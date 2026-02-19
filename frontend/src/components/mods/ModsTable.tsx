@@ -7,6 +7,15 @@ import type { ModGroup } from "@/types/api";
 type SortKey = "name" | "files" | "confidence" | "match";
 type SortDir = "asc" | "desc";
 
+function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
+  if (sortKey !== col) return null;
+  return sortDir === "asc" ? (
+    <ChevronUp size={14} />
+  ) : (
+    <ChevronDown size={14} />
+  );
+}
+
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;
@@ -61,15 +70,6 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
     });
   };
 
-  const SortIcon = ({ col }: { col: SortKey }) => {
-    if (sortKey !== col) return null;
-    return sortDir === "asc" ? (
-      <ChevronUp size={14} />
-    ) : (
-      <ChevronDown size={14} />
-    );
-  };
-
   if (mods.length === 0) {
     return (
       <p className="text-text-muted text-sm py-4">
@@ -89,7 +89,7 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
               onClick={() => toggleSort("name")}
             >
               <span className="flex items-center gap-1">
-                Mod Name <SortIcon col="name" />
+                Mod Name <SortIcon col="name" sortKey={sortKey} sortDir={sortDir} />
               </span>
             </th>
             <th
@@ -97,7 +97,7 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
               onClick={() => toggleSort("files")}
             >
               <span className="flex items-center gap-1">
-                Files <SortIcon col="files" />
+                Files <SortIcon col="files" sortKey={sortKey} sortDir={sortDir} />
               </span>
             </th>
             <th
@@ -105,7 +105,7 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
               onClick={() => toggleSort("match")}
             >
               <span className="flex items-center gap-1">
-                Nexus Match <SortIcon col="match" />
+                Nexus Match <SortIcon col="match" sortKey={sortKey} sortDir={sortDir} />
               </span>
             </th>
             <th
@@ -113,7 +113,7 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
               onClick={() => toggleSort("confidence")}
             >
               <span className="flex items-center gap-1">
-                Confidence <SortIcon col="confidence" />
+                Confidence <SortIcon col="confidence" sortKey={sortKey} sortDir={sortDir} />
               </span>
             </th>
           </tr>
