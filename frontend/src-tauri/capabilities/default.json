@@ -17,6 +17,7 @@
     "core:window:allow-start-dragging",
     "core:window:allow-set-focus",
     "dialog:default",
-    "core:app:default"
+    "core:app:default",
+    "deep-link:default"
   ]
 }
