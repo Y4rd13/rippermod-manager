@@ -173,8 +173,8 @@ export function GameDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {updates.updates.map((u) => (
-                    <tr key={u.mod_group_id} className="border-b border-border/50">
+                  {updates.updates.map((u, i) => (
+                    <tr key={u.installed_mod_id ?? `group-${u.mod_group_id ?? i}`} className="border-b border-border/50">
                       <td className="py-2 pr-4 text-text-primary">{u.display_name}</td>
                       <td className="py-2 pr-4 text-text-muted">{u.local_version}</td>
                       <td className="py-2 pr-4 text-success font-medium">{u.nexus_version}</td>
