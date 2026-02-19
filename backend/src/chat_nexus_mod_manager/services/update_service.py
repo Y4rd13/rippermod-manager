@@ -9,6 +9,7 @@ import httpx
 from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.matching.filename_parser import is_newer_version
+from chat_nexus_mod_manager.matching.variant_scorer import pick_best_file
 from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
 from chat_nexus_mod_manager.models.install import InstalledMod
 from chat_nexus_mod_manager.models.mod import ModGroup
@@ -28,51 +29,6 @@ class UpdateResult:
     updates: list[dict[str, Any]] = field(default_factory=list)
 
 
-def _find_best_matching_file(
-    installed_mod: InstalledMod,
-    nexus_files: list[dict[str, Any]],
-) -> dict[str, Any] | None:
-    """Find the best matching Nexus file for an installed mod.
-
-    Priority:
-    1. Exact upload_timestamp match -> return latest file in same category
-    2. nexus_file_id match -> return that file
-    3. Most recent MAIN file (category_id == 1)
-    4. Most recent file of any category
-    """
-    if not nexus_files:
-        return None
-
-    # Priority 1: exact timestamp match
-    if installed_mod.upload_timestamp:
-        matched_file = None
-        for f in nexus_files:
-            if f.get("uploaded_timestamp") == installed_mod.upload_timestamp:
-                matched_file = f
-                break
-
-        if matched_file:
-            category = matched_file.get("category_id")
-            same_category = [f for f in nexus_files if f.get("category_id") == category]
-            if same_category:
-                return max(same_category, key=lambda f: f.get("uploaded_timestamp", 0))
-            return matched_file
-
-    # Priority 2: file_id match
-    if installed_mod.nexus_file_id:
-        for f in nexus_files:
-            if f.get("file_id") == installed_mod.nexus_file_id:
-                return f
-
-    # Priority 3: most recent MAIN file (category_id == 1)
-    main_files = [f for f in nexus_files if f.get("category_id") == 1]
-    if main_files:
-        return max(main_files, key=lambda f: f.get("uploaded_timestamp", 0))
-
-    # Priority 4: most recent file of any category
-    return max(nexus_files, key=lambda f: f.get("uploaded_timestamp", 0))
-
-
 def _check_update_for_installed_mod(
     installed_mod: InstalledMod,
     nexus_files: list[dict[str, Any]],
@@ -82,7 +38,7 @@ def _check_update_for_installed_mod(
 
     Returns a dict with update info, or None if no update.
     """
-    best_file = _find_best_matching_file(installed_mod, nexus_files)
+    best_file = pick_best_file(nexus_files, installed_mod)
     if not best_file:
         return None
 
@@ -120,6 +76,8 @@ def _check_update_for_installed_mod(
         "local_version": local_version,
         "nexus_version": nexus_version,
         "nexus_mod_id": nexus_mod_id,
+        "nexus_file_id": best_file.get("file_id"),
+        "nexus_file_name": best_file.get("file_name", ""),
         "nexus_url": nexus_url,
         "author": author,
         "source": "installed",
@@ -228,6 +186,8 @@ def check_correlation_updates(
                     "local_version": download.version,
                     "nexus_version": meta.version,
                     "nexus_mod_id": download.nexus_mod_id,
+                    "nexus_file_id": None,
+                    "nexus_file_name": "",
                     "nexus_url": download.nexus_url,
                     "author": meta.author,
                     "source": "correlation",

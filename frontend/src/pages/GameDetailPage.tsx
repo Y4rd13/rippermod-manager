@@ -1,4 +1,13 @@
-import { Archive, FolderOpen, Link2, Package, RefreshCw, Scan, UserCheck } from "lucide-react";
+import {
+  Archive,
+  Download,
+  FolderOpen,
+  Link2,
+  Package,
+  RefreshCw,
+  Scan,
+  UserCheck,
+} from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
@@ -7,12 +16,14 @@ import { ArchivesList } from "@/components/mods/ArchivesList";
 import { InstalledModsTable } from "@/components/mods/InstalledModsTable";
 import { ModsTable } from "@/components/mods/ModsTable";
 import { ProfileManager } from "@/components/mods/ProfileManager";
+import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ScanProgress, type ScanLog } from "@/components/ui/ScanProgress";
-import { useCorrelate, useSyncNexus } from "@/hooks/mutations";
+import { useCheckUpdates, useCorrelate, useStartDownload, useSyncNexus } from "@/hooks/mutations";
 import {
   useAvailableArchives,
+  useDownloadJobs,
   useGame,
   useInstalledMods,
   useMods,
@@ -22,6 +33,8 @@ import {
 import { api } from "@/lib/api-client";
 import { parseSSE } from "@/lib/sse-parser";
 import { cn } from "@/lib/utils";
+import { toast } from "@/stores/toast-store";
+import type { ModUpdate } from "@/types/api";
 
 type Tab = "mods" | "installed" | "archives" | "profiles" | "updates";
 
@@ -32,6 +45,102 @@ const TABS: { key: Tab; label: string; Icon: typeof Package }[] = [
   { key: "profiles", label: "Profiles", Icon: FolderOpen },
   { key: "updates", label: "Updates", Icon: RefreshCw },
 ];
+
+function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdate[] }) {
+  const { data: downloadJobs = [] } = useDownloadJobs(gameName);
+  const checkUpdates = useCheckUpdates();
+  const startDownload = useStartDownload();
+
+  const downloadableUpdates = updates.filter((u) => u.nexus_file_id != null);
+
+  const handleUpdateAll = async () => {
+    for (const u of downloadableUpdates) {
+      if (u.nexus_file_id) {
+        try {
+          await startDownload.mutateAsync({
+            gameName,
+            data: {
+              nexus_mod_id: u.nexus_mod_id,
+              nexus_file_id: u.nexus_file_id,
+            },
+          });
+        } catch {
+          // Individual download errors handled by mutation callbacks
+        }
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-text-muted text-xs">
+          {updates.length} update(s) available
+        </p>
+        <div className="flex items-center gap-2">
+          {downloadableUpdates.length > 1 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleUpdateAll}
+              loading={startDownload.isPending}
+            >
+              <Download className="h-3.5 w-3.5 mr-1" />
+              Update All ({downloadableUpdates.length})
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => checkUpdates.mutate(gameName)}
+            loading={checkUpdates.isPending}
+          >
+            <RefreshCw className="h-3.5 w-3.5 mr-1" />
+            Check Now
+          </Button>
+        </div>
+      </div>
+
+      {!updates.length ? (
+        <p className="text-text-muted text-sm py-4">No updates detected. Run a scan first.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-text-muted">
+                <th className="pb-2 pr-4">Mod</th>
+                <th className="pb-2 pr-4">Local Version</th>
+                <th className="pb-2 pr-4">Nexus Version</th>
+                <th className="pb-2 pr-4">Author</th>
+                <th className="pb-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {updates.map((u, i) => (
+                <tr
+                  key={u.installed_mod_id ?? `group-${u.mod_group_id ?? i}`}
+                  className="border-b border-border/50"
+                >
+                  <td className="py-2 pr-4 text-text-primary">{u.display_name}</td>
+                  <td className="py-2 pr-4 text-text-muted">{u.local_version}</td>
+                  <td className="py-2 pr-4 text-success font-medium">{u.nexus_version}</td>
+                  <td className="py-2 pr-4 text-text-muted">{u.author}</td>
+                  <td className="py-2">
+                    <UpdateDownloadCell
+                      update={u}
+                      gameName={gameName}
+                      downloadJobs={downloadJobs}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function GameDetailPage() {
   const { name = "" } = useParams();
@@ -146,11 +255,13 @@ export function GameDetailPage() {
       setScanPercent(100);
       queryClient.invalidateQueries({ queryKey: ["mods", name] });
       queryClient.invalidateQueries({ queryKey: ["installed-mods", name] });
+      toast.success("Scan complete", `${corrResult.matched} matched, ${corrResult.unmatched} unmatched`);
     } catch (e) {
       stopFlushing();
       const msg = e instanceof Error ? e.message : "Scan failed";
       pushLog({ phase: "error", message: msg, percent: 0 });
       setScanPhase("error");
+      toast.error("Scan failed", msg);
     } finally {
       abortRef.current = null;
       setIsScanning(false);
@@ -251,45 +362,7 @@ export function GameDetailPage() {
         <ProfileManager profiles={profiles} gameName={name} />
       )}
       {tab === "updates" && (
-        <div>
-          {!updates?.updates.length ? (
-            <p className="text-text-muted text-sm py-4">No updates detected. Run a scan first.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-text-muted">
-                    <th className="pb-2 pr-4">Mod</th>
-                    <th className="pb-2 pr-4">Local Version</th>
-                    <th className="pb-2 pr-4">Nexus Version</th>
-                    <th className="pb-2 pr-4">Author</th>
-                    <th className="pb-2">Link</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {updates.updates.map((u, i) => (
-                    <tr key={u.installed_mod_id ?? `group-${u.mod_group_id ?? i}`} className="border-b border-border/50">
-                      <td className="py-2 pr-4 text-text-primary">{u.display_name}</td>
-                      <td className="py-2 pr-4 text-text-muted">{u.local_version}</td>
-                      <td className="py-2 pr-4 text-success font-medium">{u.nexus_version}</td>
-                      <td className="py-2 pr-4 text-text-muted">{u.author}</td>
-                      <td className="py-2">
-                        <a
-                          href={u.nexus_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-accent hover:underline"
-                        >
-                          Nexus
-                        </a>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <UpdatesTab gameName={name} updates={updates?.updates ?? []} />
       )}
     </div>
   );
