@@ -137,12 +137,16 @@ def get_game_version(name: str, session: Session = Depends(get_session)) -> Game
     if not game:
         raise HTTPException(404, f"Game '{name}' not found")
 
+    game_info = GAME_REGISTRY.get(game.domain_name)
+    if not game_info:
+        raise HTTPException(
+            422, f"Version detection not supported for game type '{game.domain_name}'"
+        )
+
     from chat_nexus_mod_manager.services.game_version import read_game_version
 
-    game_info = GAME_REGISTRY.get(game.domain_name)
-    exe_rel = game_info["exe_path"] if game_info else ""
     version = read_game_version(game.install_path, game.domain_name)
-    return GameVersion(version=version, exe_path=exe_rel)
+    return GameVersion(version=version, exe_path=game_info["exe_path"])
 
 
 @router.delete("/{name}", status_code=204)

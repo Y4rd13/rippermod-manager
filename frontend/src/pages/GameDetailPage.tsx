@@ -208,10 +208,13 @@ export function GameDetailPage() {
   }, []);
 
   const handleLaunch = async () => {
-    if (!game) return;
+    if (!game || !gameVersion?.exe_path) return;
     setIsLaunching(true);
     try {
-      await invoke<void>("launch_game", { installPath: game.install_path });
+      await invoke<void>("launch_game", {
+        installPath: game.install_path,
+        exeRelativePath: gameVersion.exe_path,
+      });
       toast.success("Game launched");
     } catch (e) {
       const msg = typeof e === "string" ? e : "Launch failed";

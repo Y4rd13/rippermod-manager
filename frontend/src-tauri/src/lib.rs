@@ -254,11 +254,8 @@ fn extract_vdf_value(line: &str) -> Option<String> {
 }
 
 #[tauri::command]
-fn launch_game(install_path: String) -> Result<(), String> {
-    let exe_path = std::path::Path::new(&install_path)
-        .join("bin")
-        .join("x64")
-        .join("Cyberpunk2077.exe");
+fn launch_game(install_path: String, exe_relative_path: String) -> Result<(), String> {
+    let exe_path = std::path::Path::new(&install_path).join(&exe_relative_path);
 
     if !exe_path.exists() {
         return Err(format!(

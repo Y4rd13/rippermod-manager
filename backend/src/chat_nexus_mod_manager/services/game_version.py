@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import os
 
@@ -25,15 +26,15 @@ def read_game_version(install_path: str, domain_name: str) -> str | None:
         )
 
         if not hasattr(pe, "VS_FIXEDFILEINFO"):
-            pe.close()
             return None
 
         info = pe.VS_FIXEDFILEINFO[0]
         ms = info.FileVersionMS
         ls = info.FileVersionLS
-        version = f"{ms >> 16}.{ms & 0xFFFF}.{ls >> 16}.{ls & 0xFFFF}"
-        pe.close()
-        return version
+        return f"{ms >> 16}.{ms & 0xFFFF}.{ls >> 16}.{ls & 0xFFFF}"
     except Exception:
         logger.warning("Failed to read PE version from %s", exe_path, exc_info=True)
         return None
+    finally:
+        with contextlib.suppress(Exception):
+            pe.close()  # type: ignore[possibly-undefined]
