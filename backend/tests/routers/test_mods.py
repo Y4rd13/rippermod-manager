@@ -31,7 +31,13 @@ class TestListModGroups:
             group = ModGroup(game_id=game.id, display_name="TestMod", confidence=0.9)
             s.add(group)
             s.flush()
-            s.add(ModFile(mod_group_id=group.id, file_path="mods/test.archive", filename="test.archive"))
+            s.add(
+                ModFile(
+                    mod_group_id=group.id,
+                    file_path="mods/test.archive",
+                    filename="test.archive",
+                )
+            )
             s.commit()
 
         r = client.get("/api/v1/games/G/mods/")

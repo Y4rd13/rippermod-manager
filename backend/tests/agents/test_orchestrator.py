@@ -1,11 +1,9 @@
 from chat_nexus_mod_manager.agents.orchestrator import (
     _generate_suggestions,
-    get_mod_details,
+    get_nexus_mod_info,
     list_all_games,
     search_local_mods,
-    get_nexus_mod_info,
 )
-from chat_nexus_mod_manager.models.game import Game, GameModPath
 from chat_nexus_mod_manager.models.mod import ModFile, ModGroup
 from chat_nexus_mod_manager.models.nexus import NexusModMeta
 

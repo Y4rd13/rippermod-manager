@@ -32,7 +32,14 @@ class TestListUpdates:
             dl = NexusDownload(game_id=game.id, nexus_mod_id=10, mod_name="Mod1", version="1.0")
             s.add(dl)
             s.flush()
-            s.add(ModNexusCorrelation(mod_group_id=group.id, nexus_download_id=dl.id, score=1.0, method="exact"))
+            s.add(
+                ModNexusCorrelation(
+                    mod_group_id=group.id,
+                    nexus_download_id=dl.id,
+                    score=1.0,
+                    method="exact",
+                )
+            )
             s.add(NexusModMeta(nexus_mod_id=10, name="Mod1", version="1.0"))
             s.commit()
 
@@ -54,11 +61,31 @@ class TestListUpdates:
             s.add(GameModPath(game_id=game.id, relative_path="mods"))
             group = ModGroup(game_id=game.id, display_name="Mod1")
             s.add(group)
-            dl = NexusDownload(game_id=game.id, nexus_mod_id=10, mod_name="Mod1", version="1.0", nexus_url="https://nexus/10")
+            dl = NexusDownload(
+                game_id=game.id,
+                nexus_mod_id=10,
+                mod_name="Mod1",
+                version="1.0",
+                nexus_url="https://nexus/10",
+            )
             s.add(dl)
             s.flush()
-            s.add(ModNexusCorrelation(mod_group_id=group.id, nexus_download_id=dl.id, score=1.0, method="exact"))
-            s.add(NexusModMeta(nexus_mod_id=10, name="Mod1", version="2.0", author="Auth"))
+            s.add(
+                ModNexusCorrelation(
+                    mod_group_id=group.id,
+                    nexus_download_id=dl.id,
+                    score=1.0,
+                    method="exact",
+                )
+            )
+            s.add(
+                NexusModMeta(
+                    nexus_mod_id=10,
+                    name="Mod1",
+                    version="2.0",
+                    author="Auth",
+                )
+            )
             s.commit()
 
         r = client.get("/api/v1/games/G/updates/")

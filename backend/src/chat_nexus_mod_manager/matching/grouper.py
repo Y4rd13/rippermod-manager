@@ -45,9 +45,7 @@ def group_mod_files(
     if not doc_labels:
         return []
 
-    vectorizer = TfidfVectorizer(
-        analyzer="char_wb", ngram_range=(2, 4), min_df=1
-    )
+    vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 4), min_df=1)
     tfidf_matrix = vectorizer.fit_transform(doc_labels)
     sim_matrix = cosine_similarity(tfidf_matrix)
     distance_matrix = 1.0 - sim_matrix
@@ -70,10 +68,7 @@ def group_mod_files(
 
         token_counts = Counter(cluster_tokens)
         if token_counts:
-            name_parts = [
-                t for t, _ in token_counts.most_common(3)
-                if len(t) > 2
-            ]
+            name_parts = [t for t, _ in token_counts.most_common(3) if len(t) > 2]
             group_name = " ".join(name_parts) if name_parts else cluster_files[0].filename
         else:
             group_name = cluster_files[0].filename
@@ -82,9 +77,7 @@ def group_mod_files(
 
         if len(indices) > 1:
             sub_sims = [
-                sim_matrix[i][j]
-                for idx_i, i in enumerate(indices)
-                for j in indices[idx_i + 1:]
+                sim_matrix[i][j] for idx_i, i in enumerate(indices) for j in indices[idx_i + 1 :]
             ]
             confidence = float(np.mean(sub_sims)) if sub_sims else 1.0
         else:

@@ -22,7 +22,7 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   nexusKey: "",
   nexusUsername: "",
   gameName: "Cyberpunk 2077",
-  installPath: "",
+  installPath: "G:\\SteamLibrary\\steamapps\\common\\Cyberpunk 2077",
   setStep: (step) => set({ currentStep: step }),
   setOpenaiKey: (key) => set({ openaiKey: key }),
   setNexusKey: (key) => set({ nexusKey: key }),
@@ -36,6 +36,6 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
       nexusKey: "",
       nexusUsername: "",
       gameName: "Cyberpunk 2077",
-      installPath: "",
+      installPath: "G:\\SteamLibrary\\steamapps\\common\\Cyberpunk 2077",
     }),
 }));

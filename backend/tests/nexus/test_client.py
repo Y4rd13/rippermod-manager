@@ -21,9 +21,7 @@ class TestNexusClient:
     @respx.mock
     @pytest.mark.asyncio
     async def test_validate_401(self):
-        respx.get(f"{BASE_URL}/v1/users/validate.json").mock(
-            return_value=httpx.Response(401)
-        )
+        respx.get(f"{BASE_URL}/v1/users/validate.json").mock(return_value=httpx.Response(401))
         async with NexusClient("bad-key") as client:
             result = await client.validate_key()
         assert result.valid is False

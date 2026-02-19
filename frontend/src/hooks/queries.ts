@@ -20,7 +20,7 @@ export function useOnboardingStatus() {
 export function useGames() {
   return useQuery<Game[]>({
     queryKey: ["games"],
-    queryFn: () => api.get("/api/v1/games"),
+    queryFn: () => api.get("/api/v1/games/"),
   });
 }
 
@@ -59,6 +59,6 @@ export function useUpdates(gameName: string) {
 export function useSettings() {
   return useQuery<Setting[]>({
     queryKey: ["settings"],
-    queryFn: () => api.get("/api/v1/settings"),
+    queryFn: () => api.get("/api/v1/settings/"),
   });
 }

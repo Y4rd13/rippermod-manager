@@ -35,12 +35,14 @@ def semantic_search(
                 for i, doc in enumerate(results["documents"][0]):
                     distance = results["distances"][0][i] if results["distances"] else 0
                     metadata = results["metadatas"][0][i] if results["metadatas"] else {}
-                    all_results.append({
-                        "collection": coll_name,
-                        "document": doc,
-                        "distance": f"{distance:.3f}",
-                        "type": metadata.get("type", "unknown"),
-                    })
+                    all_results.append(
+                        {
+                            "collection": coll_name,
+                            "document": doc,
+                            "distance": f"{distance:.3f}",
+                            "type": metadata.get("type", "unknown"),
+                        }
+                    )
         except Exception:
             logger.warning("Failed to search collection %s", coll_name, exc_info=True)
             continue
@@ -64,7 +66,5 @@ def search_all_semantic(query: str, n_results: int = 8) -> str:
 
     output_parts: list[str] = []
     for r in results:
-        output_parts.append(
-            f"[{r['type']}] (relevance: {r['distance']})\n{r['document']}"
-        )
+        output_parts.append(f"[{r['type']}] (relevance: {r['distance']})\n{r['document']}")
     return "\n---\n".join(output_parts)

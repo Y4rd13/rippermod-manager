@@ -46,15 +46,19 @@ class TestCreateGame:
         assert r.status_code == 201
         assert len(r.json()["mod_paths"]) == 1
 
-    def test_duplicate_400(self, client):
+    def test_duplicate_upserts(self, client):
         payload = {
             "name": "DupGame",
             "domain_name": "dup",
             "install_path": "/games/dup",
         }
         client.post("/api/v1/games/", json=payload)
-        r = client.post("/api/v1/games/", json=payload)
-        assert r.status_code == 400
+        r = client.post(
+            "/api/v1/games/",
+            json={**payload, "install_path": "/games/dup2"},
+        )
+        assert r.status_code == 201
+        assert r.json()["install_path"] == "/games/dup2"
 
 
 class TestGetGame:
