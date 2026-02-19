@@ -1,4 +1,8 @@
 use serde::Serialize;
+use tauri::Emitter;
+
+#[cfg(desktop)]
+use tauri_plugin_deep_link::DeepLinkExt;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct DetectedGame {
@@ -253,8 +257,21 @@ fn extract_vdf_value(line: &str) -> Option<String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_deep_link::init());
+
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            // When a second instance is spawned with an nxm:// URL, forward it to the existing window
+            if let Some(url) = argv.iter().find(|a| a.starts_with("nxm://")) {
+                let _ = app.emit("nxm-link", url.clone());
+            }
+        }));
+    }
+
+    builder
         .invoke_handler(tauri::generate_handler![detect_game_paths])
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -264,6 +281,23 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // Handle cold-start: app launched via nxm:// URL
+            #[cfg(desktop)]
+            if let Ok(Some(urls)) = app.deep_link().get_current() {
+                for url in urls {
+                    let url_str = url.to_string();
+                    if url_str.starts_with("nxm://") {
+                        let handle = app.handle().clone();
+                        // Defer emission so the frontend event listener is ready
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_millis(500));
+                            let _ = handle.emit("nxm-link", url_str);
+                        });
+                    }
+                }
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())

@@ -26,6 +26,13 @@
       "csp": "default-src 'self'; connect-src 'self' http://localhost:8425 https://api.nexusmods.com; img-src 'self' https://staticdelivery.nexusmods.com data:; style-src 'self' 'unsafe-inline'"
     }
   },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["nxm"]
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
