@@ -1,44 +1,22 @@
 import os
 from datetime import UTC, datetime
-from typing import TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import delete
 from sqlmodel import Session, select
 
+from chat_nexus_mod_manager.constants import CYBERPUNK_DEFAULT_PATHS, GAME_REGISTRY
 from chat_nexus_mod_manager.database import get_session
 from chat_nexus_mod_manager.models.game import Game, GameModPath
 from chat_nexus_mod_manager.schemas.game import (
     GameCreate,
     GameOut,
+    GameVersion,
     PathValidation,
     PathValidationRequest,
 )
 
 router = APIRouter(prefix="/games", tags=["games"])
-
-CYBERPUNK_DEFAULT_PATHS = [
-    ("archive/pc/mod", "Main mod archives", True),
-    ("bin/x64/plugins/cyber_engine_tweaks/mods", "CET script mods", True),
-    ("red4ext/plugins", "RED4ext plugins", True),
-    ("r6/scripts", "Redscript mods", True),
-    ("r6/tweaks", "TweakXL tweaks", True),
-    ("bin/x64/plugins", "ASI/plugin loaders", True),
-    ("mods", "REDmod mods", True),
-]
-
-
-class GameRegistryEntry(TypedDict):
-    exe_path: str
-    mod_paths: list[tuple[str, str, bool]]
-
-
-GAME_REGISTRY: dict[str, GameRegistryEntry] = {
-    "cyberpunk2077": {
-        "exe_path": os.path.join("bin", "x64", "Cyberpunk2077.exe"),
-        "mod_paths": CYBERPUNK_DEFAULT_PATHS,
-    },
-}
 
 
 @router.get("/", response_model=list[GameOut])
@@ -151,6 +129,24 @@ def get_game(name: str, session: Session = Depends(get_session)) -> Game:
         raise HTTPException(404, f"Game '{name}' not found")
     _ = game.mod_paths
     return game
+
+
+@router.get("/{name}/version", response_model=GameVersion)
+def get_game_version(name: str, session: Session = Depends(get_session)) -> GameVersion:
+    game = session.exec(select(Game).where(Game.name == name)).first()
+    if not game:
+        raise HTTPException(404, f"Game '{name}' not found")
+
+    game_info = GAME_REGISTRY.get(game.domain_name)
+    if not game_info:
+        raise HTTPException(
+            422, f"Version detection not supported for game type '{game.domain_name}'"
+        )
+
+    from chat_nexus_mod_manager.services.game_version import read_game_version
+
+    version = read_game_version(game.install_path, game.domain_name)
+    return GameVersion(version=version, exe_path=game_info["exe_path"])
 
 
 @router.delete("/{name}", status_code=204)
