@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+export type ReasoningEffort = "none" | "low" | "medium" | "high";
+
 export interface ChatMsg {
   id: string;
   role: "user" | "assistant" | "tool";
@@ -11,11 +13,15 @@ export interface ChatMsg {
 interface ChatState {
   messages: ChatMsg[];
   isStreaming: boolean;
+  isThinking: boolean;
+  reasoningEffort: ReasoningEffort;
   suggestedActions: string[];
   abortController: AbortController | null;
   addMessage: (msg: ChatMsg) => void;
   appendToLast: (content: string) => void;
   setStreaming: (streaming: boolean) => void;
+  setThinking: (thinking: boolean) => void;
+  setReasoningEffort: (effort: ReasoningEffort) => void;
   setSuggestedActions: (actions: string[]) => void;
   setAbortController: (ctrl: AbortController | null) => void;
   clearMessages: () => void;
@@ -24,6 +30,8 @@ interface ChatState {
 export const useChatStore = create<ChatState>((set) => ({
   messages: [],
   isStreaming: false,
+  isThinking: false,
+  reasoningEffort: "none",
   suggestedActions: [],
   abortController: null,
   addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),
@@ -37,6 +45,8 @@ export const useChatStore = create<ChatState>((set) => ({
       return { messages: msgs };
     }),
   setStreaming: (streaming) => set({ isStreaming: streaming }),
+  setThinking: (thinking) => set({ isThinking: thinking }),
+  setReasoningEffort: (effort) => set({ reasoningEffort: effort }),
   setSuggestedActions: (actions) => set({ suggestedActions: actions }),
   setAbortController: (ctrl) => set({ abortController: ctrl }),
   clearMessages: () => set({ messages: [], suggestedActions: [] }),

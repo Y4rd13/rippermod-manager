@@ -1,4 +1,4 @@
-import { MessageSquare, Send, X } from "lucide-react";
+import { Brain, MessageSquare, Send, X } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { api } from "@/lib/api-client";
 import { parseSSE } from "@/lib/sse-parser";
 import { cn } from "@/lib/utils";
-import { type ChatMsg, useChatStore } from "@/stores/chat-store";
+import { type ChatMsg, type ReasoningEffort, useChatStore } from "@/stores/chat-store";
 import { useUIStore } from "@/stores/ui-store";
 
 const remarkPlugins = [remarkGfm];
@@ -32,6 +32,34 @@ const markdownComponents = {
   ),
   li: ({ children }: { children?: React.ReactNode }) => <li>{children}</li>,
 };
+
+const EFFORT_CYCLE: ReasoningEffort[] = ["none", "low", "medium", "high"];
+const EFFORT_LABELS: Record<ReasoningEffort, string> = {
+  none: "Off",
+  low: "Low",
+  medium: "Med",
+  high: "High",
+};
+
+function ThinkingIndicator() {
+  return (
+    <div className="flex gap-3 py-3 flex-row">
+      <div className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold shrink-0 bg-surface-3 text-text-secondary">
+        AI
+      </div>
+      <div className="rounded-xl px-4 py-2.5 bg-surface-2">
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent animate-bounce" />
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent animate-bounce [animation-delay:150ms]" />
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent animate-bounce [animation-delay:300ms]" />
+          </div>
+          <span className="text-xs text-text-muted">Thinking...</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const ChatMessage = memo(function ChatMessage({ msg }: { msg: ChatMsg }) {
   const isUser = msg.role === "user";
@@ -81,12 +109,20 @@ export function ChatPanel() {
   const { chatPanelOpen, setChatPanelOpen } = useUIStore(
     useShallow((s) => ({ chatPanelOpen: s.chatPanelOpen, setChatPanelOpen: s.setChatPanelOpen })),
   );
-  const { messages, isStreaming, suggestedActions } = useChatStore(
-    useShallow((s) => ({ messages: s.messages, isStreaming: s.isStreaming, suggestedActions: s.suggestedActions })),
+  const { messages, isStreaming, isThinking, reasoningEffort, suggestedActions } = useChatStore(
+    useShallow((s) => ({
+      messages: s.messages,
+      isStreaming: s.isStreaming,
+      isThinking: s.isThinking,
+      reasoningEffort: s.reasoningEffort,
+      suggestedActions: s.suggestedActions,
+    })),
   );
   const addMessage = useChatStore((s) => s.addMessage);
   const appendToLast = useChatStore((s) => s.appendToLast);
   const setStreaming = useChatStore((s) => s.setStreaming);
+  const setThinking = useChatStore((s) => s.setThinking);
+  const setReasoningEffort = useChatStore((s) => s.setReasoningEffort);
   const setSuggestedActions = useChatStore((s) => s.setSuggestedActions);
 
   const [input, setInput] = useState("");
@@ -95,7 +131,7 @@ export function ChatPanel() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, isThinking]);
 
   useEffect(() => {
     return () => {
@@ -103,9 +139,17 @@ export function ChatPanel() {
     };
   }, []);
 
+  const cycleEffort = useCallback(() => {
+    const currentIdx = EFFORT_CYCLE.indexOf(reasoningEffort);
+    const nextIdx = (currentIdx + 1) % EFFORT_CYCLE.length;
+    setReasoningEffort(EFFORT_CYCLE[nextIdx]);
+  }, [reasoningEffort, setReasoningEffort]);
+
   const handleSend = useCallback(async (text?: string) => {
     const msg = text ?? input.trim();
     if (!msg || useChatStore.getState().isStreaming) return;
+
+    const currentEffort = useChatStore.getState().reasoningEffort;
 
     setInput("");
     addMessage({
@@ -131,7 +175,7 @@ export function ChatPanel() {
     try {
       const response = await api.stream(
         "/api/v1/chat/",
-        { message: msg },
+        { message: msg, reasoning_effort: currentEffort },
         controller.signal,
       );
 
@@ -141,6 +185,12 @@ export function ChatPanel() {
           switch (event.event) {
             case "token":
               appendToLast(data.content ?? "");
+              break;
+            case "thinking_start":
+              setThinking(true);
+              break;
+            case "thinking_end":
+              setThinking(false);
               break;
             case "tool_call":
               appendToLast(`\n\n*Using tool: ${data.name}...*\n\n`);
@@ -165,8 +215,9 @@ export function ChatPanel() {
     } finally {
       abortRef.current = null;
       setStreaming(false);
+      setThinking(false);
     }
-  }, [input, addMessage, appendToLast, setStreaming, setSuggestedActions]);
+  }, [input, addMessage, appendToLast, setStreaming, setThinking, setSuggestedActions]);
 
   if (!chatPanelOpen) return null;
 
@@ -199,6 +250,7 @@ export function ChatPanel() {
         {messages.map((msg) => (
           <ChatMessage key={msg.id} msg={msg} />
         ))}
+        {isThinking && <ThinkingIndicator />}
         <div ref={messagesEndRef} />
       </div>
 
@@ -232,6 +284,20 @@ export function ChatPanel() {
             className="flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent"
             disabled={isStreaming}
           />
+          <button
+            type="button"
+            onClick={cycleEffort}
+            className={cn(
+              "flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors",
+              reasoningEffort !== "none"
+                ? "border-accent bg-accent/10 text-accent"
+                : "border-border bg-surface-2 text-text-muted hover:text-text-secondary",
+            )}
+            title={`Reasoning: ${EFFORT_LABELS[reasoningEffort]}`}
+          >
+            <Brain size={14} />
+            <span>{EFFORT_LABELS[reasoningEffort]}</span>
+          </button>
           <Button
             type="submit"
             size="sm"
