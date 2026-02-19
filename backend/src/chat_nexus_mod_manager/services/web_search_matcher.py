@@ -64,8 +64,8 @@ async def search_unmatched_mods(
 
     found_mod_ids: dict[int, dict] = {}  # group_id -> {nexus_mod_id, score, group_name}
 
-    async def search_one(group: ModGroup) -> bool:
-        """Search for a single group. Returns True if search was attempted."""
+    async def search_one(group: ModGroup) -> None:
+        """Search for a single group and populate found_mod_ids on match."""
         async with semaphore:
             # Sanitize and truncate display name for query
             name = re.sub(r"[^\w\s\-.]", "", group.display_name).strip()
@@ -79,7 +79,7 @@ async def search_unmatched_mods(
                 )
             except Exception:
                 logger.warning("Tavily search failed for '%s'", group.display_name)
-                return True
+                return
 
             for r in result.get("results", []):
                 url = r.get("url", "")
@@ -93,12 +93,11 @@ async def search_unmatched_mods(
                         "group_name": group.display_name,
                     }
                     break
-            return True
 
     tasks = [search_one(g) for g in unmatched]
     try:
-        results = await asyncio.wait_for(asyncio.gather(*tasks), timeout=_SEARCH_TIMEOUT)
-        searched = sum(1 for r in results if r)
+        await asyncio.wait_for(asyncio.gather(*tasks), timeout=_SEARCH_TIMEOUT)
+        searched = len(unmatched)
     except TimeoutError:
         logger.warning("Web search timed out after %ds", _SEARCH_TIMEOUT)
         searched = len(found_mod_ids)
