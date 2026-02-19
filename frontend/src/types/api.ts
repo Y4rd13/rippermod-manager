@@ -125,6 +125,11 @@ export interface ModUpdate {
   nexus_timestamp: number | null;
 }
 
+export interface GameVersion {
+  version: string | null;
+  exe_path: string;
+}
+
 export interface DetectedGame {
   path: string;
   source: string;

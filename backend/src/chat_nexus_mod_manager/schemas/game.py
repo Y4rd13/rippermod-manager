@@ -35,6 +35,11 @@ class GameOut(BaseModel):
     mod_paths: list[ModPathOut] = []
 
 
+class GameVersion(BaseModel):
+    version: str | None
+    exe_path: str
+
+
 class PathValidationRequest(BaseModel):
     install_path: str
     domain_name: str = "cyberpunk2077"
