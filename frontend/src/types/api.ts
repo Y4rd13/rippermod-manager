@@ -115,6 +115,8 @@ export interface ModUpdate {
   local_version: string;
   nexus_version: string;
   nexus_mod_id: number;
+  nexus_file_id: number | null;
+  nexus_file_name: string;
   nexus_url: string;
   author: string;
   installed_mod_id: number | null;
@@ -238,4 +240,39 @@ export interface ProfileExport {
   exported_at: string;
   mod_count: number;
   mods: ProfileExportMod[];
+}
+
+// Download feature types
+
+export interface DownloadRequest {
+  nexus_mod_id: number;
+  nexus_file_id: number;
+  nxm_key?: string;
+  nxm_expires?: number;
+}
+
+export type DownloadStatus =
+  | "pending"
+  | "downloading"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface DownloadJobOut {
+  id: number;
+  nexus_mod_id: number;
+  nexus_file_id: number;
+  file_name: string;
+  status: DownloadStatus;
+  progress_bytes: number;
+  total_bytes: number;
+  percent: number;
+  error: string;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface DownloadStartResult {
+  job: DownloadJobOut;
+  requires_nxm: boolean;
 }

@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, datetime
 
 import httpx
 from fastapi import APIRouter, Depends
@@ -25,6 +26,8 @@ class ModUpdate(BaseModel):
     local_version: str
     nexus_version: str
     nexus_mod_id: int
+    nexus_file_id: int | None = None
+    nexus_file_name: str = ""
     nexus_url: str
     author: str
     installed_mod_id: int | None = None
@@ -86,7 +89,9 @@ async def check_updates(
                                 info = await client.get_mod_info(game.domain_name, nexus_mod_id)
                                 if info:
                                     meta.version = info.get("version", meta.version)
-                                    meta.updated_at = info.get("updated_timestamp")
+                                    ts = info.get("updated_timestamp")
+                                    if ts:
+                                        meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)
                                 session.add(meta)
                 session.commit()
             except (httpx.HTTPError, ValueError):

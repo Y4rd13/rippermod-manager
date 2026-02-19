@@ -1,10 +1,17 @@
-import { ExternalLink, RefreshCw, Search } from "lucide-react";
+import { Download, ExternalLink, RefreshCw, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { useCheckUpdates } from "@/hooks/mutations";
-import { useGames, useUpdates } from "@/hooks/queries";
+import { DownloadProgress } from "@/components/ui/DownloadProgress";
+import {
+  useCancelDownload,
+  useCheckUpdates,
+  useStartDownload,
+} from "@/hooks/mutations";
+import { useDownloadJobs, useGames, useUpdates } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
+import { useDownloadStore } from "@/stores/download-store";
+import type { DownloadJobOut, ModUpdate } from "@/types/api";
 
 function SourceBadge({ source }: { source: string }) {
   const isTimestamp = source === "installed";
@@ -22,13 +29,121 @@ function SourceBadge({ source }: { source: string }) {
   );
 }
 
+function DownloadCell({
+  update,
+  gameName,
+  downloadJobs,
+}: {
+  update: ModUpdate;
+  gameName: string;
+  downloadJobs: DownloadJobOut[];
+}) {
+  const startDownload = useStartDownload();
+  const cancelDownload = useCancelDownload();
+  const storeJobs = useDownloadStore((s) => s.jobs);
+
+  // Find active download job for this mod (from store or query)
+  const activeJob =
+    Object.values(storeJobs).find(
+      (j) =>
+        j.nexus_mod_id === update.nexus_mod_id &&
+        (j.status === "downloading" || j.status === "pending"),
+    ) ??
+    downloadJobs.find(
+      (j) =>
+        j.nexus_mod_id === update.nexus_mod_id &&
+        (j.status === "downloading" || j.status === "pending"),
+    );
+
+  const completedJob =
+    Object.values(storeJobs).find(
+      (j) => j.nexus_mod_id === update.nexus_mod_id && j.status === "completed",
+    ) ??
+    downloadJobs.find(
+      (j) => j.nexus_mod_id === update.nexus_mod_id && j.status === "completed",
+    );
+
+  if (activeJob) {
+    return (
+      <div className="w-48">
+        <DownloadProgress
+          job={activeJob}
+          onCancel={() =>
+            cancelDownload.mutate({ gameName, jobId: activeJob.id })
+          }
+        />
+      </div>
+    );
+  }
+
+  if (completedJob) {
+    return (
+      <span className="text-success text-xs font-medium">Downloaded</span>
+    );
+  }
+
+  if (!update.nexus_file_id) {
+    return (
+      <a
+        href={update.nexus_url}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1 text-accent hover:underline text-xs"
+      >
+        <ExternalLink size={12} /> Nexus
+      </a>
+    );
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={() => {
+        if (update.nexus_file_id) {
+          startDownload.mutate({
+            gameName,
+            data: {
+              nexus_mod_id: update.nexus_mod_id,
+              nexus_file_id: update.nexus_file_id,
+            },
+          });
+        }
+      }}
+      loading={startDownload.isPending}
+    >
+      <Download size={12} />
+    </Button>
+  );
+}
+
 function GameUpdates({ gameName }: { gameName: string }) {
   const { data: updates, isLoading } = useUpdates(gameName);
+  const { data: downloadJobs = [] } = useDownloadJobs(gameName);
   const checkUpdates = useCheckUpdates();
+  const startDownload = useStartDownload();
 
   if (isLoading) {
     return <p className="text-text-muted text-sm">Checking {gameName}...</p>;
   }
+
+  const downloadableUpdates = (updates?.updates ?? []).filter(
+    (u) => u.nexus_file_id != null,
+  );
+
+  const handleUpdateAll = () => {
+    for (const u of downloadableUpdates) {
+      if (u.nexus_file_id) {
+        startDownload.mutate({
+          gameName,
+          data: {
+            nexus_mod_id: u.nexus_mod_id,
+            nexus_file_id: u.nexus_file_id,
+          },
+        });
+      }
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -36,15 +151,28 @@ function GameUpdates({ gameName }: { gameName: string }) {
         <p className="text-text-muted text-xs">
           {updates?.updates_available ?? 0} update(s) available
         </p>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => checkUpdates.mutate(gameName)}
-          loading={checkUpdates.isPending}
-        >
-          <Search className="h-3.5 w-3.5 mr-1" />
-          Check Now
-        </Button>
+        <div className="flex items-center gap-2">
+          {downloadableUpdates.length > 1 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleUpdateAll}
+              loading={startDownload.isPending}
+            >
+              <Download className="h-3.5 w-3.5 mr-1" />
+              Update All ({downloadableUpdates.length})
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => checkUpdates.mutate(gameName)}
+            loading={checkUpdates.isPending}
+          >
+            <Search className="h-3.5 w-3.5 mr-1" />
+            Check Now
+          </Button>
+        </div>
       </div>
 
       {!updates?.updates.length ? (
@@ -66,11 +194,16 @@ function GameUpdates({ gameName }: { gameName: string }) {
             </thead>
             <tbody>
               {updates.updates.map((u, i) => (
-                <tr key={u.installed_mod_id ?? `group-${u.mod_group_id ?? i}`} className="border-b border-border/50">
+                <tr
+                  key={u.installed_mod_id ?? `group-${u.mod_group_id ?? i}`}
+                  className="border-b border-border/50"
+                >
                   <td className="py-2 pr-4 text-text-primary font-medium">
                     {u.display_name}
                   </td>
-                  <td className="py-2 pr-4 text-text-muted">{u.local_version}</td>
+                  <td className="py-2 pr-4 text-text-muted">
+                    {u.local_version}
+                  </td>
                   <td className="py-2 pr-4 text-success font-medium">
                     {u.nexus_version}
                   </td>
@@ -79,14 +212,11 @@ function GameUpdates({ gameName }: { gameName: string }) {
                   </td>
                   <td className="py-2 pr-4 text-text-muted">{u.author}</td>
                   <td className="py-2">
-                    <a
-                      href={u.nexus_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-accent hover:underline"
-                    >
-                      <ExternalLink size={12} /> Nexus
-                    </a>
+                    <DownloadCell
+                      update={u}
+                      gameName={gameName}
+                      downloadJobs={downloadJobs}
+                    />
                   </td>
                 </tr>
               ))}

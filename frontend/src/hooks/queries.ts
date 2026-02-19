@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
 import type {
   AvailableArchive,
+  DownloadJobOut,
   Game,
   InstalledModOut,
   ModGroup,
@@ -89,5 +90,14 @@ export function useProfiles(gameName: string) {
     queryKey: ["profiles", gameName],
     queryFn: () => api.get(`/api/v1/games/${gameName}/profiles/`),
     enabled: !!gameName,
+  });
+}
+
+export function useDownloadJobs(gameName: string) {
+  return useQuery<DownloadJobOut[]>({
+    queryKey: ["download-jobs", gameName],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/downloads/`),
+    enabled: !!gameName,
+    refetchInterval: 5000,
   });
 }
