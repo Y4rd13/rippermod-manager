@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlmodel import Field, SQLModel
 
@@ -13,4 +13,4 @@ class ModNexusCorrelation(SQLModel, table=True):
     method: str = ""
     reasoning: str = ""
     confirmed_by_user: bool = False
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

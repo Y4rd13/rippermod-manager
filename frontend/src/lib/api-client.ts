@@ -33,11 +33,18 @@ export const api = {
   put: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
-  stream: (path: string, body?: unknown) =>
-    fetch(`${BASE_URL}${path}`, {
+  stream: async (path: string, body?: unknown, signal?: AbortSignal) => {
+    const res = await fetch(`${BASE_URL}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
-    }),
+      signal,
+    });
+    if (!res.ok) {
+      const errorBody = await res.json().catch(() => null);
+      throw new ApiError(res.status, errorBody);
+    }
+    return res;
+  },
   baseUrl: BASE_URL,
 };

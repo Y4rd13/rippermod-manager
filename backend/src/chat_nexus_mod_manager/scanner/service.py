@@ -78,11 +78,15 @@ def scan_game_mods(
     total_files = len(candidate_files)
     on_progress("scan", f"Found {total_files} candidate files", 0)
 
+    if total_files == 0:
+        on_progress("done", "No mod files found", 100)
+        return ScanResult(files_found=0, groups_created=0, new_files=0)
+
     discovered_files: list[ModFile] = []
     new_count = 0
 
     for i, (file_path, source_folder) in enumerate(candidate_files):
-        pct = int(((i + 1) / total_files) * 70) if total_files else 0
+        pct = int(((i + 1) / total_files) * 70)
 
         rel = str(file_path.relative_to(install_path))
         existing = session.exec(select(ModFile).where(ModFile.file_path == rel)).first()
@@ -135,8 +139,11 @@ def scan_game_mods(
 
         index_mod_groups(game.id)
         on_progress("index", "Vector index updated", 95)
-    except Exception:
+    except ImportError:
         on_progress("index", "Vector indexing skipped (not configured)", 95)
+        logger.info("ChromaDB not available, skipping vector indexing")
+    except Exception:
+        on_progress("index", "Vector indexing failed", 95)
         logger.warning("Failed to auto-index after scan", exc_info=True)
 
     on_progress("done", f"Complete: {len(discovered_files)} files, {groups_created} groups", 100)

@@ -1,4 +1,5 @@
 import json
+import logging
 import queue
 import threading
 
@@ -17,6 +18,8 @@ from chat_nexus_mod_manager.schemas.mod import (
     ModGroupOut,
     ScanResult,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/games/{game_name}/mods", tags=["mods"])
 
@@ -39,9 +42,11 @@ def list_mod_groups(game_name: str, session: Session = Depends(get_session)) -> 
         .join(NexusDownload, ModNexusCorrelation.nexus_download_id == NexusDownload.id)
         .where(ModNexusCorrelation.mod_group_id.in_(group_ids))  # type: ignore[union-attr]
     ).all()
-    corr_map: dict[int, tuple[ModNexusCorrelation, NexusDownload]] = {
-        corr.mod_group_id: (corr, nd) for corr, nd in corr_rows
-    }
+    corr_map: dict[int, tuple[ModNexusCorrelation, NexusDownload]] = {}
+    for corr, nd in corr_rows:
+        existing = corr_map.get(corr.mod_group_id)
+        if existing is None or corr.score > existing[0].score:
+            corr_map[corr.mod_group_id] = (corr, nd)
 
     result: list[ModGroupOut] = []
     for g in groups:
@@ -99,18 +104,24 @@ def scan_mods_stream(game_name: str) -> StreamingResponse:
         q.put({"phase": phase, "message": message, "percent": percent})
 
     def run_scan() -> None:
-        with Session(engine) as session:
-            game = session.exec(select(Game).where(Game.name == game_name)).first()
-            if not game:
-                q.put({"phase": "error", "message": f"Game '{game_name}' not found", "percent": 0})
-                q.put(None)
-                return
-            _ = game.mod_paths
+        try:
+            with Session(engine) as session:
+                game = session.exec(select(Game).where(Game.name == game_name)).first()
+                if not game:
+                    q.put(
+                        {"phase": "error", "message": f"Game '{game_name}' not found", "percent": 0}
+                    )
+                    return
+                _ = game.mod_paths
 
-            from chat_nexus_mod_manager.scanner.service import scan_game_mods
+                from chat_nexus_mod_manager.scanner.service import scan_game_mods
 
-            scan_game_mods(game, session, on_progress=on_progress)
-        q.put(None)
+                scan_game_mods(game, session, on_progress=on_progress)
+        except Exception:
+            logger.exception("Scan failed for game '%s'", game_name)
+            q.put({"phase": "error", "message": "Scan failed unexpectedly", "percent": 0})
+        finally:
+            q.put(None)
 
     threading.Thread(target=run_scan, daemon=True).start()
 
@@ -121,7 +132,11 @@ def scan_mods_stream(game_name: str) -> StreamingResponse:
                 break
             yield f"data: {json.dumps(item)}\n\n"
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
 
 
 @router.post("/correlate", response_model=CorrelateResult)
