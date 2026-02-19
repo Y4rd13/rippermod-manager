@@ -38,7 +38,7 @@ def reset_collection(name: str) -> chromadb.Collection:
     client = get_chroma_client()
     try:
         client.delete_collection(name)
-    except ValueError:
+    except Exception:
         pass
     return client.get_or_create_collection(
         name=name,
