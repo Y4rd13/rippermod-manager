@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from typing import TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from sqlalchemy import delete
 from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.database import get_session
@@ -157,6 +158,40 @@ def delete_game(name: str, session: Session = Depends(get_session)) -> None:
     game = session.exec(select(Game).where(Game.name == name)).first()
     if not game:
         raise HTTPException(404, f"Game '{name}' not found")
-    game.updated_at = datetime.now(UTC)
+
+    game_id = game.id
+
+    from chat_nexus_mod_manager.vector.indexer import delete_game_vectors
+
+    delete_game_vectors(game_id)
+
+    from chat_nexus_mod_manager.models.install import InstalledMod, InstalledModFile
+    from chat_nexus_mod_manager.models.mod import ModFile, ModGroup, ModGroupAlias
+    from chat_nexus_mod_manager.models.nexus import NexusDownload
+    from chat_nexus_mod_manager.models.profile import Profile, ProfileEntry
+
+    # Delete in FK-safe order: children before parents
+    profile_ids = [p.id for p in session.exec(select(Profile).where(Profile.game_id == game_id))]
+    if profile_ids:
+        session.exec(delete(ProfileEntry).where(ProfileEntry.profile_id.in_(profile_ids)))  # type: ignore[union-attr]
+    session.exec(delete(Profile).where(Profile.game_id == game_id))  # type: ignore[call-overload]
+
+    installed_ids = [
+        m.id for m in session.exec(select(InstalledMod).where(InstalledMod.game_id == game_id))
+    ]
+    if installed_ids:
+        session.exec(
+            delete(InstalledModFile).where(InstalledModFile.installed_mod_id.in_(installed_ids))
+        )  # type: ignore[union-attr]
+    session.exec(delete(InstalledMod).where(InstalledMod.game_id == game_id))  # type: ignore[call-overload]
+
+    group_ids = [g.id for g in session.exec(select(ModGroup).where(ModGroup.game_id == game_id))]
+    if group_ids:
+        session.exec(delete(ModGroupAlias).where(ModGroupAlias.mod_group_id.in_(group_ids)))  # type: ignore[union-attr]
+        session.exec(delete(ModFile).where(ModFile.mod_group_id.in_(group_ids)))  # type: ignore[union-attr]
+    session.exec(delete(ModGroup).where(ModGroup.game_id == game_id))  # type: ignore[call-overload]
+
+    session.exec(delete(NexusDownload).where(NexusDownload.game_id == game_id))  # type: ignore[call-overload]
+
     session.delete(game)
     session.commit()

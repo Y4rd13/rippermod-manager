@@ -14,32 +14,26 @@ from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.mod import ModGroup
 from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
 from chat_nexus_mod_manager.models.settings import AppSetting
+from chat_nexus_mod_manager.schemas.chat import ReasoningEffort
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = (
-    "You are a helpful mod manager assistant for PC games "
-    "(especially Cyberpunk 2077).\n"
-    "You help users manage their mods, troubleshoot issues, "
-    "check for updates, and answer questions about their mod setup.\n\n"
-    "You have access to tools to:\n"
-    "- Search and query the local mod database "
-    "(search_local_mods, get_mod_details)\n"
-    "- Semantic search across all mod data using natural language "
-    "(semantic_mod_search) -- prefer this for broad or fuzzy questions\n"
-    "- Get information about specific mods from Nexus "
-    "(get_nexus_mod_info, list_nexus_downloads)\n"
-    "- List configured games (list_all_games)\n"
-    "- Rebuild the search index after data changes "
-    "(reindex_vector_store)\n\n"
-    "When answering questions about mods, first try "
-    "semantic_mod_search for broad queries, then use "
-    "search_local_mods or get_mod_details for exact lookups.\n"
-    "Be concise and helpful. Reference specific mod names, "
-    "versions, and authors when available.\n"
-    "If the user asks about mod conflicts or load order, "
-    "provide practical advice."
-)
+SYSTEM_PROMPT = """\
+Role: You are a mod manager assistant for PC games, specializing in Cyberpunk 2077.
+
+Capabilities:
+- Search local mod database (search_local_mods, get_mod_details)
+- Semantic search across all mod data (semantic_mod_search) — prefer for broad/fuzzy queries
+- Query Nexus Mods metadata (get_nexus_mod_info, list_nexus_downloads)
+- List configured games (list_all_games)
+- Rebuild search index (reindex_vector_store)
+
+Instructions:
+1. For broad questions, use semantic_mod_search first, then refine with exact lookups.
+2. Reference specific mod names, versions, and authors when available.
+3. For conflict or load order questions, provide actionable advice.
+4. Be concise. Avoid repeating the user's question back to them.
+"""
 
 
 def _get_openai_key() -> str:
@@ -205,7 +199,9 @@ TOOLS = [
 
 
 async def run_agent(
-    message: str, game_name: str | None = None
+    message: str,
+    game_name: str | None = None,
+    reasoning_effort: ReasoningEffort = "none",
 ) -> AsyncGenerator[dict[str, Any], None]:
     api_key = _get_openai_key()
     if not api_key:
@@ -216,12 +212,20 @@ async def run_agent(
         return
 
     model_name = _get_model_name()
-    llm = ChatOpenAI(
-        model=model_name,
-        api_key=api_key,
-        streaming=True,
-        temperature=0.3,
-    )
+    use_reasoning = reasoning_effort != "none"
+
+    llm_kwargs: dict[str, Any] = {
+        "model": model_name,
+        "api_key": api_key,
+        "streaming": True,
+    }
+    if use_reasoning:
+        llm_kwargs["temperature"] = 1
+        llm_kwargs["model_kwargs"] = {"reasoning": {"effort": reasoning_effort}}
+    else:
+        llm_kwargs["temperature"] = 0.3
+
+    llm = ChatOpenAI(**llm_kwargs)
     llm_with_tools = llm.bind_tools(TOOLS)
 
     with Session(engine) as session:
@@ -249,15 +253,32 @@ async def run_agent(
     max_iterations = 5
     for _ in range(max_iterations):
         full_content = ""
-        tool_calls_data: list[dict[str, Any]] = []
+        emitted_thinking_start = False
+        emitted_thinking_end = False
 
+        if use_reasoning:
+            yield {"type": "thinking_start", "data": {"effort": reasoning_effort}}
+            emitted_thinking_start = True
+
+        # Concatenate AIMessageChunks to properly merge streamed tool calls
+        gathered = None
         async for chunk in llm_with_tools.astream(messages):
             if chunk.content:
                 text = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
+                if emitted_thinking_start and not emitted_thinking_end:
+                    yield {"type": "thinking_end", "data": {}}
+                    emitted_thinking_end = True
                 full_content += text
                 yield {"type": "token", "data": {"content": text}}
-            if hasattr(chunk, "tool_calls") and chunk.tool_calls:
-                tool_calls_data.extend(chunk.tool_calls)
+            gathered = chunk if gathered is None else gathered + chunk
+
+        # If thinking started but no content tokens arrived (tool-call-only), still end it
+        if emitted_thinking_start and not emitted_thinking_end:
+            yield {"type": "thinking_end", "data": {}}
+
+        tool_calls_data: list[dict[str, Any]] = []
+        if gathered and hasattr(gathered, "tool_calls"):
+            tool_calls_data = list(gathered.tool_calls)
 
         if not tool_calls_data:
             with Session(engine) as session:
@@ -265,8 +286,15 @@ async def run_agent(
                 session.commit()
             break
 
+        # Ensure every tool call has a valid string id
+        for i, tc in enumerate(tool_calls_data):
+            if not tc.get("id"):
+                tc["id"] = f"call_{tc['name']}_{i}"
+
         ai_msg = AIMessage(content=full_content, tool_calls=tool_calls_data)
         messages.append(ai_msg)
+
+        from langchain_core.messages import ToolMessage
 
         for tc in tool_calls_data:
             yield {
@@ -287,8 +315,6 @@ async def run_agent(
                 "type": "tool_result",
                 "data": {"name": tc["name"], "result": str(result)[:500]},
             }
-
-            from langchain_core.messages import ToolMessage
 
             messages.append(ToolMessage(content=str(result), tool_call_id=tc["id"]))
 

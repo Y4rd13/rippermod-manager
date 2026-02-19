@@ -21,7 +21,9 @@ async def chat(data: ChatRequest, session: Session = Depends(get_session)) -> Ev
         try:
             from chat_nexus_mod_manager.agents.orchestrator import run_agent
 
-            async for event in run_agent(data.message, data.game_name):
+            async for event in run_agent(
+                data.message, data.game_name, reasoning_effort=data.reasoning_effort
+            ):
                 yield {"event": event["type"], "data": json.dumps(event["data"])}
         except ImportError:
             yield {

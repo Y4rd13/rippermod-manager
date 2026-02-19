@@ -22,6 +22,9 @@ frontend/src-tauri/target/
 .env
 *.env.local
 
+# Temp
+temp/
+
 # OS
 .DS_Store
 Thumbs.db
