@@ -10,11 +10,11 @@ from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.database import engine
 from chat_nexus_mod_manager.models.chat import ChatMessage
-from chat_nexus_mod_manager.schemas.chat import ReasoningEffort
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.mod import ModGroup
 from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
 from chat_nexus_mod_manager.models.settings import AppSetting
+from chat_nexus_mod_manager.schemas.chat import ReasoningEffort
 
 logger = logging.getLogger(__name__)
 
