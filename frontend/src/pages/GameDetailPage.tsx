@@ -149,7 +149,7 @@ export function GameDetailPage() {
     } catch (e) {
       stopFlushing();
       const msg = e instanceof Error ? e.message : "Scan failed";
-      setScanLogs((prev) => [...prev, { phase: "error", message: msg, percent: 0 }]);
+      pushLog({ phase: "error", message: msg, percent: 0 });
       setScanPhase("error");
     } finally {
       abortRef.current = null;
