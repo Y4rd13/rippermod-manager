@@ -1,0 +1,57 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+
+concurrency:
+  group: claude-pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Claude PR Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          track_progress: true
+          include_fix_links: true
+          prompt: |
+            Review this PR focused on:
+            - Bugs and logic errors
+            - Security vulnerabilities
+            - Best practices and code quality
+            - Missing error handling
+            - Performance issues
+
+            Provide detailed feedback using inline comments for specific issues.
+            Use top-level comments for general observations.
+            Only post GitHub comments - don't submit review text as messages.
+
+            Format summary as:
+            🔴 BLOCKING: critical issues
+            🟡 SUGGESTED: improvements
+            🟢 POSITIVE: good patterns found
+
+          claude_args: |
+            --model claude-opus-4-6
+            --max-turns 50
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git fetch:*)"
