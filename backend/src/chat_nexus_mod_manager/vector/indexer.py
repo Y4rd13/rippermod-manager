@@ -190,9 +190,7 @@ def delete_game_vectors(game_id: int) -> None:
     Must be called *before* cascading SQL deletes so NexusDownload rows are still available.
     """
     with Session(engine) as session:
-        group_ids = list(
-            session.exec(select(ModGroup.id).where(ModGroup.game_id == game_id)).all()
-        )
+        group_ids = list(session.exec(select(ModGroup.id).where(ModGroup.game_id == game_id)).all())
         nexus_mod_ids = list(
             session.exec(
                 select(NexusDownload.nexus_mod_id).where(NexusDownload.game_id == game_id)
