@@ -22,7 +22,7 @@ import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ScanProgress, type ScanLog } from "@/components/ui/ScanProgress";
-import { useCheckUpdates, useCorrelate, useStartDownload, useSyncNexus } from "@/hooks/mutations";
+import { useCheckUpdates, useStartDownload } from "@/hooks/mutations";
 import {
   useAvailableArchives,
   useDownloadJobs,
@@ -155,8 +155,6 @@ export function GameDetailPage() {
   const { data: profiles = [] } = useProfiles(name);
   const { data: updates } = useUpdates(name);
   const queryClient = useQueryClient();
-  const syncNexus = useSyncNexus();
-  const correlate = useCorrelate();
   const [tab, setTab] = useState<Tab>("mods");
 
   const [isLaunching, setIsLaunching] = useState(false);
@@ -251,34 +249,12 @@ export function GameDetailPage() {
         pushLog(data);
       }
 
-      pushLog({ phase: "sync", message: "Syncing Nexus history...", percent: 100 });
-      latestPhase.current = "sync";
-      latestPercent.current = 100;
-
-      try {
-        await syncNexus.mutateAsync(name);
-        pushLog({ phase: "sync", message: "Nexus sync complete", percent: 100 });
-      } catch {
-        pushLog({ phase: "sync", message: "Nexus sync skipped (optional)", percent: 100 });
-      }
-
-      pushLog({ phase: "correlate", message: "Correlating mods...", percent: 100 });
-      latestPhase.current = "correlate";
-
-      const corrResult = await correlate.mutateAsync(name);
-      pushLog({
-        phase: "done",
-        message: `Done: ${corrResult.matched} matched, ${corrResult.unmatched} unmatched`,
-        percent: 100,
-      });
-      latestPhase.current = "done";
-
       stopFlushing();
       setScanPhase("done");
       setScanPercent(100);
       queryClient.invalidateQueries({ queryKey: ["mods", name] });
       queryClient.invalidateQueries({ queryKey: ["installed-mods", name] });
-      toast.success("Scan complete", `${corrResult.matched} matched, ${corrResult.unmatched} unmatched`);
+      toast.success("Scan complete");
     } catch (e) {
       stopFlushing();
       const msg = e instanceof Error ? e.message : "Scan failed";

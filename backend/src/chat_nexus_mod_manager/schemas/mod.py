@@ -39,4 +39,22 @@ class CorrelateResult(BaseModel):
     unmatched: int
 
 
+class EnrichResult(BaseModel):
+    ids_found: int
+    ids_new: int
+    ids_failed: int
+
+
+class ArchiveMatchResult(BaseModel):
+    archives_scanned: int
+    matched: int
+    unmatched: int
+
+
+class WebSearchResult(BaseModel):
+    searched: int
+    matched: int
+    unmatched: int
+
+
 ModGroupOut.model_rebuild()
