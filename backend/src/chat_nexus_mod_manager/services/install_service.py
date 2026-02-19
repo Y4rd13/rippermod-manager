@@ -113,9 +113,14 @@ def install_mod(
         file_contents = archive.read_all_files(entries_to_read)
 
         for entry, normalised, normalised_lower in valid_entries:
+            data = file_contents.get(entry.filename)
+            if data is None:
+                logger.warning("Batch read missed entry: %s", entry.filename)
+                skipped += 1
+                continue
             target = game_dir / normalised
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(file_contents.get(entry.filename, b""))
+            target.write_bytes(data)
             extracted_paths.append(normalised)
 
             if normalised_lower in ownership:

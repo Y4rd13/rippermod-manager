@@ -127,6 +127,7 @@ class SevenZipHandler(ArchiveHandler):
         return result
 
     def close(self) -> None:
+        self._cache = None
         self._archive.close()
 
 

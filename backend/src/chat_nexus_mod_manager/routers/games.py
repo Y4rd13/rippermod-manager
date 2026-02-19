@@ -1,5 +1,6 @@
 import os
 from datetime import UTC, datetime
+from typing import TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlmodel import Session, select
@@ -25,8 +26,13 @@ CYBERPUNK_DEFAULT_PATHS = [
     ("mods", "REDmod mods", True),
 ]
 
-# Mapping of game domain -> (relative exe path, mod directories)
-GAME_REGISTRY: dict[str, dict] = {
+
+class GameRegistryEntry(TypedDict):
+    exe_path: str
+    mod_paths: list[tuple[str, str, bool]]
+
+
+GAME_REGISTRY: dict[str, GameRegistryEntry] = {
     "cyberpunk2077": {
         "exe_path": os.path.join("bin", "x64", "Cyberpunk2077.exe"),
         "mod_paths": CYBERPUNK_DEFAULT_PATHS,

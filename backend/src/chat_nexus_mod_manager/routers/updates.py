@@ -89,7 +89,7 @@ async def check_updates(
                                     meta.updated_at = info.get("updated_timestamp")
                                 session.add(meta)
                 session.commit()
-            except (httpx.HTTPError, httpx.TimeoutException, ValueError):
+            except (httpx.HTTPError, ValueError):
                 logger.warning("Failed to refresh mod metadata", exc_info=True)
 
             # Timestamp-based update checking for installed mods

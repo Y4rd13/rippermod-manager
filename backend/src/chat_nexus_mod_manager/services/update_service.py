@@ -166,7 +166,7 @@ async def check_installed_mod_updates(
         async with sem:
             try:
                 return nid, await client.get_mod_files(game_domain, nid)
-            except (httpx.HTTPError, httpx.TimeoutException, ValueError):
+            except (httpx.HTTPError, ValueError):
                 logger.warning("Failed to fetch files for mod %d", nid)
                 return nid, None
 
