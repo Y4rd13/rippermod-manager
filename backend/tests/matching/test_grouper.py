@@ -47,7 +47,7 @@ class TestGroupModFiles:
     def test_single_file(self):
         result = group_mod_files([_file("cool_mod.archive")])
         assert len(result) == 1
-        name, files, confidence = result[0]
+        _name, files, confidence = result[0]
         assert len(files) == 1
         assert confidence == 1.0
 

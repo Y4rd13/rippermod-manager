@@ -17,19 +17,29 @@ from chat_nexus_mod_manager.models.settings import AppSetting
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are a helpful mod manager assistant for PC games (especially Cyberpunk 2077).
-You help users manage their mods, troubleshoot issues, check for updates, and answer questions about their mod setup.
-
-You have access to tools to:
-- Search and query the local mod database (search_local_mods, get_mod_details)
-- Semantic search across all mod data using natural language (semantic_mod_search) — prefer this for broad or fuzzy questions
-- Get information about specific mods from Nexus (get_nexus_mod_info, list_nexus_downloads)
-- List configured games (list_all_games)
-- Rebuild the search index after data changes (reindex_vector_store)
-
-When answering questions about mods, first try semantic_mod_search for broad queries, then use search_local_mods or get_mod_details for exact lookups.
-Be concise and helpful. Reference specific mod names, versions, and authors when available.
-If the user asks about mod conflicts or load order, provide practical advice."""
+SYSTEM_PROMPT = (
+    "You are a helpful mod manager assistant for PC games "
+    "(especially Cyberpunk 2077).\n"
+    "You help users manage their mods, troubleshoot issues, "
+    "check for updates, and answer questions about their mod setup.\n\n"
+    "You have access to tools to:\n"
+    "- Search and query the local mod database "
+    "(search_local_mods, get_mod_details)\n"
+    "- Semantic search across all mod data using natural language "
+    "(semantic_mod_search) -- prefer this for broad or fuzzy questions\n"
+    "- Get information about specific mods from Nexus "
+    "(get_nexus_mod_info, list_nexus_downloads)\n"
+    "- List configured games (list_all_games)\n"
+    "- Rebuild the search index after data changes "
+    "(reindex_vector_store)\n\n"
+    "When answering questions about mods, first try "
+    "semantic_mod_search for broad queries, then use "
+    "search_local_mods or get_mod_details for exact lookups.\n"
+    "Be concise and helpful. Reference specific mod names, "
+    "versions, and authors when available.\n"
+    "If the user asks about mod conflicts or load order, "
+    "provide practical advice."
+)
 
 
 def _get_openai_key() -> str:
@@ -50,7 +60,10 @@ def _get_model_name() -> str:
 
 @tool
 def search_local_mods(query: str, game_name: str = "") -> str:
-    """Search for mods in the local database by name. Returns matching mod groups with their files and nexus match info."""
+    """Search for mods in the local database by name.
+
+    Returns matching mod groups with their files and nexus match info.
+    """
     with Session(engine) as session:
         stmt = select(ModGroup)
         if game_name:
@@ -79,7 +92,9 @@ def get_mod_details(mod_name: str) -> str:
     """Get detailed information about a specific mod group including all files and nexus match."""
     with Session(engine) as session:
         group = session.exec(
-            select(ModGroup).where(ModGroup.display_name.contains(mod_name))  # type: ignore[arg-type]
+            select(ModGroup).where(
+                ModGroup.display_name.contains(mod_name)  # type: ignore[arg-type]
+            )
         ).first()
         if not group:
             return f"Mod '{mod_name}' not found"
@@ -152,7 +167,13 @@ def list_nexus_downloads(game_name: str = "") -> str:
 
 @tool
 def semantic_mod_search(query: str) -> str:
-    """Search across all mod data using semantic/natural language search. Use this when the user asks broad questions about mods, troubleshooting, compatibility, or when exact name matching isn't enough. Returns the most relevant mod information from local mods, Nexus metadata, and correlation data."""
+    """Search across all mod data using semantic/natural language search.
+
+    Use this when the user asks broad questions about mods,
+    troubleshooting, compatibility, or when exact name matching
+    isn't enough. Returns the most relevant mod information from
+    local mods, Nexus metadata, and correlation data.
+    """
     from chat_nexus_mod_manager.vector.search import search_all_semantic
 
     return search_all_semantic(query, n_results=6)
@@ -160,7 +181,11 @@ def semantic_mod_search(query: str) -> str:
 
 @tool
 def reindex_vector_store(game_name: str = "") -> str:
-    """Rebuild the semantic search index from current database data. Run this after scanning mods or syncing Nexus data to update the search index."""
+    """Rebuild the semantic search index from current database data.
+
+    Run this after scanning mods or syncing Nexus data to update
+    the search index.
+    """
     from chat_nexus_mod_manager.vector.indexer import index_all
 
     game_id = None
@@ -194,7 +219,13 @@ async def run_agent(
 ) -> AsyncGenerator[dict[str, Any], None]:
     api_key = _get_openai_key()
     if not api_key:
-        yield {"type": "token", "data": {"content": "OpenAI API key not configured. Please set it in Settings."}}
+        yield {
+            "type": "token",
+            "data": {
+                "content": "OpenAI API key not configured. "
+                "Please set it in Settings."
+            },
+        }
         return
 
     model_name = _get_model_name()
@@ -208,7 +239,9 @@ async def run_agent(
 
     with Session(engine) as session:
         history_rows = session.exec(
-            select(ChatMessage).order_by(ChatMessage.created_at.desc()).limit(20)  # type: ignore[arg-type]
+            select(ChatMessage)
+            .order_by(ChatMessage.created_at.desc())  # type: ignore[arg-type]
+            .limit(20)
         ).all()
 
     messages: list[Any] = [SystemMessage(content=SYSTEM_PROMPT)]

@@ -1,3 +1,4 @@
+import contextlib
 import logging
 
 import chromadb
@@ -36,10 +37,8 @@ def get_collection(name: str) -> chromadb.Collection:
 
 def reset_collection(name: str) -> chromadb.Collection:
     client = get_chroma_client()
-    try:
+    with contextlib.suppress(Exception):
         client.delete_collection(name)
-    except Exception:
-        pass
     return client.get_or_create_collection(
         name=name,
         metadata={"hnsw:space": "cosine"},

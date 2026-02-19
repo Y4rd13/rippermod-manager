@@ -91,7 +91,11 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
                 nexus_download_id=best_download.id,  # type: ignore[arg-type]
                 score=best_score,
                 method=best_method,
-                reasoning=f"Matched '{group.display_name}' → '{best_download.mod_name}' via {best_method}",
+                reasoning=(
+                    f"Matched '{group.display_name}' "
+                    f"-> '{best_download.mod_name}' "
+                    f"via {best_method}"
+                ),
             )
             session.add(corr)
             matched += 1

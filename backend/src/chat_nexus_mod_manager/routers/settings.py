@@ -48,7 +48,10 @@ def update_settings(
 
 @router.get("/specs", response_model=PCSpecsOut | None)
 def get_specs(session: Session = Depends(get_session)) -> PCSpecs | None:
-    return session.exec(select(PCSpecs).order_by(PCSpecs.captured_at.desc())).first()  # type: ignore[arg-type]
+    return session.exec(
+        select(PCSpecs)
+        .order_by(PCSpecs.captured_at.desc())  # type: ignore[arg-type]
+    ).first()
 
 
 @router.post("/specs/capture", response_model=PCSpecsOut)
