@@ -131,37 +131,38 @@ def scan_mods_stream(game_name: str) -> StreamingResponse:
                 api_key = get_setting(session, "nexus_api_key")
                 tavily_key = get_setting(session, "tavily_api_key")
 
-                if api_key:
-                    # Phase 2: Tier 1 — Filename ID enrichment (85-92%)
-                    on_progress("enrich", "Enriching from filename IDs...", 85)
-                    asyncio.run(enrich_from_filename_ids(game, api_key, session, on_progress))
+                async def _run_async_pipeline() -> None:
+                    if api_key:
+                        # Tier 1 — Filename ID enrichment (85-92%)
+                        on_progress("enrich", "Enriching from filename IDs...", 85)
+                        await enrich_from_filename_ids(game, api_key, session, on_progress)
 
-                    # Phase 3: Tier 2 — MD5 archive matching (92-96%)
-                    on_progress("md5", "Matching archives by MD5...", 92)
-                    asyncio.run(match_archives_by_md5(game, api_key, session, on_progress))
+                        # Tier 2 — MD5 archive matching (92-96%)
+                        on_progress("md5", "Matching archives by MD5...", 92)
+                        await match_archives_by_md5(game, api_key, session, on_progress)
 
-                    # Phase 4: Nexus sync (96-97%)
-                    on_progress("sync", "Syncing Nexus history...", 96)
-                    asyncio.run(sync_nexus_history(game, api_key, session))
-                    on_progress("sync", "Nexus sync complete", 97)
+                        # Nexus sync (96-97%)
+                        on_progress("sync", "Syncing Nexus history...", 96)
+                        await sync_nexus_history(game, api_key, session)
+                        on_progress("sync", "Nexus sync complete", 97)
 
-                # Phase 5: Correlate (97-99%)
-                on_progress("correlate", "Correlating mods...", 97)
-                result = correlate_game_mods(game, session)
-                on_progress(
-                    "correlate",
-                    f"Correlated: {result.matched} matched, {result.unmatched} unmatched",
-                    99,
-                )
-
-                if api_key and tavily_key:
-                    # Phase 6: Tier 3 — Web search fallback (99-100%)
-                    on_progress("web-search", "Searching unmatched mods...", 99)
-                    asyncio.run(
-                        search_unmatched_mods(game, api_key, tavily_key, session, on_progress)
+                    # Correlate (97-99%)
+                    on_progress("correlate", "Correlating mods...", 97)
+                    result = correlate_game_mods(game, session)
+                    on_progress(
+                        "correlate",
+                        f"Correlated: {result.matched} matched, {result.unmatched} unmatched",
+                        99,
                     )
 
-                on_progress("done", f"Done: {result.matched} matched", 100)
+                    if api_key and tavily_key:
+                        # Tier 3 — Web search fallback (99-100%)
+                        on_progress("web-search", "Searching unmatched mods...", 99)
+                        await search_unmatched_mods(game, api_key, tavily_key, session, on_progress)
+
+                    on_progress("done", f"Done: {result.matched} matched", 100)
+
+                asyncio.run(_run_async_pipeline())
         except Exception:
             logger.exception("Scan failed for game '%s'", game_name)
             q.put({"phase": "error", "message": "Scan failed unexpectedly", "percent": 0})

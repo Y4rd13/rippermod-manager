@@ -7,27 +7,24 @@ and creates correlations for confident matches.
 import asyncio
 import logging
 import re
-from collections.abc import Callable
 
 from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.mod import ModGroup
-from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
+from chat_nexus_mod_manager.models.nexus import NexusDownload
 from chat_nexus_mod_manager.nexus.client import NexusClient, NexusRateLimitError
 from chat_nexus_mod_manager.schemas.mod import WebSearchResult
+from chat_nexus_mod_manager.services.nexus_helpers import upsert_nexus_mod
+from chat_nexus_mod_manager.services.progress import ProgressCallback, noop_progress
 
 logger = logging.getLogger(__name__)
 
-ProgressCallback = Callable[[str, str, int], None]
-
 _NEXUS_MOD_ID_RE = re.compile(r"nexusmods\.com/\w+/mods/(\d+)")
 _CONCURRENCY = 10
-
-
-def _noop(_phase: str, _msg: str, _pct: int) -> None:
-    pass
+_SEARCH_TIMEOUT = 120  # seconds
+_MAX_QUERY_LENGTH = 120
 
 
 async def search_unmatched_mods(
@@ -35,7 +32,7 @@ async def search_unmatched_mods(
     api_key: str,
     tavily_key: str,
     session: Session,
-    on_progress: ProgressCallback = _noop,
+    on_progress: ProgressCallback = noop_progress,
     max_searches: int = 50,
 ) -> WebSearchResult:
     """Search the web for unmatched mod groups and create correlations."""
@@ -65,14 +62,15 @@ async def search_unmatched_mods(
     tavily = AsyncTavilyClient(api_key=tavily_key)
     semaphore = asyncio.Semaphore(_CONCURRENCY)
 
-    searched = 0
-    matched_count = 0
     found_mod_ids: dict[int, dict] = {}  # group_id -> {nexus_mod_id, score, group_name}
 
-    async def search_one(group: ModGroup) -> None:
-        nonlocal searched
+    async def search_one(group: ModGroup) -> bool:
+        """Search for a single group. Returns True if search was attempted."""
         async with semaphore:
-            query = f"{group.display_name} {game.domain_name} site:nexusmods.com"
+            # Sanitize and truncate display name for query
+            name = re.sub(r"[^\w\s\-.]", "", group.display_name).strip()
+            name = name[:_MAX_QUERY_LENGTH] if name else "mod"
+            query = f"{name} {game.domain_name} site:nexusmods.com"
             try:
                 result = await tavily.search(
                     query=query,
@@ -81,9 +79,7 @@ async def search_unmatched_mods(
                 )
             except Exception:
                 logger.warning("Tavily search failed for '%s'", group.display_name)
-                return
-            finally:
-                searched += 1
+                return True
 
             for r in result.get("results", []):
                 url = r.get("url", "")
@@ -97,11 +93,19 @@ async def search_unmatched_mods(
                         "group_name": group.display_name,
                     }
                     break
+            return True
 
     tasks = [search_one(g) for g in unmatched]
-    await asyncio.gather(*tasks)
+    try:
+        results = await asyncio.wait_for(asyncio.gather(*tasks), timeout=_SEARCH_TIMEOUT)
+        searched = sum(1 for r in results if r)
+    except TimeoutError:
+        logger.warning("Web search timed out after %ds", _SEARCH_TIMEOUT)
+        searched = len(found_mod_ids)
 
     on_progress("web-search", f"Found {len(found_mod_ids)} matches, fetching mod info...", 99)
+
+    matched_count = 0
 
     # Fetch mod info and create correlations
     async with NexusClient(api_key) as client:
@@ -131,34 +135,14 @@ async def search_unmatched_mods(
                     logger.warning("Failed to fetch mod info for %s/%d", game.domain_name, mod_id)
                     continue
 
-                nexus_url = f"https://www.nexusmods.com/{game.domain_name}/mods/{mod_id}"
-                dl = NexusDownload(
-                    game_id=game.id,  # type: ignore[arg-type]
-                    nexus_mod_id=mod_id,
-                    mod_name=info.get("name", ""),
-                    version=info.get("version", ""),
-                    category=str(info.get("category_id", "")),
-                    nexus_url=nexus_url,
+                dl = upsert_nexus_mod(
+                    session,
+                    game.id,  # type: ignore[arg-type]
+                    game.domain_name,
+                    mod_id,
+                    info,
                 )
-                session.add(dl)
                 session.flush()
-
-                existing_meta = session.exec(
-                    select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)
-                ).first()
-                if not existing_meta:
-                    meta = NexusModMeta(
-                        nexus_mod_id=mod_id,
-                        game_domain=game.domain_name,
-                        name=info.get("name", ""),
-                        summary=info.get("summary", ""),
-                        author=info.get("author", ""),
-                        version=info.get("version", ""),
-                        endorsement_count=info.get("endorsement_count", 0),
-                        category=str(info.get("category_id", "")),
-                    )
-                    session.add(meta)
-
                 existing_dl = dl
 
             # Create correlation

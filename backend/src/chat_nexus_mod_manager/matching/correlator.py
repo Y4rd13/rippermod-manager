@@ -100,6 +100,14 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
                     best_method = method
 
         if best_download and best_score >= 0.4:
+            if best_score < 0.5:
+                logger.info(
+                    "Low-confidence match (%.2f): '%s' -> '%s' via %s",
+                    best_score,
+                    group.display_name,
+                    best_download.mod_name,
+                    best_method,
+                )
             corr = ModNexusCorrelation(
                 mod_group_id=group.id,  # type: ignore[arg-type]
                 nexus_download_id=best_download.id,  # type: ignore[arg-type]
