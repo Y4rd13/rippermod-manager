@@ -1,4 +1,5 @@
 use serde::Serialize;
+use tauri::Emitter;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct DetectedGame {
@@ -253,8 +254,21 @@ fn extract_vdf_value(line: &str) -> Option<String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_deep_link::init());
+
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            // When a second instance is spawned with an nxm:// URL, forward it to the existing window
+            if let Some(url) = argv.iter().find(|a| a.starts_with("nxm://")) {
+                let _ = app.emit("nxm-link", url);
+            }
+        }));
+    }
+
+    builder
         .invoke_handler(tauri::generate_handler![detect_game_paths])
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -264,6 +278,7 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
             Ok(())
         })
         .run(tauri::generate_context!())
