@@ -5,6 +5,7 @@ import type {
   AvailableArchive,
   DownloadJobOut,
   Game,
+  GameVersion,
   InstalledModOut,
   ModGroup,
   NexusDownload,
@@ -33,6 +34,15 @@ export function useGame(name: string) {
     queryKey: ["games", name],
     queryFn: () => api.get(`/api/v1/games/${name}`),
     enabled: !!name,
+  });
+}
+
+export function useGameVersion(gameName: string) {
+  return useQuery<GameVersion>({
+    queryKey: ["game-version", gameName],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/version`),
+    enabled: !!gameName,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

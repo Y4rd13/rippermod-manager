@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::process::Command;
 use tauri::Emitter;
 
 #[derive(Debug, Serialize, Clone)]
@@ -252,6 +253,28 @@ fn extract_vdf_value(line: &str) -> Option<String> {
     None
 }
 
+#[tauri::command]
+fn launch_game(install_path: String) -> Result<(), String> {
+    let exe_path = std::path::Path::new(&install_path)
+        .join("bin")
+        .join("x64")
+        .join("Cyberpunk2077.exe");
+
+    if !exe_path.exists() {
+        return Err(format!(
+            "Game executable not found: {}",
+            exe_path.display()
+        ));
+    }
+
+    Command::new(&exe_path)
+        .arg("--launcher-skip")
+        .spawn()
+        .map_err(|e| format!("Failed to launch game: {}", e))?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default()
@@ -269,7 +292,7 @@ pub fn run() {
     }
 
     builder
-        .invoke_handler(tauri::generate_handler![detect_game_paths])
+        .invoke_handler(tauri::generate_handler![detect_game_paths, launch_game])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(

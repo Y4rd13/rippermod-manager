@@ -4,10 +4,12 @@ import {
   FolderOpen,
   Link2,
   Package,
+  Play,
   RefreshCw,
   Scan,
   UserCheck,
 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
@@ -25,6 +27,7 @@ import {
   useAvailableArchives,
   useDownloadJobs,
   useGame,
+  useGameVersion,
   useInstalledMods,
   useMods,
   useProfiles,
@@ -145,6 +148,7 @@ function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdat
 export function GameDetailPage() {
   const { name = "" } = useParams();
   const { data: game } = useGame(name);
+  const { data: gameVersion } = useGameVersion(name);
   const { data: mods = [] } = useMods(name);
   const { data: installedMods = [] } = useInstalledMods(name);
   const { data: archives = [] } = useAvailableArchives(name);
@@ -155,6 +159,7 @@ export function GameDetailPage() {
   const correlate = useCorrelate();
   const [tab, setTab] = useState<Tab>("mods");
 
+  const [isLaunching, setIsLaunching] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanLogs, setScanLogs] = useState<ScanLog[]>([]);
   const [scanPercent, setScanPercent] = useState(0);
@@ -201,6 +206,20 @@ export function GameDetailPage() {
       abortRef.current?.abort();
     };
   }, []);
+
+  const handleLaunch = async () => {
+    if (!game) return;
+    setIsLaunching(true);
+    try {
+      await invoke<void>("launch_game", { installPath: game.install_path });
+      toast.success("Game launched");
+    } catch (e) {
+      const msg = typeof e === "string" ? e : "Launch failed";
+      toast.error("Launch failed", msg);
+    } finally {
+      setIsLaunching(false);
+    }
+  };
 
   const handleFullScan = async () => {
     setIsScanning(true);
@@ -279,12 +298,24 @@ export function GameDetailPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary">{game.name}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-text-primary">{game.name}</h1>
+            {gameVersion?.version && (
+              <span className="text-xs font-medium text-text-muted bg-surface-secondary px-2 py-0.5 rounded">
+                v{gameVersion.version}
+              </span>
+            )}
+          </div>
           <p className="text-sm text-text-muted">{game.install_path}</p>
         </div>
-        <Button onClick={handleFullScan} loading={isScanning}>
-          <Scan size={16} /> Scan & Correlate
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={handleLaunch} loading={isLaunching}>
+            <Play size={16} /> Play
+          </Button>
+          <Button onClick={handleFullScan} loading={isScanning}>
+            <Scan size={16} /> Scan & Correlate
+          </Button>
+        </div>
       </div>
 
       {scanPhase && (
