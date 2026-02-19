@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlmodel import Field, SQLModel
 
@@ -23,4 +23,4 @@ class PCSpecs(SQLModel, table=True):
     storage_type: str = ""
     os_version: str = ""
     resolution: str = ""
-    captured_at: datetime = Field(default_factory=datetime.utcnow)
+    captured_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

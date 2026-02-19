@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -11,8 +11,8 @@ class Game(SQLModel, table=True):
     domain_name: str = Field(index=True)
     install_path: str
     os: str = "windows"
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     mod_paths: list["GameModPath"] = Relationship(back_populates="game")
 
