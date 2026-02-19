@@ -303,7 +303,7 @@ function AddGameStep({ onFinish }: { onFinish: () => void }) {
   const pendingLogs = useRef<ScanLog[]>([]);
   const latestPercent = useRef(0);
   const latestPhase = useRef("");
-  const flushTimer = useRef<ReturnType<typeof setInterval>>();
+  const flushTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   const startFlushing = useCallback(() => {
     flushTimer.current = setInterval(() => {

@@ -1,5 +1,3 @@
-import pytest
-
 from chat_nexus_mod_manager.matching.correlator import (
     compute_name_score,
     correlate_game_mods,

@@ -1,11 +1,7 @@
-from unittest.mock import AsyncMock, patch
-
 import httpx
-import pytest
 import respx
 
 from chat_nexus_mod_manager.nexus.client import BASE_URL
-from chat_nexus_mod_manager.schemas.nexus import NexusKeyResult, NexusSyncResult
 
 
 class TestValidateKey:
