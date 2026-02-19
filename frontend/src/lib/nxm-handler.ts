@@ -47,11 +47,22 @@ interface NxmHandlerDeps {
 const RETRY_INTERVAL_MS = 500;
 const MAX_RETRIES = 10;
 
-function handleNxmLink(link: NxmLink, deps: NxmHandlerDeps, retries = 0) {
+function handleNxmLink(
+  link: NxmLink,
+  deps: NxmHandlerDeps,
+  ctx: { cancelled: boolean; retryTimers: Set<ReturnType<typeof setTimeout>> },
+  retries = 0,
+) {
+  if (ctx.cancelled) return;
+
   const games = deps.getGames();
   if (!games) {
     if (retries < MAX_RETRIES) {
-      setTimeout(() => handleNxmLink(link, deps, retries + 1), RETRY_INTERVAL_MS);
+      const timer = setTimeout(() => {
+        ctx.retryTimers.delete(timer);
+        handleNxmLink(link, deps, ctx, retries + 1);
+      }, RETRY_INTERVAL_MS);
+      ctx.retryTimers.add(timer);
       return;
     }
     toast.error("NXM link failed", "Games not loaded — please try again");
@@ -77,22 +88,22 @@ function handleNxmLink(link: NxmLink, deps: NxmHandlerDeps, retries = 0) {
 }
 
 export function setupNxmHandler(deps: NxmHandlerDeps): () => void {
-  let cancelled = false;
+  const ctx = { cancelled: false, retryTimers: new Set<ReturnType<typeof setTimeout>>() };
   let unlisten: (() => void) | undefined;
   const window = getCurrentWebviewWindow();
 
   listen<string>("nxm-link", (event) => {
-    if (cancelled) return;
+    if (ctx.cancelled) return;
     window.setFocus();
     const link = parseNxmUrl(event.payload);
     if (link) {
-      handleNxmLink(link, deps);
+      handleNxmLink(link, deps, ctx);
     } else {
       toast.error("Invalid NXM link", "Could not parse the download URL");
     }
   })
     .then((fn) => {
-      if (cancelled) {
+      if (ctx.cancelled) {
         fn();
       } else {
         unlisten = fn;
@@ -105,14 +116,14 @@ export function setupNxmHandler(deps: NxmHandlerDeps): () => void {
   // Check for cold-start URLs via the deep-link plugin
   import("@tauri-apps/plugin-deep-link")
     .then(({ getCurrent }) => {
-      if (cancelled) return;
+      if (ctx.cancelled) return;
       getCurrent()
         .then((urls) => {
-          if (cancelled || !urls || urls.length === 0) return;
+          if (ctx.cancelled || !urls || urls.length === 0) return;
           for (const url of urls) {
             const link = parseNxmUrl(url);
             if (link) {
-              handleNxmLink(link, deps);
+              handleNxmLink(link, deps, ctx);
               break;
             }
           }
@@ -126,7 +137,9 @@ export function setupNxmHandler(deps: NxmHandlerDeps): () => void {
     });
 
   return () => {
-    cancelled = true;
+    ctx.cancelled = true;
     unlisten?.();
+    for (const timer of ctx.retryTimers) clearTimeout(timer);
+    ctx.retryTimers.clear();
   };
 }
