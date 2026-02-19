@@ -33,3 +33,15 @@ class GameOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     mod_paths: list[ModPathOut] = []
+
+
+class PathValidationRequest(BaseModel):
+    install_path: str
+
+
+class PathValidation(BaseModel):
+    valid: bool
+    path: str
+    found_exe: bool
+    found_mod_dirs: list[str]
+    warning: str = ""

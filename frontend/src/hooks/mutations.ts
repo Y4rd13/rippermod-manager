@@ -2,14 +2,23 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api-client";
 import type {
+  ConflictCheckResult,
   CorrelateResult,
-  GameCreate,
   Game,
+  GameCreate,
+  InstallRequest,
+  InstallResult,
   NexusKeyResult,
   NexusSyncResult,
   OnboardingStatus,
+  PathValidation,
+  ProfileExport,
+  ProfileOut,
   ScanResult,
   Setting,
+  ToggleResult,
+  UninstallResult,
+  UpdateCheckResult,
 } from "@/types/api";
 
 export function useCreateGame() {
@@ -89,5 +98,118 @@ export function useCompleteOnboarding() {
   return useMutation<OnboardingStatus, Error, { openai_api_key?: string; nexus_api_key?: string }>({
     mutationFn: (data) => api.post("/api/v1/onboarding/complete", data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["onboarding"] }),
+  });
+}
+
+export function useInstallMod() {
+  const qc = useQueryClient();
+  return useMutation<InstallResult, Error, { gameName: string; data: InstallRequest }>({
+    mutationFn: ({ gameName, data }) =>
+      api.post(`/api/v1/games/${gameName}/install/`, data),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
+    },
+  });
+}
+
+export function useUninstallMod() {
+  const qc = useQueryClient();
+  return useMutation<UninstallResult, Error, { gameName: string; modId: number }>({
+    mutationFn: ({ gameName, modId }) =>
+      api.delete(`/api/v1/games/${gameName}/install/installed/${modId}`),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+    },
+  });
+}
+
+export function useToggleMod() {
+  const qc = useQueryClient();
+  return useMutation<ToggleResult, Error, { gameName: string; modId: number }>({
+    mutationFn: ({ gameName, modId }) =>
+      api.patch(`/api/v1/games/${gameName}/install/installed/${modId}/toggle`),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+    },
+  });
+}
+
+export function useCheckConflicts() {
+  return useMutation<ConflictCheckResult, Error, { gameName: string; archiveFilename: string }>({
+    mutationFn: ({ gameName, archiveFilename }) =>
+      api.get(
+        `/api/v1/games/${gameName}/install/conflicts?archive_filename=${encodeURIComponent(archiveFilename)}`,
+      ),
+  });
+}
+
+export function useSaveProfile() {
+  const qc = useQueryClient();
+  return useMutation<ProfileOut, Error, { gameName: string; name: string }>({
+    mutationFn: ({ gameName, name }) =>
+      api.post(`/api/v1/games/${gameName}/profiles/`, { name }),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["profiles", gameName] });
+    },
+  });
+}
+
+export function useLoadProfile() {
+  const qc = useQueryClient();
+  return useMutation<ProfileOut, Error, { gameName: string; profileId: number }>({
+    mutationFn: ({ gameName, profileId }) =>
+      api.post(`/api/v1/games/${gameName}/profiles/${profileId}/load`),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      qc.invalidateQueries({ queryKey: ["profiles", gameName] });
+    },
+  });
+}
+
+export function useDeleteProfile() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, { gameName: string; profileId: number }>({
+    mutationFn: ({ gameName, profileId }) =>
+      api.delete(`/api/v1/games/${gameName}/profiles/${profileId}`),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["profiles", gameName] });
+    },
+  });
+}
+
+export function useExportProfile() {
+  return useMutation<ProfileExport, Error, { gameName: string; profileId: number }>({
+    mutationFn: ({ gameName, profileId }) =>
+      api.post(`/api/v1/games/${gameName}/profiles/${profileId}/export`),
+  });
+}
+
+export function useImportProfile() {
+  const qc = useQueryClient();
+  return useMutation<ProfileOut, Error, { gameName: string; data: ProfileExport }>({
+    mutationFn: ({ gameName, data }) =>
+      api.post(`/api/v1/games/${gameName}/profiles/import`, data),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["profiles", gameName] });
+    },
+  });
+}
+
+export function useCheckUpdates() {
+  const qc = useQueryClient();
+  return useMutation<UpdateCheckResult, Error, string>({
+    mutationFn: (gameName) =>
+      api.post(`/api/v1/games/${gameName}/updates/check`),
+    onSuccess: (_, gameName) => {
+      qc.invalidateQueries({ queryKey: ["updates", gameName] });
+    },
+  });
+}
+
+export function useValidatePath() {
+  return useMutation<PathValidation, Error, { install_path: string }>({
+    mutationFn: (data) =>
+      api.post("/api/v1/games/validate-path", data),
   });
 }

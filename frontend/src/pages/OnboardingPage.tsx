@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { open } from "@tauri-apps/plugin-dialog";
-import { ChevronDown, FolderOpen } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { CheckCircle, ChevronDown, FolderOpen, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -11,12 +12,14 @@ import {
   useCreateGame,
   useSaveSettings,
   useSyncNexus,
+  useValidatePath,
 } from "@/hooks/mutations";
 import { api } from "@/lib/api-client";
 import { parseSSE } from "@/lib/sse-parser";
 import { useOnboardingStatus } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
 import { useOnboardingStore } from "@/stores/onboarding-store";
+import type { DetectedGame, PathValidation } from "@/types/api";
 
 const STEPS = ["Welcome", "AI Setup", "Nexus Mods", "Add Game"];
 
@@ -294,11 +297,15 @@ function AddGameStep({ onFinish }: { onFinish: () => void }) {
   const createGame = useCreateGame();
   const syncNexus = useSyncNexus();
   const completeOnboarding = useCompleteOnboarding();
+  const validatePath = useValidatePath();
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [scanLogs, setScanLogs] = useState<ScanLog[]>([]);
   const [scanPercent, setScanPercent] = useState(0);
   const [scanPhase, setScanPhase] = useState("");
+  const [detectedPaths, setDetectedPaths] = useState<DetectedGame[]>([]);
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [validation, setValidation] = useState<PathValidation | null>(null);
 
   const pendingLogs = useRef<ScanLog[]>([]);
   const latestPercent = useRef(0);
@@ -341,6 +348,44 @@ function AddGameStep({ onFinish }: { onFinish: () => void }) {
       abortRef.current?.abort();
     };
   }, []);
+
+  const handleAutoDetect = async () => {
+    setIsDetecting(true);
+    setError("");
+    setDetectedPaths([]);
+    setValidation(null);
+    try {
+      const paths = await invoke<DetectedGame[]>("detect_game_paths");
+      if (paths.length === 1) {
+        store.setInstallPath(paths[0].path);
+        handleValidate(paths[0].path);
+      } else if (paths.length > 1) {
+        setDetectedPaths(paths);
+      } else {
+        setError("No installations found. Use Browse to select your game folder.");
+      }
+    } catch {
+      setError("Auto-detection failed. Use Browse to select your game folder.");
+    } finally {
+      setIsDetecting(false);
+    }
+  };
+
+  const handleSelectDetected = (path: string) => {
+    store.setInstallPath(path);
+    setDetectedPaths([]);
+    handleValidate(path);
+  };
+
+  const handleValidate = (path: string) => {
+    validatePath.mutate(
+      { install_path: path },
+      {
+        onSuccess: (result) => setValidation(result),
+        onError: () => setValidation(null),
+      },
+    );
+  };
 
   const handleFinish = async () => {
     if (!store.installPath.trim()) {
@@ -425,7 +470,7 @@ function AddGameStep({ onFinish }: { onFinish: () => void }) {
         onChange={(e) => store.setGameName(e.target.value)}
         disabled
       />
-      <div className="space-y-1">
+      <div className="space-y-2">
         <label className="block text-sm font-medium text-text-secondary">
           Installation Path
         </label>
@@ -434,9 +479,19 @@ function AddGameStep({ onFinish }: { onFinish: () => void }) {
             {store.installPath ? (
               <span className="text-text-primary">{store.installPath}</span>
             ) : (
-              <span className="text-text-muted">Click Browse to select your game folder</span>
+              <span className="text-text-muted">Auto-detect or browse for your game folder</span>
             )}
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={isLoading || isDetecting}
+            onClick={handleAutoDetect}
+            loading={isDetecting}
+          >
+            <Search className="h-4 w-4 mr-1" />
+            Auto-detect
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -449,7 +504,9 @@ function AddGameStep({ onFinish }: { onFinish: () => void }) {
               });
               if (selected) {
                 store.setInstallPath(selected);
+                setDetectedPaths([]);
                 setError("");
+                handleValidate(selected);
               }
             }}
           >
@@ -457,6 +514,43 @@ function AddGameStep({ onFinish }: { onFinish: () => void }) {
             Browse
           </Button>
         </div>
+
+        {detectedPaths.length > 1 && (
+          <div className="rounded-lg border border-border bg-surface-1 p-2 space-y-1">
+            <p className="text-xs text-text-muted px-1 mb-1">
+              Multiple installations found. Select one:
+            </p>
+            {detectedPaths.map((d) => (
+              <button
+                key={d.path}
+                type="button"
+                onClick={() => handleSelectDetected(d.path)}
+                className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-surface-2 transition-colors"
+              >
+                <span className="text-text-primary truncate">{d.path}</span>
+                <span className="shrink-0 ml-2 text-xs text-accent font-medium">
+                  {d.source}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {validation && (
+          <div className="flex items-center gap-2 text-xs">
+            {validation.valid ? (
+              <>
+                <CheckCircle className="h-3.5 w-3.5 text-success" />
+                <span className="text-success">
+                  Valid installation ({validation.found_mod_dirs.length} mod directories found)
+                </span>
+              </>
+            ) : (
+              <span className="text-danger">{validation.warning}</span>
+            )}
+          </div>
+        )}
+
         {error && <p className="text-danger text-sm">{error}</p>}
       </div>
 

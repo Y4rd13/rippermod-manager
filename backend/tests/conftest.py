@@ -1,3 +1,4 @@
+import contextlib
 from collections.abc import Generator
 
 import pytest
@@ -22,20 +23,27 @@ def engine():
     return eng
 
 
+def _safe_monkeypatch_engine(monkeypatch, engine):
+    """Monkeypatch engine references, skipping modules with unavailable deps."""
+    monkeypatch.setattr("chat_nexus_mod_manager.database.engine", engine)
+    for module_path in (
+        "chat_nexus_mod_manager.vector.indexer.engine",
+        "chat_nexus_mod_manager.agents.orchestrator.engine",
+    ):
+        with contextlib.suppress(ImportError, AttributeError):
+            monkeypatch.setattr(module_path, engine)
+
+
 @pytest.fixture
 def session(engine, monkeypatch):
     with Session(engine) as sess:
-        monkeypatch.setattr("chat_nexus_mod_manager.database.engine", engine)
-        monkeypatch.setattr("chat_nexus_mod_manager.vector.indexer.engine", engine)
-        monkeypatch.setattr("chat_nexus_mod_manager.agents.orchestrator.engine", engine)
+        _safe_monkeypatch_engine(monkeypatch, engine)
         yield sess
 
 
 @pytest.fixture
 def client(engine, monkeypatch):
-    monkeypatch.setattr("chat_nexus_mod_manager.database.engine", engine)
-    monkeypatch.setattr("chat_nexus_mod_manager.vector.indexer.engine", engine)
-    monkeypatch.setattr("chat_nexus_mod_manager.agents.orchestrator.engine", engine)
+    _safe_monkeypatch_engine(monkeypatch, engine)
 
     def _override_session() -> Generator[Session, None, None]:
         with Session(engine) as sess:
