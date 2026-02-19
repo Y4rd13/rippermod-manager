@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     nexus_api_key: str = ""
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
+    tavily_api_key: str = ""
     chroma_path: Path = Path("data/chroma")
     host: str = "127.0.0.1"
     port: int = 8425

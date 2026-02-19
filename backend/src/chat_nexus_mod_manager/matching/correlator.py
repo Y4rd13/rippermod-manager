@@ -43,7 +43,7 @@ def compute_name_score(local_name: str, nexus_name: str) -> tuple[float, str]:
 
     jaccard = token_jaccard(local_name, nexus_name)
     jw = jellyfish.jaro_winkler_similarity(ln, nn)
-    combined = 0.6 * jaccard + 0.4 * jw
+    combined = 0.5 * jaccard + 0.5 * jw
 
     return round(combined, 3), "fuzzy"
 
@@ -57,11 +57,13 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
         return CorrelateResult(total_groups=len(groups), matched=0, unmatched=len(groups))
 
     existing = session.exec(
-        select(ModNexusCorrelation.mod_group_id).where(
+        select(ModNexusCorrelation).where(
             ModNexusCorrelation.mod_group_id.in_([g.id for g in groups])  # type: ignore[union-attr]
         )
     ).all()
-    already_matched = set(existing)
+    already_matched: set[int] = set()
+    for corr in existing:
+        already_matched.add(corr.mod_group_id)
 
     nexus_id_map: dict[int, NexusDownload] = {}
     for dl in downloads:
@@ -97,7 +99,7 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
                     best_download = dl
                     best_method = method
 
-        if best_download and best_score >= 0.5:
+        if best_download and best_score >= 0.4:
             corr = ModNexusCorrelation(
                 mod_group_id=group.id,  # type: ignore[arg-type]
                 nexus_download_id=best_download.id,  # type: ignore[arg-type]
