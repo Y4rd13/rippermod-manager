@@ -208,7 +208,7 @@ export function useCheckUpdates() {
 }
 
 export function useValidatePath() {
-  return useMutation<PathValidation, Error, { install_path: string }>({
+  return useMutation<PathValidation, Error, { install_path: string; domain_name?: string }>({
     mutationFn: (data) =>
       api.post("/api/v1/games/validate-path", data),
   });

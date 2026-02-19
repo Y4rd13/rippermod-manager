@@ -8,8 +8,8 @@ from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.database import get_session
 from chat_nexus_mod_manager.matching.filename_parser import parse_mod_filename
-from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.install import InstalledMod
+from chat_nexus_mod_manager.routers.deps import get_game_or_404
 from chat_nexus_mod_manager.schemas.install import (
     AvailableArchive,
     ConflictCheckResult,
@@ -32,20 +32,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/games/{game_name}/install", tags=["install"])
 
 
-def _get_game(game_name: str, session: Session) -> Game:
-    game = session.exec(select(Game).where(Game.name == game_name)).first()
-    if not game:
-        raise HTTPException(404, f"Game '{game_name}' not found")
-    return game
-
-
 @router.get("/available", response_model=list[AvailableArchive])
 async def list_archives(
     game_name: str,
     session: Session = Depends(get_session),
 ) -> list[AvailableArchive]:
     """List mod archives available for installation."""
-    game = _get_game(game_name, session)
+    game = get_game_or_404(game_name, session)
     archives = list_available_archives(game)
     result: list[AvailableArchive] = []
     for path in archives:
@@ -68,7 +61,7 @@ async def list_installed(
     session: Session = Depends(get_session),
 ) -> list[InstalledModOut]:
     """List all installed mods for a game."""
-    game = _get_game(game_name, session)
+    game = get_game_or_404(game_name, session)
     mods = session.exec(select(InstalledMod).where(InstalledMod.game_id == game.id)).all()
     result: list[InstalledModOut] = []
     for mod in mods:
@@ -96,7 +89,7 @@ async def install(
     session: Session = Depends(get_session),
 ) -> InstallResult:
     """Install a mod from an archive in the staging folder."""
-    game = _get_game(game_name, session)
+    game = get_game_or_404(game_name, session)
     staging = Path(game.install_path) / "downloaded_mods"
     archive_path = staging / data.archive_filename
     if not archive_path.resolve().is_relative_to(staging.resolve()):
@@ -119,7 +112,7 @@ async def uninstall(
     session: Session = Depends(get_session),
 ) -> UninstallResult:
     """Uninstall a mod, removing all its files from the game directory."""
-    game = _get_game(game_name, session)
+    game = get_game_or_404(game_name, session)
     mod = session.get(InstalledMod, mod_id)
     if not mod or mod.game_id != game.id:
         raise HTTPException(404, "Installed mod not found")
@@ -133,7 +126,7 @@ async def toggle(
     session: Session = Depends(get_session),
 ) -> ToggleResult:
     """Enable or disable a mod by renaming its files."""
-    game = _get_game(game_name, session)
+    game = get_game_or_404(game_name, session)
     mod = session.get(InstalledMod, mod_id)
     if not mod or mod.game_id != game.id:
         raise HTTPException(404, "Installed mod not found")
@@ -147,7 +140,7 @@ async def conflicts(
     session: Session = Depends(get_session),
 ) -> ConflictCheckResult:
     """Check for file conflicts before installing an archive."""
-    game = _get_game(game_name, session)
+    game = get_game_or_404(game_name, session)
     staging = Path(game.install_path) / "downloaded_mods"
     archive_path = staging / archive_filename
     if not archive_path.resolve().is_relative_to(staging.resolve()):

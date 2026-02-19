@@ -37,6 +37,7 @@ class GameOut(BaseModel):
 
 class PathValidationRequest(BaseModel):
     install_path: str
+    domain_name: str = "cyberpunk2077"
 
 
 class PathValidation(BaseModel):
