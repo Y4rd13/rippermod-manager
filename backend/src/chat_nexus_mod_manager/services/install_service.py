@@ -1,0 +1,238 @@
+"""Mod installation, uninstallation, and enable/disable toggle.
+
+Handles archive extraction to the game directory, file ownership tracking
+via the InstalledMod/InstalledModFile tables, and non-destructive
+enable/disable via ``.disabled`` file renaming.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from pathlib import Path
+
+from sqlmodel import Session, select
+
+from chat_nexus_mod_manager.archive.handler import open_archive
+from chat_nexus_mod_manager.matching.filename_parser import parse_mod_filename
+from chat_nexus_mod_manager.models.game import Game
+from chat_nexus_mod_manager.models.install import InstalledMod, InstalledModFile
+from chat_nexus_mod_manager.schemas.install import (
+    InstallResult,
+    ToggleResult,
+    UninstallResult,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def list_available_archives(game: Game) -> list[Path]:
+    """Return archive files found in a ``staging`` folder next to the game install."""
+    staging = Path(game.install_path) / "downloaded_mods"
+    if not staging.is_dir():
+        return []
+    return sorted(
+        p for p in staging.iterdir() if p.is_file() and p.suffix.lower() in {".zip", ".7z", ".rar"}
+    )
+
+
+def get_file_ownership_map(session: Session, game_id: int) -> dict[str, InstalledMod]:
+    """Build a map of ``{normalised_path: InstalledMod}`` for all installed mods."""
+    mods = session.exec(select(InstalledMod).where(InstalledMod.game_id == game_id)).all()
+    ownership: dict[str, InstalledMod] = {}
+    for mod in mods:
+        _ = mod.files
+        for f in mod.files:
+            ownership[f.relative_path.replace("\\", "/").lower()] = mod
+    return ownership
+
+
+def install_mod(
+    game: Game,
+    archive_path: Path,
+    session: Session,
+    skip_conflicts: list[str] | None = None,
+) -> InstallResult:
+    """Extract an archive to the game directory and record ownership.
+
+    Returns an ``InstallResult`` with counts of extracted and skipped files.
+
+    Raises:
+        FileNotFoundError: If the archive or game directory doesn't exist.
+        ValueError: If a mod with the same name is already installed.
+    """
+    if not archive_path.exists():
+        raise FileNotFoundError(f"Archive not found: {archive_path}")
+
+    game_dir = Path(game.install_path)
+    if not game_dir.is_dir():
+        raise FileNotFoundError(f"Game directory not found: {game_dir}")
+
+    parsed = parse_mod_filename(archive_path.name)
+
+    existing = session.exec(
+        select(InstalledMod).where(
+            InstalledMod.game_id == game.id,
+            InstalledMod.name == parsed.name,
+        )
+    ).first()
+    if existing:
+        raise ValueError(f"Mod '{parsed.name}' is already installed. Uninstall first to reinstall.")
+
+    skip_set: set[str] = set()
+    if skip_conflicts:
+        skip_set = {f.replace("\\", "/").lower() for f in skip_conflicts}
+
+    ownership = get_file_ownership_map(session, game.id)  # type: ignore[arg-type]
+
+    extracted_paths: list[str] = []
+    skipped = 0
+
+    with open_archive(archive_path) as archive:
+        for entry in archive.list_entries():
+            if entry.is_dir:
+                continue
+
+            normalised = entry.filename.replace("\\", "/")
+            normalised_lower = normalised.lower()
+
+            if normalised_lower in skip_set:
+                skipped += 1
+                continue
+
+            target = game_dir / normalised
+            if not target.resolve().is_relative_to(game_dir.resolve()):
+                logger.warning("Skipping path traversal entry: %s", entry.filename)
+                skipped += 1
+                continue
+
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(archive.read_file(entry))
+            extracted_paths.append(normalised)
+
+            if normalised_lower in ownership:
+                prev_mod = ownership[normalised_lower]
+                for f in list(prev_mod.files):
+                    if f.relative_path.replace("\\", "/").lower() == normalised_lower:
+                        session.delete(f)
+                        break
+
+    installed = InstalledMod(
+        game_id=game.id,  # type: ignore[arg-type]
+        name=parsed.name,
+        source_archive=archive_path.name,
+        nexus_mod_id=parsed.nexus_mod_id,
+        upload_timestamp=parsed.upload_timestamp,
+        installed_version=parsed.version or "",
+    )
+    session.add(installed)
+    session.flush()
+
+    for rel_path in extracted_paths:
+        session.add(
+            InstalledModFile(
+                installed_mod_id=installed.id,  # type: ignore[arg-type]
+                relative_path=rel_path,
+            )
+        )
+
+    session.commit()
+    session.refresh(installed)
+
+    logger.info("Installed '%s' (%d files)", parsed.name, len(extracted_paths))
+    return InstallResult(
+        installed_mod_id=installed.id,  # type: ignore[arg-type]
+        name=parsed.name,
+        files_extracted=len(extracted_paths),
+        files_skipped=skipped,
+    )
+
+
+def uninstall_mod(
+    installed_mod: InstalledMod,
+    game: Game,
+    session: Session,
+) -> UninstallResult:
+    """Delete all files owned by a mod and remove the DB record."""
+    game_dir = Path(game.install_path)
+    deleted = 0
+    dirs_removed = 0
+
+    _ = installed_mod.files
+    for f in installed_mod.files:
+        file_path = game_dir / f.relative_path.replace("/", os.sep)
+        if file_path.exists():
+            try:
+                file_path.unlink()
+                deleted += 1
+                parent = file_path.parent
+                while parent != game_dir:
+                    if not any(parent.iterdir()):
+                        parent.rmdir()
+                        dirs_removed += 1
+                        parent = parent.parent
+                    else:
+                        break
+            except OSError:
+                logger.warning("Could not delete %s", file_path)
+        else:
+            disabled_path = file_path.with_suffix(file_path.suffix + ".disabled")
+            if disabled_path.exists():
+                try:
+                    disabled_path.unlink()
+                    deleted += 1
+                except OSError:
+                    logger.warning("Could not delete %s", disabled_path)
+
+    session.delete(installed_mod)
+    session.commit()
+
+    logger.info("Uninstalled '%s' (%d files deleted)", installed_mod.name, deleted)
+    return UninstallResult(files_deleted=deleted, directories_removed=dirs_removed)
+
+
+def toggle_mod(
+    installed_mod: InstalledMod,
+    game: Game,
+    session: Session,
+    *,
+    commit: bool = True,
+) -> ToggleResult:
+    """Enable or disable a mod by renaming its files with ``.disabled`` suffix.
+
+    Pass ``commit=False`` to defer the DB commit (useful for batching in
+    profile loads).
+    """
+    game_dir = Path(game.install_path)
+    should_disable = not installed_mod.disabled
+    affected = 0
+
+    _ = installed_mod.files
+    for f in installed_mod.files:
+        file_path = game_dir / f.relative_path.replace("/", os.sep)
+
+        if should_disable:
+            if file_path.exists():
+                disabled_path = file_path.with_suffix(file_path.suffix + ".disabled")
+                try:
+                    file_path.rename(disabled_path)
+                    affected += 1
+                except OSError:
+                    logger.warning("Could not disable %s", file_path)
+        else:
+            disabled_path = file_path.with_suffix(file_path.suffix + ".disabled")
+            if disabled_path.exists():
+                try:
+                    disabled_path.rename(file_path)
+                    affected += 1
+                except OSError:
+                    logger.warning("Could not enable %s", disabled_path)
+
+    installed_mod.disabled = should_disable
+    session.add(installed_mod)
+    if commit:
+        session.commit()
+
+    action = "Disabled" if should_disable else "Enabled"
+    logger.info("%s '%s' (%d files)", action, installed_mod.name, affected)
+    return ToggleResult(disabled=should_disable, files_affected=affected)

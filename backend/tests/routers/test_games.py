@@ -76,6 +76,54 @@ class TestGetGame:
         assert r.status_code == 404
 
 
+class TestValidatePath:
+    def test_nonexistent_path(self, client):
+        r = client.post(
+            "/api/v1/games/validate-path",
+            json={"install_path": "/nonexistent/path"},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["valid"] is False
+        assert data["found_exe"] is False
+        assert data["found_mod_dirs"] == []
+        assert "not found" in data["warning"].lower()
+
+    def test_valid_path_with_exe(self, client, tmp_path):
+        # Create a fake Cyberpunk install
+        exe_dir = tmp_path / "bin" / "x64"
+        exe_dir.mkdir(parents=True)
+        (exe_dir / "Cyberpunk2077.exe").touch()
+
+        # Create some mod dirs
+        (tmp_path / "mods").mkdir()
+        (tmp_path / "archive" / "pc" / "mod").mkdir(parents=True)
+
+        r = client.post(
+            "/api/v1/games/validate-path",
+            json={"install_path": str(tmp_path)},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["valid"] is True
+        assert data["found_exe"] is True
+        assert "mods" in data["found_mod_dirs"]
+        assert "archive/pc/mod" in data["found_mod_dirs"]
+
+    def test_path_without_exe(self, client, tmp_path):
+        # Just create a mod dir but no exe
+        (tmp_path / "mods").mkdir()
+
+        r = client.post(
+            "/api/v1/games/validate-path",
+            json={"install_path": str(tmp_path)},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["valid"] is False
+        assert data["found_exe"] is False
+
+
 class TestDeleteGame:
     def test_success(self, client):
         client.post(
