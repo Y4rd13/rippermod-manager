@@ -93,6 +93,14 @@ async def sync_nexus_history(
         select(NexusDownload).where(NexusDownload.game_id == game.id)
     ).all()
 
+    try:
+        from chat_nexus_mod_manager.vector.indexer import index_nexus_metadata
+
+        index_nexus_metadata(game.id)
+        logger.info("Auto-indexed Nexus metadata into vector store after sync")
+    except Exception:
+        logger.warning("Failed to auto-index after Nexus sync", exc_info=True)
+
     return NexusSyncResult(
         tracked_mods=tracked_count,
         endorsed_mods=endorsed_count,

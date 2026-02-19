@@ -96,6 +96,14 @@ def scan_game_mods(game: Game, session: Session) -> ScanResult:
 
     session.commit()
 
+    try:
+        from chat_nexus_mod_manager.vector.indexer import index_mod_groups
+
+        index_mod_groups(game.id)
+        logger.info("Auto-indexed mod groups into vector store after scan")
+    except Exception:
+        logger.warning("Failed to auto-index after scan", exc_info=True)
+
     return ScanResult(
         files_found=len(discovered_files),
         groups_created=groups_created,

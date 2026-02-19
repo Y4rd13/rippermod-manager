@@ -98,6 +98,14 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
 
     session.commit()
 
+    try:
+        from chat_nexus_mod_manager.vector.indexer import index_correlations
+
+        index_correlations(game.id)
+        logger.info("Auto-indexed correlations into vector store")
+    except Exception:
+        logger.warning("Failed to auto-index correlations", exc_info=True)
+
     return CorrelateResult(
         total_groups=len(groups),
         matched=matched,

@@ -21,12 +21,14 @@ SYSTEM_PROMPT = """You are a helpful mod manager assistant for PC games (especia
 You help users manage their mods, troubleshoot issues, check for updates, and answer questions about their mod setup.
 
 You have access to tools to:
-- Search and query the local mod database
-- Get information about specific mods from Nexus
-- Scan for local mods
-- Check for mod updates
+- Search and query the local mod database (search_local_mods, get_mod_details)
+- Semantic search across all mod data using natural language (semantic_mod_search) — prefer this for broad or fuzzy questions
+- Get information about specific mods from Nexus (get_nexus_mod_info, list_nexus_downloads)
+- List configured games (list_all_games)
+- Rebuild the search index after data changes (reindex_vector_store)
 
-Be concise and helpful. When discussing mods, reference specific names and versions when available.
+When answering questions about mods, first try semantic_mod_search for broad queries, then use search_local_mods or get_mod_details for exact lookups.
+Be concise and helpful. Reference specific mod names, versions, and authors when available.
 If the user asks about mod conflicts or load order, provide practical advice."""
 
 
@@ -148,7 +150,43 @@ def list_nexus_downloads(game_name: str = "") -> str:
         return "\n".join(results)
 
 
-TOOLS = [search_local_mods, get_mod_details, list_all_games, get_nexus_mod_info, list_nexus_downloads]
+@tool
+def semantic_mod_search(query: str) -> str:
+    """Search across all mod data using semantic/natural language search. Use this when the user asks broad questions about mods, troubleshooting, compatibility, or when exact name matching isn't enough. Returns the most relevant mod information from local mods, Nexus metadata, and correlation data."""
+    from chat_nexus_mod_manager.vector.search import search_all_semantic
+
+    return search_all_semantic(query, n_results=6)
+
+
+@tool
+def reindex_vector_store(game_name: str = "") -> str:
+    """Rebuild the semantic search index from current database data. Run this after scanning mods or syncing Nexus data to update the search index."""
+    from chat_nexus_mod_manager.vector.indexer import index_all
+
+    game_id = None
+    if game_name:
+        with Session(engine) as session:
+            game = session.exec(select(Game).where(Game.name == game_name)).first()
+            if game:
+                game_id = game.id
+
+    counts = index_all(game_id)
+    return (
+        f"Reindexed: {counts['mod_groups']} mod groups, "
+        f"{counts['nexus_mods']} Nexus mods, "
+        f"{counts['correlations']} correlations"
+    )
+
+
+TOOLS = [
+    search_local_mods,
+    get_mod_details,
+    list_all_games,
+    get_nexus_mod_info,
+    list_nexus_downloads,
+    semantic_mod_search,
+    reindex_vector_store,
+]
 
 
 async def run_agent(
