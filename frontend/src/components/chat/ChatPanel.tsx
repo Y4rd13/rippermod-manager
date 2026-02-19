@@ -33,9 +33,10 @@ const markdownComponents = {
   li: ({ children }: { children?: React.ReactNode }) => <li>{children}</li>,
 };
 
-const EFFORT_CYCLE: ReasoningEffort[] = ["none", "low", "medium", "high"];
+const EFFORT_CYCLE: ReasoningEffort[] = ["none", "minimal", "low", "medium", "high"];
 const EFFORT_LABELS: Record<ReasoningEffort, string> = {
   none: "Off",
+  minimal: "Min",
   low: "Low",
   medium: "Med",
   high: "High",

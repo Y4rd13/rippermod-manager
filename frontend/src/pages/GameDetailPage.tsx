@@ -1,4 +1,5 @@
 import { Archive, FolderOpen, Link2, Package, RefreshCw, Scan, UserCheck } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 
@@ -40,6 +41,7 @@ export function GameDetailPage() {
   const { data: archives = [] } = useAvailableArchives(name);
   const { data: profiles = [] } = useProfiles(name);
   const { data: updates } = useUpdates(name);
+  const queryClient = useQueryClient();
   const syncNexus = useSyncNexus();
   const correlate = useCorrelate();
   const [tab, setTab] = useState<Tab>("mods");
@@ -142,10 +144,12 @@ export function GameDetailPage() {
       stopFlushing();
       setScanPhase("done");
       setScanPercent(100);
+      queryClient.invalidateQueries({ queryKey: ["mods", name] });
+      queryClient.invalidateQueries({ queryKey: ["installed-mods", name] });
     } catch (e) {
       stopFlushing();
       const msg = e instanceof Error ? e.message : "Scan failed";
-      pushLog({ phase: "error", message: msg, percent: 0 });
+      setScanLogs((prev) => [...prev, { phase: "error", message: msg, percent: 0 }]);
       setScanPhase("error");
     } finally {
       abortRef.current = null;

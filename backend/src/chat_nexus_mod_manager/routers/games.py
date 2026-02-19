@@ -161,6 +161,10 @@ def delete_game(name: str, session: Session = Depends(get_session)) -> None:
 
     game_id = game.id
 
+    from chat_nexus_mod_manager.vector.indexer import delete_game_vectors
+
+    delete_game_vectors(game_id)
+
     from chat_nexus_mod_manager.models.install import InstalledMod, InstalledModFile
     from chat_nexus_mod_manager.models.mod import ModFile, ModGroup, ModGroupAlias
     from chat_nexus_mod_manager.models.nexus import NexusDownload

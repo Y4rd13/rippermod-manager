@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type ReasoningEffort = "none" | "low" | "medium" | "high";
+export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high";
 
 export interface ChatMsg {
   id: string;

@@ -10,6 +10,7 @@ from chat_nexus_mod_manager.vector.store import (
     COLLECTION_CORRELATIONS,
     COLLECTION_MODS,
     COLLECTION_NEXUS,
+    get_collection,
     reset_collection,
 )
 
@@ -181,3 +182,22 @@ def index_all(game_id: int | None = None) -> dict[str, int]:
     nexus = index_nexus_metadata(game_id)
     corrs = index_correlations(game_id)
     return {"mod_groups": mods, "nexus_mods": nexus, "correlations": corrs}
+
+
+def delete_game_vectors(game_id: int) -> None:
+    """Remove all vectors associated with a game from the vector store."""
+    with Session(engine) as session:
+        group_ids = list(
+            session.exec(select(ModGroup.id).where(ModGroup.game_id == game_id)).all()
+        )
+
+    # mod_groups collection has game_id in metadata
+    mods_col = get_collection(COLLECTION_MODS)
+    mods_col.delete(where={"game_id": game_id})
+
+    if group_ids:
+        # correlations are keyed by corr.id but have mod_group_id in metadata
+        corr_col = get_collection(COLLECTION_CORRELATIONS)
+        corr_col.delete(where={"mod_group_id": {"$in": group_ids}})
+
+    logger.info("Deleted vectors for game_id=%d", game_id)

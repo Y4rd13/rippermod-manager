@@ -10,6 +10,7 @@ from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.database import engine
 from chat_nexus_mod_manager.models.chat import ChatMessage
+from chat_nexus_mod_manager.schemas.chat import ReasoningEffort
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.mod import ModGroup
 from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
@@ -44,7 +45,7 @@ def _get_openai_key() -> str:
 def _get_model_name() -> str:
     with Session(engine) as session:
         setting = session.exec(select(AppSetting).where(AppSetting.key == "openai_model")).first()
-        return setting.value if setting else "gpt-5.2"
+        return setting.value if setting else "gpt-4o"
 
 
 @tool
@@ -200,7 +201,7 @@ TOOLS = [
 async def run_agent(
     message: str,
     game_name: str | None = None,
-    reasoning_effort: str = "none",
+    reasoning_effort: ReasoningEffort = "none",
 ) -> AsyncGenerator[dict[str, Any], None]:
     api_key = _get_openai_key()
     if not api_key:
