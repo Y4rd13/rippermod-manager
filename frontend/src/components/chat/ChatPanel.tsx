@@ -1,7 +1,8 @@
 import { MessageSquare, Send, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/Button";
 import { api } from "@/lib/api-client";
@@ -10,7 +11,29 @@ import { cn } from "@/lib/utils";
 import { type ChatMsg, useChatStore } from "@/stores/chat-store";
 import { useUIStore } from "@/stores/ui-store";
 
-function ChatMessage({ msg }: { msg: ChatMsg }) {
+const remarkPlugins = [remarkGfm];
+
+const markdownComponents = {
+  p: ({ children }: { children?: React.ReactNode }) => (
+    <p className="mb-2 last:mb-0">{children}</p>
+  ),
+  code: ({ children, className }: { children?: React.ReactNode; className?: string }) =>
+    className ? (
+      <code className="block bg-surface-3 rounded p-2 text-xs font-mono overflow-x-auto my-2">
+        {children}
+      </code>
+    ) : (
+      <code className="bg-surface-3 rounded px-1 py-0.5 text-xs font-mono">
+        {children}
+      </code>
+    ),
+  ul: ({ children }: { children?: React.ReactNode }) => (
+    <ul className="list-disc pl-4 mb-2 space-y-1">{children}</ul>
+  ),
+  li: ({ children }: { children?: React.ReactNode }) => <li>{children}</li>,
+};
+
+const ChatMessage = memo(function ChatMessage({ msg }: { msg: ChatMsg }) {
   const isUser = msg.role === "user";
   return (
     <div
@@ -43,24 +66,8 @@ function ChatMessage({ msg }: { msg: ChatMsg }) {
           </pre>
         ) : (
           <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-              code: ({ children, className }) =>
-                className ? (
-                  <code className="block bg-surface-3 rounded p-2 text-xs font-mono overflow-x-auto my-2">
-                    {children}
-                  </code>
-                ) : (
-                  <code className="bg-surface-3 rounded px-1 py-0.5 text-xs font-mono">
-                    {children}
-                  </code>
-                ),
-              ul: ({ children }) => (
-                <ul className="list-disc pl-4 mb-2 space-y-1">{children}</ul>
-              ),
-              li: ({ children }) => <li>{children}</li>,
-            }}
+            remarkPlugins={remarkPlugins}
+            components={markdownComponents}
           >
             {msg.content}
           </ReactMarkdown>
@@ -68,30 +75,37 @@ function ChatMessage({ msg }: { msg: ChatMsg }) {
       </div>
     </div>
   );
-}
+});
 
 export function ChatPanel() {
-  const { chatPanelOpen, setChatPanelOpen } = useUIStore();
-  const {
-    messages,
-    isStreaming,
-    suggestedActions,
-    addMessage,
-    appendToLast,
-    setStreaming,
-    setSuggestedActions,
-  } = useChatStore();
+  const { chatPanelOpen, setChatPanelOpen } = useUIStore(
+    useShallow((s) => ({ chatPanelOpen: s.chatPanelOpen, setChatPanelOpen: s.setChatPanelOpen })),
+  );
+  const { messages, isStreaming, suggestedActions } = useChatStore(
+    useShallow((s) => ({ messages: s.messages, isStreaming: s.isStreaming, suggestedActions: s.suggestedActions })),
+  );
+  const addMessage = useChatStore((s) => s.addMessage);
+  const appendToLast = useChatStore((s) => s.appendToLast);
+  const setStreaming = useChatStore((s) => s.setStreaming);
+  const setSuggestedActions = useChatStore((s) => s.setSuggestedActions);
 
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = async (text?: string) => {
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  const handleSend = useCallback(async (text?: string) => {
     const msg = text ?? input.trim();
-    if (!msg || isStreaming) return;
+    if (!msg || useChatStore.getState().isStreaming) return;
 
     setInput("");
     addMessage({
@@ -111,8 +125,16 @@ export function ChatPanel() {
       timestamp: Date.now(),
     });
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
-      const response = await api.stream("/api/v1/chat", { message: msg });
+      const response = await fetch(`${api.baseUrl}/api/v1/chat/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg }),
+        signal: controller.signal,
+      });
       if (!response.ok) {
         appendToLast("Failed to connect to chat service.");
         setStreaming(false);
@@ -142,13 +164,15 @@ export function ChatPanel() {
         }
       }
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       appendToLast(
         `\n\nError: ${e instanceof Error ? e.message : "Connection failed"}`,
       );
     } finally {
+      abortRef.current = null;
       setStreaming(false);
     }
-  };
+  }, [input, addMessage, appendToLast, setStreaming, setSuggestedActions]);
 
   if (!chatPanelOpen) return null;
 

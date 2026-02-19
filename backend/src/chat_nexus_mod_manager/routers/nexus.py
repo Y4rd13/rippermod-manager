@@ -32,9 +32,7 @@ async def connect_and_store(
         result = await client.validate_key()
 
     if result.valid:
-        setting = session.exec(
-            select(AppSetting).where(AppSetting.key == "nexus_api_key")
-        ).first()
+        setting = session.exec(select(AppSetting).where(AppSetting.key == "nexus_api_key")).first()
         if setting:
             setting.value = data.api_key
         else:
@@ -46,16 +44,12 @@ async def connect_and_store(
 
 
 @router.post("/sync-history/{game_name}", response_model=NexusSyncResult)
-async def sync_history(
-    game_name: str, session: Session = Depends(get_session)
-) -> NexusSyncResult:
+async def sync_history(game_name: str, session: Session = Depends(get_session)) -> NexusSyncResult:
     game = session.exec(select(Game).where(Game.name == game_name)).first()
     if not game:
         raise HTTPException(404, f"Game '{game_name}' not found")
 
-    key_setting = session.exec(
-        select(AppSetting).where(AppSetting.key == "nexus_api_key")
-    ).first()
+    key_setting = session.exec(select(AppSetting).where(AppSetting.key == "nexus_api_key")).first()
     if not key_setting or not key_setting.value:
         raise HTTPException(400, "Nexus API key not configured")
 
@@ -74,9 +68,7 @@ def list_downloads(
 
     from chat_nexus_mod_manager.models.nexus import NexusDownload
 
-    downloads = session.exec(
-        select(NexusDownload).where(NexusDownload.game_id == game.id)
-    ).all()
+    downloads = session.exec(select(NexusDownload).where(NexusDownload.game_id == game.id)).all()
     return [
         NexusDownloadOut(
             id=d.id,  # type: ignore[arg-type]

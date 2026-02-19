@@ -36,9 +36,7 @@ def _get_game(game_name: str, session: Session) -> Game:
 
 
 @router.get("/", response_model=UpdateCheckResult)
-def list_updates(
-    game_name: str, session: Session = Depends(get_session)
-) -> UpdateCheckResult:
+def list_updates(game_name: str, session: Session = Depends(get_session)) -> UpdateCheckResult:
     game = _get_game(game_name, session)
 
     correlations = session.exec(
@@ -49,11 +47,9 @@ def list_updates(
     ).all()
 
     updates: list[ModUpdate] = []
-    for corr, group, download in correlations:
+    for _corr, group, download in correlations:
         meta = session.exec(
-            select(NexusModMeta).where(
-                NexusModMeta.nexus_mod_id == download.nexus_mod_id
-            )
+            select(NexusModMeta).where(NexusModMeta.nexus_mod_id == download.nexus_mod_id)
         ).first()
         if meta and meta.version and meta.version != download.version:
             updates.append(
@@ -81,9 +77,7 @@ async def check_updates(
 ) -> UpdateCheckResult:
     game = _get_game(game_name, session)
 
-    key_setting = session.exec(
-        select(AppSetting).where(AppSetting.key == "nexus_api_key")
-    ).first()
+    key_setting = session.exec(select(AppSetting).where(AppSetting.key == "nexus_api_key")).first()
 
     if key_setting and key_setting.value:
         from chat_nexus_mod_manager.nexus.client import NexusClient
@@ -94,18 +88,14 @@ async def check_updates(
                 nexus_mod_id = mod_data.get("mod_id")
                 if nexus_mod_id:
                     meta = session.exec(
-                        select(NexusModMeta).where(
-                            NexusModMeta.nexus_mod_id == nexus_mod_id
-                        )
+                        select(NexusModMeta).where(NexusModMeta.nexus_mod_id == nexus_mod_id)
                     ).first()
                     if meta:
                         latest = mod_data.get("latest_file_update") or mod_data.get(
                             "latest_mod_activity"
                         )
                         if latest:
-                            info = await client.get_mod_info(
-                                game.domain_name, nexus_mod_id
-                            )
+                            info = await client.get_mod_info(game.domain_name, nexus_mod_id)
                             if info:
                                 meta.version = info.get("version", meta.version)
                                 meta.updated_at = info.get("updated_timestamp")

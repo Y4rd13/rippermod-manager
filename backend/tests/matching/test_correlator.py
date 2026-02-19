@@ -1,5 +1,3 @@
-import pytest
-
 from chat_nexus_mod_manager.matching.correlator import (
     compute_name_score,
     correlate_game_mods,
@@ -88,9 +86,7 @@ class TestCorrelateGameMods:
     def test_skips_low_score(self, session, make_game):
         game = make_game()
         session.add(ModGroup(game_id=game.id, display_name="AAAA"))
-        session.add(
-            NexusDownload(game_id=game.id, nexus_mod_id=200, mod_name="ZZZZ")
-        )
+        session.add(NexusDownload(game_id=game.id, nexus_mod_id=200, mod_name="ZZZZ"))
         session.commit()
         result = correlate_game_mods(game, session)
         assert result.matched == 0

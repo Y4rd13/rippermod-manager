@@ -25,15 +25,9 @@ def engine():
 @pytest.fixture
 def session(engine, monkeypatch):
     with Session(engine) as sess:
-        monkeypatch.setattr(
-            "chat_nexus_mod_manager.database.engine", engine
-        )
-        monkeypatch.setattr(
-            "chat_nexus_mod_manager.vector.indexer.engine", engine
-        )
-        monkeypatch.setattr(
-            "chat_nexus_mod_manager.agents.orchestrator.engine", engine
-        )
+        monkeypatch.setattr("chat_nexus_mod_manager.database.engine", engine)
+        monkeypatch.setattr("chat_nexus_mod_manager.vector.indexer.engine", engine)
+        monkeypatch.setattr("chat_nexus_mod_manager.agents.orchestrator.engine", engine)
         yield sess
 
 
@@ -41,9 +35,7 @@ def session(engine, monkeypatch):
 def client(engine, monkeypatch):
     monkeypatch.setattr("chat_nexus_mod_manager.database.engine", engine)
     monkeypatch.setattr("chat_nexus_mod_manager.vector.indexer.engine", engine)
-    monkeypatch.setattr(
-        "chat_nexus_mod_manager.agents.orchestrator.engine", engine
-    )
+    monkeypatch.setattr("chat_nexus_mod_manager.agents.orchestrator.engine", engine)
 
     def _override_session() -> Generator[Session, None, None]:
         with Session(engine) as sess:
@@ -57,9 +49,7 @@ def client(engine, monkeypatch):
 
 @pytest.fixture
 def patched_chroma(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        "chat_nexus_mod_manager.config.settings.chroma_path", tmp_path / "chroma"
-    )
+    monkeypatch.setattr("chat_nexus_mod_manager.config.settings.chroma_path", tmp_path / "chroma")
     import chat_nexus_mod_manager.vector.store as store_mod
 
     monkeypatch.setattr(store_mod, "_client", None)
@@ -83,9 +73,7 @@ def make_game(session):
         session.add(game)
         session.flush()
         for rel in mod_paths or ["archive/pc/mod"]:
-            session.add(
-                GameModPath(game_id=game.id, relative_path=rel)
-            )
+            session.add(GameModPath(game_id=game.id, relative_path=rel))
         session.commit()
         session.refresh(game)
         _ = game.mod_paths

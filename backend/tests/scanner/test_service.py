@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from chat_nexus_mod_manager.scanner.service import compute_hash, scan_game_mods
 
 

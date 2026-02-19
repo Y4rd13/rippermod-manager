@@ -19,6 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dev = ["ruff>=0.8.0"]
 test = ["pytest>=8.0", "pytest-asyncio>=0.24", "respx>=0.22"]
 
 [build-system]
@@ -40,6 +41,9 @@ src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/chat_nexus_mod_manager/routers/*.py" = ["B008"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["chat_nexus_mod_manager"]

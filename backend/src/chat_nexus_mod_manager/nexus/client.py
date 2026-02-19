@@ -69,14 +69,8 @@ class NexusClient:
     async def get_mod_files(self, game_domain: str, mod_id: int) -> dict[str, Any]:
         return await self._get(f"/v1/games/{game_domain}/mods/{mod_id}/files.json")
 
-    async def get_updated_mods(
-        self, game_domain: str, period: str = "1w"
-    ) -> list[dict[str, Any]]:
+    async def get_updated_mods(self, game_domain: str, period: str = "1w") -> list[dict[str, Any]]:
         return await self._get(f"/v1/games/{game_domain}/mods/updated.json?period={period}")
 
-    async def md5_search(
-        self, game_domain: str, md5_hash: str
-    ) -> list[dict[str, Any]]:
-        return await self._get(
-            f"/v1/games/{game_domain}/mods/md5_search/{md5_hash}.json"
-        )
+    async def md5_search(self, game_domain: str, md5_hash: str) -> list[dict[str, Any]]:
+        return await self._get(f"/v1/games/{game_domain}/mods/md5_search/{md5_hash}.json")

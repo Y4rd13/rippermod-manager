@@ -23,7 +23,12 @@ class TestSearch:
         with patch(
             "chat_nexus_mod_manager.vector.search.semantic_search",
             return_value=[
-                {"collection": "mod_groups", "document": "TestMod", "distance": "0.1", "type": "mod_group"}
+                {
+                    "collection": "mod_groups",
+                    "document": "TestMod",
+                    "distance": "0.1",
+                    "type": "mod_group",
+                }
             ],
         ):
             r = client.get("/api/v1/vector/search?q=test")

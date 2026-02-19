@@ -48,18 +48,12 @@ def compute_name_score(local_name: str, nexus_name: str) -> tuple[float, str]:
 
 
 def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
-    groups = session.exec(
-        select(ModGroup).where(ModGroup.game_id == game.id)
-    ).all()
+    groups = session.exec(select(ModGroup).where(ModGroup.game_id == game.id)).all()
 
-    downloads = session.exec(
-        select(NexusDownload).where(NexusDownload.game_id == game.id)
-    ).all()
+    downloads = session.exec(select(NexusDownload).where(NexusDownload.game_id == game.id)).all()
 
     if not groups or not downloads:
-        return CorrelateResult(
-            total_groups=len(groups), matched=0, unmatched=len(groups)
-        )
+        return CorrelateResult(total_groups=len(groups), matched=0, unmatched=len(groups))
 
     existing = session.exec(
         select(ModNexusCorrelation.mod_group_id).where(
@@ -91,7 +85,11 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
                 nexus_download_id=best_download.id,  # type: ignore[arg-type]
                 score=best_score,
                 method=best_method,
-                reasoning=f"Matched '{group.display_name}' → '{best_download.mod_name}' via {best_method}",
+                reasoning=(
+                    f"Matched '{group.display_name}' "
+                    f"-> '{best_download.mod_name}' "
+                    f"via {best_method}"
+                ),
             )
             session.add(corr)
             matched += 1
