@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp, ExternalLink, FileText } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 
 import { ConfidenceBadge } from "@/components/ui/Badge";
 import type { ModGroup } from "@/types/api";
@@ -120,9 +120,8 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
         </thead>
         <tbody>
           {sorted.map((mod) => (
-            <>
+            <Fragment key={mod.id}>
               <tr
-                key={mod.id}
                 className="border-b border-border/50 hover:bg-surface-1/50 cursor-pointer"
                 onClick={() => toggleExpand(mod.id)}
               >
@@ -184,7 +183,7 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
                   </td>
                 </tr>
               )}
-            </>
+            </Fragment>
           ))}
         </tbody>
       </table>

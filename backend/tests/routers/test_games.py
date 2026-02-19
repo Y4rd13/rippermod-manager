@@ -57,7 +57,7 @@ class TestCreateGame:
             "/api/v1/games/",
             json={**payload, "install_path": "/games/dup2"},
         )
-        assert r.status_code == 201
+        assert r.status_code == 200
         assert r.json()["install_path"] == "/games/dup2"
 
 

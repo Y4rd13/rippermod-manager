@@ -129,17 +129,11 @@ export function ChatPanel() {
     abortRef.current = controller;
 
     try {
-      const response = await fetch(`${api.baseUrl}/api/v1/chat/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg }),
-        signal: controller.signal,
-      });
-      if (!response.ok) {
-        appendToLast("Failed to connect to chat service.");
-        setStreaming(false);
-        return;
-      }
+      const response = await api.stream(
+        "/api/v1/chat/",
+        { message: msg },
+        controller.signal,
+      );
 
       for await (const event of parseSSE(response)) {
         try {

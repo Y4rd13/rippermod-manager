@@ -304,6 +304,7 @@ function AddGameStep({ onFinish }: { onFinish: () => void }) {
   const latestPercent = useRef(0);
   const latestPhase = useRef("");
   const flushTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const abortRef = useRef<AbortController | null>(null);
 
   const startFlushing = useCallback(() => {
     flushTimer.current = setInterval(() => {
@@ -337,6 +338,7 @@ function AddGameStep({ onFinish }: { onFinish: () => void }) {
   useEffect(() => {
     return () => {
       if (flushTimer.current) clearInterval(flushTimer.current);
+      abortRef.current?.abort();
     };
   }, []);
 
@@ -366,13 +368,13 @@ function AddGameStep({ onFinish }: { onFinish: () => void }) {
       });
 
       pushLog({ phase: "scan", message: "Starting mod scan...", percent: 0 });
+      const controller = new AbortController();
+      abortRef.current = controller;
       const response = await api.stream(
         `/api/v1/games/${store.gameName}/mods/scan-stream`,
+        undefined,
+        controller.signal,
       );
-
-      if (!response.ok) {
-        throw new Error("Scan request failed");
-      }
 
       for await (const event of parseSSE(response)) {
         const data = JSON.parse(event.data) as ScanLog;
@@ -428,8 +430,12 @@ function AddGameStep({ onFinish }: { onFinish: () => void }) {
           Installation Path
         </label>
         <div className="flex items-center gap-2">
-          <div className="flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary truncate">
-            {store.installPath}
+          <div className="flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm truncate">
+            {store.installPath ? (
+              <span className="text-text-primary">{store.installPath}</span>
+            ) : (
+              <span className="text-text-muted">Click Browse to select your game folder</span>
+            )}
           </div>
           <Button
             variant="ghost"

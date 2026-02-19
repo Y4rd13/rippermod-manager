@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -10,7 +10,7 @@ class ModGroup(SQLModel, table=True):
     game_id: int = Field(foreign_key="games.id", index=True)
     display_name: str
     confidence: float = 0.0
-    scan_timestamp: datetime = Field(default_factory=datetime.utcnow)
+    scan_timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     scanner_version: str = "1.0"
 
     files: list["ModFile"] = Relationship(back_populates="mod_group")
