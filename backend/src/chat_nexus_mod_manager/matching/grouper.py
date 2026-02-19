@@ -1,5 +1,4 @@
 import re
-from collections import Counter
 
 import numpy as np
 from sklearn.cluster import DBSCAN
@@ -19,12 +18,8 @@ def normalize_name(name: str) -> str:
     return name.strip().lower()
 
 
-def tokenize(text: str) -> list[str]:
-    return [t for t in text.split() if len(t) > 1]
-
-
 def group_mod_files(
-    files: list[ModFile], eps: float = 0.35
+    files: list[ModFile], eps: float = 0.45
 ) -> list[tuple[str, list[ModFile], float]]:
     if not files:
         return []
@@ -62,18 +57,9 @@ def group_mod_files(
     results: list[tuple[str, list[ModFile], float]] = []
     for _label, indices in sorted(clusters.items()):
         cluster_files = [file_map[i] for i in indices]
-        cluster_tokens: list[str] = []
-        for i in indices:
-            cluster_tokens.extend(tokenize(doc_labels[i]))
-
-        token_counts = Counter(cluster_tokens)
-        if token_counts:
-            name_parts = [t for t, _ in token_counts.most_common(3) if len(t) > 2]
-            group_name = " ".join(name_parts) if name_parts else cluster_files[0].filename
-        else:
-            group_name = cluster_files[0].filename
-
-        group_name = group_name.title()
+        stems = [normalize_name(f.filename) for f in cluster_files]
+        longest_stem = max(stems, key=len) if stems else ""
+        group_name = longest_stem.title() if longest_stem else cluster_files[0].filename
 
         if len(indices) > 1:
             sub_sims = [

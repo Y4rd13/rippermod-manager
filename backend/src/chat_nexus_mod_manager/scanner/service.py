@@ -1,5 +1,4 @@
 import logging
-from collections.abc import Callable
 from pathlib import Path
 
 import xxhash
@@ -9,6 +8,7 @@ from chat_nexus_mod_manager.matching.grouper import group_mod_files
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.mod import ModFile, ModGroup
 from chat_nexus_mod_manager.schemas.mod import ScanResult
+from chat_nexus_mod_manager.services.progress import ProgressCallback, noop_progress
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +29,6 @@ INTERESTING_EXTENSIONS = {
 }
 
 SKIP_DIRS = {"__pycache__", ".git", "node_modules", ".vscode"}
-
-ProgressCallback = Callable[[str, str, int], None]
-
-
-def _noop_progress(_phase: str, _msg: str, _pct: int) -> None:
-    pass
 
 
 def compute_hash(file_path: Path) -> str:
@@ -65,7 +59,7 @@ def _discover_files(game: Game) -> list[tuple[Path, str]]:
 def scan_game_mods(
     game: Game,
     session: Session,
-    on_progress: ProgressCallback = _noop_progress,
+    on_progress: ProgressCallback = noop_progress,
 ) -> ScanResult:
     install_path = Path(game.install_path)
     if not install_path.exists():
@@ -132,21 +126,22 @@ def scan_game_mods(
         on_progress("group", f"Created group: {group_name}", -1)
 
     session.commit()
-    on_progress("index", "Indexing into vector store...", 90)
+    on_progress("index", "Indexing into vector store...", 78)
 
     try:
         from chat_nexus_mod_manager.vector.indexer import index_mod_groups
 
         index_mod_groups(game.id)
-        on_progress("index", "Vector index updated", 95)
+        on_progress("index", "Vector index updated", 83)
     except ImportError:
-        on_progress("index", "Vector indexing skipped (not configured)", 95)
+        on_progress("index", "Vector indexing skipped (not configured)", 83)
         logger.info("ChromaDB not available, skipping vector indexing")
     except Exception:
-        on_progress("index", "Vector indexing failed", 95)
+        on_progress("index", "Vector indexing failed", 83)
         logger.warning("Failed to auto-index after scan", exc_info=True)
 
-    on_progress("done", f"Complete: {len(discovered_files)} files, {groups_created} groups", 100)
+    msg = f"Scan complete: {len(discovered_files)} files, {groups_created} groups"
+    on_progress("index", msg, 85)
 
     return ScanResult(
         files_found=len(discovered_files),
