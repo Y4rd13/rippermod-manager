@@ -97,10 +97,9 @@ async def search_unmatched_mods(
     tasks = [search_one(g) for g in unmatched]
     try:
         await asyncio.wait_for(asyncio.gather(*tasks), timeout=_SEARCH_TIMEOUT)
-        searched = len(unmatched)
     except TimeoutError:
         logger.warning("Web search timed out after %ds", _SEARCH_TIMEOUT)
-        searched = len(found_mod_ids)
+    searched = len(unmatched)
 
     on_progress("web-search", f"Found {len(found_mod_ids)} matches, fetching mod info...", 99)
 

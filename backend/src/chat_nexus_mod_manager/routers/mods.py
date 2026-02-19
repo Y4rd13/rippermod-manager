@@ -157,8 +157,17 @@ def scan_mods_stream(game_name: str) -> StreamingResponse:
 
                     if api_key and tavily_key:
                         # Tier 3 — Web search fallback (99-100%)
-                        on_progress("web-search", "Searching unmatched mods...", 99)
-                        await search_unmatched_mods(game, api_key, tavily_key, session, on_progress)
+                        try:
+                            on_progress("web-search", "Searching unmatched mods...", 99)
+                            await search_unmatched_mods(
+                                game, api_key, tavily_key, session, on_progress
+                            )
+                        except ImportError:
+                            on_progress(
+                                "web-search",
+                                "Skipped (install tavily-python for web search)",
+                                99,
+                            )
 
                     on_progress("done", f"Done: {result.matched} matched", 100)
 

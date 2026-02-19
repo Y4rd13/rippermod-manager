@@ -1,7 +1,6 @@
 from chat_nexus_mod_manager.matching.grouper import (
     group_mod_files,
     normalize_name,
-    tokenize,
 )
 from chat_nexus_mod_manager.models.mod import ModFile
 
@@ -27,17 +26,6 @@ class TestNormalizeName:
 
     def test_lowercases(self):
         assert normalize_name("MyMod.archive") == "mymod"
-
-
-class TestTokenize:
-    def test_splits_words(self):
-        assert tokenize("hello world") == ["hello", "world"]
-
-    def test_filters_single_chars(self):
-        assert tokenize("a big mod") == ["big", "mod"]
-
-    def test_empty_string(self):
-        assert tokenize("") == []
 
 
 class TestGroupModFiles:

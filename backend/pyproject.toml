@@ -18,10 +18,10 @@ dependencies = [
     "sse-starlette>=2.2.0",
     "py7zr>=0.22.0",
     "pefile>=2024.8.26",
-    "tavily-python>=0.7.0",
 ]
 
 [project.optional-dependencies]
+search = ["tavily-python>=0.7.0"]
 dev = ["ruff>=0.8.0"]
 test = ["pytest>=8.0", "pytest-asyncio>=0.24", "respx>=0.22"]
 
