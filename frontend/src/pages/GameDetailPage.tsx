@@ -1,5 +1,5 @@
 import { Archive, FolderOpen, Link2, Package, RefreshCw, Scan, UserCheck } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 
 import { ArchivesList } from "@/components/mods/ArchivesList";
@@ -8,7 +8,8 @@ import { ModsTable } from "@/components/mods/ModsTable";
 import { ProfileManager } from "@/components/mods/ProfileManager";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { useCorrelate, useScanMods, useSyncNexus } from "@/hooks/mutations";
+import { ScanProgress, type ScanLog } from "@/components/ui/ScanProgress";
+import { useCorrelate, useSyncNexus } from "@/hooks/mutations";
 import {
   useAvailableArchives,
   useGame,
@@ -17,6 +18,8 @@ import {
   useProfiles,
   useUpdates,
 } from "@/hooks/queries";
+import { api } from "@/lib/api-client";
+import { parseSSE } from "@/lib/sse-parser";
 import { cn } from "@/lib/utils";
 
 type Tab = "mods" | "installed" | "archives" | "profiles" | "updates";
@@ -37,36 +40,123 @@ export function GameDetailPage() {
   const { data: archives = [] } = useAvailableArchives(name);
   const { data: profiles = [] } = useProfiles(name);
   const { data: updates } = useUpdates(name);
-  const scanMods = useScanMods();
   const syncNexus = useSyncNexus();
   const correlate = useCorrelate();
   const [tab, setTab] = useState<Tab>("mods");
-  const [scanStatus, setScanStatus] = useState("");
+
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanLogs, setScanLogs] = useState<ScanLog[]>([]);
+  const [scanPercent, setScanPercent] = useState(0);
+  const [scanPhase, setScanPhase] = useState("");
+
+  const pendingLogs = useRef<ScanLog[]>([]);
+  const latestPercent = useRef(0);
+  const latestPhase = useRef("");
+  const flushTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const startFlushing = useCallback(() => {
+    flushTimer.current = setInterval(() => {
+      if (pendingLogs.current.length > 0) {
+        const batch = pendingLogs.current;
+        pendingLogs.current = [];
+        setScanLogs((prev) => [...prev, ...batch]);
+      }
+      setScanPercent(latestPercent.current);
+      setScanPhase(latestPhase.current);
+    }, 150);
+  }, []);
+
+  const stopFlushing = useCallback(() => {
+    if (flushTimer.current) clearInterval(flushTimer.current);
+    if (pendingLogs.current.length > 0) {
+      const batch = pendingLogs.current;
+      pendingLogs.current = [];
+      setScanLogs((prev) => [...prev, ...batch]);
+    }
+    setScanPercent(latestPercent.current);
+    setScanPhase(latestPhase.current);
+  }, []);
+
+  const pushLog = useCallback((log: ScanLog) => {
+    pendingLogs.current.push(log);
+    if (log.percent >= 0) latestPercent.current = log.percent;
+    latestPhase.current = log.phase;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (flushTimer.current) clearInterval(flushTimer.current);
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  const handleFullScan = async () => {
+    setIsScanning(true);
+    setScanLogs([]);
+    setScanPercent(0);
+    setScanPhase("scan");
+    pendingLogs.current = [];
+    latestPercent.current = 0;
+    latestPhase.current = "scan";
+
+    try {
+      pushLog({ phase: "scan", message: "Starting mod scan...", percent: 0 });
+      startFlushing();
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const response = await api.stream(
+        `/api/v1/games/${name}/mods/scan-stream`,
+        undefined,
+        controller.signal,
+      );
+
+      for await (const event of parseSSE(response)) {
+        const data = JSON.parse(event.data) as ScanLog;
+        pushLog(data);
+      }
+
+      pushLog({ phase: "sync", message: "Syncing Nexus history...", percent: 100 });
+      latestPhase.current = "sync";
+      latestPercent.current = 100;
+
+      try {
+        await syncNexus.mutateAsync(name);
+        pushLog({ phase: "sync", message: "Nexus sync complete", percent: 100 });
+      } catch {
+        pushLog({ phase: "sync", message: "Nexus sync skipped (optional)", percent: 100 });
+      }
+
+      pushLog({ phase: "correlate", message: "Correlating mods...", percent: 100 });
+      latestPhase.current = "correlate";
+
+      const corrResult = await correlate.mutateAsync(name);
+      pushLog({
+        phase: "done",
+        message: `Done: ${corrResult.matched} matched, ${corrResult.unmatched} unmatched`,
+        percent: 100,
+      });
+      latestPhase.current = "done";
+
+      stopFlushing();
+      setScanPhase("done");
+      setScanPercent(100);
+    } catch (e) {
+      stopFlushing();
+      const msg = e instanceof Error ? e.message : "Scan failed";
+      pushLog({ phase: "error", message: msg, percent: 0 });
+      setScanPhase("error");
+    } finally {
+      abortRef.current = null;
+      setIsScanning(false);
+    }
+  };
 
   if (!game) {
     return <p className="text-text-muted">Loading game...</p>;
   }
 
-  const handleFullScan = async () => {
-    setScanStatus("Scanning local files...");
-    const result = await scanMods.mutateAsync(name);
-    setScanStatus(`Found ${result.files_found} files, ${result.groups_created} groups.`);
-
-    setScanStatus("Syncing Nexus data...");
-    try {
-      await syncNexus.mutateAsync(name);
-    } catch {
-      // optional
-    }
-
-    setScanStatus("Correlating mods...");
-    const corrResult = await correlate.mutateAsync(name);
-    setScanStatus(
-      `Done: ${corrResult.matched} matched, ${corrResult.unmatched} unmatched`,
-    );
-  };
-
-  const isScanning = scanMods.isPending || syncNexus.isPending || correlate.isPending;
   const matched = mods.filter((m) => m.nexus_match).length;
   const enabledCount = installedMods.filter((m) => !m.disabled).length;
 
@@ -82,8 +172,8 @@ export function GameDetailPage() {
         </Button>
       </div>
 
-      {scanStatus && (
-        <p className="text-sm text-accent">{scanStatus}</p>
+      {scanPhase && (
+        <ScanProgress logs={scanLogs} percent={scanPercent} phase={scanPhase} />
       )}
 
       <div className="grid grid-cols-4 gap-4">
