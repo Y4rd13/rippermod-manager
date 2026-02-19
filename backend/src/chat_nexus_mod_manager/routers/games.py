@@ -32,7 +32,14 @@ def list_games(session: Session = Depends(get_session)) -> list[Game]:
 def create_game(data: GameCreate, session: Session = Depends(get_session)) -> Game:
     existing = session.exec(select(Game).where(Game.name == data.name)).first()
     if existing:
-        raise HTTPException(400, f"Game '{data.name}' already exists")
+        existing.install_path = data.install_path
+        existing.domain_name = data.domain_name
+        existing.os = data.os
+        existing.updated_at = datetime.utcnow()
+        session.commit()
+        session.refresh(existing)
+        _ = existing.mod_paths
+        return existing
 
     game = Game(
         name=data.name,

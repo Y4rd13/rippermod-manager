@@ -1,7 +1,12 @@
+import json
+import queue
+import threading
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
-from chat_nexus_mod_manager.database import get_session
+from chat_nexus_mod_manager.database import get_session, engine
 from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.mod import ModGroup
@@ -32,26 +37,30 @@ def list_mod_groups(
         select(ModGroup).where(ModGroup.game_id == game.id)
     ).all()
 
+    group_ids = [g.id for g in groups]
+    corr_rows = session.exec(
+        select(ModNexusCorrelation, NexusDownload)
+        .join(NexusDownload, ModNexusCorrelation.nexus_download_id == NexusDownload.id)
+        .where(ModNexusCorrelation.mod_group_id.in_(group_ids))  # type: ignore[union-attr]
+    ).all()
+    corr_map: dict[int, tuple[ModNexusCorrelation, NexusDownload]] = {
+        corr.mod_group_id: (corr, nd) for corr, nd in corr_rows
+    }
+
     result: list[ModGroupOut] = []
     for g in groups:
         _ = g.files
-        corr = session.exec(
-            select(ModNexusCorrelation).where(
-                ModNexusCorrelation.mod_group_id == g.id
-            )
-        ).first()
-
         nexus_match = None
-        if corr:
-            nd = session.get(NexusDownload, corr.nexus_download_id)
-            if nd:
-                nexus_match = CorrelationBrief(
-                    nexus_mod_id=nd.nexus_mod_id,
-                    mod_name=nd.mod_name,
-                    score=corr.score,
-                    method=corr.method,
-                    confirmed=corr.confirmed_by_user,
-                )
+        match = corr_map.get(g.id)  # type: ignore[arg-type]
+        if match:
+            corr, nd = match
+            nexus_match = CorrelationBrief(
+                nexus_mod_id=nd.nexus_mod_id,
+                mod_name=nd.mod_name,
+                score=corr.score,
+                method=corr.method,
+                confirmed=corr.confirmed_by_user,
+            )
 
         result.append(
             ModGroupOut(
@@ -84,6 +93,39 @@ def scan_mods(game_name: str, session: Session = Depends(get_session)) -> ScanRe
     from chat_nexus_mod_manager.scanner.service import scan_game_mods
 
     return scan_game_mods(game, session)
+
+
+@router.post("/scan-stream")
+def scan_mods_stream(game_name: str) -> StreamingResponse:
+    q: queue.Queue[dict | None] = queue.Queue()
+
+    def on_progress(phase: str, message: str, percent: int) -> None:
+        q.put({"phase": phase, "message": message, "percent": percent})
+
+    def run_scan() -> None:
+        with Session(engine) as session:
+            game = session.exec(select(Game).where(Game.name == game_name)).first()
+            if not game:
+                q.put({"phase": "error", "message": f"Game '{game_name}' not found", "percent": 0})
+                q.put(None)
+                return
+            _ = game.mod_paths
+
+            from chat_nexus_mod_manager.scanner.service import scan_game_mods
+
+            scan_game_mods(game, session, on_progress=on_progress)
+        q.put(None)
+
+    threading.Thread(target=run_scan, daemon=True).start()
+
+    def event_stream():
+        while True:
+            item = q.get()
+            if item is None:
+                break
+            yield f"data: {json.dumps(item)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @router.post("/correlate", response_model=CorrelateResult)

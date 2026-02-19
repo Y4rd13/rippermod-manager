@@ -15,7 +15,7 @@ import type {
 export function useCreateGame() {
   const qc = useQueryClient();
   return useMutation<Game, Error, GameCreate>({
-    mutationFn: (data) => api.post("/api/v1/games", data),
+    mutationFn: (data) => api.post("/api/v1/games/", data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["games"] }),
   });
 }
@@ -79,7 +79,7 @@ export function useSaveSettings() {
   const qc = useQueryClient();
   return useMutation<Setting[], Error, Record<string, string>>({
     mutationFn: (settings) =>
-      api.put("/api/v1/settings", { settings }),
+      api.put("/api/v1/settings/", { settings }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
   });
 }

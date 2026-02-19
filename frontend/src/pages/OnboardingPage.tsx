@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { open } from "@tauri-apps/plugin-dialog";
+import { ChevronDown, FolderOpen } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -8,9 +10,10 @@ import {
   useConnectNexus,
   useCreateGame,
   useSaveSettings,
-  useScanMods,
   useSyncNexus,
 } from "@/hooks/mutations";
+import { api } from "@/lib/api-client";
+import { parseSSE } from "@/lib/sse-parser";
 import { useOnboardingStatus } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
 import { useOnboardingStore } from "@/stores/onboarding-store";
@@ -190,14 +193,152 @@ function NexusSetupStep({ onNext }: { onNext: () => void }) {
   );
 }
 
+interface ScanLog {
+  phase: string;
+  message: string;
+  percent: number;
+}
+
+function ScanProgress({ logs, percent, phase }: { logs: ScanLog[]; percent: number; phase: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (expanded && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [logs.length, expanded]);
+
+  const phaseLabel: Record<string, string> = {
+    scan: "Scanning files",
+    group: "Grouping mods",
+    index: "Indexing",
+    done: "Complete",
+    error: "Error",
+    sync: "Syncing Nexus",
+    complete: "Finishing",
+  };
+
+  const isDone = phase === "done" || phase === "complete";
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-text-secondary font-medium">
+            {phaseLabel[phase] ?? phase}
+          </span>
+          <span className="text-text-muted tabular-nums">{percent}%</span>
+        </div>
+        <div className="h-1.5 w-full rounded-full bg-surface-3 overflow-hidden">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all duration-300 ease-out",
+              isDone ? "bg-success" : "bg-accent",
+            )}
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      </div>
+
+      {logs.length > 0 && (
+        <div className="rounded-lg border border-border bg-surface-1 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="flex w-full items-center justify-between px-3 py-2 text-xs text-text-muted hover:text-text-secondary transition-colors"
+          >
+            <span>{logs.length} log entries</span>
+            <ChevronDown
+              className={cn(
+                "h-3.5 w-3.5 transition-transform duration-200",
+                expanded && "rotate-180",
+              )}
+            />
+          </button>
+          <div
+            className={cn(
+              "overflow-hidden transition-all duration-200 ease-out",
+              expanded ? "max-h-48" : "max-h-0",
+            )}
+          >
+            <div ref={scrollRef} className="overflow-y-auto max-h-48 border-t border-border">
+              {logs.slice(-50).map((log, i) => (
+                <div
+                  key={i}
+                  className="flex items-start gap-2 px-3 py-1 text-[11px] font-mono leading-relaxed"
+                >
+                  <span
+                    className={cn(
+                      "shrink-0 mt-0.5 h-1.5 w-1.5 rounded-full",
+                      log.phase === "error"
+                        ? "bg-danger"
+                        : log.phase === "done"
+                          ? "bg-success"
+                          : "bg-accent/60",
+                    )}
+                  />
+                  <span className="text-text-muted break-all">{log.message}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AddGameStep({ onFinish }: { onFinish: () => void }) {
   const store = useOnboardingStore();
   const createGame = useCreateGame();
-  const scanMods = useScanMods();
   const syncNexus = useSyncNexus();
   const completeOnboarding = useCompleteOnboarding();
   const [error, setError] = useState("");
-  const [status, setStatus] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [scanLogs, setScanLogs] = useState<ScanLog[]>([]);
+  const [scanPercent, setScanPercent] = useState(0);
+  const [scanPhase, setScanPhase] = useState("");
+
+  const pendingLogs = useRef<ScanLog[]>([]);
+  const latestPercent = useRef(0);
+  const latestPhase = useRef("");
+  const flushTimer = useRef<ReturnType<typeof setInterval>>();
+
+  const startFlushing = useCallback(() => {
+    flushTimer.current = setInterval(() => {
+      if (pendingLogs.current.length > 0) {
+        const batch = pendingLogs.current;
+        pendingLogs.current = [];
+        setScanLogs((prev) => [...prev, ...batch]);
+      }
+      setScanPercent(latestPercent.current);
+      setScanPhase(latestPhase.current);
+    }, 150);
+  }, []);
+
+  const stopFlushing = useCallback(() => {
+    if (flushTimer.current) clearInterval(flushTimer.current);
+    if (pendingLogs.current.length > 0) {
+      const batch = pendingLogs.current;
+      pendingLogs.current = [];
+      setScanLogs((prev) => [...prev, ...batch]);
+    }
+    setScanPercent(latestPercent.current);
+    setScanPhase(latestPhase.current);
+  }, []);
+
+  const pushLog = useCallback((log: ScanLog) => {
+    pendingLogs.current.push(log);
+    if (log.percent >= 0) latestPercent.current = log.percent;
+    latestPhase.current = log.phase;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (flushTimer.current) clearInterval(flushTimer.current);
+    };
+  }, []);
 
   const handleFinish = async () => {
     if (!store.installPath.trim()) {
@@ -205,38 +346,65 @@ function AddGameStep({ onFinish }: { onFinish: () => void }) {
       return;
     }
 
+    setIsLoading(true);
+    setError("");
+    setScanLogs([]);
+    setScanPercent(0);
+    setScanPhase("scan");
+    pendingLogs.current = [];
+    latestPercent.current = 0;
+    latestPhase.current = "scan";
+
     try {
-      setStatus("Creating game...");
+      pushLog({ phase: "scan", message: "Creating game...", percent: 0 });
+      startFlushing();
+
       await createGame.mutateAsync({
         name: store.gameName,
         domain_name: "cyberpunk2077",
         install_path: store.installPath,
       });
 
-      setStatus("Scanning local mods...");
-      const scanResult = await scanMods.mutateAsync(store.gameName);
+      pushLog({ phase: "scan", message: "Starting mod scan...", percent: 0 });
+      const response = await api.stream(
+        `/api/v1/games/${store.gameName}/mods/scan-stream`,
+      );
 
-      setStatus(`Found ${scanResult.files_found} files. Syncing Nexus history...`);
-      try {
-        await syncNexus.mutateAsync(store.gameName);
-      } catch {
-        // Nexus sync is optional
+      if (!response.ok) {
+        throw new Error("Scan request failed");
       }
 
-      setStatus("Completing setup...");
+      for await (const event of parseSSE(response)) {
+        const data = JSON.parse(event.data) as ScanLog;
+        pushLog(data);
+      }
+
+      pushLog({ phase: "sync", message: "Syncing Nexus history...", percent: 100 });
+      latestPhase.current = "sync";
+      latestPercent.current = 100;
+
+      try {
+        await syncNexus.mutateAsync(store.gameName);
+        pushLog({ phase: "sync", message: "Nexus sync complete", percent: 100 });
+      } catch {
+        pushLog({ phase: "sync", message: "Nexus sync skipped (optional)", percent: 100 });
+      }
+
+      pushLog({ phase: "complete", message: "Completing setup...", percent: 100 });
+      latestPhase.current = "complete";
       await completeOnboarding.mutateAsync({});
+
+      stopFlushing();
+      setScanPhase("done");
+      setScanPercent(100);
       onFinish();
     } catch (e) {
+      stopFlushing();
       setError(e instanceof Error ? e.message : "Setup failed");
-      setStatus("");
+      setScanPhase("error");
+      setIsLoading(false);
     }
   };
-
-  const isLoading =
-    createGame.isPending ||
-    scanMods.isPending ||
-    syncNexus.isPending ||
-    completeOnboarding.isPending;
 
   return (
     <div className="space-y-6 max-w-md mx-auto">
@@ -255,20 +423,41 @@ function AddGameStep({ onFinish }: { onFinish: () => void }) {
         onChange={(e) => store.setGameName(e.target.value)}
         disabled
       />
-      <Input
-        id="install-path"
-        label="Installation Path"
-        placeholder="C:\\Program Files (x86)\\Steam\\steamapps\\common\\Cyberpunk 2077"
-        value={store.installPath}
-        onChange={(e) => {
-          store.setInstallPath(e.target.value);
-          setError("");
-        }}
-        error={error}
-      />
-      {status && (
-        <p className="text-accent text-sm animate-pulse">{status}</p>
+      <div className="space-y-1">
+        <label className="block text-sm font-medium text-text-secondary">
+          Installation Path
+        </label>
+        <div className="flex items-center gap-2">
+          <div className="flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary truncate">
+            {store.installPath}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={isLoading}
+            onClick={async () => {
+              const selected = await open({
+                directory: true,
+                title: "Select game installation folder",
+                defaultPath: store.installPath,
+              });
+              if (selected) {
+                store.setInstallPath(selected);
+                setError("");
+              }
+            }}
+          >
+            <FolderOpen className="h-4 w-4 mr-1" />
+            Browse
+          </Button>
+        </div>
+        {error && <p className="text-danger text-sm">{error}</p>}
+      </div>
+
+      {scanPhase && (
+        <ScanProgress logs={scanLogs} percent={scanPercent} phase={scanPhase} />
       )}
+
       <div className="flex justify-end gap-3">
         <Button onClick={handleFinish} loading={isLoading}>
           Finish Setup
