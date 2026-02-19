@@ -44,10 +44,17 @@ interface NxmHandlerDeps {
   navigate: (path: string) => void;
 }
 
-function handleNxmLink(link: NxmLink, deps: NxmHandlerDeps) {
+const RETRY_INTERVAL_MS = 500;
+const MAX_RETRIES = 10;
+
+function handleNxmLink(link: NxmLink, deps: NxmHandlerDeps, retries = 0) {
   const games = deps.getGames();
   if (!games) {
-    toast.error("NXM link received", "Games not loaded yet — try again");
+    if (retries < MAX_RETRIES) {
+      setTimeout(() => handleNxmLink(link, deps, retries + 1), RETRY_INTERVAL_MS);
+      return;
+    }
+    toast.error("NXM link failed", "Games not loaded — please try again");
     return;
   }
 
@@ -83,28 +90,40 @@ export function setupNxmHandler(deps: NxmHandlerDeps): () => void {
     } else {
       toast.error("Invalid NXM link", "Could not parse the download URL");
     }
-  }).then((fn) => {
-    if (cancelled) {
-      fn();
-    } else {
-      unlisten = fn;
-    }
-  });
+  })
+    .then((fn) => {
+      if (cancelled) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    })
+    .catch(() => {
+      /* listen unavailable outside Tauri */
+    });
 
   // Check for cold-start URLs via the deep-link plugin
-  import("@tauri-apps/plugin-deep-link").then(({ getCurrent }) => {
-    if (cancelled) return;
-    getCurrent().then((urls) => {
-      if (cancelled || !urls || urls.length === 0) return;
-      for (const url of urls) {
-        const link = parseNxmUrl(url);
-        if (link) {
-          handleNxmLink(link, deps);
-          break;
-        }
-      }
+  import("@tauri-apps/plugin-deep-link")
+    .then(({ getCurrent }) => {
+      if (cancelled) return;
+      getCurrent()
+        .then((urls) => {
+          if (cancelled || !urls || urls.length === 0) return;
+          for (const url of urls) {
+            const link = parseNxmUrl(url);
+            if (link) {
+              handleNxmLink(link, deps);
+              break;
+            }
+          }
+        })
+        .catch(() => {
+          /* getCurrent unavailable */
+        });
+    })
+    .catch(() => {
+      /* deep-link plugin unavailable */
     });
-  });
 
   return () => {
     cancelled = true;
