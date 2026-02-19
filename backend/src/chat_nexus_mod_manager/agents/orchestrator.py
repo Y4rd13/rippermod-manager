@@ -45,7 +45,7 @@ def _get_openai_key() -> str:
 def _get_model_name() -> str:
     with Session(engine) as session:
         setting = session.exec(select(AppSetting).where(AppSetting.key == "openai_model")).first()
-        return setting.value if setting else "gpt-4o"
+        return setting.value if setting else "gpt-5.2"
 
 
 @tool
