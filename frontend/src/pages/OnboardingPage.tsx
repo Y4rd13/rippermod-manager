@@ -379,7 +379,7 @@ function AddGameStep({ onFinish }: { onFinish: () => void }) {
 
   const handleValidate = (path: string) => {
     validatePath.mutate(
-      { install_path: path },
+      { install_path: path, domain_name: "cyberpunk2077" },
       {
         onSuccess: (result) => setValidation(result),
         onError: () => setValidation(null),

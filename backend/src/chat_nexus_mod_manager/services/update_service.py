@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+import httpx
 from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.matching.filename_parser import is_newer_version
@@ -165,7 +166,7 @@ async def check_installed_mod_updates(
         async with sem:
             try:
                 return nid, await client.get_mod_files(game_domain, nid)
-            except Exception:
+            except (httpx.HTTPError, ValueError):
                 logger.warning("Failed to fetch files for mod %d", nid)
                 return nid, None
 

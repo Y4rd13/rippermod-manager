@@ -110,6 +110,16 @@ class TestValidatePath:
         assert "mods" in data["found_mod_dirs"]
         assert "archive/pc/mod" in data["found_mod_dirs"]
 
+    def test_unknown_domain(self, client):
+        r = client.post(
+            "/api/v1/games/validate-path",
+            json={"install_path": "/some/path", "domain_name": "unknowngame"},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["valid"] is False
+        assert "Unknown game domain" in data["warning"]
+
     def test_path_without_exe(self, client, tmp_path):
         # Just create a mod dir but no exe
         (tmp_path / "mods").mkdir()

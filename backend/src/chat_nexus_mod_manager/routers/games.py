@@ -1,5 +1,6 @@
 import os
 from datetime import UTC, datetime
+from typing import TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlmodel import Session, select
@@ -24,6 +25,19 @@ CYBERPUNK_DEFAULT_PATHS = [
     ("bin/x64/plugins", "ASI/plugin loaders", True),
     ("mods", "REDmod mods", True),
 ]
+
+
+class GameRegistryEntry(TypedDict):
+    exe_path: str
+    mod_paths: list[tuple[str, str, bool]]
+
+
+GAME_REGISTRY: dict[str, GameRegistryEntry] = {
+    "cyberpunk2077": {
+        "exe_path": os.path.join("bin", "x64", "Cyberpunk2077.exe"),
+        "mod_paths": CYBERPUNK_DEFAULT_PATHS,
+    },
+}
 
 
 @router.get("/", response_model=list[GameOut])
@@ -90,11 +104,22 @@ def create_game(
 @router.post("/validate-path", response_model=PathValidation)
 def validate_game_path(data: PathValidationRequest) -> PathValidation:
     install_path = data.install_path
-    exe_path = os.path.join(install_path, "bin", "x64", "Cyberpunk2077.exe")
+    game_info = GAME_REGISTRY.get(data.domain_name)
+
+    if not game_info:
+        return PathValidation(
+            valid=False,
+            path=install_path,
+            found_exe=False,
+            found_mod_dirs=[],
+            warning=f"Unknown game domain: {data.domain_name}",
+        )
+
+    exe_path = os.path.join(install_path, game_info["exe_path"])
     found_exe = os.path.isfile(exe_path)
 
     found_mod_dirs: list[str] = []
-    for rel_path, _desc, _default in CYBERPUNK_DEFAULT_PATHS:
+    for rel_path, _desc, _default in game_info["mod_paths"]:
         full_path = os.path.join(install_path, rel_path)
         if os.path.isdir(full_path):
             found_mod_dirs.append(rel_path)
@@ -106,7 +131,8 @@ def validate_game_path(data: PathValidationRequest) -> PathValidation:
             "Game executable found but no mod directories detected. Mods may not be installed yet."
         )
     elif not found_exe:
-        warning = "Cyberpunk2077.exe not found. Please verify the installation path."
+        exe_name = os.path.basename(game_info["exe_path"])
+        warning = f"{exe_name} not found. Please verify the installation path."
 
     return PathValidation(
         valid=valid,
