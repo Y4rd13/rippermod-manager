@@ -28,9 +28,7 @@ def update_settings(
 ) -> list[SettingOut]:
     results: list[SettingOut] = []
     for key, value in data.settings.items():
-        setting = session.exec(
-            select(AppSetting).where(AppSetting.key == key)
-        ).first()
+        setting = session.exec(select(AppSetting).where(AppSetting.key == key)).first()
         if setting:
             setting.value = value
         else:
@@ -49,15 +47,12 @@ def update_settings(
 @router.get("/specs", response_model=PCSpecsOut | None)
 def get_specs(session: Session = Depends(get_session)) -> PCSpecs | None:
     return session.exec(
-        select(PCSpecs)
-        .order_by(PCSpecs.captured_at.desc())  # type: ignore[arg-type]
+        select(PCSpecs).order_by(PCSpecs.captured_at.desc())  # type: ignore[arg-type]
     ).first()
 
 
 @router.post("/specs/capture", response_model=PCSpecsOut)
-def capture_specs(
-    data: PCSpecsOut, session: Session = Depends(get_session)
-) -> PCSpecs:
+def capture_specs(data: PCSpecsOut, session: Session = Depends(get_session)) -> PCSpecs:
     specs = PCSpecs(**data.model_dump())
     session.add(specs)
     session.commit()

@@ -29,13 +29,9 @@ def _get_game(game_name: str, session: Session) -> Game:
 
 
 @router.get("/", response_model=list[ModGroupOut])
-def list_mod_groups(
-    game_name: str, session: Session = Depends(get_session)
-) -> list[ModGroupOut]:
+def list_mod_groups(game_name: str, session: Session = Depends(get_session)) -> list[ModGroupOut]:
     game = _get_game(game_name, session)
-    groups = session.exec(
-        select(ModGroup).where(ModGroup.game_id == game.id)
-    ).all()
+    groups = session.exec(select(ModGroup).where(ModGroup.game_id == game.id)).all()
 
     group_ids = [g.id for g in groups]
     corr_rows = session.exec(
@@ -129,9 +125,7 @@ def scan_mods_stream(game_name: str) -> StreamingResponse:
 
 
 @router.post("/correlate", response_model=CorrelateResult)
-def correlate_mods(
-    game_name: str, session: Session = Depends(get_session)
-) -> CorrelateResult:
+def correlate_mods(game_name: str, session: Session = Depends(get_session)) -> CorrelateResult:
     game = _get_game(game_name, session)
 
     from chat_nexus_mod_manager.matching.correlator import correlate_game_mods

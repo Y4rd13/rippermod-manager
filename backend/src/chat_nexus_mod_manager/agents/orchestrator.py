@@ -44,17 +44,13 @@ SYSTEM_PROMPT = (
 
 def _get_openai_key() -> str:
     with Session(engine) as session:
-        setting = session.exec(
-            select(AppSetting).where(AppSetting.key == "openai_api_key")
-        ).first()
+        setting = session.exec(select(AppSetting).where(AppSetting.key == "openai_api_key")).first()
         return setting.value if setting else ""
 
 
 def _get_model_name() -> str:
     with Session(engine) as session:
-        setting = session.exec(
-            select(AppSetting).where(AppSetting.key == "openai_model")
-        ).first()
+        setting = session.exec(select(AppSetting).where(AppSetting.key == "openai_model")).first()
         return setting.value if setting else "gpt-4o"
 
 
@@ -72,9 +68,7 @@ def search_local_mods(query: str, game_name: str = "") -> str:
                 stmt = stmt.where(ModGroup.game_id == game.id)
 
         groups = session.exec(stmt).all()
-        matches = [
-            g for g in groups if query.lower() in g.display_name.lower()
-        ]
+        matches = [g for g in groups if query.lower() in g.display_name.lower()]
 
         if not matches:
             return f"No mods found matching '{query}'"
@@ -116,11 +110,7 @@ def list_all_games() -> str:
             return "No games configured"
         results = []
         for g in games:
-            mod_count = len(
-                session.exec(
-                    select(ModGroup).where(ModGroup.game_id == g.id)
-                ).all()
-            )
+            mod_count = len(session.exec(select(ModGroup).where(ModGroup.game_id == g.id)).all())
             results.append(f"- {g.name} ({mod_count} mod groups, path: {g.install_path})")
         return "\n".join(results)
 
@@ -221,10 +211,7 @@ async def run_agent(
     if not api_key:
         yield {
             "type": "token",
-            "data": {
-                "content": "OpenAI API key not configured. "
-                "Please set it in Settings."
-            },
+            "data": {"content": "OpenAI API key not configured. Please set it in Settings."},
         }
         return
 
@@ -303,9 +290,7 @@ async def run_agent(
 
             from langchain_core.messages import ToolMessage
 
-            messages.append(
-                ToolMessage(content=str(result), tool_call_id=tc["id"])
-            )
+            messages.append(ToolMessage(content=str(result), tool_call_id=tc["id"]))
 
         with Session(engine) as session:
             session.add(

@@ -10,9 +10,7 @@ from chat_nexus_mod_manager.schemas.nexus import NexusSyncResult
 logger = logging.getLogger(__name__)
 
 
-async def sync_nexus_history(
-    game: Game, api_key: str, session: Session
-) -> NexusSyncResult:
+async def sync_nexus_history(game: Game, api_key: str, session: Session) -> NexusSyncResult:
     tracked_count = 0
     endorsed_count = 0
 
@@ -89,9 +87,7 @@ async def sync_nexus_history(
 
         session.commit()
 
-    total = session.exec(
-        select(NexusDownload).where(NexusDownload.game_id == game.id)
-    ).all()
+    total = session.exec(select(NexusDownload).where(NexusDownload.game_id == game.id)).all()
 
     try:
         from chat_nexus_mod_manager.vector.indexer import index_nexus_metadata

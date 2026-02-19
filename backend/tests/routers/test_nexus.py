@@ -16,9 +16,7 @@ class TestValidateKey:
 
     @respx.mock
     def test_invalid(self, client):
-        respx.get(f"{BASE_URL}/v1/users/validate.json").mock(
-            return_value=httpx.Response(401)
-        )
+        respx.get(f"{BASE_URL}/v1/users/validate.json").mock(return_value=httpx.Response(401))
         r = client.post("/api/v1/nexus/validate", json={"api_key": "bad"})
         assert r.status_code == 200
         assert r.json()["valid"] is False
@@ -39,9 +37,7 @@ class TestConnectAndStore:
 
     @respx.mock
     def test_invalid_no_store(self, client):
-        respx.get(f"{BASE_URL}/v1/users/validate.json").mock(
-            return_value=httpx.Response(401)
-        )
+        respx.get(f"{BASE_URL}/v1/users/validate.json").mock(return_value=httpx.Response(401))
         r = client.post("/api/v1/nexus/connect", json={"api_key": "bad"})
         assert r.json()["valid"] is False
         settings = client.get("/api/v1/settings/").json()

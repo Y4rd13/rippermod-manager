@@ -26,10 +26,12 @@ async def chat(data: ChatRequest, session: Session = Depends(get_session)) -> Ev
         except ImportError:
             yield {
                 "event": "token",
-                "data": json.dumps({
-                    "content": "Chat agent not yet configured. "
-                    "Please set up your OpenAI API key in settings."
-                }),
+                "data": json.dumps(
+                    {
+                        "content": "Chat agent not yet configured. "
+                        "Please set up your OpenAI API key in settings."
+                    }
+                ),
             }
         yield {"event": "done", "data": json.dumps({})}
 
@@ -37,9 +39,7 @@ async def chat(data: ChatRequest, session: Session = Depends(get_session)) -> Ev
 
 
 @router.get("/history", response_model=list[ChatMessageOut])
-def chat_history(
-    limit: int = 50, session: Session = Depends(get_session)
-) -> list[ChatMessage]:
+def chat_history(limit: int = 50, session: Session = Depends(get_session)) -> list[ChatMessage]:
     return list(
         session.exec(
             select(ChatMessage)

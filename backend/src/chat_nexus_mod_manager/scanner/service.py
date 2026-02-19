@@ -13,8 +13,19 @@ from chat_nexus_mod_manager.schemas.mod import ScanResult
 logger = logging.getLogger(__name__)
 
 INTERESTING_EXTENSIONS = {
-    ".archive", ".lua", ".dll", ".asi", ".reds", ".yaml", ".yml",
-    ".xl", ".json", ".ini", ".toml", ".xml", ".csv",
+    ".archive",
+    ".lua",
+    ".dll",
+    ".asi",
+    ".reds",
+    ".yaml",
+    ".yml",
+    ".xl",
+    ".json",
+    ".ini",
+    ".toml",
+    ".xml",
+    ".csv",
 }
 
 SKIP_DIRS = {"__pycache__", ".git", "node_modules", ".vscode"}
@@ -74,9 +85,7 @@ def scan_game_mods(
         pct = int(((i + 1) / total_files) * 70) if total_files else 0
 
         rel = str(file_path.relative_to(install_path))
-        existing = session.exec(
-            select(ModFile).where(ModFile.file_path == rel)
-        ).first()
+        existing = session.exec(select(ModFile).where(ModFile.file_path == rel)).first()
 
         if existing:
             discovered_files.append(existing)

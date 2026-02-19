@@ -10,9 +10,7 @@ router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
 
 def _has_key(session: Session, key_name: str) -> bool:
-    setting = session.exec(
-        select(AppSetting).where(AppSetting.key == key_name)
-    ).first()
+    setting = session.exec(select(AppSetting).where(AppSetting.key == key_name)).first()
     return bool(setting and setting.value)
 
 
@@ -57,9 +55,7 @@ def complete_onboarding(
         ("nexus_api_key", data.nexus_api_key),
     ]:
         if value:
-            setting = session.exec(
-                select(AppSetting).where(AppSetting.key == key)
-            ).first()
+            setting = session.exec(select(AppSetting).where(AppSetting.key == key)).first()
             if setting:
                 setting.value = value
             else:

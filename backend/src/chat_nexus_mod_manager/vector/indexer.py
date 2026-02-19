@@ -48,14 +48,16 @@ def index_mod_groups(game_id: int | None = None) -> int:
 
             ids.append(f"modgroup-{group.id}")
             documents.append(doc)
-            metadatas.append({
-                "type": "mod_group",
-                "mod_group_id": group.id or 0,
-                "game_id": group.game_id,
-                "display_name": group.display_name,
-                "file_count": len(group.files),
-                "confidence": group.confidence,
-            })
+            metadatas.append(
+                {
+                    "type": "mod_group",
+                    "mod_group_id": group.id or 0,
+                    "game_id": group.game_id,
+                    "display_name": group.display_name,
+                    "file_count": len(group.files),
+                    "confidence": group.confidence,
+                }
+            )
 
         collection.add(ids=ids, documents=documents, metadatas=metadatas)
         logger.info("Indexed %d mod groups into vector store", len(ids))
@@ -68,9 +70,7 @@ def index_nexus_metadata(game_id: int | None = None) -> int:
     with Session(engine) as session:
         if game_id is not None:
             download_ids = session.exec(
-                select(NexusDownload.nexus_mod_id).where(
-                    NexusDownload.game_id == game_id
-                )
+                select(NexusDownload.nexus_mod_id).where(NexusDownload.game_id == game_id)
             ).all()
             mod_ids = set(download_ids)
             metas = session.exec(
@@ -101,15 +101,17 @@ def index_nexus_metadata(game_id: int | None = None) -> int:
 
             ids.append(f"nexus-{meta.nexus_mod_id}")
             documents.append(doc)
-            metadatas.append({
-                "type": "nexus_mod",
-                "nexus_mod_id": meta.nexus_mod_id,
-                "name": meta.name,
-                "author": meta.author,
-                "version": meta.version,
-                "game_domain": meta.game_domain,
-                "endorsement_count": meta.endorsement_count,
-            })
+            metadatas.append(
+                {
+                    "type": "nexus_mod",
+                    "nexus_mod_id": meta.nexus_mod_id,
+                    "name": meta.name,
+                    "author": meta.author,
+                    "version": meta.version,
+                    "game_domain": meta.game_domain,
+                    "endorsement_count": meta.endorsement_count,
+                }
+            )
 
         collection.add(ids=ids, documents=documents, metadatas=metadatas)
         logger.info("Indexed %d Nexus mod metadata into vector store", len(ids))
@@ -120,10 +122,10 @@ def index_correlations(game_id: int | None = None) -> int:
     collection = reset_collection(COLLECTION_CORRELATIONS)
 
     with Session(engine) as session:
-        stmt = select(ModNexusCorrelation, ModGroup, NexusDownload).join(
-            ModGroup, ModNexusCorrelation.mod_group_id == ModGroup.id
-        ).join(
-            NexusDownload, ModNexusCorrelation.nexus_download_id == NexusDownload.id
+        stmt = (
+            select(ModNexusCorrelation, ModGroup, NexusDownload)
+            .join(ModGroup, ModNexusCorrelation.mod_group_id == ModGroup.id)
+            .join(NexusDownload, ModNexusCorrelation.nexus_download_id == NexusDownload.id)
         )
         if game_id is not None:
             stmt = stmt.where(ModGroup.game_id == game_id)
@@ -139,9 +141,7 @@ def index_correlations(game_id: int | None = None) -> int:
 
         for corr, group, download in results:
             meta = session.exec(
-                select(NexusModMeta).where(
-                    NexusModMeta.nexus_mod_id == download.nexus_mod_id
-                )
+                select(NexusModMeta).where(NexusModMeta.nexus_mod_id == download.nexus_mod_id)
             ).first()
 
             summary = meta.summary if meta else ""
@@ -159,15 +159,17 @@ def index_correlations(game_id: int | None = None) -> int:
 
             ids.append(f"corr-{corr.id}")
             documents.append(doc)
-            metadatas.append({
-                "type": "correlation",
-                "mod_group_id": corr.mod_group_id,
-                "nexus_mod_id": download.nexus_mod_id,
-                "score": corr.score,
-                "method": corr.method,
-                "local_name": group.display_name,
-                "nexus_name": download.mod_name,
-            })
+            metadatas.append(
+                {
+                    "type": "correlation",
+                    "mod_group_id": corr.mod_group_id,
+                    "nexus_mod_id": download.nexus_mod_id,
+                    "score": corr.score,
+                    "method": corr.method,
+                    "local_name": group.display_name,
+                    "nexus_name": download.mod_name,
+                }
+            )
 
         collection.add(ids=ids, documents=documents, metadatas=metadatas)
         logger.info("Indexed %d correlations into vector store", len(ids))
