@@ -53,16 +53,20 @@ function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdat
 
   const downloadableUpdates = updates.filter((u) => u.nexus_file_id != null);
 
-  const handleUpdateAll = () => {
+  const handleUpdateAll = async () => {
     for (const u of downloadableUpdates) {
       if (u.nexus_file_id) {
-        startDownload.mutate({
-          gameName,
-          data: {
-            nexus_mod_id: u.nexus_mod_id,
-            nexus_file_id: u.nexus_file_id,
-          },
-        });
+        try {
+          await startDownload.mutateAsync({
+            gameName,
+            data: {
+              nexus_mod_id: u.nexus_mod_id,
+              nexus_file_id: u.nexus_file_id,
+            },
+          });
+        } catch {
+          // Individual download errors handled by mutation callbacks
+        }
       }
     }
   };

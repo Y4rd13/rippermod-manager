@@ -62,10 +62,11 @@ def score_file_variant(
     if candidate.get("category_id") == 1:
         score += 5
 
-    # Substring name match bonus
+    # Substring name match bonus (require >= 4 chars to avoid false positives)
     installed_name_lower = installed_source_archive.lower()
     cand_file_name = candidate.get("file_name", "").lower()
-    if cand_file_name and cand_file_name.split("-")[0] in installed_name_lower:
+    cand_prefix = cand_file_name.split("-")[0] if cand_file_name else ""
+    if len(cand_prefix) >= 4 and cand_prefix in installed_name_lower:
         score += 25
 
     return score

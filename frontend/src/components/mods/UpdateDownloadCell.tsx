@@ -60,14 +60,21 @@ export function UpdateDownloadCell({ update, gameName, downloadJobs }: Props) {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [conflicts]);
 
+  const doInstall = async (fileName: string, skipConflicts: string[]) => {
+    // Uninstall old version right before install (after conflict check)
+    if (update.installed_mod_id) {
+      await uninstallMod.mutateAsync({ gameName, modId: update.installed_mod_id });
+    }
+    await installMod.mutateAsync({
+      gameName,
+      data: { archive_filename: fileName, skip_conflicts: skipConflicts },
+    });
+    toast.success("Mod updated", update.display_name);
+  };
+
   const handleInstall = async (fileName: string) => {
     setInstallingFile(fileName);
     try {
-      // Uninstall old version first if this is an update
-      if (update.installed_mod_id) {
-        await uninstallMod.mutateAsync({ gameName, modId: update.installed_mod_id });
-      }
-
       const result = await checkConflicts.mutateAsync({
         gameName,
         archiveFilename: fileName,
@@ -76,11 +83,7 @@ export function UpdateDownloadCell({ update, gameName, downloadJobs }: Props) {
       if (result.conflicts.length > 0) {
         setConflicts(result);
       } else {
-        await installMod.mutateAsync({
-          gameName,
-          data: { archive_filename: fileName, skip_conflicts: [] },
-        });
-        toast.success("Mod updated", update.display_name);
+        await doInstall(fileName, []);
       }
     } catch {
       // Errors handled by mutation callbacks
@@ -92,14 +95,10 @@ export function UpdateDownloadCell({ update, gameName, downloadJobs }: Props) {
   const handleInstallWithSkip = async () => {
     if (!conflicts) return;
     try {
-      await installMod.mutateAsync({
-        gameName,
-        data: {
-          archive_filename: conflicts.archive_filename,
-          skip_conflicts: conflicts.conflicts.map((c) => c.file_path),
-        },
-      });
-      toast.success("Mod updated", update.display_name);
+      await doInstall(
+        conflicts.archive_filename,
+        conflicts.conflicts.map((c) => c.file_path),
+      );
     } finally {
       setConflicts(null);
     }
@@ -108,11 +107,7 @@ export function UpdateDownloadCell({ update, gameName, downloadJobs }: Props) {
   const handleInstallOverwrite = async () => {
     if (!conflicts) return;
     try {
-      await installMod.mutateAsync({
-        gameName,
-        data: { archive_filename: conflicts.archive_filename, skip_conflicts: [] },
-      });
-      toast.success("Mod updated", update.display_name);
+      await doInstall(conflicts.archive_filename, []);
     } finally {
       setConflicts(null);
     }

@@ -2,20 +2,25 @@
 
 import asyncio
 import logging
-from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlmodel import Session, col, select
 
+from chat_nexus_mod_manager.database import engine
 from chat_nexus_mod_manager.models.download import DownloadJob
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.nexus.client import NexusClient, NexusPremiumRequiredError
 
 logger = logging.getLogger(__name__)
 
+# Active cancel events keyed by job_id
+_cancel_events: dict[int, asyncio.Event] = {}
 
-async def start_download(
+_PROGRESS_DB_INTERVAL = 5  # seconds between DB progress updates
+
+
+async def create_and_start_download(
     game: Game,
     nexus_mod_id: int,
     nexus_file_id: int,
@@ -24,12 +29,10 @@ async def start_download(
     *,
     nxm_key: str | None = None,
     nxm_expires: int | None = None,
-    progress_callback: Callable[[int, int, int], None] | None = None,
-    cancel_event: asyncio.Event | None = None,
 ) -> DownloadJob:
-    """Download a file from Nexus to downloaded_mods/.
+    """Create a download job and kick off the download as a background task.
 
-    progress_callback receives (job_id, downloaded_bytes, total_bytes).
+    Returns the job immediately in "downloading" status (non-blocking).
     """
     job = DownloadJob(
         game_id=game.id,  # type: ignore[arg-type]
@@ -41,37 +44,34 @@ async def start_download(
     session.commit()
     session.refresh(job)
 
-    async with NexusClient(api_key) as client:
-        # Check premium status when no nxm_key
-        if not nxm_key:
-            key_result = await client.validate_key()
-            if not key_result.is_premium:
-                return job
+    # Gather data we need before releasing the session
+    game_domain = game.domain_name
+    install_path = game.install_path
+    job_id = job.id
+    assert job_id is not None
 
+    async with NexusClient(api_key) as client:
         # Fetch file metadata to get the filename
         try:
-            files_resp = await client.get_mod_files(game.domain_name, nexus_mod_id)
+            files_resp = await client.get_mod_files(game_domain, nexus_mod_id)
             nexus_files = files_resp.get("files", [])
-            target_file = None
-            for f in nexus_files:
-                if f.get("file_id") == nexus_file_id:
-                    target_file = f
-                    break
-            if target_file:
-                job.file_name = target_file.get("file_name", f"{nexus_mod_id}-{nexus_file_id}.zip")
-            else:
-                job.file_name = f"{nexus_mod_id}-{nexus_file_id}.zip"
+            target_file = next((f for f in nexus_files if f.get("file_id") == nexus_file_id), None)
+            file_name = (
+                target_file.get("file_name", f"{nexus_mod_id}-{nexus_file_id}.zip")
+                if target_file
+                else f"{nexus_mod_id}-{nexus_file_id}.zip"
+            )
         except Exception:
             logger.warning("Could not fetch file metadata for %d/%d", nexus_mod_id, nexus_file_id)
-            job.file_name = f"{nexus_mod_id}-{nexus_file_id}.zip"
+            file_name = f"{nexus_mod_id}-{nexus_file_id}.zip"
 
-        session.add(job)
-        session.commit()
+        # Sanitize filename to prevent path traversal
+        file_name = Path(file_name).name
 
-        # Fetch download links
+        # Fetch download links (this is fast, do it before backgrounding)
         try:
             links = await client.get_download_links(
-                game.domain_name,
+                game_domain,
                 nexus_mod_id,
                 nexus_file_id,
                 nxm_key=nxm_key,
@@ -80,66 +80,126 @@ async def start_download(
         except NexusPremiumRequiredError:
             job.status = "failed"
             job.error = "Premium account required for direct downloads"
+            job.file_name = file_name
             session.add(job)
             session.commit()
+            session.refresh(job)
             return job
 
-        if not links:
-            job.status = "failed"
-            job.error = "No download links returned"
-            session.add(job)
-            session.commit()
-            return job
-
-        cdn_url = links[0].get("URI", "")
-        if not cdn_url:
-            job.status = "failed"
-            job.error = "Empty CDN URL in download link"
-            session.add(job)
-            session.commit()
-            return job
-
-        # Prepare destination
-        dest_dir = Path(game.install_path) / "downloaded_mods"
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        dest_path = dest_dir / job.file_name
-
-        job.status = "downloading"
+    if not links or not links[0].get("URI"):
+        job.status = "failed"
+        job.error = "No download links returned"
+        job.file_name = file_name
         session.add(job)
         session.commit()
+        session.refresh(job)
+        return job
 
-        job_id = job.id
+    cdn_url = links[0]["URI"]
 
-        def _progress(downloaded: int, total: int) -> None:
-            if progress_callback and job_id is not None:
-                progress_callback(job_id, downloaded, total)
-
-        try:
-            await client.stream_download(
-                cdn_url,
-                dest_path,
-                progress_callback=_progress,
-                cancel_event=cancel_event,
-            )
-            job.status = "completed"
-            job.completed_at = datetime.now(UTC)
-            # Read final size from disk
-            if dest_path.exists():
-                job.total_bytes = dest_path.stat().st_size
-                job.progress_bytes = job.total_bytes
-        except asyncio.CancelledError:
-            job.status = "cancelled"
-            if dest_path.exists():
-                dest_path.unlink(missing_ok=True)
-        except Exception as e:
-            logger.exception("Download failed for job %s", job_id)
-            job.status = "failed"
-            job.error = str(e)[:500]
-
+    # Update job with metadata, set to downloading
+    job.file_name = file_name
+    job.status = "downloading"
     session.add(job)
     session.commit()
     session.refresh(job)
+
+    # Create cancel event and fire background task
+    cancel_event = asyncio.Event()
+    _cancel_events[job_id] = cancel_event
+    _task = asyncio.create_task(
+        _run_download(job_id, cdn_url, install_path, file_name, cancel_event)
+    )
+    _task.add_done_callback(
+        lambda t: t.result() if not t.cancelled() and not t.exception() else None
+    )
+
     return job
+
+
+async def _run_download(
+    job_id: int,
+    cdn_url: str,
+    install_path: str,
+    file_name: str,
+    cancel_event: asyncio.Event,
+) -> None:
+    """Background task that streams the download and updates the DB periodically."""
+    dest_dir = Path(install_path) / "downloaded_mods"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = dest_dir / file_name
+
+    last_db_update = 0.0
+
+    def _progress(downloaded: int, total: int) -> None:
+        nonlocal last_db_update
+        now = asyncio.get_running_loop().time()
+        if now - last_db_update < _PROGRESS_DB_INTERVAL:
+            return
+        last_db_update = now
+        # Update progress in DB from the event loop
+        try:
+            with Session(engine) as s:
+                job = s.get(DownloadJob, job_id)
+                if job:
+                    job.progress_bytes = downloaded
+                    job.total_bytes = total
+                    s.add(job)
+                    s.commit()
+        except Exception:
+            logger.debug("Failed to update progress for job %d", job_id)
+
+    try:
+        import httpx
+
+        async with (
+            httpx.AsyncClient(follow_redirects=True, timeout=300.0) as cdn_client,
+            cdn_client.stream("GET", cdn_url) as resp,
+        ):
+            resp.raise_for_status()
+            total = int(resp.headers.get("Content-Length", 0))
+            downloaded = 0
+            with open(dest_path, "wb") as f:
+                async for chunk in resp.aiter_bytes(chunk_size=65_536):
+                    if cancel_event.is_set():
+                        raise asyncio.CancelledError("Download cancelled")
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    _progress(downloaded, total)
+
+        # Completed
+        with Session(engine) as s:
+            job = s.get(DownloadJob, job_id)
+            if job:
+                job.status = "completed"
+                job.completed_at = datetime.now(UTC)
+                if dest_path.exists():
+                    job.total_bytes = dest_path.stat().st_size
+                    job.progress_bytes = job.total_bytes
+                s.add(job)
+                s.commit()
+
+    except asyncio.CancelledError:
+        dest_path.unlink(missing_ok=True)
+        with Session(engine) as s:
+            job = s.get(DownloadJob, job_id)
+            if job:
+                job.status = "cancelled"
+                s.add(job)
+                s.commit()
+
+    except Exception as e:
+        logger.exception("Download failed for job %d", job_id)
+        with Session(engine) as s:
+            job = s.get(DownloadJob, job_id)
+            if job:
+                job.status = "failed"
+                job.error = str(e)[:500]
+                s.add(job)
+                s.commit()
+
+    finally:
+        _cancel_events.pop(job_id, None)
 
 
 def get_job(job_id: int, session: Session) -> DownloadJob | None:
@@ -147,6 +207,8 @@ def get_job(job_id: int, session: Session) -> DownloadJob | None:
 
 
 def list_jobs(game_id: int, session: Session) -> list[DownloadJob]:
+    # Clean up old jobs opportunistically
+    cleanup_old_jobs(game_id, session)
     return list(
         session.exec(
             select(DownloadJob)
@@ -162,6 +224,10 @@ def cancel_job(job: DownloadJob, session: Session) -> DownloadJob:
         session.add(job)
         session.commit()
         session.refresh(job)
+        # Signal the background task to stop
+        event = _cancel_events.pop(job.id, None)  # type: ignore[arg-type]
+        if event:
+            event.set()
     return job
 
 
