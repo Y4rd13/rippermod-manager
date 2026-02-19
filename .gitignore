@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+backend/data/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Tauri
+frontend/src-tauri/target/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Env
+.env
+*.env.local
+
+# OS
+.DS_Store
+Thumbs.db
