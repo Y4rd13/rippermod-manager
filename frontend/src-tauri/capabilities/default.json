@@ -16,6 +16,7 @@
     "core:window:allow-unmaximize",
     "core:window:allow-start-dragging",
     "core:window:allow-set-focus",
-    "dialog:default"
+    "dialog:default",
+    "app:default"
   ]
 }

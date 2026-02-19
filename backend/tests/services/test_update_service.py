@@ -155,7 +155,8 @@ class TestCheckCorrelationUpdates:
             s.commit()
 
             result = check_correlation_updates(game.id, s)
-            assert len(result) == 0
+            assert result.total_checked == 1
+            assert len(result.updates) == 0
 
     def test_real_update_detected(self, engine):
         """'1.0' vs '2.0' should be detected as an update."""
@@ -187,9 +188,10 @@ class TestCheckCorrelationUpdates:
             s.commit()
 
             result = check_correlation_updates(game.id, s)
-            assert len(result) == 1
-            assert result[0]["source"] == "correlation"
-            assert result[0]["nexus_version"] == "2.0"
+            assert result.total_checked == 1
+            assert len(result.updates) == 1
+            assert result.updates[0]["source"] == "correlation"
+            assert result.updates[0]["nexus_version"] == "2.0"
 
     def test_empty_version_skipped(self, engine):
         with Session(engine) as s:
@@ -214,7 +216,7 @@ class TestCheckCorrelationUpdates:
             s.commit()
 
             result = check_correlation_updates(game.id, s)
-            assert len(result) == 0
+            assert len(result.updates) == 0
 
 
 class TestCheckInstalledModUpdates:
@@ -228,7 +230,8 @@ class TestCheckInstalledModUpdates:
 
             client = AsyncMock()
             result = await check_installed_mod_updates(game.id, "g", client, s)
-            assert result == []
+            assert result.total_checked == 0
+            assert result.updates == []
 
     @pytest.mark.anyio
     async def test_timestamp_update_detected(self, engine):
@@ -274,6 +277,7 @@ class TestCheckInstalledModUpdates:
             }
 
             result = await check_installed_mod_updates(game.id, "g", client, s)
-            assert len(result) == 1
-            assert result[0]["nexus_timestamp"] == 2000
-            assert result[0]["source"] == "installed"
+            assert result.total_checked == 1
+            assert len(result.updates) == 1
+            assert result.updates[0]["nexus_timestamp"] == 2000
+            assert result.updates[0]["source"] == "installed"

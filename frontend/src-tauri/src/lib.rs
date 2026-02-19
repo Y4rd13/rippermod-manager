@@ -98,9 +98,9 @@ fn detect_gog() -> Vec<DetectedGame> {
 
     let mut results = Vec::new();
 
-    // Check both 64-bit and 32-bit registry views
-    for root in [HKEY_LOCAL_MACHINE, HKEY_LOCAL_MACHINE] {
-        let reg = RegKey::predef(root);
+    // Check both 64-bit and 32-bit registry views via subkey paths
+    {
+        let reg = RegKey::predef(HKEY_LOCAL_MACHINE);
         for subkey_path in [
             r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
             r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",

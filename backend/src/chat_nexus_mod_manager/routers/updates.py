@@ -1,5 +1,6 @@
 import logging
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select
@@ -49,11 +50,11 @@ def _get_game(game_name: str, session: Session) -> Game:
 def list_updates(game_name: str, session: Session = Depends(get_session)) -> UpdateCheckResult:
     game = _get_game(game_name, session)
 
-    raw_updates = check_correlation_updates(game.id, session)  # type: ignore[arg-type]
-    updates = [ModUpdate(**u) for u in raw_updates]
+    result = check_correlation_updates(game.id, session)  # type: ignore[arg-type]
+    updates = [ModUpdate(**u) for u in result.updates]
 
     return UpdateCheckResult(
-        total_checked=len(raw_updates),
+        total_checked=result.total_checked,
         updates_available=len(updates),
         updates=updates,
     )
@@ -67,6 +68,7 @@ async def check_updates(
 
     key_setting = session.exec(select(AppSetting).where(AppSetting.key == "nexus_api_key")).first()
 
+    installed_total = 0
     installed_updates: list[dict] = []
     covered_nexus_ids: set[int] = set()
 
@@ -94,27 +96,29 @@ async def check_updates(
                                     meta.updated_at = info.get("updated_timestamp")
                                 session.add(meta)
                 session.commit()
-            except Exception:
+            except (httpx.HTTPError, httpx.TimeoutException, ValueError):
                 logger.warning("Failed to refresh mod metadata", exc_info=True)
 
             # Timestamp-based update checking for installed mods
-            installed_updates = await check_installed_mod_updates(
+            installed_result = await check_installed_mod_updates(
                 game.id,
                 game.domain_name,
                 client,
                 session,  # type: ignore[arg-type]
             )
+            installed_total = installed_result.total_checked
+            installed_updates = installed_result.updates
             covered_nexus_ids = {u["nexus_mod_id"] for u in installed_updates}
 
     # Correlation-based updates for mods not covered by installed path
-    correlation_updates = check_correlation_updates(game.id, session)  # type: ignore[arg-type]
+    correlation_result = check_correlation_updates(game.id, session)  # type: ignore[arg-type]
     filtered_correlation = [
-        u for u in correlation_updates if u["nexus_mod_id"] not in covered_nexus_ids
+        u for u in correlation_result.updates if u["nexus_mod_id"] not in covered_nexus_ids
     ]
 
     all_updates_raw = installed_updates + filtered_correlation
     all_updates = [ModUpdate(**u) for u in all_updates_raw]
-    total = len(installed_updates) + len(correlation_updates)
+    total = installed_total + correlation_result.total_checked
 
     return UpdateCheckResult(
         total_checked=total,

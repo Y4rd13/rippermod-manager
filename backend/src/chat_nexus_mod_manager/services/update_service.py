@@ -1,6 +1,8 @@
 """Update checking service with timestamp-based and version-based paths."""
 
+import asyncio
 import logging
+from dataclasses import dataclass, field
 from typing import Any
 
 from sqlmodel import Session, select
@@ -13,6 +15,16 @@ from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
 from chat_nexus_mod_manager.nexus.client import NexusClient
 
 logger = logging.getLogger(__name__)
+
+_MAX_CONCURRENT_REQUESTS = 5
+
+
+@dataclass
+class UpdateResult:
+    """Container for update check results with total count."""
+
+    total_checked: int = 0
+    updates: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _find_best_matching_file(
@@ -120,11 +132,12 @@ async def check_installed_mod_updates(
     game_domain: str,
     client: NexusClient,
     session: Session,
-) -> list[dict[str, Any]]:
+) -> UpdateResult:
     """Check updates for installed mods using timestamp comparison.
 
     Queries InstalledMod where nexus_mod_id IS NOT NULL, groups by nexus_mod_id
-    to avoid duplicate API calls.
+    to avoid duplicate API calls. Uses concurrent requests with a semaphore
+    to respect Nexus API rate limits.
     """
     installed_mods = session.exec(
         select(InstalledMod).where(
@@ -134,7 +147,7 @@ async def check_installed_mod_updates(
     ).all()
 
     if not installed_mods:
-        return []
+        return UpdateResult()
 
     # Group by nexus_mod_id to avoid duplicate API calls
     groups: dict[int, list[InstalledMod]] = {}
@@ -143,22 +156,34 @@ async def check_installed_mod_updates(
         assert mid is not None
         groups.setdefault(mid, []).append(mod)
 
+    total_checked = len(installed_mods)
+
+    # Fetch files concurrently with rate limit
+    sem = asyncio.Semaphore(_MAX_CONCURRENT_REQUESTS)
+
+    async def fetch_files(nid: int) -> tuple[int, dict[str, Any] | None]:
+        async with sem:
+            try:
+                return nid, await client.get_mod_files(game_domain, nid)
+            except Exception:
+                logger.warning("Failed to fetch files for mod %d", nid)
+                return nid, None
+
+    results = await asyncio.gather(*(fetch_files(nid) for nid in groups))
+
     updates: list[dict[str, Any]] = []
     seen_nexus_ids: set[int] = set()
 
-    for nexus_mod_id, mods in groups.items():
-        try:
-            files_response = await client.get_mod_files(game_domain, nexus_mod_id)
-            nexus_files = files_response.get("files", [])
-        except Exception:
-            logger.warning("Failed to fetch files for mod %d", nexus_mod_id)
+    for nexus_mod_id, files_response in results:
+        if files_response is None:
             continue
+        nexus_files = files_response.get("files", [])
 
         meta = session.exec(
             select(NexusModMeta).where(NexusModMeta.nexus_mod_id == nexus_mod_id)
         ).first()
 
-        for mod in mods:
+        for mod in groups[nexus_mod_id]:
             if nexus_mod_id in seen_nexus_ids:
                 continue
             result = _check_update_for_installed_mod(mod, nexus_files, meta)
@@ -166,13 +191,13 @@ async def check_installed_mod_updates(
                 updates.append(result)
                 seen_nexus_ids.add(nexus_mod_id)
 
-    return updates
+    return UpdateResult(total_checked=total_checked, updates=updates)
 
 
 def check_correlation_updates(
     game_id: int,
     session: Session,
-) -> list[dict[str, Any]]:
+) -> UpdateResult:
     """Check updates via correlation pipeline using semantic version comparison.
 
     Uses is_newer_version() instead of simple != to avoid false positives
@@ -185,6 +210,7 @@ def check_correlation_updates(
         .where(ModGroup.game_id == game_id)
     ).all()
 
+    total_checked = len(correlations)
     updates: list[dict[str, Any]] = []
     for _corr, group, download in correlations:
         meta = session.exec(
@@ -209,4 +235,4 @@ def check_correlation_updates(
                 }
             )
 
-    return updates
+    return UpdateResult(total_checked=total_checked, updates=updates)

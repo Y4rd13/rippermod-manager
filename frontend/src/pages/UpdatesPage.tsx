@@ -66,7 +66,7 @@ function GameUpdates({ gameName }: { gameName: string }) {
             </thead>
             <tbody>
               {updates.updates.map((u, i) => (
-                <tr key={u.nexus_mod_id ?? i} className="border-b border-border/50">
+                <tr key={u.installed_mod_id ?? `group-${u.mod_group_id ?? i}`} className="border-b border-border/50">
                   <td className="py-2 pr-4 text-text-primary font-medium">
                     {u.display_name}
                   </td>

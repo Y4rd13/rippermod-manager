@@ -102,6 +102,10 @@ def is_newer_version(latest: str, installed: str) -> bool:
 
     Uses numeric comparison (not lexicographic) so ``0.15.0 > 0.2.0``.
     A release version beats a prerelease: ``1.0 > 1.0-beta``.
+
+    Note: non-numeric suffixes within a part (e.g. ``1.0a`` vs ``1.0b``)
+    are compared lexicographically, which works for single-letter tags but
+    may mis-order multi-character labels (e.g. ``alpha`` vs ``beta``).
     """
     latest_parts = parse_version(latest)
     installed_parts = parse_version(installed)

@@ -1,3 +1,4 @@
+import os
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -88,8 +89,6 @@ def create_game(
 
 @router.post("/validate-path", response_model=PathValidation)
 def validate_game_path(data: PathValidationRequest) -> PathValidation:
-    import os
-
     install_path = data.install_path
     exe_path = os.path.join(install_path, "bin", "x64", "Cyberpunk2077.exe")
     found_exe = os.path.isfile(exe_path)
