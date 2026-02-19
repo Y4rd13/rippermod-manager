@@ -2,10 +2,13 @@ import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/lib/api-client";
 import type {
+  AvailableArchive,
   Game,
+  InstalledModOut,
   ModGroup,
   NexusDownload,
   OnboardingStatus,
+  ProfileOut,
   Setting,
   UpdateCheckResult,
 } from "@/types/api";
@@ -60,5 +63,31 @@ export function useSettings() {
   return useQuery<Setting[]>({
     queryKey: ["settings"],
     queryFn: () => api.get("/api/v1/settings/"),
+  });
+}
+
+export function useAvailableArchives(gameName: string) {
+  return useQuery<AvailableArchive[]>({
+    queryKey: ["available-archives", gameName],
+    queryFn: () =>
+      api.get(`/api/v1/games/${gameName}/install/available`),
+    enabled: !!gameName,
+  });
+}
+
+export function useInstalledMods(gameName: string) {
+  return useQuery<InstalledModOut[]>({
+    queryKey: ["installed-mods", gameName],
+    queryFn: () =>
+      api.get(`/api/v1/games/${gameName}/install/installed`),
+    enabled: !!gameName,
+  });
+}
+
+export function useProfiles(gameName: string) {
+  return useQuery<ProfileOut[]>({
+    queryKey: ["profiles", gameName],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/profiles/`),
+    enabled: !!gameName,
   });
 }

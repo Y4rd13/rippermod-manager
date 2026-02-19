@@ -1,20 +1,41 @@
-import { Link2, Package, RefreshCw, Scan } from "lucide-react";
+import { Archive, FolderOpen, Link2, Package, RefreshCw, Scan, UserCheck } from "lucide-react";
 import { useState } from "react";
 import { useParams } from "react-router";
 
+import { ArchivesList } from "@/components/mods/ArchivesList";
+import { InstalledModsTable } from "@/components/mods/InstalledModsTable";
 import { ModsTable } from "@/components/mods/ModsTable";
+import { ProfileManager } from "@/components/mods/ProfileManager";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useCorrelate, useScanMods, useSyncNexus } from "@/hooks/mutations";
-import { useGame, useMods, useUpdates } from "@/hooks/queries";
+import {
+  useAvailableArchives,
+  useGame,
+  useInstalledMods,
+  useMods,
+  useProfiles,
+  useUpdates,
+} from "@/hooks/queries";
 import { cn } from "@/lib/utils";
 
-type Tab = "mods" | "updates";
+type Tab = "mods" | "installed" | "archives" | "profiles" | "updates";
+
+const TABS: { key: Tab; label: string; Icon: typeof Package }[] = [
+  { key: "mods", label: "Scanned", Icon: Package },
+  { key: "installed", label: "Installed", Icon: UserCheck },
+  { key: "archives", label: "Archives", Icon: Archive },
+  { key: "profiles", label: "Profiles", Icon: FolderOpen },
+  { key: "updates", label: "Updates", Icon: RefreshCw },
+];
 
 export function GameDetailPage() {
   const { name = "" } = useParams();
   const { data: game } = useGame(name);
   const { data: mods = [] } = useMods(name);
+  const { data: installedMods = [] } = useInstalledMods(name);
+  const { data: archives = [] } = useAvailableArchives(name);
+  const { data: profiles = [] } = useProfiles(name);
   const { data: updates } = useUpdates(name);
   const scanMods = useScanMods();
   const syncNexus = useSyncNexus();
@@ -46,8 +67,8 @@ export function GameDetailPage() {
   };
 
   const isScanning = scanMods.isPending || syncNexus.isPending || correlate.isPending;
-
   const matched = mods.filter((m) => m.nexus_match).length;
+  const enabledCount = installedMods.filter((m) => !m.disabled).length;
 
   return (
     <div className="space-y-6">
@@ -65,13 +86,24 @@ export function GameDetailPage() {
         <p className="text-sm text-accent">{scanStatus}</p>
       )}
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <Card>
           <div className="flex items-center gap-3">
             <Package size={18} className="text-success" />
             <div>
-              <p className="text-xs text-text-muted">Local Mods</p>
+              <p className="text-xs text-text-muted">Scanned Mods</p>
               <p className="text-lg font-bold text-text-primary">{mods.length}</p>
+            </div>
+          </div>
+        </Card>
+        <Card>
+          <div className="flex items-center gap-3">
+            <UserCheck size={18} className="text-accent" />
+            <div>
+              <p className="text-xs text-text-muted">Installed</p>
+              <p className="text-lg font-bold text-text-primary">
+                {enabledCount}/{installedMods.length}
+              </p>
             </div>
           </div>
         </Card>
@@ -88,7 +120,7 @@ export function GameDetailPage() {
           <div className="flex items-center gap-3">
             <RefreshCw size={18} className="text-danger" />
             <div>
-              <p className="text-xs text-text-muted">Updates Available</p>
+              <p className="text-xs text-text-muted">Updates</p>
               <p className="text-lg font-bold text-text-primary">
                 {updates?.updates_available ?? "--"}
               </p>
@@ -98,23 +130,32 @@ export function GameDetailPage() {
       </div>
 
       <div className="flex gap-1 border-b border-border">
-        {(["mods", "updates"] as const).map((t) => (
+        {TABS.map(({ key, label }) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={key}
+            onClick={() => setTab(key)}
             className={cn(
               "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px",
-              tab === t
+              tab === key
                 ? "border-accent text-accent"
                 : "border-transparent text-text-muted hover:text-text-secondary",
             )}
           >
-            {t === "mods" ? "Mods" : "Updates"}
+            {label}
           </button>
         ))}
       </div>
 
       {tab === "mods" && <ModsTable mods={mods} />}
+      {tab === "installed" && (
+        <InstalledModsTable mods={installedMods} gameName={name} />
+      )}
+      {tab === "archives" && (
+        <ArchivesList archives={archives} gameName={name} />
+      )}
+      {tab === "profiles" && (
+        <ProfileManager profiles={profiles} gameName={name} />
+      )}
       {tab === "updates" && (
         <div>
           {!updates?.updates.length ? (

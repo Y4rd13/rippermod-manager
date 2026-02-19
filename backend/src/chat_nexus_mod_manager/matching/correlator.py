@@ -4,6 +4,7 @@ import re
 import jellyfish
 from sqlmodel import Session, select
 
+from chat_nexus_mod_manager.matching.filename_parser import parse_mod_filename
 from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.mod import ModGroup
@@ -62,6 +63,11 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
     ).all()
     already_matched = set(existing)
 
+    nexus_id_map: dict[int, NexusDownload] = {}
+    for dl in downloads:
+        if dl.nexus_mod_id:
+            nexus_id_map.setdefault(dl.nexus_mod_id, dl)
+
     matched = 0
     for group in groups:
         if group.id in already_matched:
@@ -72,12 +78,24 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
         best_download: NexusDownload | None = None
         best_method = ""
 
-        for dl in downloads:
-            score, method = compute_name_score(group.display_name, dl.mod_name)
-            if score > best_score:
-                best_score = score
-                best_download = dl
-                best_method = method
+        # Fast path: try to match via Nexus mod ID parsed from filenames
+        _ = group.files
+        for f in group.files:
+            parsed = parse_mod_filename(f.filename)
+            if parsed.nexus_mod_id and parsed.nexus_mod_id in nexus_id_map:
+                best_download = nexus_id_map[parsed.nexus_mod_id]
+                best_score = 0.95
+                best_method = "filename_id"
+                break
+
+        # Slow path: fuzzy name matching
+        if not best_download:
+            for dl in downloads:
+                score, method = compute_name_score(group.display_name, dl.mod_name)
+                if score > best_score:
+                    best_score = score
+                    best_download = dl
+                    best_method = method
 
         if best_download and best_score >= 0.5:
             corr = ModNexusCorrelation(

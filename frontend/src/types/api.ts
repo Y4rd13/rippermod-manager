@@ -132,3 +132,93 @@ export interface ChatMessage {
   tool_calls_json: string;
   created_at: string;
 }
+
+// Install feature types
+
+export interface AvailableArchive {
+  filename: string;
+  size: number;
+  nexus_mod_id: number | null;
+  parsed_name: string;
+  parsed_version: string | null;
+}
+
+export interface InstalledModOut {
+  id: number;
+  name: string;
+  source_archive: string;
+  nexus_mod_id: number | null;
+  installed_version: string;
+  disabled: boolean;
+  installed_at: string;
+  file_count: number;
+  mod_group_id: number | null;
+}
+
+export interface InstallRequest {
+  archive_filename: string;
+  skip_conflicts: string[];
+}
+
+export interface InstallResult {
+  installed_mod_id: number;
+  name: string;
+  files_extracted: number;
+  files_skipped: number;
+}
+
+export interface UninstallResult {
+  files_deleted: number;
+  directories_removed: number;
+}
+
+export interface ToggleResult {
+  disabled: boolean;
+  files_affected: number;
+}
+
+export interface FileConflict {
+  file_path: string;
+  owning_mod_id: number;
+  owning_mod_name: string;
+}
+
+export interface ConflictCheckResult {
+  archive_filename: string;
+  total_files: number;
+  conflicts: FileConflict[];
+}
+
+// Profile feature types
+
+export interface ProfileModOut {
+  installed_mod_id: number;
+  name: string;
+  enabled: boolean;
+}
+
+export interface ProfileOut {
+  id: number;
+  name: string;
+  game_id: number;
+  created_at: string;
+  mod_count: number;
+  mods: ProfileModOut[];
+}
+
+export interface ProfileExportMod {
+  name: string;
+  nexus_mod_id: number | null;
+  version: string;
+  source_archive: string;
+}
+
+export interface ProfileExport {
+  type: string;
+  version: string;
+  profile_name: string;
+  game_name: string;
+  exported_at: string;
+  mod_count: number;
+  mods: ProfileExportMod[];
+}
