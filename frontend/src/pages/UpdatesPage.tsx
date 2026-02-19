@@ -1,9 +1,10 @@
-import { ExternalLink, RefreshCw, Search } from "lucide-react";
+import { Download, RefreshCw, Search } from "lucide-react";
 
+import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { useCheckUpdates } from "@/hooks/mutations";
-import { useGames, useUpdates } from "@/hooks/queries";
+import { useCheckUpdates, useStartDownload } from "@/hooks/mutations";
+import { useDownloadJobs, useGames, useUpdates } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
 
 function SourceBadge({ source }: { source: string }) {
@@ -24,11 +25,35 @@ function SourceBadge({ source }: { source: string }) {
 
 function GameUpdates({ gameName }: { gameName: string }) {
   const { data: updates, isLoading } = useUpdates(gameName);
+  const { data: downloadJobs = [] } = useDownloadJobs(gameName);
   const checkUpdates = useCheckUpdates();
+  const startDownload = useStartDownload();
 
   if (isLoading) {
     return <p className="text-text-muted text-sm">Checking {gameName}...</p>;
   }
+
+  const downloadableUpdates = (updates?.updates ?? []).filter(
+    (u) => u.nexus_file_id != null,
+  );
+
+  const handleUpdateAll = async () => {
+    for (const u of downloadableUpdates) {
+      if (u.nexus_file_id) {
+        try {
+          await startDownload.mutateAsync({
+            gameName,
+            data: {
+              nexus_mod_id: u.nexus_mod_id,
+              nexus_file_id: u.nexus_file_id,
+            },
+          });
+        } catch {
+          // Individual download errors handled by mutation callbacks
+        }
+      }
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -36,15 +61,28 @@ function GameUpdates({ gameName }: { gameName: string }) {
         <p className="text-text-muted text-xs">
           {updates?.updates_available ?? 0} update(s) available
         </p>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => checkUpdates.mutate(gameName)}
-          loading={checkUpdates.isPending}
-        >
-          <Search className="h-3.5 w-3.5 mr-1" />
-          Check Now
-        </Button>
+        <div className="flex items-center gap-2">
+          {downloadableUpdates.length > 1 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleUpdateAll}
+              loading={startDownload.isPending}
+            >
+              <Download className="h-3.5 w-3.5 mr-1" />
+              Update All ({downloadableUpdates.length})
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => checkUpdates.mutate(gameName)}
+            loading={checkUpdates.isPending}
+          >
+            <Search className="h-3.5 w-3.5 mr-1" />
+            Check Now
+          </Button>
+        </div>
       </div>
 
       {!updates?.updates.length ? (
@@ -66,11 +104,16 @@ function GameUpdates({ gameName }: { gameName: string }) {
             </thead>
             <tbody>
               {updates.updates.map((u, i) => (
-                <tr key={u.installed_mod_id ?? `group-${u.mod_group_id ?? i}`} className="border-b border-border/50">
+                <tr
+                  key={u.installed_mod_id ?? `group-${u.mod_group_id ?? i}`}
+                  className="border-b border-border/50"
+                >
                   <td className="py-2 pr-4 text-text-primary font-medium">
                     {u.display_name}
                   </td>
-                  <td className="py-2 pr-4 text-text-muted">{u.local_version}</td>
+                  <td className="py-2 pr-4 text-text-muted">
+                    {u.local_version}
+                  </td>
                   <td className="py-2 pr-4 text-success font-medium">
                     {u.nexus_version}
                   </td>
@@ -79,14 +122,11 @@ function GameUpdates({ gameName }: { gameName: string }) {
                   </td>
                   <td className="py-2 pr-4 text-text-muted">{u.author}</td>
                   <td className="py-2">
-                    <a
-                      href={u.nexus_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-accent hover:underline"
-                    >
-                      <ExternalLink size={12} /> Nexus
-                    </a>
+                    <UpdateDownloadCell
+                      update={u}
+                      gameName={gameName}
+                      downloadJobs={downloadJobs}
+                    />
                   </td>
                 </tr>
               ))}

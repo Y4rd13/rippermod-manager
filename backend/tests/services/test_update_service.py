@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlmodel import Session
 
+from chat_nexus_mod_manager.matching.variant_scorer import pick_best_file
 from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
 from chat_nexus_mod_manager.models.game import Game, GameModPath
 from chat_nexus_mod_manager.models.install import InstalledMod
@@ -10,16 +11,15 @@ from chat_nexus_mod_manager.models.mod import ModGroup
 from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
 from chat_nexus_mod_manager.services.update_service import (
     _check_update_for_installed_mod,
-    _find_best_matching_file,
     check_correlation_updates,
     check_installed_mod_updates,
 )
 
 
-class TestFindBestMatchingFile:
+class TestPickBestFile:
     def test_empty_files_returns_none(self):
         mod = InstalledMod(game_id=1, name="Mod", upload_timestamp=1000, nexus_mod_id=10)
-        assert _find_best_matching_file(mod, []) is None
+        assert pick_best_file([], mod) is None
 
     def test_exact_timestamp_match_returns_latest_in_category(self):
         mod = InstalledMod(game_id=1, name="Mod", upload_timestamp=1000, nexus_mod_id=10)
@@ -28,7 +28,7 @@ class TestFindBestMatchingFile:
             {"file_id": 2, "uploaded_timestamp": 2000, "category_id": 1, "version": "2.0"},
             {"file_id": 3, "uploaded_timestamp": 3000, "category_id": 4, "version": "3.0"},
         ]
-        result = _find_best_matching_file(mod, files)
+        result = pick_best_file(files, mod)
         assert result is not None
         assert result["file_id"] == 2
         assert result["version"] == "2.0"
@@ -39,7 +39,7 @@ class TestFindBestMatchingFile:
             {"file_id": 41, "uploaded_timestamp": 1000, "category_id": 1, "version": "1.0"},
             {"file_id": 42, "uploaded_timestamp": 900, "category_id": 2, "version": "0.9"},
         ]
-        result = _find_best_matching_file(mod, files)
+        result = pick_best_file(files, mod)
         assert result is not None
         assert result["file_id"] == 42
 
@@ -50,7 +50,7 @@ class TestFindBestMatchingFile:
             {"file_id": 2, "uploaded_timestamp": 1000, "category_id": 1, "version": "2.0"},
             {"file_id": 3, "uploaded_timestamp": 2000, "category_id": 4, "version": "3.0"},
         ]
-        result = _find_best_matching_file(mod, files)
+        result = pick_best_file(files, mod)
         assert result is not None
         assert result["file_id"] == 2
 
@@ -60,7 +60,7 @@ class TestFindBestMatchingFile:
             {"file_id": 1, "uploaded_timestamp": 500, "category_id": 4, "version": "1.0"},
             {"file_id": 2, "uploaded_timestamp": 2000, "category_id": 4, "version": "2.0"},
         ]
-        result = _find_best_matching_file(mod, files)
+        result = pick_best_file(files, mod)
         assert result is not None
         assert result["file_id"] == 2
 

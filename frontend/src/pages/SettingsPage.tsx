@@ -11,7 +11,6 @@ export function SettingsPage() {
   const saveSettings = useSaveSettings();
   const [openaiKey, setOpenaiKey] = useState("");
   const [nexusKey, setNexusKey] = useState("");
-  const [saved, setSaved] = useState(false);
 
   const handleSave = () => {
     const updates: Record<string, string> = {};
@@ -21,10 +20,8 @@ export function SettingsPage() {
 
     saveSettings.mutate(updates, {
       onSuccess: () => {
-        setSaved(true);
         setOpenaiKey("");
         setNexusKey("");
-        setTimeout(() => setSaved(false), 2000);
       },
     });
   };
@@ -67,12 +64,9 @@ export function SettingsPage() {
               <p className="text-xs text-text-muted mt-1">Current: {currentNexus}</p>
             )}
           </div>
-          <div className="flex items-center gap-3">
-            <Button onClick={handleSave} loading={saveSettings.isPending}>
-              Save Changes
-            </Button>
-            {saved && <span className="text-sm text-success">Saved!</span>}
-          </div>
+          <Button onClick={handleSave} loading={saveSettings.isPending}>
+            Save Changes
+          </Button>
         </div>
       </Card>
     </div>

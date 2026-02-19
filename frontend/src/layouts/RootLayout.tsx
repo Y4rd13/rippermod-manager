@@ -3,6 +3,7 @@ import { Outlet } from "react-router";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Titlebar } from "@/components/layout/Titlebar";
+import { ToastContainer } from "@/components/ui/Toast";
 
 export function RootLayout() {
   return (
@@ -15,6 +16,7 @@ export function RootLayout() {
         </main>
         <ChatPanel />
       </div>
+      <ToastContainer />
     </div>
   );
 }
