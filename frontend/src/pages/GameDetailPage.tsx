@@ -214,6 +214,7 @@ export function GameDetailPage() {
       await invoke<void>("launch_game", {
         installPath: game.install_path,
         exeRelativePath: gameVersion.exe_path,
+        launchArgs: ["--launcher-skip"],
       });
       toast.success("Game launched");
     } catch (e) {
@@ -312,7 +313,7 @@ export function GameDetailPage() {
           <p className="text-sm text-text-muted">{game.install_path}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={handleLaunch} loading={isLaunching}>
+          <Button variant="secondary" onClick={handleLaunch} loading={isLaunching} disabled={!gameVersion?.exe_path}>
             <Play size={16} /> Play
           </Button>
           <Button onClick={handleFullScan} loading={isScanning}>

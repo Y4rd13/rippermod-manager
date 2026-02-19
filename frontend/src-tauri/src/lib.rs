@@ -254,7 +254,11 @@ fn extract_vdf_value(line: &str) -> Option<String> {
 }
 
 #[tauri::command]
-fn launch_game(install_path: String, exe_relative_path: String) -> Result<(), String> {
+fn launch_game(
+    install_path: String,
+    exe_relative_path: String,
+    launch_args: Option<Vec<String>>,
+) -> Result<(), String> {
     let exe_path = std::path::Path::new(&install_path).join(&exe_relative_path);
 
     if !exe_path.exists() {
@@ -264,9 +268,11 @@ fn launch_game(install_path: String, exe_relative_path: String) -> Result<(), St
         ));
     }
 
-    Command::new(&exe_path)
-        .arg("--launcher-skip")
-        .spawn()
+    let mut cmd = Command::new(&exe_path);
+    if let Some(args) = launch_args {
+        cmd.args(args);
+    }
+    cmd.spawn()
         .map_err(|e| format!("Failed to launch game: {}", e))?;
 
     Ok(())
