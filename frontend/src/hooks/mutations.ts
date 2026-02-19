@@ -201,8 +201,8 @@ export function useCheckUpdates() {
   return useMutation<UpdateCheckResult, Error, string>({
     mutationFn: (gameName) =>
       api.post(`/api/v1/games/${gameName}/updates/check`),
-    onSuccess: (_, gameName) => {
-      qc.invalidateQueries({ queryKey: ["updates", gameName] });
+    onSuccess: (data, gameName) => {
+      qc.setQueryData(["updates", gameName], data);
     },
   });
 }

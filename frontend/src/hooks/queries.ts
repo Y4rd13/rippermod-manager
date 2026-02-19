@@ -38,7 +38,7 @@ export function useGame(name: string) {
 export function useMods(gameName: string) {
   return useQuery<ModGroup[]>({
     queryKey: ["mods", gameName],
-    queryFn: () => api.get(`/api/v1/games/${gameName}/mods`),
+    queryFn: () => api.get(`/api/v1/games/${gameName}/mods/`),
     enabled: !!gameName,
   });
 }
@@ -54,7 +54,7 @@ export function useNexusDownloads(gameName: string) {
 export function useUpdates(gameName: string) {
   return useQuery<UpdateCheckResult>({
     queryKey: ["updates", gameName],
-    queryFn: () => api.get(`/api/v1/games/${gameName}/updates`),
+    queryFn: () => api.get(`/api/v1/games/${gameName}/updates/`),
     enabled: !!gameName,
   });
 }

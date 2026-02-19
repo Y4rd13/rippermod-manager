@@ -1,15 +1,18 @@
-import { Gamepad2, Plus, Trash2 } from "lucide-react";
+import { CheckCircle, FolderOpen, Gamepad2, Plus, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
+import { open } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
-import { useCreateGame, useDeleteGame } from "@/hooks/mutations";
+import { useCreateGame, useDeleteGame, useValidatePath } from "@/hooks/mutations";
 import { useGames } from "@/hooks/queries";
+import type { DetectedGame, PathValidation } from "@/types/api";
 
 function AddGameDialog({
-  open,
+  open: isOpen,
   onClose,
 }: {
   open: boolean;
@@ -18,9 +21,65 @@ function AddGameDialog({
   const [name, setName] = useState("Cyberpunk 2077");
   const [installPath, setInstallPath] = useState("");
   const [error, setError] = useState("");
+  const [detectedPaths, setDetectedPaths] = useState<DetectedGame[]>([]);
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [validation, setValidation] = useState<PathValidation | null>(null);
   const createGame = useCreateGame();
+  const validatePath = useValidatePath();
 
-  if (!open) return null;
+  if (!isOpen) return null;
+
+  const handleValidate = (path: string) => {
+    validatePath.mutate(
+      { install_path: path, domain_name: "cyberpunk2077" },
+      {
+        onSuccess: (result) => setValidation(result),
+        onError: () => setValidation(null),
+      },
+    );
+  };
+
+  const handleAutoDetect = async () => {
+    setIsDetecting(true);
+    setError("");
+    setDetectedPaths([]);
+    setValidation(null);
+    try {
+      const paths = await invoke<DetectedGame[]>("detect_game_paths");
+      if (paths.length === 1) {
+        setInstallPath(paths[0].path);
+        handleValidate(paths[0].path);
+      } else if (paths.length > 1) {
+        setDetectedPaths(paths);
+      } else {
+        setError("No installations found. Use Browse to select your game folder.");
+      }
+    } catch {
+      setError("Auto-detection failed. Use Browse to select your game folder.");
+    } finally {
+      setIsDetecting(false);
+    }
+  };
+
+  const handleSelectDetected = (path: string) => {
+    setInstallPath(path);
+    setDetectedPaths([]);
+    handleValidate(path);
+  };
+
+  const handleBrowse = async () => {
+    const selected = await open({
+      directory: true,
+      title: "Select game installation folder",
+      defaultPath: installPath || undefined,
+    });
+    if (selected) {
+      setInstallPath(selected);
+      setDetectedPaths([]);
+      setError("");
+      handleValidate(selected);
+    }
+  };
 
   const handleCreate = () => {
     if (!installPath.trim()) {
@@ -34,6 +93,9 @@ function AddGameDialog({
           onClose();
           setName("Cyberpunk 2077");
           setInstallPath("");
+          setValidation(null);
+          setDetectedPaths([]);
+          setError("");
         },
         onError: (e) => setError(e.message),
       },
@@ -53,17 +115,78 @@ function AddGameDialog({
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
-          <Input
-            id="install-path"
-            label="Install Path"
-            placeholder="C:\\...\\Cyberpunk 2077"
-            value={installPath}
-            onChange={(e) => {
-              setInstallPath(e.target.value);
-              setError("");
-            }}
-            error={error}
-          />
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-text-secondary">
+              Installation Path
+            </label>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm truncate">
+                {installPath ? (
+                  <span className="text-text-primary">{installPath}</span>
+                ) : (
+                  <span className="text-text-muted">Auto-detect or browse for your game folder</span>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={isDetecting}
+                onClick={handleAutoDetect}
+                loading={isDetecting}
+              >
+                <Search className="h-4 w-4 mr-1" />
+                Auto-detect
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleBrowse}
+              >
+                <FolderOpen className="h-4 w-4 mr-1" />
+                Browse
+              </Button>
+            </div>
+
+            {detectedPaths.length > 1 && (
+              <div className="rounded-lg border border-border bg-surface-1 p-2 space-y-1">
+                <p className="text-xs text-text-muted px-1 mb-1">
+                  Multiple installations found. Select one:
+                </p>
+                {detectedPaths.map((d) => (
+                  <button
+                    key={d.path}
+                    type="button"
+                    onClick={() => handleSelectDetected(d.path)}
+                    className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-surface-2 transition-colors"
+                  >
+                    <span className="text-text-primary truncate">{d.path}</span>
+                    <span className="shrink-0 ml-2 text-xs text-accent font-medium">
+                      {d.source}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {validation && (
+              <div className="flex items-center gap-2 text-xs">
+                {validation.valid ? (
+                  <>
+                    <CheckCircle className="h-3.5 w-3.5 text-success" />
+                    <span className="text-success">
+                      Valid installation ({validation.found_mod_dirs.length} mod directories found)
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-danger">{validation.warning}</span>
+                )}
+              </div>
+            )}
+
+            {error && <p className="text-danger text-sm">{error}</p>}
+          </div>
+
           <div className="flex justify-end gap-3">
             <Button variant="ghost" onClick={onClose}>
               Cancel
