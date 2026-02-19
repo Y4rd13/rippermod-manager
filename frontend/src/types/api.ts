@@ -110,13 +110,30 @@ export interface OnboardingStatus {
 }
 
 export interface ModUpdate {
-  mod_group_id: number;
+  mod_group_id: number | null;
   display_name: string;
   local_version: string;
   nexus_version: string;
   nexus_mod_id: number;
   nexus_url: string;
   author: string;
+  installed_mod_id: number | null;
+  source: string;
+  local_timestamp: number | null;
+  nexus_timestamp: number | null;
+}
+
+export interface DetectedGame {
+  path: string;
+  source: string;
+}
+
+export interface PathValidation {
+  valid: boolean;
+  path: string;
+  found_exe: boolean;
+  found_mod_dirs: string[];
+  warning: string;
 }
 
 export interface UpdateCheckResult {

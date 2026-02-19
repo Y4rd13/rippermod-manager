@@ -11,12 +11,14 @@ import type {
   NexusKeyResult,
   NexusSyncResult,
   OnboardingStatus,
+  PathValidation,
   ProfileExport,
   ProfileOut,
   ScanResult,
   Setting,
   ToggleResult,
   UninstallResult,
+  UpdateCheckResult,
 } from "@/types/api";
 
 export function useCreateGame() {
@@ -191,5 +193,23 @@ export function useImportProfile() {
     onSuccess: (_, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["profiles", gameName] });
     },
+  });
+}
+
+export function useCheckUpdates() {
+  const qc = useQueryClient();
+  return useMutation<UpdateCheckResult, Error, string>({
+    mutationFn: (gameName) =>
+      api.post(`/api/v1/games/${gameName}/updates/check`),
+    onSuccess: (_, gameName) => {
+      qc.invalidateQueries({ queryKey: ["updates", gameName] });
+    },
+  });
+}
+
+export function useValidatePath() {
+  return useMutation<PathValidation, Error, { install_path: string }>({
+    mutationFn: (data) =>
+      api.post("/api/v1/games/validate-path", data),
   });
 }

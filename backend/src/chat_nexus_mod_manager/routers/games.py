@@ -5,7 +5,12 @@ from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.database import get_session
 from chat_nexus_mod_manager.models.game import Game, GameModPath
-from chat_nexus_mod_manager.schemas.game import GameCreate, GameOut
+from chat_nexus_mod_manager.schemas.game import (
+    GameCreate,
+    GameOut,
+    PathValidation,
+    PathValidationRequest,
+)
 
 router = APIRouter(prefix="/games", tags=["games"])
 
@@ -79,6 +84,38 @@ def create_game(
     session.refresh(game)
     _ = game.mod_paths
     return game
+
+
+@router.post("/validate-path", response_model=PathValidation)
+def validate_game_path(data: PathValidationRequest) -> PathValidation:
+    import os
+
+    install_path = data.install_path
+    exe_path = os.path.join(install_path, "bin", "x64", "Cyberpunk2077.exe")
+    found_exe = os.path.isfile(exe_path)
+
+    found_mod_dirs: list[str] = []
+    for rel_path, _desc, _default in CYBERPUNK_DEFAULT_PATHS:
+        full_path = os.path.join(install_path, rel_path)
+        if os.path.isdir(full_path):
+            found_mod_dirs.append(rel_path)
+
+    valid = found_exe
+    warning = ""
+    if found_exe and not found_mod_dirs:
+        warning = (
+            "Game executable found but no mod directories detected. Mods may not be installed yet."
+        )
+    elif not found_exe:
+        warning = "Cyberpunk2077.exe not found. Please verify the installation path."
+
+    return PathValidation(
+        valid=valid,
+        path=install_path,
+        found_exe=found_exe,
+        found_mod_dirs=found_mod_dirs,
+        warning=warning,
+    )
 
 
 @router.get("/{name}", response_model=GameOut)
