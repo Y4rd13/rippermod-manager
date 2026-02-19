@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
-from chat_nexus_mod_manager.database import get_session, engine
+from chat_nexus_mod_manager.database import engine, get_session
 from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.mod import ModGroup

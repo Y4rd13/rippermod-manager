@@ -49,7 +49,7 @@ def list_updates(
     ).all()
 
     updates: list[ModUpdate] = []
-    for corr, group, download in correlations:
+    for _corr, group, download in correlations:
         meta = session.exec(
             select(NexusModMeta).where(
                 NexusModMeta.nexus_mod_id == download.nexus_mod_id
