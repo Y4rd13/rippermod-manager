@@ -13,7 +13,7 @@ from pathlib import Path
 
 from sqlmodel import Session, select
 
-from chat_nexus_mod_manager.archive.handler import open_archive
+from chat_nexus_mod_manager.archive.handler import ArchiveEntry, open_archive
 from chat_nexus_mod_manager.matching.filename_parser import parse_mod_filename
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.install import InstalledMod, InstalledModFile
@@ -89,25 +89,33 @@ def install_mod(
     skipped = 0
 
     with open_archive(archive_path) as archive:
-        for entry in archive.list_entries():
+        all_entries = archive.list_entries()
+
+        # Pre-filter entries to determine which files to extract
+        valid_entries: list[tuple[ArchiveEntry, str, str]] = []
+        for entry in all_entries:
             if entry.is_dir:
                 continue
-
             normalised = entry.filename.replace("\\", "/")
             normalised_lower = normalised.lower()
-
             if normalised_lower in skip_set:
                 skipped += 1
                 continue
-
             target = game_dir / normalised
             if not target.resolve().is_relative_to(game_dir.resolve()):
                 logger.warning("Skipping path traversal entry: %s", entry.filename)
                 skipped += 1
                 continue
+            valid_entries.append((entry, normalised, normalised_lower))
 
+        # Batch read all valid entries in a single pass (avoids O(N²) for 7z)
+        entries_to_read = [e for e, _, _ in valid_entries]
+        file_contents = archive.read_all_files(entries_to_read)
+
+        for entry, normalised, normalised_lower in valid_entries:
+            target = game_dir / normalised
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(archive.read_file(entry))
+            target.write_bytes(file_contents.get(entry.filename, b""))
             extracted_paths.append(normalised)
 
             if normalised_lower in ownership:

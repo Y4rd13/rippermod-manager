@@ -112,6 +112,29 @@ class TestZipHandler:
         for entry in entries:
             assert isinstance(entry, ArchiveEntry)
 
+    def test_read_all_files_batch(self, tmp_path):
+        zip_path = tmp_path / "batch.zip"
+        _make_zip(zip_path, {"a.txt": b"aaa", "b.txt": b"bbb", "c.txt": b"ccc"})
+
+        with ZipHandler(zip_path) as handler:
+            entries = handler.list_entries()
+            result = handler.read_all_files(entries)
+
+        assert result == {"a.txt": b"aaa", "b.txt": b"bbb", "c.txt": b"ccc"}
+
+    def test_read_all_files_skips_directories(self, tmp_path):
+        zip_path = tmp_path / "dirs.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.mkdir("subdir")
+            zf.writestr("subdir/file.txt", b"content")
+
+        with ZipHandler(zip_path) as handler:
+            entries = handler.list_entries()
+            result = handler.read_all_files(entries)
+
+        assert "subdir/file.txt" in result
+        assert "subdir/" not in result
+
 
 class TestOpenArchive:
     def test_selects_zip_handler_for_zip(self, tmp_path):

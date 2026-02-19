@@ -36,6 +36,10 @@ class ArchiveHandler(ABC):
     def read_file(self, entry: ArchiveEntry) -> bytes:
         """Read the contents of a single file entry."""
 
+    def read_all_files(self, entries: list[ArchiveEntry]) -> dict[str, bytes]:
+        """Read all file entries in a single pass. Override for efficiency."""
+        return {e.filename: self.read_file(e) for e in entries if not e.is_dir}
+
     @abstractmethod
     def close(self) -> None:
         """Release resources."""
@@ -82,6 +86,7 @@ class SevenZipHandler(ArchiveHandler):
             raise ImportError("py7zr is required for .7z support: pip install py7zr") from exc
         self._path = Path(path)
         self._archive = py7zr.SevenZipFile(self._path, mode="r")
+        self._cache: dict[str, bytes] | None = None
 
     def list_entries(self) -> list[ArchiveEntry]:
         entries: list[ArchiveEntry] = []
@@ -96,6 +101,8 @@ class SevenZipHandler(ArchiveHandler):
         return entries
 
     def read_file(self, entry: ArchiveEntry) -> bytes:
+        if self._cache is not None and entry.filename in self._cache:
+            return self._cache[entry.filename]
         self._archive.reset()
         result = self._archive.read(targets=[entry.filename])
         if result and entry.filename in result:
@@ -104,6 +111,20 @@ class SevenZipHandler(ArchiveHandler):
                 return bio.read()
             return bytes(bio)
         return b""
+
+    def read_all_files(self, entries: list[ArchiveEntry]) -> dict[str, bytes]:
+        """Read all files in a single pass using readall(), avoiding O(N²) reset."""
+        self._archive.reset()
+        targets = [e.filename for e in entries if not e.is_dir]
+        raw = self._archive.read(targets=targets) or {}
+        result: dict[str, bytes] = {}
+        for name, bio in raw.items():
+            if isinstance(bio, io.BytesIO):
+                result[name] = bio.read()
+            else:
+                result[name] = bytes(bio)
+        self._cache = result
+        return result
 
     def close(self) -> None:
         self._archive.close()

@@ -1,14 +1,14 @@
 import logging
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.database import get_session
-from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.nexus import NexusModMeta
 from chat_nexus_mod_manager.models.settings import AppSetting
+from chat_nexus_mod_manager.routers.deps import get_game_or_404
 from chat_nexus_mod_manager.services.update_service import (
     check_correlation_updates,
     check_installed_mod_updates,
@@ -39,16 +39,9 @@ class UpdateCheckResult(BaseModel):
     updates: list[ModUpdate]
 
 
-def _get_game(game_name: str, session: Session) -> Game:
-    game = session.exec(select(Game).where(Game.name == game_name)).first()
-    if not game:
-        raise HTTPException(404, f"Game '{game_name}' not found")
-    return game
-
-
 @router.get("/", response_model=UpdateCheckResult)
 def list_updates(game_name: str, session: Session = Depends(get_session)) -> UpdateCheckResult:
-    game = _get_game(game_name, session)
+    game = get_game_or_404(game_name, session)
 
     result = check_correlation_updates(game.id, session)  # type: ignore[arg-type]
     updates = [ModUpdate(**u) for u in result.updates]
@@ -64,7 +57,7 @@ def list_updates(game_name: str, session: Session = Depends(get_session)) -> Upd
 async def check_updates(
     game_name: str, session: Session = Depends(get_session)
 ) -> UpdateCheckResult:
-    game = _get_game(game_name, session)
+    game = get_game_or_404(game_name, session)
 
     key_setting = session.exec(select(AppSetting).where(AppSetting.key == "nexus_api_key")).first()
 
