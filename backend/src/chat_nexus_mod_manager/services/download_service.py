@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 # Active cancel events keyed by job_id
 _cancel_events: dict[int, asyncio.Event] = {}
+# Strong references to background tasks (prevent GC mid-execution)
+_background_tasks: set[asyncio.Task] = set()  # type: ignore[type-arg]
 
 _PROGRESS_DB_INTERVAL = 5  # seconds between DB progress updates
 
@@ -107,12 +109,11 @@ async def create_and_start_download(
     # Create cancel event and fire background task
     cancel_event = asyncio.Event()
     _cancel_events[job_id] = cancel_event
-    _task = asyncio.create_task(
+    task = asyncio.create_task(
         _run_download(job_id, cdn_url, install_path, file_name, cancel_event)
     )
-    _task.add_done_callback(
-        lambda t: t.result() if not t.cancelled() and not t.exception() else None
-    )
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
     return job
 

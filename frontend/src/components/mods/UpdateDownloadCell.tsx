@@ -31,22 +31,22 @@ export function UpdateDownloadCell({ update, gameName, downloadJobs }: Props) {
   const [installingFile, setInstallingFile] = useState<string | null>(null);
 
   const activeJob =
-    Object.values(storeJobs).find(
+    downloadJobs.find(
       (j) =>
         j.nexus_mod_id === update.nexus_mod_id &&
         (j.status === "downloading" || j.status === "pending"),
     ) ??
-    downloadJobs.find(
+    Object.values(storeJobs).find(
       (j) =>
         j.nexus_mod_id === update.nexus_mod_id &&
         (j.status === "downloading" || j.status === "pending"),
     );
 
   const completedJob =
-    Object.values(storeJobs).find(
+    downloadJobs.find(
       (j) => j.nexus_mod_id === update.nexus_mod_id && j.status === "completed",
     ) ??
-    downloadJobs.find(
+    Object.values(storeJobs).find(
       (j) => j.nexus_mod_id === update.nexus_mod_id && j.status === "completed",
     );
 
