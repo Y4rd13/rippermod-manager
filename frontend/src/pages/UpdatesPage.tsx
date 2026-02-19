@@ -1,17 +1,11 @@
-import { Download, ExternalLink, RefreshCw, Search } from "lucide-react";
+import { Download, RefreshCw, Search } from "lucide-react";
 
+import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { DownloadProgress } from "@/components/ui/DownloadProgress";
-import {
-  useCancelDownload,
-  useCheckUpdates,
-  useStartDownload,
-} from "@/hooks/mutations";
+import { useCheckUpdates, useStartDownload } from "@/hooks/mutations";
 import { useDownloadJobs, useGames, useUpdates } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
-import { useDownloadStore } from "@/stores/download-store";
-import type { DownloadJobOut, ModUpdate } from "@/types/api";
 
 function SourceBadge({ source }: { source: string }) {
   const isTimestamp = source === "installed";
@@ -26,94 +20,6 @@ function SourceBadge({ source }: { source: string }) {
     >
       {isTimestamp ? "Timestamp" : "Version"}
     </span>
-  );
-}
-
-function DownloadCell({
-  update,
-  gameName,
-  downloadJobs,
-}: {
-  update: ModUpdate;
-  gameName: string;
-  downloadJobs: DownloadJobOut[];
-}) {
-  const startDownload = useStartDownload();
-  const cancelDownload = useCancelDownload();
-  const storeJobs = useDownloadStore((s) => s.jobs);
-
-  // Find active download job for this mod (from store or query)
-  const activeJob =
-    Object.values(storeJobs).find(
-      (j) =>
-        j.nexus_mod_id === update.nexus_mod_id &&
-        (j.status === "downloading" || j.status === "pending"),
-    ) ??
-    downloadJobs.find(
-      (j) =>
-        j.nexus_mod_id === update.nexus_mod_id &&
-        (j.status === "downloading" || j.status === "pending"),
-    );
-
-  const completedJob =
-    Object.values(storeJobs).find(
-      (j) => j.nexus_mod_id === update.nexus_mod_id && j.status === "completed",
-    ) ??
-    downloadJobs.find(
-      (j) => j.nexus_mod_id === update.nexus_mod_id && j.status === "completed",
-    );
-
-  if (activeJob) {
-    return (
-      <div className="w-48">
-        <DownloadProgress
-          job={activeJob}
-          onCancel={() =>
-            cancelDownload.mutate({ gameName, jobId: activeJob.id })
-          }
-        />
-      </div>
-    );
-  }
-
-  if (completedJob) {
-    return (
-      <span className="text-success text-xs font-medium">Downloaded</span>
-    );
-  }
-
-  if (!update.nexus_file_id) {
-    return (
-      <a
-        href={update.nexus_url}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex items-center gap-1 text-accent hover:underline text-xs"
-      >
-        <ExternalLink size={12} /> Nexus
-      </a>
-    );
-  }
-
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={() => {
-        if (update.nexus_file_id) {
-          startDownload.mutate({
-            gameName,
-            data: {
-              nexus_mod_id: update.nexus_mod_id,
-              nexus_file_id: update.nexus_file_id,
-            },
-          });
-        }
-      }}
-      loading={startDownload.isPending}
-    >
-      <Download size={12} />
-    </Button>
   );
 }
 
@@ -212,7 +118,7 @@ function GameUpdates({ gameName }: { gameName: string }) {
                   </td>
                   <td className="py-2 pr-4 text-text-muted">{u.author}</td>
                   <td className="py-2">
-                    <DownloadCell
+                    <UpdateDownloadCell
                       update={u}
                       gameName={gameName}
                       downloadJobs={downloadJobs}

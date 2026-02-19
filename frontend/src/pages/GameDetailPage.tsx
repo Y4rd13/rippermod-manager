@@ -1,7 +1,6 @@
 import {
   Archive,
   Download,
-  ExternalLink,
   FolderOpen,
   Link2,
   Package,
@@ -17,17 +16,11 @@ import { ArchivesList } from "@/components/mods/ArchivesList";
 import { InstalledModsTable } from "@/components/mods/InstalledModsTable";
 import { ModsTable } from "@/components/mods/ModsTable";
 import { ProfileManager } from "@/components/mods/ProfileManager";
+import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { DownloadProgress } from "@/components/ui/DownloadProgress";
 import { ScanProgress, type ScanLog } from "@/components/ui/ScanProgress";
-import {
-  useCancelDownload,
-  useCheckUpdates,
-  useCorrelate,
-  useStartDownload,
-  useSyncNexus,
-} from "@/hooks/mutations";
+import { useCheckUpdates, useCorrelate, useStartDownload, useSyncNexus } from "@/hooks/mutations";
 import {
   useAvailableArchives,
   useDownloadJobs,
@@ -40,9 +33,8 @@ import {
 import { api } from "@/lib/api-client";
 import { parseSSE } from "@/lib/sse-parser";
 import { cn } from "@/lib/utils";
-import { useDownloadStore } from "@/stores/download-store";
 import { toast } from "@/stores/toast-store";
-import type { DownloadJobOut, ModUpdate } from "@/types/api";
+import type { ModUpdate } from "@/types/api";
 
 type Tab = "mods" | "installed" | "archives" | "profiles" | "updates";
 
@@ -53,89 +45,6 @@ const TABS: { key: Tab; label: string; Icon: typeof Package }[] = [
   { key: "profiles", label: "Profiles", Icon: FolderOpen },
   { key: "updates", label: "Updates", Icon: RefreshCw },
 ];
-
-function UpdateDownloadCell({
-  update,
-  gameName,
-  downloadJobs,
-}: {
-  update: ModUpdate;
-  gameName: string;
-  downloadJobs: DownloadJobOut[];
-}) {
-  const startDownload = useStartDownload();
-  const cancelDownload = useCancelDownload();
-  const storeJobs = useDownloadStore((s) => s.jobs);
-
-  const activeJob =
-    Object.values(storeJobs).find(
-      (j) =>
-        j.nexus_mod_id === update.nexus_mod_id &&
-        (j.status === "downloading" || j.status === "pending"),
-    ) ??
-    downloadJobs.find(
-      (j) =>
-        j.nexus_mod_id === update.nexus_mod_id &&
-        (j.status === "downloading" || j.status === "pending"),
-    );
-
-  const completedJob =
-    Object.values(storeJobs).find(
-      (j) => j.nexus_mod_id === update.nexus_mod_id && j.status === "completed",
-    ) ??
-    downloadJobs.find(
-      (j) => j.nexus_mod_id === update.nexus_mod_id && j.status === "completed",
-    );
-
-  if (activeJob) {
-    return (
-      <div className="w-48">
-        <DownloadProgress
-          job={activeJob}
-          onCancel={() => cancelDownload.mutate({ gameName, jobId: activeJob.id })}
-        />
-      </div>
-    );
-  }
-
-  if (completedJob) {
-    return <span className="text-success text-xs font-medium">Downloaded</span>;
-  }
-
-  if (!update.nexus_file_id) {
-    return (
-      <a
-        href={update.nexus_url}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex items-center gap-1 text-accent hover:underline text-xs"
-      >
-        <ExternalLink size={12} /> Nexus
-      </a>
-    );
-  }
-
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={() => {
-        if (update.nexus_file_id) {
-          startDownload.mutate({
-            gameName,
-            data: {
-              nexus_mod_id: update.nexus_mod_id,
-              nexus_file_id: update.nexus_file_id,
-            },
-          });
-        }
-      }}
-      loading={startDownload.isPending}
-    >
-      <Download size={12} />
-    </Button>
-  );
-}
 
 function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdate[] }) {
   const { data: downloadJobs = [] } = useDownloadJobs(gameName);
