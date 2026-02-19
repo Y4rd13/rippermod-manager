@@ -18,6 +18,7 @@ from chat_nexus_mod_manager.services.profile_service import (
     import_profile,
     list_profiles,
     load_profile,
+    profile_to_out,
 )
 
 router = APIRouter(prefix="/games/{game_name}/profiles", tags=["profiles"])
@@ -38,7 +39,7 @@ def _get_profile(profile_id: int, game: Game, session: Session) -> Profile:
 
 
 @router.get("/", response_model=list[ProfileOut])
-def list_game_profiles(
+async def list_game_profiles(
     game_name: str,
     session: Session = Depends(get_session),
 ) -> list[ProfileOut]:
@@ -48,7 +49,7 @@ def list_game_profiles(
 
 
 @router.post("/", response_model=ProfileOut, status_code=201)
-def save_profile(
+async def save_profile(
     game_name: str,
     data: ProfileCreate,
     session: Session = Depends(get_session),
@@ -59,7 +60,7 @@ def save_profile(
 
 
 @router.get("/{profile_id}", response_model=ProfileOut)
-def get_profile(
+async def get_profile(
     game_name: str,
     profile_id: int,
     session: Session = Depends(get_session),
@@ -68,13 +69,11 @@ def get_profile(
     game = _get_game(game_name, session)
     profile = _get_profile(profile_id, game, session)
     _ = profile.entries
-    from chat_nexus_mod_manager.services.profile_service import _profile_to_out
-
-    return _profile_to_out(profile, session)
+    return profile_to_out(profile, session)
 
 
 @router.delete("/{profile_id}", status_code=204)
-def remove_profile(
+async def remove_profile(
     game_name: str,
     profile_id: int,
     session: Session = Depends(get_session),
@@ -86,7 +85,7 @@ def remove_profile(
 
 
 @router.post("/{profile_id}/load", response_model=ProfileOut)
-def apply_profile(
+async def apply_profile(
     game_name: str,
     profile_id: int,
     session: Session = Depends(get_session),
@@ -98,7 +97,7 @@ def apply_profile(
 
 
 @router.post("/{profile_id}/export", response_model=ProfileExport)
-def export_game_profile(
+async def export_game_profile(
     game_name: str,
     profile_id: int,
     session: Session = Depends(get_session),
@@ -110,7 +109,7 @@ def export_game_profile(
 
 
 @router.post("/import", response_model=ProfileOut, status_code=201)
-def import_game_profile(
+async def import_game_profile(
     game_name: str,
     data: ProfileExport,
     session: Session = Depends(get_session),

@@ -101,6 +101,11 @@ def install_mod(
                 continue
 
             target = game_dir / normalised
+            if not target.resolve().is_relative_to(game_dir.resolve()):
+                logger.warning("Skipping path traversal entry: %s", entry.filename)
+                skipped += 1
+                continue
+
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(archive.read_file(entry))
             extracted_paths.append(normalised)
@@ -190,8 +195,14 @@ def toggle_mod(
     installed_mod: InstalledMod,
     game: Game,
     session: Session,
+    *,
+    commit: bool = True,
 ) -> ToggleResult:
-    """Enable or disable a mod by renaming its files with ``.disabled`` suffix."""
+    """Enable or disable a mod by renaming its files with ``.disabled`` suffix.
+
+    Pass ``commit=False`` to defer the DB commit (useful for batching in
+    profile loads).
+    """
     game_dir = Path(game.install_path)
     should_disable = not installed_mod.disabled
     affected = 0
@@ -219,7 +230,8 @@ def toggle_mod(
 
     installed_mod.disabled = should_disable
     session.add(installed_mod)
-    session.commit()
+    if commit:
+        session.commit()
 
     action = "Disabled" if should_disable else "Enabled"
     logger.info("%s '%s' (%d files)", action, installed_mod.name, affected)

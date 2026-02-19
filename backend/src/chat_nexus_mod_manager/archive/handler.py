@@ -143,6 +143,9 @@ class RarHandler(ArchiveHandler):
             text=True,
             timeout=60,
         )
+        if result.returncode != 0:
+            raise RuntimeError(f"7z list failed (exit {result.returncode}): {result.stderr}")
+
         entries: list[ArchiveEntry] = []
         current_path = ""
         current_size = 0
@@ -150,7 +153,7 @@ class RarHandler(ArchiveHandler):
 
         for line in result.stdout.splitlines():
             line = line.strip()
-            if (line.startswith("Path = ") and entries) or current_path:
+            if line.startswith("Path = "):
                 if current_path:
                     entries.append(
                         ArchiveEntry(
@@ -162,8 +165,6 @@ class RarHandler(ArchiveHandler):
                 current_path = line[7:]
                 current_size = 0
                 current_is_dir = False
-            elif line.startswith("Path = "):
-                current_path = line[7:]
             elif line.startswith("Size = "):
                 try:
                     current_size = int(line[7:])
@@ -189,6 +190,9 @@ class RarHandler(ArchiveHandler):
             capture_output=True,
             timeout=120,
         )
+        if result.returncode != 0:
+            stderr = result.stderr.decode(errors="replace")
+            raise RuntimeError(f"7z extract failed (exit {result.returncode}): {stderr}")
         return result.stdout
 
     def close(self) -> None:

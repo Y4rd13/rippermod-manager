@@ -1,5 +1,5 @@
 import { AlertTriangle, Download } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import {
@@ -68,6 +68,18 @@ export function ArchivesList({ archives, gameName }: Props) {
     setConflicts(null);
     setSelectedArchive(null);
   };
+
+  useEffect(() => {
+    if (!conflicts) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setConflicts(null);
+        setSelectedArchive(null);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [conflicts]);
 
   if (archives.length === 0) {
     return (

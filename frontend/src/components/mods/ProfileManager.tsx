@@ -6,7 +6,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -28,6 +28,8 @@ interface Props {
 export function ProfileManager({ profiles, gameName }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
+  const [importError, setImportError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const saveProfile = useSaveProfile();
@@ -62,21 +64,25 @@ export function ProfileManager({ profiles, gameName }: Props) {
     URL.revokeObjectURL(url);
   };
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const data = JSON.parse(reader.result as string) as ProfileExport;
-        importProfile.mutate({ gameName, data });
-      } catch {
-        // invalid json
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = "";
-  };
+  const handleImport = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setImportError("");
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result as string) as ProfileExport;
+          importProfile.mutate({ gameName, data });
+        } catch {
+          setImportError("Invalid profile file: could not parse JSON.");
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = "";
+    },
+    [gameName, importProfile],
+  );
 
   return (
     <div className="space-y-4">
@@ -136,6 +142,10 @@ export function ProfileManager({ profiles, gameName }: Props) {
         </Card>
       )}
 
+      {importError && (
+        <p className="text-sm text-danger">{importError}</p>
+      )}
+
       {profiles.length === 0 && !showCreate ? (
         <p className="py-4 text-sm text-text-muted">
           No profiles saved. Save your current mod setup as a profile.
@@ -177,19 +187,30 @@ export function ProfileManager({ profiles, gameName }: Props) {
                   >
                     <Download size={14} className="text-text-muted" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    loading={
-                      deleteProfile.isPending &&
-                      deleteProfile.variables?.profileId === p.id
-                    }
-                    onClick={() =>
-                      deleteProfile.mutate({ gameName, profileId: p.id })
-                    }
-                  >
-                    <Trash2 size={14} className="text-danger" />
-                  </Button>
+                  {confirmDelete === p.id ? (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      loading={
+                        deleteProfile.isPending &&
+                        deleteProfile.variables?.profileId === p.id
+                      }
+                      onClick={() => {
+                        deleteProfile.mutate({ gameName, profileId: p.id });
+                        setConfirmDelete(null);
+                      }}
+                    >
+                      Confirm
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setConfirmDelete(p.id)}
+                    >
+                      <Trash2 size={14} className="text-danger" />
+                    </Button>
+                  )}
                 </div>
               </div>
             </Card>

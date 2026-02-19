@@ -117,9 +117,10 @@ def load_profile(profile: Profile, game: Game, session: Session) -> ProfileOut:
         is_currently_enabled = not mod.disabled
 
         if should_be_enabled != is_currently_enabled:
-            toggle_mod(mod, game, session)
+            toggle_mod(mod, game, session, commit=False)
 
-    return _profile_to_out(profile, session)
+    session.commit()
+    return profile_to_out(profile, session)
 
 
 def export_profile(profile: Profile, game: Game, session: Session) -> ProfileExport:
@@ -208,7 +209,7 @@ def import_profile(
     )
 
 
-def _profile_to_out(profile: Profile, session: Session) -> ProfileOut:
+def profile_to_out(profile: Profile, session: Session) -> ProfileOut:
     """Convert a Profile model to a ProfileOut schema."""
     _ = profile.entries
     mods: list[ProfileModOut] = []

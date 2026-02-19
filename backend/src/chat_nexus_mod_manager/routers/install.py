@@ -40,7 +40,7 @@ def _get_game(game_name: str, session: Session) -> Game:
 
 
 @router.get("/available", response_model=list[AvailableArchive])
-def list_archives(
+async def list_archives(
     game_name: str,
     session: Session = Depends(get_session),
 ) -> list[AvailableArchive]:
@@ -63,7 +63,7 @@ def list_archives(
 
 
 @router.get("/installed", response_model=list[InstalledModOut])
-def list_installed(
+async def list_installed(
     game_name: str,
     session: Session = Depends(get_session),
 ) -> list[InstalledModOut]:
@@ -90,7 +90,7 @@ def list_installed(
 
 
 @router.post("/", response_model=InstallResult, status_code=201)
-def install(
+async def install(
     game_name: str,
     data: InstallRequest,
     session: Session = Depends(get_session),
@@ -99,6 +99,8 @@ def install(
     game = _get_game(game_name, session)
     staging = Path(game.install_path) / "downloaded_mods"
     archive_path = staging / data.archive_filename
+    if not archive_path.resolve().is_relative_to(staging.resolve()):
+        raise HTTPException(400, "Invalid archive filename")
     if not archive_path.is_file():
         raise HTTPException(404, f"Archive not found: {data.archive_filename}")
 
@@ -111,7 +113,7 @@ def install(
 
 
 @router.delete("/installed/{mod_id}", response_model=UninstallResult)
-def uninstall(
+async def uninstall(
     game_name: str,
     mod_id: int,
     session: Session = Depends(get_session),
@@ -125,7 +127,7 @@ def uninstall(
 
 
 @router.patch("/installed/{mod_id}/toggle", response_model=ToggleResult)
-def toggle(
+async def toggle(
     game_name: str,
     mod_id: int,
     session: Session = Depends(get_session),
@@ -139,7 +141,7 @@ def toggle(
 
 
 @router.get("/conflicts", response_model=ConflictCheckResult)
-def conflicts(
+async def conflicts(
     game_name: str,
     archive_filename: str,
     session: Session = Depends(get_session),
@@ -148,6 +150,8 @@ def conflicts(
     game = _get_game(game_name, session)
     staging = Path(game.install_path) / "downloaded_mods"
     archive_path = staging / archive_filename
+    if not archive_path.resolve().is_relative_to(staging.resolve()):
+        raise HTTPException(400, "Invalid archive filename")
     if not archive_path.is_file():
         raise HTTPException(404, f"Archive not found: {archive_filename}")
     return check_conflicts(game, archive_path, session)
