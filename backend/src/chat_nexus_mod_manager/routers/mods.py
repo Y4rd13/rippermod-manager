@@ -1,4 +1,5 @@
 import json
+import logging
 import queue
 import threading
 
@@ -17,6 +18,8 @@ from chat_nexus_mod_manager.schemas.mod import (
     ModGroupOut,
     ScanResult,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/games/{game_name}/mods", tags=["mods"])
 
@@ -108,15 +111,15 @@ def scan_mods_stream(game_name: str) -> StreamingResponse:
                     q.put(
                         {"phase": "error", "message": f"Game '{game_name}' not found", "percent": 0}
                     )
-                    q.put(None)
                     return
                 _ = game.mod_paths
 
                 from chat_nexus_mod_manager.scanner.service import scan_game_mods
 
                 scan_game_mods(game, session, on_progress=on_progress)
-        except Exception as exc:
-            q.put({"phase": "error", "message": str(exc), "percent": 0})
+        except Exception:
+            logger.exception("Scan failed for game '%s'", game_name)
+            q.put({"phase": "error", "message": "Scan failed unexpectedly", "percent": 0})
         finally:
             q.put(None)
 
