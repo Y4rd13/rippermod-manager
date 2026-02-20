@@ -63,7 +63,7 @@ async def sync_history(game_name: str, session: Session = Depends(get_session)) 
 @router.get("/downloads/{game_name}", response_model=list[NexusModEnrichedOut])
 def list_downloads(
     game_name: str,
-    source: Literal["all", "endorsed", "tracked"] | None = Query(default=None),
+    source: Literal["endorsed", "tracked"] | None = Query(default=None),
     session: Session = Depends(get_session),
 ) -> list[NexusModEnrichedOut]:
     game = session.exec(select(Game).where(Game.name == game_name)).first()

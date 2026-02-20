@@ -67,8 +67,6 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
                 existing_dl.mod_name = info.get("name", existing_dl.mod_name)
                 # NOTE: do NOT overwrite version — preserves discovery-time snapshot
                 existing_dl.nexus_url = nexus_url
-                existing_dl.is_tracked = mod_id in tracked_ids
-                existing_dl.is_endorsed = mod_id in endorsed_ids
 
             existing_meta = session.exec(
                 select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)

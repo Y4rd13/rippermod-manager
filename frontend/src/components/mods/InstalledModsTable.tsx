@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   Check,
   Download,
   ExternalLink,
@@ -8,15 +7,17 @@ import {
   PowerOff,
   Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
+import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { useCheckConflicts, useInstallMod, useToggleMod, useUninstallMod } from "@/hooks/mutations";
+import { useToggleMod, useUninstallMod } from "@/hooks/mutations";
+import { useInstallFlow } from "@/hooks/use-install-flow";
 import { cn } from "@/lib/utils";
-import type { AvailableArchive, ConflictCheckResult, InstalledModOut, ModGroup } from "@/types/api";
+import type { AvailableArchive, InstalledModOut, ModGroup } from "@/types/api";
 
 interface Props {
   mods: InstalledModOut[];
@@ -179,100 +180,15 @@ function RecognizedModsGrid({
   installedModIds: Set<number>;
   gameName: string;
 }) {
-  const [installingModIds, setInstallingModIds] = useState<Set<number>>(new Set());
-  const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
-  const [conflictModId, setConflictModId] = useState<number | null>(null);
-
-  const installMod = useInstallMod();
-  const checkConflicts = useCheckConflicts();
-
-  const archiveByModId = useMemo(() => {
-    const map = new Map<number, AvailableArchive>();
-    for (const a of archives) {
-      if (a.nexus_mod_id == null) continue;
-      const existing = map.get(a.nexus_mod_id);
-      if (!existing || a.size > existing.size) {
-        map.set(a.nexus_mod_id, a);
-      }
-    }
-    return map;
-  }, [archives]);
-
-  const addInstalling = (id: number) =>
-    setInstallingModIds((prev) => new Set(prev).add(id));
-  const removeInstalling = (id: number) =>
-    setInstallingModIds((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-
-  useEffect(() => {
-    if (!conflicts) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (conflictModId != null) removeInstalling(conflictModId);
-        setConflicts(null);
-        setConflictModId(null);
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [conflicts, conflictModId]);
-
-  const doInstall = async (fileName: string, skipConflicts: string[], nexusModId: number) => {
-    try {
-      await installMod.mutateAsync({
-        gameName,
-        data: { archive_filename: fileName, skip_conflicts: skipConflicts },
-      });
-    } finally {
-      removeInstalling(nexusModId);
-    }
-  };
-
-  const handleInstall = async (nexusModId: number, archive: AvailableArchive) => {
-    addInstalling(nexusModId);
-    try {
-      const result = await checkConflicts.mutateAsync({
-        gameName,
-        archiveFilename: archive.filename,
-      });
-
-      if (result.conflicts.length > 0) {
-        setConflicts(result);
-        setConflictModId(nexusModId);
-      } else {
-        await doInstall(archive.filename, [], nexusModId);
-      }
-    } catch {
-      removeInstalling(nexusModId);
-    }
-  };
-
-  const handleInstallWithSkip = async () => {
-    if (!conflicts || conflictModId == null) return;
-    try {
-      await doInstall(
-        conflicts.archive_filename,
-        conflicts.conflicts.map((c) => c.file_path),
-        conflictModId,
-      );
-    } finally {
-      setConflicts(null);
-      setConflictModId(null);
-    }
-  };
-
-  const handleInstallOverwrite = async () => {
-    if (!conflicts || conflictModId == null) return;
-    try {
-      await doInstall(conflicts.archive_filename, [], conflictModId);
-    } finally {
-      setConflicts(null);
-      setConflictModId(null);
-    }
-  };
+  const {
+    archiveByModId,
+    installingModIds,
+    conflicts,
+    handleInstall,
+    handleInstallWithSkip,
+    handleInstallOverwrite,
+    dismissConflicts,
+  } = useInstallFlow(gameName, archives);
 
   return (
     <>
@@ -343,48 +259,13 @@ function RecognizedModsGrid({
         })}
       </div>
 
-      {/* Conflict Dialog */}
       {conflicts && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-lg rounded-xl border border-border bg-surface-1 p-6">
-            <div className="mb-4 flex items-center gap-2 text-warning">
-              <AlertTriangle size={20} />
-              <h3 className="text-lg font-semibold text-text-primary">
-                File Conflicts Detected
-              </h3>
-            </div>
-            <p className="mb-3 text-sm text-text-secondary">
-              {conflicts.conflicts.length} file(s) conflict with installed mods:
-            </p>
-            <div className="mb-4 max-h-48 overflow-y-auto rounded border border-border bg-surface-0 p-3">
-              {conflicts.conflicts.map((c) => (
-                <div key={c.file_path} className="py-1 text-xs">
-                  <span className="font-mono text-text-primary">{c.file_path}</span>
-                  <span className="ml-2 text-text-muted">(owned by {c.owning_mod_name})</span>
-                </div>
-              ))}
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  if (conflictModId != null) removeInstalling(conflictModId);
-                  setConflicts(null);
-                  setConflictModId(null);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button variant="secondary" size="sm" onClick={handleInstallWithSkip}>
-                Skip Conflicts
-              </Button>
-              <Button size="sm" onClick={handleInstallOverwrite}>
-                Overwrite
-              </Button>
-            </div>
-          </div>
-        </div>
+        <ConflictDialog
+          conflicts={conflicts}
+          onCancel={dismissConflicts}
+          onSkip={handleInstallWithSkip}
+          onOverwrite={handleInstallOverwrite}
+        />
       )}
     </>
   );
