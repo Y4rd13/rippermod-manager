@@ -203,7 +203,7 @@ function RecognizedModsGrid({
               nexusUrl={match.nexus_url}
               action={
                 <ModCardAction
-                  nexusModId={nexusModId}
+
                   isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
                   isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
                   activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}

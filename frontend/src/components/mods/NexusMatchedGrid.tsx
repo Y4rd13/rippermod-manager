@@ -129,7 +129,7 @@ export function NexusMatchedGrid({ mods, archives, installedMods, gameName, down
               nexusUrl={match.nexus_url}
               action={
                 <ModCardAction
-                  nexusModId={nexusModId}
+
                   isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
                   isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
                   activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}

@@ -12,7 +12,6 @@ import { DownloadProgress } from "@/components/ui/DownloadProgress";
 import type { AvailableArchive, DownloadJobOut } from "@/types/api";
 
 interface Props {
-  nexusModId: number;
   isInstalled: boolean;
   isInstalling: boolean;
   activeDownload?: DownloadJobOut;

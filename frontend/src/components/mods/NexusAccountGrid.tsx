@@ -123,7 +123,7 @@ export function NexusAccountGrid({
               nexusUrl={mod.nexus_url}
               action={
                 <ModCardAction
-                  nexusModId={nexusModId}
+
                   isInstalled={installedModIds.has(nexusModId)}
                   isInstalling={flow.installingModIds.has(nexusModId)}
                   activeDownload={flow.activeDownloadByModId.get(nexusModId)}
