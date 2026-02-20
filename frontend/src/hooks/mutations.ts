@@ -256,6 +256,24 @@ export function useStartDownload() {
   });
 }
 
+export function useStartModDownload() {
+  const qc = useQueryClient();
+  return useMutation<DownloadStartResult, Error, { gameName: string; nexusModId: number }>({
+    mutationFn: ({ gameName, nexusModId }) =>
+      api.post(`/api/v1/games/${gameName}/downloads/from-mod`, { nexus_mod_id: nexusModId }),
+    onSuccess: (result, { gameName }) => {
+      if (result.requires_nxm) {
+        toast.warning("Premium required", "Open the mod on Nexus to download manually");
+      } else {
+        useDownloadStore.getState().setJob(result.job);
+        toast.info("Download started", result.job.file_name);
+      }
+      qc.invalidateQueries({ queryKey: ["download-jobs", gameName] });
+    },
+    onError: () => toast.error("Download failed"),
+  });
+}
+
 export function useCancelDownload() {
   const qc = useQueryClient();
   return useMutation<DownloadJobOut, Error, { gameName: string; jobId: number }>({

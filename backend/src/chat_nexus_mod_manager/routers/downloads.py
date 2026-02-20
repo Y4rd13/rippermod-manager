@@ -7,6 +7,7 @@ from chat_nexus_mod_manager.database import get_session
 from chat_nexus_mod_manager.models.settings import AppSetting
 from chat_nexus_mod_manager.routers.deps import get_game_or_404
 from chat_nexus_mod_manager.schemas.download import (
+    DownloadFromModRequest,
     DownloadJobOut,
     DownloadRequest,
     DownloadStartResult,
@@ -81,6 +82,69 @@ async def start_download(
         nxm_expires=body.nxm_expires,
     )
 
+    return DownloadStartResult(job=_job_to_out(job), requires_nxm=False)
+
+
+@router.post("/from-mod", response_model=DownloadStartResult)
+async def start_download_from_mod(
+    game_name: str,
+    body: DownloadFromModRequest,
+    session: Session = Depends(get_session),
+) -> DownloadStartResult:
+    """Resolve the main file for a mod and start downloading it."""
+    game = get_game_or_404(game_name, session)
+    api_key = _get_api_key(session)
+
+    from chat_nexus_mod_manager.models.download import DownloadJob
+    from chat_nexus_mod_manager.nexus.client import NexusClient
+
+    # Return existing active job instead of creating duplicates
+    existing = session.exec(
+        select(DownloadJob).where(
+            DownloadJob.game_id == game.id,
+            DownloadJob.nexus_mod_id == body.nexus_mod_id,
+            DownloadJob.status.in_(["pending", "downloading"]),  # type: ignore[union-attr]
+        )
+    ).first()
+    if existing:
+        return DownloadStartResult(
+            job=_job_to_out(existing), requires_nxm=existing.status == "pending"
+        )
+
+    async with NexusClient(api_key) as client:
+        key_result = await client.validate_key()
+        files_resp = await client.get_mod_files(game.domain_name, body.nexus_mod_id)
+
+    nexus_files = files_resp.get("files", [])
+    if not nexus_files:
+        raise HTTPException(404, "No files found for this mod")
+
+    # Prefer main files (category_id == 1), fallback to latest file
+    main_files = [f for f in nexus_files if f.get("category_id") == 1]
+    target = main_files[-1] if main_files else nexus_files[-1]
+    nexus_file_id = target.get("file_id")
+    if not nexus_file_id:
+        raise HTTPException(502, "Nexus API returned a file entry without a file_id")
+
+    if not key_result.is_premium:
+        job = DownloadJob(
+            game_id=game.id,  # type: ignore[arg-type]
+            nexus_mod_id=body.nexus_mod_id,
+            nexus_file_id=nexus_file_id,
+            status="pending",
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        return DownloadStartResult(job=_job_to_out(job), requires_nxm=True)
+
+    job = await download_service.create_and_start_download(
+        game=game,
+        nexus_mod_id=body.nexus_mod_id,
+        nexus_file_id=nexus_file_id,
+        api_key=api_key,
+        session=session,
+    )
     return DownloadStartResult(job=_job_to_out(job), requires_nxm=False)
 
 

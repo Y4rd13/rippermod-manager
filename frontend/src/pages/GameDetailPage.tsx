@@ -165,6 +165,7 @@ export function GameDetailPage() {
   const { data: endorsedMods = [] } = useEndorsedMods(name);
   const { data: trackedMods = [] } = useTrackedMods(name);
   const { data: updates } = useUpdates(name);
+  const { data: downloadJobs = [] } = useDownloadJobs(name);
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("mods");
 
@@ -173,6 +174,21 @@ export function GameDetailPage() {
   const [scanLogs, setScanLogs] = useState<ScanLog[]>([]);
   const [scanPercent, setScanPercent] = useState(0);
   const [scanPhase, setScanPhase] = useState("");
+
+  const prevCompletedRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    const completedIds = new Set(
+      downloadJobs.filter((j) => j.status === "completed").map((j) => j.id),
+    );
+    if (prevCompletedRef.current.size > 0) {
+      const hasNew = [...completedIds].some((id) => !prevCompletedRef.current.has(id));
+      if (hasNew) {
+        queryClient.invalidateQueries({ queryKey: ["available-archives", name] });
+      }
+    }
+    prevCompletedRef.current = completedIds;
+  }, [downloadJobs, name, queryClient]);
 
   const pendingLogs = useRef<ScanLog[]>([]);
   const latestPercent = useRef(0);
@@ -265,6 +281,8 @@ export function GameDetailPage() {
       setScanPercent(100);
       queryClient.invalidateQueries({ queryKey: ["mods", name] });
       queryClient.invalidateQueries({ queryKey: ["installed-mods", name] });
+      queryClient.invalidateQueries({ queryKey: ["nexus-downloads", name] });
+      queryClient.invalidateQueries({ queryKey: ["available-archives", name] });
       toast.success("Scan complete");
     } catch (e) {
       stopFlushing();
@@ -383,6 +401,7 @@ export function GameDetailPage() {
           archives={archives}
           installedMods={installedMods}
           gameName={name}
+          downloadJobs={downloadJobs}
         />
       )}
       {tab === "endorsed" && (
@@ -392,6 +411,7 @@ export function GameDetailPage() {
           installedMods={installedMods}
           gameName={name}
           emptyMessage="No endorsed mods. Sync your Nexus account to see mods you've endorsed."
+          downloadJobs={downloadJobs}
         />
       )}
       {tab === "tracked" && (
@@ -401,6 +421,7 @@ export function GameDetailPage() {
           installedMods={installedMods}
           gameName={name}
           emptyMessage="No tracked mods. Sync your Nexus account to see mods you're tracking."
+          downloadJobs={downloadJobs}
         />
       )}
       {tab === "installed" && (
@@ -409,6 +430,7 @@ export function GameDetailPage() {
           gameName={name}
           recognizedMods={nexusMatched}
           archives={archives}
+          downloadJobs={downloadJobs}
         />
       )}
       {tab === "archives" && (
