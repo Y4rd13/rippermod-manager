@@ -88,9 +88,8 @@ def upsert_nexus_mod(
             existing_meta.endorsement_count = info["endorsement_count"]
         if info.get("picture_url"):
             existing_meta.picture_url = info["picture_url"]
-        if existing_meta.updated_at is None:
-            ts = info.get("updated_timestamp")
-            if ts:
-                existing_meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)
+        ts = info.get("updated_timestamp")
+        if ts:
+            existing_meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)
 
     return dl

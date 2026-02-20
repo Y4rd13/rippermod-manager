@@ -15,7 +15,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 _MAX_CONCURRENT = 5
 _CACHE_KEY_PREFIX = "update_cache_"
+_CACHE_TTL = timedelta(hours=24)
 
 
 @dataclass(frozen=True, slots=True)
@@ -238,17 +239,20 @@ def _cache_update_result(game_id: int, result: UpdateResult, session: Session) -
 
 
 def _load_cached_result(game_id: int, session: Session) -> UpdateResult | None:
-    """Load a previously cached update result from AppSetting."""
+    """Load a previously cached update result from AppSetting, respecting TTL."""
     raw = get_setting(session, f"{_CACHE_KEY_PREFIX}{game_id}")
     if not raw:
         return None
     try:
         data = json.loads(raw)
+        cached_at = datetime.fromisoformat(data.get("cached_at", ""))
+        if datetime.now(UTC) - cached_at > _CACHE_TTL:
+            return None
         return UpdateResult(
             total_checked=data["total_checked"],
             updates=data["updates"],
         )
-    except (json.JSONDecodeError, KeyError):
+    except (json.JSONDecodeError, KeyError, ValueError):
         logger.warning("Failed to parse cached update result for game %d", game_id)
         return None
 
@@ -359,6 +363,7 @@ async def check_all_updates(
                     "source": mod.source,
                     "local_timestamp": mod.upload_timestamp,
                     "nexus_timestamp": None,
+                    "timestamp_only": is_timestamp_flagged and not is_version_newer,
                 }
             )
         else:

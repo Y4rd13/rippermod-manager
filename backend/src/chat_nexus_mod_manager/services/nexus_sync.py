@@ -98,10 +98,9 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
                     "endorsement_count", existing_meta.endorsement_count
                 )
                 existing_meta.picture_url = info.get("picture_url", existing_meta.picture_url)
-                if existing_meta.updated_at is None:
-                    ts = info.get("updated_timestamp")
-                    if ts:
-                        existing_meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)
+                ts = info.get("updated_timestamp")
+                if ts:
+                    existing_meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)
 
         session.commit()
 
