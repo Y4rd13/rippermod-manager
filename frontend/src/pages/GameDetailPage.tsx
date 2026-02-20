@@ -326,7 +326,7 @@ export function GameDetailPage() {
           </div>
         </Card>
         <Card
-          className="cursor-pointer hover:border-warning/40 transition-colors"
+          className="hover:border-warning/40 transition-colors"
           onClick={() => setTab("matched")}
         >
           <div className="flex items-center gap-3">

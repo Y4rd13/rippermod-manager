@@ -9,7 +9,7 @@ interface CardProps {
 export function Card({ children, className, onClick }: CardProps) {
   return (
     <div
-      className={cn("rounded-xl border border-border bg-surface-1 p-5", className)}
+      className={cn("rounded-xl border border-border bg-surface-1 p-5", onClick && "cursor-pointer", className)}
       onClick={onClick}
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
