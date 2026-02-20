@@ -40,3 +40,20 @@ class NexusModMetaOut(BaseModel):
     updated_at: datetime | None
     endorsement_count: int
     category: str
+
+
+class NexusModEnrichedOut(BaseModel):
+    id: int
+    nexus_mod_id: int
+    mod_name: str
+    file_name: str
+    version: str
+    category: str
+    downloaded_at: datetime | None
+    nexus_url: str
+    is_tracked: bool
+    is_endorsed: bool
+    author: str = ""
+    summary: str = ""
+    endorsement_count: int = 0
+    picture_url: str = ""

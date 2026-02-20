@@ -16,6 +16,8 @@ class NexusDownload(SQLModel, table=True):
     category: str = ""
     downloaded_at: datetime | None = None
     nexus_url: str = ""
+    is_tracked: bool = Field(default=False)
+    is_endorsed: bool = Field(default=False)
 
 
 class NexusModMeta(SQLModel, table=True):
