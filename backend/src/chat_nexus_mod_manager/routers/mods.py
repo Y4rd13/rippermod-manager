@@ -132,6 +132,7 @@ def scan_mods_stream(game_name: str) -> StreamingResponse:
                 # Phase 1.5: FOMOD/REDmod metadata (83-85%)
                 on_progress("fomod", "Inspecting archive metadata...", 83)
                 fomod_result = parse_archive_metadata(game, session, on_progress)
+                session.commit()
                 on_progress(
                     "fomod",
                     f"Found {fomod_result.fomod_found} FOMOD + {fomod_result.redmod_found} REDmod",

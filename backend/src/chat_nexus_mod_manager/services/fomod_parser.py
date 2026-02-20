@@ -12,10 +12,10 @@ import contextlib
 import json
 import logging
 import re
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
+import defusedxml.ElementTree as DefusedET
 from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.archive.handler import open_archive
@@ -30,6 +30,8 @@ from chat_nexus_mod_manager.services.progress import ProgressCallback, noop_prog
 logger = logging.getLogger(__name__)
 
 _NEXUS_MOD_ID_RE = re.compile(r"nexusmods\.com/\w+/mods/(\d+)")
+
+_MAX_METADATA_SIZE = 1_048_576  # 1 MB — more than enough for info.xml / info.json
 
 
 @dataclass(frozen=True)
@@ -60,12 +62,11 @@ def _parse_fomod_info_xml(xml_bytes: bytes) -> ArchiveMetadata | None:
         elif text.startswith(b"\xef\xbb\xbf"):
             text = xml_bytes[3:]
 
-        root = ET.fromstring(text)
-    except ET.ParseError:
+        root = DefusedET.fromstring(text)
+    except Exception:
         return None
 
     def _get_text(tag: str) -> str | None:
-        # Try direct child first, then search recursively
         el = root.find(tag)
         if el is None:
             el = root.find(f".//{tag}")
@@ -80,7 +81,6 @@ def _parse_fomod_info_xml(xml_bytes: bytes) -> ArchiveMetadata | None:
 
     nexus_mod_id: int | None = None
 
-    # Try <Id> element first
     id_text = _get_text("Id")
     if id_text:
         with contextlib.suppress(ValueError):
@@ -119,7 +119,11 @@ def _parse_redmod_info_json(json_bytes: bytes) -> ArchiveMetadata | None:
         return None
 
     version = data.get("version")
-    version = version.strip() or None if isinstance(version, str) else None
+    version = (version.strip() or None) if isinstance(version, str) else None
+
+    # Require version field to reduce false positives from generic info.json files
+    if version is None:
+        return None
 
     return ArchiveMetadata(
         mod_name=name.strip(),
@@ -147,24 +151,21 @@ def inspect_archive(archive_path: Path) -> ArchiveMetadata | None:
             parts = lower.split("/")
             depth = len(parts)
 
-            # FOMOD: path ending with fomod/info.xml
             if lower.endswith("fomod/info.xml") and depth < best_fomod_depth:
                 fomod_entry = entry
                 best_fomod_depth = depth
 
-            # REDmod: info.json at depth <= 2 (e.g. "modname/info.json" or "info.json")
             if parts[-1] == "info.json" and depth <= 2 and depth < best_redmod_depth:
                 redmod_entry = entry
                 best_redmod_depth = depth
 
-        # Prefer FOMOD over REDmod (richer data)
-        if fomod_entry is not None:
+        if fomod_entry is not None and fomod_entry.size <= _MAX_METADATA_SIZE:
             xml_bytes = archive.read_file(fomod_entry)
             result = _parse_fomod_info_xml(xml_bytes)
             if result is not None:
                 return result
 
-        if redmod_entry is not None:
+        if redmod_entry is not None and redmod_entry.size <= _MAX_METADATA_SIZE:
             json_bytes = archive.read_file(redmod_entry)
             return _parse_redmod_info_json(json_bytes)
 
@@ -182,6 +183,8 @@ def parse_archive_metadata(
     1. If nexus_mod_id found -> create NexusDownload + NexusModMeta (if not exists)
     2. If archive matches an InstalledMod with a ModGroup -> create ModNexusCorrelation
     3. If better display name found -> update ModGroup.display_name
+
+    Note: does NOT call ``session.commit()`` — the caller controls the transaction.
     """
     archives = list_available_archives(game)
 
@@ -244,7 +247,6 @@ def parse_archive_metadata(
         ).first()
 
         if installed_mod and installed_mod.mod_group_id:
-            # Create correlation if we have a NexusDownload
             if dl is not None:
                 existing_corr = session.exec(
                     select(ModNexusCorrelation).where(
@@ -253,18 +255,18 @@ def parse_archive_metadata(
                     )
                 ).first()
                 if not existing_corr:
+                    reason = f"FOMOD info.xml mod ID {metadata.nexus_mod_id}"
                     session.add(
                         ModNexusCorrelation(
                             mod_group_id=installed_mod.mod_group_id,
                             nexus_download_id=dl.id,  # type: ignore[arg-type]
                             score=0.95,
                             method="fomod",
-                            reasoning=f"FOMOD info.xml contained mod ID {metadata.nexus_mod_id}",
+                            reasoning=reason,
                         )
                     )
                     result.correlations_created += 1
 
-            # Update display name if we have a better one from metadata
             if metadata.mod_name:
                 from chat_nexus_mod_manager.models.mod import ModGroup
 
@@ -276,11 +278,13 @@ def parse_archive_metadata(
             pct = 83 + int(2 * (i + 1) / len(archives))
             on_progress("fomod", f"Inspected {i + 1}/{len(archives)} archives", pct)
 
-    session.commit()
     return result
 
 
 def _is_filename_derived(name: str) -> bool:
     """Heuristic: detect names derived from filenames rather than human-authored."""
-    indicators = ["-", "_", "  "]
-    return any(ind in name for ind in indicators) or bool(re.search(r"\d+\.\d+", name))
+    if re.search(r"\.\w{2,4}$", name):
+        return True
+    if "_" in name:
+        return True
+    return bool(re.search(r"\d{4,}", name))
