@@ -2,7 +2,7 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
-.venv/
+.venv*/
 backend/data/
 
 # Node
@@ -21,6 +21,9 @@ frontend/src-tauri/target/
 # Env
 .env
 *.env.local
+
+# Docs (local strategy notes)
+docs/
 
 # Temp
 temp/

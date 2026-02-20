@@ -17,6 +17,7 @@ dependencies = [
     "xxhash>=3.5.0",
     "sse-starlette>=2.2.0",
     "py7zr>=0.22.0",
+    "defusedxml>=0.7.0",
     "pefile>=2024.8.26",
 ]
 
