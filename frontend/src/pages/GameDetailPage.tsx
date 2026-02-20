@@ -22,6 +22,7 @@ import { ModsTable } from "@/components/mods/ModsTable";
 import { NexusAccountGrid } from "@/components/mods/NexusAccountGrid";
 import { NexusMatchedGrid } from "@/components/mods/NexusMatchedGrid";
 import { ProfileManager } from "@/components/mods/ProfileManager";
+import { SourceBadge } from "@/components/mods/SourceBadge";
 import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -123,6 +124,7 @@ function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdat
                 <th className="pb-2 pr-4">Mod</th>
                 <th className="pb-2 pr-4">Local Version</th>
                 <th className="pb-2 pr-4">Nexus Version</th>
+                <th className="pb-2 pr-4">Source</th>
                 <th className="pb-2 pr-4">Author</th>
                 <th className="pb-2" />
               </tr>
@@ -136,6 +138,9 @@ function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdat
                   <td className="py-2 pr-4 text-text-primary">{u.display_name}</td>
                   <td className="py-2 pr-4 text-text-muted">{u.local_version}</td>
                   <td className="py-2 pr-4 text-success font-medium">{u.nexus_version}</td>
+                  <td className="py-2 pr-4">
+                    <SourceBadge source={u.source} />
+                  </td>
                   <td className="py-2 pr-4 text-text-muted">{u.author}</td>
                   <td className="py-2">
                     <UpdateDownloadCell

@@ -1,27 +1,11 @@
 import { Download, RefreshCw, Search } from "lucide-react";
 
+import { SourceBadge } from "@/components/mods/SourceBadge";
 import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useCheckUpdates, useStartDownload } from "@/hooks/mutations";
 import { useDownloadJobs, useGames, useUpdates } from "@/hooks/queries";
-import { cn } from "@/lib/utils";
-
-function SourceBadge({ source }: { source: string }) {
-  const isTimestamp = source === "installed";
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
-        isTimestamp
-          ? "bg-success/15 text-success"
-          : "bg-accent/15 text-accent",
-      )}
-    >
-      {isTimestamp ? "Timestamp" : "Version"}
-    </span>
-  );
-}
 
 function GameUpdates({ gameName }: { gameName: string }) {
   const { data: updates, isLoading } = useUpdates(gameName);

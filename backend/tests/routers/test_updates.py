@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from chat_nexus_mod_manager.routers.updates import _resolve_file_ids
+from chat_nexus_mod_manager.services.update_service import _resolve_file_ids
 
 
 class TestListUpdates:
@@ -281,7 +281,7 @@ class TestResolveFileIds:
     @pytest.mark.anyio
     async def test_api_error_logs_warning_and_continues(self):
         mock_client = AsyncMock()
-        mock_client.get_mod_files.side_effect = RuntimeError("API down")
+        mock_client.get_mod_files.side_effect = ValueError("API down")
         updates = [
             {"nexus_mod_id": 10, "nexus_file_id": None, "nexus_version": "1.0"},
         ]
