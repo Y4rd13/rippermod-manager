@@ -4,12 +4,15 @@ Strategy (optimal API usage):
 1. Collect ALL nexus_mod_ids from every source with local version info
 2. Deduplicate: installed > correlation > endorsed > tracked
 3. Fetch recently updated mods (1 API call: get_updated_mods("1m"))
-4. Refresh NexusModMeta only for mods that changed on Nexus
-5. Compare local versions against NexusModMeta via is_newer_version()
-6. Resolve file IDs only for mods with confirmed updates
+4. Compare latest_file_update timestamps against NexusModMeta.updated_at
+5. Refresh NexusModMeta only for mods flagged by timestamp comparison
+6. Build updates from BOTH timestamp flags and version comparison
+7. Resolve file IDs only for mods with confirmed updates
+8. Cache results in AppSetting for the GET endpoint
 """
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -27,10 +30,12 @@ from chat_nexus_mod_manager.models.install import InstalledMod
 from chat_nexus_mod_manager.models.mod import ModGroup
 from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
 from chat_nexus_mod_manager.nexus.client import NexusClient
+from chat_nexus_mod_manager.services.settings_helpers import get_setting, set_setting
 
 logger = logging.getLogger(__name__)
 
 _MAX_CONCURRENT = 5
+_CACHE_KEY_PREFIX = "update_cache_"
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,6 +226,33 @@ async def _resolve_file_ids(
     await asyncio.gather(*(resolve_one(u) for u in updates))
 
 
+def _cache_update_result(game_id: int, result: UpdateResult, session: Session) -> None:
+    """Serialize and persist update result to AppSetting."""
+    payload = {
+        "total_checked": result.total_checked,
+        "updates": result.updates,
+        "cached_at": datetime.now(UTC).isoformat(),
+    }
+    set_setting(session, f"{_CACHE_KEY_PREFIX}{game_id}", json.dumps(payload))
+    session.commit()
+
+
+def _load_cached_result(game_id: int, session: Session) -> UpdateResult | None:
+    """Load a previously cached update result from AppSetting."""
+    raw = get_setting(session, f"{_CACHE_KEY_PREFIX}{game_id}")
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        return UpdateResult(
+            total_checked=data["total_checked"],
+            updates=data["updates"],
+        )
+    except (json.JSONDecodeError, KeyError):
+        logger.warning("Failed to parse cached update result for game %d", game_id)
+        return None
+
+
 async def check_all_updates(
     game_id: int,
     game_domain: str,
@@ -231,9 +263,11 @@ async def check_all_updates(
 
     1. Collect tracked mods from installed, correlated, endorsed, and tracked
     2. Fetch recently updated mods from Nexus (1 API call)
-    3. Refresh metadata only for mods that actually changed
-    4. Compare versions for all tracked mods
-    5. Resolve file IDs for updates
+    3. Build file_update_map and compare against NexusModMeta.updated_at
+    4. Refresh metadata only for mods flagged by timestamp
+    5. Compare versions for all tracked mods (catches both paths)
+    6. Resolve file IDs for updates
+    7. Cache result for the GET endpoint
     """
     tracked = collect_tracked_mods(game_id, game_domain, session)
     if not tracked:
@@ -242,21 +276,45 @@ async def check_all_updates(
     logger.info("Update check: %d unique mods from all sources", len(tracked))
 
     # 1 API call: get all mods updated in last month
+    file_update_map: dict[int, int] = {}
     try:
         updated_entries = await client.get_updated_mods(game_domain, "1m")
-        recently_updated_ids = {e["mod_id"] for e in updated_entries}
+        for entry in updated_entries:
+            file_update_map[entry["mod_id"]] = entry.get("latest_file_update", 0)
     except (httpx.HTTPError, ValueError):
         logger.warning("Failed to fetch recently updated mods", exc_info=True)
-        recently_updated_ids = set()
 
-    # Refresh metadata only for mods in our set that were recently updated on Nexus
-    to_refresh = recently_updated_ids & set(tracked.keys())
-    if to_refresh:
-        logger.info("Refreshing metadata for %d recently updated mods", len(to_refresh))
-        await _refresh_metadata(client, game_domain, to_refresh, session)
-
-    # Load all NexusModMeta for our tracked mods
+    # Load pre-refresh updated_at baselines for our tracked mods
     tracked_ids = list(tracked.keys())
+    meta_rows = session.exec(
+        select(NexusModMeta).where(
+            NexusModMeta.nexus_mod_id.in_(tracked_ids)  # type: ignore[union-attr]
+        )
+    ).all()
+    baseline_map: dict[int, datetime | None] = {m.nexus_mod_id: m.updated_at for m in meta_rows}
+
+    # Flag mods where latest_file_update > updated_at (or updated_at is NULL)
+    timestamp_flagged: set[int] = set()
+    for mid in tracked:
+        latest_file_ts = file_update_map.get(mid)
+        if latest_file_ts is None:
+            continue
+        baseline = baseline_map.get(mid)
+        if baseline is None:
+            timestamp_flagged.add(mid)
+        else:
+            # SQLite drops tzinfo; treat naive datetimes as UTC
+            baseline_utc = baseline.replace(tzinfo=UTC) if baseline.tzinfo is None else baseline
+            baseline_epoch = int(baseline_utc.timestamp())
+            if latest_file_ts > baseline_epoch:
+                timestamp_flagged.add(mid)
+
+    # Refresh metadata only for flagged mods
+    if timestamp_flagged:
+        logger.info("Refreshing metadata for %d timestamp-flagged mods", len(timestamp_flagged))
+        await _refresh_metadata(client, game_domain, timestamp_flagged, session)
+
+    # Reload metadata after refresh
     meta_rows = session.exec(
         select(NexusModMeta).where(
             NexusModMeta.nexus_mod_id.in_(tracked_ids)  # type: ignore[union-attr]
@@ -264,7 +322,7 @@ async def check_all_updates(
     ).all()
     meta_map = {m.nexus_mod_id: m for m in meta_rows}
 
-    # Compare versions
+    # Build updates from BOTH: timestamp flags OR version comparison
     updates: list[dict[str, Any]] = []
     for mid, mod in tracked.items():
         meta = meta_map.get(mid)
@@ -272,13 +330,18 @@ async def check_all_updates(
             logger.debug("Skip mod %d (%s): no metadata version", mid, mod.display_name)
             continue
 
-        if is_newer_version(meta.version, mod.local_version):
+        is_timestamp_flagged = mid in timestamp_flagged
+        is_version_newer = is_newer_version(meta.version, mod.local_version)
+
+        if is_timestamp_flagged or is_version_newer:
             logger.debug(
-                "UPDATE %s: local=%s, nexus=%s (source=%s)",
+                "UPDATE %s: local=%s, nexus=%s (source=%s, ts_flag=%s, ver_flag=%s)",
                 mod.display_name,
                 mod.local_version,
                 meta.version,
                 mod.source,
+                is_timestamp_flagged,
+                is_version_newer,
             )
             updates.append(
                 {
@@ -311,7 +374,10 @@ async def check_all_updates(
         await _resolve_file_ids(client, game_domain, updates)
 
     logger.info("Update check complete: %d updates from %d mods", len(updates), len(tracked))
-    return UpdateResult(total_checked=len(tracked), updates=updates)
+
+    result = UpdateResult(total_checked=len(tracked), updates=updates)
+    _cache_update_result(game_id, result, session)
+    return result
 
 
 def check_cached_updates(
@@ -319,10 +385,17 @@ def check_cached_updates(
     game_domain: str,
     session: Session,
 ) -> UpdateResult:
-    """Lightweight offline check across all sources (no API calls, for GET endpoint).
+    """Return cached update results, falling back to offline version comparison.
 
-    Compares local versions against last-refreshed NexusModMeta.version.
+    Reads the cached result from the last check_all_updates() call.
+    If no cache exists, falls back to comparing local versions against
+    last-refreshed NexusModMeta.version (the old behavior).
     """
+    cached = _load_cached_result(game_id, session)
+    if cached is not None:
+        return cached
+
+    # Fallback: offline version comparison (no timestamp data available)
     tracked = collect_tracked_mods(game_id, game_domain, session)
     if not tracked:
         return UpdateResult()
