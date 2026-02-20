@@ -99,19 +99,6 @@ export function NexusMatchedGrid({ mods, archives, installedMods, gameName }: Pr
     return items;
   }, [mods, filter, sortKey]);
 
-  // Close conflict dialog on Escape
-  useEffect(() => {
-    if (!conflicts) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setConflicts(null);
-        setConflictModId(null);
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [conflicts]);
-
   const addInstalling = (id: number) =>
     setInstallingModIds((prev) => new Set(prev).add(id));
   const removeInstalling = (id: number) =>
@@ -120,6 +107,20 @@ export function NexusMatchedGrid({ mods, archives, installedMods, gameName }: Pr
       next.delete(id);
       return next;
     });
+
+  // Close conflict dialog on Escape
+  useEffect(() => {
+    if (!conflicts) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (conflictModId != null) removeInstalling(conflictModId);
+        setConflicts(null);
+        setConflictModId(null);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [conflicts, conflictModId]);
 
   const doInstall = async (fileName: string, skipConflicts: string[], nexusModId: number) => {
     try {
@@ -304,7 +305,7 @@ export function NexusMatchedGrid({ mods, archives, installedMods, gameName }: Pr
                     ) : archive ? (
                       <button
                         onClick={() => handleInstall(nexusModId!, archive)}
-                        disabled={isInstalling}
+                        disabled={isInstalling || conflicts != null}
                         className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent/80 disabled:opacity-50"
                         title={`Install from ${archive.filename}`}
                       >
