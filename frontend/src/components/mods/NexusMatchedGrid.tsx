@@ -1,8 +1,10 @@
-import { ExternalLink, Heart, Search, User } from "lucide-react";
+import { Check, Download, ExternalLink, Heart, Loader2, Search, User } from "lucide-react";
 import { useMemo, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
-import type { ModGroup } from "@/types/api";
+import { useCheckConflicts, useInstallMod } from "@/hooks/mutations";
+import type { AvailableArchive, InstalledModOut, ModGroup } from "@/types/api";
 
 type SortKey = "score" | "name" | "endorsements" | "author";
 
@@ -18,11 +20,33 @@ const PLACEHOLDER_IMG =
 
 interface Props {
   mods: ModGroup[];
+  archives: AvailableArchive[];
+  installedMods: InstalledModOut[];
+  gameName: string;
 }
 
-export function NexusMatchedGrid({ mods }: Props) {
+export function NexusMatchedGrid({ mods, archives, installedMods, gameName }: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("score");
+  const [installingModId, setInstallingModId] = useState<number | null>(null);
+
+  const installMod = useInstallMod();
+  const checkConflicts = useCheckConflicts();
+
+  const archiveByModId = useMemo(
+    () =>
+      new Map(
+        archives
+          .filter((a) => a.nexus_mod_id != null)
+          .map((a) => [a.nexus_mod_id!, a]),
+      ),
+    [archives],
+  );
+
+  const installedModIds = useMemo(
+    () => new Set(installedMods.filter((m) => m.nexus_mod_id != null).map((m) => m.nexus_mod_id!)),
+    [installedMods],
+  );
 
   const filtered = useMemo(() => {
     const q = filter.toLowerCase();
@@ -54,6 +78,29 @@ export function NexusMatchedGrid({ mods }: Props) {
 
     return items;
   }, [mods, filter, sortKey]);
+
+  const handleInstall = async (nexusModId: number, archive: AvailableArchive) => {
+    setInstallingModId(nexusModId);
+    try {
+      const result = await checkConflicts.mutateAsync({
+        gameName,
+        archiveFilename: archive.filename,
+      });
+
+      const skipConflicts = result.conflicts.length > 0
+        ? result.conflicts.map((c) => c.file_path)
+        : [];
+
+      await installMod.mutateAsync({
+        gameName,
+        data: { archive_filename: archive.filename, skip_conflicts: skipConflicts },
+      });
+    } catch {
+      // Errors handled by mutation callbacks
+    } finally {
+      setInstallingModId(null);
+    }
+  };
 
   if (mods.length === 0) {
     return (
@@ -98,6 +145,12 @@ export function NexusMatchedGrid({ mods }: Props) {
         {filtered.map((mod) => {
           const match = mod.nexus_match;
           if (!match) return null;
+
+          const nexusModId = match.nexus_mod_id;
+          const archive = nexusModId != null ? archiveByModId.get(nexusModId) : undefined;
+          const isInstalled = nexusModId != null && installedModIds.has(nexusModId);
+          const isInstalling = installingModId === nexusModId;
+
           return (
             <div
               key={mod.id}
@@ -122,15 +175,16 @@ export function NexusMatchedGrid({ mods }: Props) {
                     {match.mod_name}
                   </h3>
                   {match.nexus_url && (
-                    <a
-                      href={match.nexus_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openUrl(match.nexus_url);
+                      }}
                       className="text-accent hover:text-accent/80 shrink-0 mt-0.5"
-                      onClick={(e) => e.stopPropagation()}
+                      title="Open on Nexus Mods"
                     >
                       <ExternalLink size={14} />
-                    </a>
+                    </button>
                   )}
                 </div>
 
@@ -166,9 +220,30 @@ export function NexusMatchedGrid({ mods }: Props) {
                     <ConfidenceBadge score={match.score} />
                     <Badge variant="neutral">{match.method}</Badge>
                   </div>
-                  <span className="text-xs text-text-muted truncate max-w-[140px]" title={mod.display_name}>
-                    {mod.display_name}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-text-muted truncate max-w-[100px]" title={mod.display_name}>
+                      {mod.display_name}
+                    </span>
+                    {isInstalled ? (
+                      <Badge variant="success">
+                        <Check size={10} /> Installed
+                      </Badge>
+                    ) : archive ? (
+                      <button
+                        onClick={() => handleInstall(nexusModId!, archive)}
+                        disabled={isInstalling}
+                        className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent/80 disabled:opacity-50"
+                        title={`Install from ${archive.filename}`}
+                      >
+                        {isInstalling ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <Download size={12} />
+                        )}
+                        Install
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </div>

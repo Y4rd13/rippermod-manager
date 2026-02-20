@@ -74,6 +74,7 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
                     version=info.get("version", ""),
                     endorsement_count=info.get("endorsement_count", 0),
                     category=str(info.get("category_id", "")),
+                    picture_url=info.get("picture_url", ""),
                 )
                 session.add(meta)
             else:
@@ -84,6 +85,7 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
                 existing_meta.endorsement_count = info.get(
                     "endorsement_count", existing_meta.endorsement_count
                 )
+                existing_meta.picture_url = info.get("picture_url", existing_meta.picture_url)
 
         session.commit()
 
