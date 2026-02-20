@@ -11,7 +11,7 @@ from chat_nexus_mod_manager.models.settings import AppSetting
 from chat_nexus_mod_manager.routers.deps import get_game_or_404
 from chat_nexus_mod_manager.services.update_service import (
     check_all_updates,
-    check_correlation_updates,
+    check_cached_updates,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ class UpdateCheckResult(BaseModel):
 def list_updates(game_name: str, session: Session = Depends(get_session)) -> UpdateCheckResult:
     """Return cached update info (no API calls, uses last-refreshed metadata)."""
     game = get_game_or_404(game_name, session)
-    result = check_correlation_updates(game.id, session)  # type: ignore[arg-type]
+    result = check_cached_updates(game.id, game.domain_name, session)  # type: ignore[arg-type]
     updates = [ModUpdate(**u) for u in result.updates]
     return UpdateCheckResult(
         total_checked=result.total_checked,
@@ -78,7 +78,7 @@ async def check_updates(
                 session,  # type: ignore[arg-type]
             )
     else:
-        result = check_correlation_updates(game.id, session)  # type: ignore[arg-type]
+        result = check_cached_updates(game.id, game.domain_name, session)  # type: ignore[arg-type]
 
     updates = [ModUpdate(**u) for u in result.updates]
     return UpdateCheckResult(

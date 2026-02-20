@@ -22,6 +22,7 @@ import { ModsTable } from "@/components/mods/ModsTable";
 import { NexusAccountGrid } from "@/components/mods/NexusAccountGrid";
 import { NexusMatchedGrid } from "@/components/mods/NexusMatchedGrid";
 import { ProfileManager } from "@/components/mods/ProfileManager";
+import { SourceBadge } from "@/components/mods/SourceBadge";
 import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -44,13 +45,6 @@ import { parseSSE } from "@/lib/sse-parser";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import type { ModUpdate } from "@/types/api";
-
-const SOURCE_STYLES: Record<string, { label: string; cls: string }> = {
-  installed: { label: "Installed", cls: "bg-success/15 text-success" },
-  correlation: { label: "Matched", cls: "bg-warning/15 text-warning" },
-  endorsed: { label: "Endorsed", cls: "bg-accent/15 text-accent" },
-  tracked: { label: "Tracked", cls: "bg-info/15 text-info" },
-};
 
 type Tab = "mods" | "matched" | "endorsed" | "tracked" | "installed" | "archives" | "profiles" | "updates";
 
@@ -145,14 +139,7 @@ function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdat
                   <td className="py-2 pr-4 text-text-muted">{u.local_version}</td>
                   <td className="py-2 pr-4 text-success font-medium">{u.nexus_version}</td>
                   <td className="py-2 pr-4">
-                    {(() => {
-                      const s = SOURCE_STYLES[u.source] ?? { label: u.source, cls: "bg-accent/15 text-accent" };
-                      return (
-                        <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium", s.cls)}>
-                          {s.label}
-                        </span>
-                      );
-                    })()}
+                    <SourceBadge source={u.source} />
                   </td>
                   <td className="py-2 pr-4 text-text-muted">{u.author}</td>
                   <td className="py-2">

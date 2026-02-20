@@ -11,7 +11,7 @@ from chat_nexus_mod_manager.models.mod import ModGroup
 from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
 from chat_nexus_mod_manager.services.update_service import (
     check_all_updates,
-    check_correlation_updates,
+    check_cached_updates,
     collect_tracked_mods,
 )
 
@@ -146,7 +146,7 @@ class TestCollectTrackedMods:
             assert tracked[10].source == "correlation"
 
 
-class TestCheckCorrelationUpdates:
+class TestCheckCachedUpdates:
     def test_semantic_version_no_false_positive(self, engine):
         """'1.0' vs '1.0.0' should NOT be flagged as an update."""
         with Session(engine) as s:
@@ -170,7 +170,7 @@ class TestCheckCorrelationUpdates:
             s.add(NexusModMeta(nexus_mod_id=10, name="Mod1", version="1.0.0", author="A"))
             s.commit()
 
-            result = check_correlation_updates(game.id, s)
+            result = check_cached_updates(game.id, "g", s)
             assert result.total_checked == 1
             assert len(result.updates) == 0
 
@@ -203,7 +203,7 @@ class TestCheckCorrelationUpdates:
             s.add(NexusModMeta(nexus_mod_id=20, name="Mod2", version="2.0", author="Auth"))
             s.commit()
 
-            result = check_correlation_updates(game.id, s)
+            result = check_cached_updates(game.id, "g", s)
             assert result.total_checked == 1
             assert len(result.updates) == 1
             assert result.updates[0]["source"] == "correlation"
@@ -231,7 +231,7 @@ class TestCheckCorrelationUpdates:
             s.add(NexusModMeta(nexus_mod_id=30, name="Mod3", version="1.0", author="A"))
             s.commit()
 
-            result = check_correlation_updates(game.id, s)
+            result = check_cached_updates(game.id, "g", s)
             assert len(result.updates) == 0
 
     def test_filename_parsed_version_detects_update(self, engine):
@@ -265,7 +265,7 @@ class TestCheckCorrelationUpdates:
             s.add(NexusModMeta(nexus_mod_id=107, name="CET", version="2.0", author="A"))
             s.commit()
 
-            result = check_correlation_updates(game.id, s)
+            result = check_cached_updates(game.id, "g", s)
             assert len(result.updates) == 1
             assert result.updates[0]["local_version"] == "1.37.1"
             assert result.updates[0]["nexus_version"] == "2.0"
@@ -300,7 +300,7 @@ class TestCheckCorrelationUpdates:
             s.add(NexusModMeta(nexus_mod_id=50, name="Mod5", version="2.0", author="A"))
             s.commit()
 
-            result = check_correlation_updates(game.id, s)
+            result = check_cached_updates(game.id, "g", s)
             assert len(result.updates) == 1
             assert result.updates[0]["local_version"] == "1.0"
             assert result.updates[0]["nexus_version"] == "2.0"
@@ -328,7 +328,7 @@ class TestCheckCorrelationUpdates:
             )
             s.commit()
 
-            result = check_correlation_updates(game.id, s)
+            result = check_cached_updates(game.id, "g", s)
             assert len(result.updates) == 1
             assert result.updates[0]["source"] == "endorsed"
             assert result.updates[0]["nexus_version"] == "2.0"
@@ -356,7 +356,7 @@ class TestCheckCorrelationUpdates:
             )
             s.commit()
 
-            result = check_correlation_updates(game.id, s)
+            result = check_cached_updates(game.id, "g", s)
             assert len(result.updates) == 1
             assert result.updates[0]["source"] == "tracked"
             assert result.updates[0]["nexus_version"] == "3.0"

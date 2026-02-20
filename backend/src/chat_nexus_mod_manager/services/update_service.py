@@ -161,6 +161,21 @@ async def _refresh_metadata(
                 if ts:
                     meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)
                 session.add(meta)
+            else:
+                new_meta = NexusModMeta(
+                    nexus_mod_id=mod_id,
+                    game_domain=game_domain,
+                    name=info.get("name", ""),
+                    version=info.get("version", ""),
+                    author=info.get("author", ""),
+                    summary=info.get("summary", ""),
+                    endorsement_count=info.get("endorsement_count", 0),
+                    picture_url=info.get("picture_url", ""),
+                )
+                ts = info.get("updated_timestamp")
+                if ts:
+                    new_meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)
+                session.add(new_meta)
 
     await asyncio.gather(*(refresh_one(mid) for mid in mod_ids))
     session.commit()
@@ -196,7 +211,7 @@ async def _resolve_file_ids(
                     update["nexus_file_name"] = best.get("file_name", "")
                     update["nexus_version"] = best.get("version", update["nexus_version"])
                     update["nexus_timestamp"] = best.get("uploaded_timestamp")
-            except Exception:
+            except (httpx.HTTPError, ValueError, KeyError):
                 logger.warning(
                     "Failed to resolve file for mod %d",
                     update["nexus_mod_id"],
@@ -299,15 +314,16 @@ async def check_all_updates(
     return UpdateResult(total_checked=len(tracked), updates=updates)
 
 
-def check_correlation_updates(
+def check_cached_updates(
     game_id: int,
+    game_domain: str,
     session: Session,
 ) -> UpdateResult:
-    """Lightweight correlation-only check (no API calls, for GET endpoint).
+    """Lightweight offline check across all sources (no API calls, for GET endpoint).
 
-    Compares NexusDownload.version (frozen) against NexusModMeta.version (refreshed).
+    Compares local versions against last-refreshed NexusModMeta.version.
     """
-    tracked = collect_tracked_mods(game_id, "", session)
+    tracked = collect_tracked_mods(game_id, game_domain, session)
     if not tracked:
         return UpdateResult()
 
