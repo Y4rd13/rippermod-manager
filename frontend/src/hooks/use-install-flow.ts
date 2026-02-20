@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useCheckConflicts, useInstallMod } from "@/hooks/mutations";
-import type { AvailableArchive, ConflictCheckResult } from "@/types/api";
+import type { AvailableArchive, ConflictCheckResult, DownloadJobOut } from "@/types/api";
 
-export function useInstallFlow(gameName: string, archives: AvailableArchive[]) {
+export function useInstallFlow(
+  gameName: string,
+  archives: AvailableArchive[],
+  downloadJobs: DownloadJobOut[] = [],
+) {
   const [installingModIds, setInstallingModIds] = useState<Set<number>>(new Set());
   const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
   const [conflictModId, setConflictModId] = useState<number | null>(null);
@@ -22,6 +26,26 @@ export function useInstallFlow(gameName: string, archives: AvailableArchive[]) {
     }
     return map;
   }, [archives]);
+
+  const activeDownloadByModId = useMemo(() => {
+    const map = new Map<number, DownloadJobOut>();
+    for (const job of downloadJobs) {
+      if (job.status === "downloading" || job.status === "pending") {
+        map.set(job.nexus_mod_id, job);
+      }
+    }
+    return map;
+  }, [downloadJobs]);
+
+  const completedDownloadByModId = useMemo(() => {
+    const map = new Map<number, DownloadJobOut>();
+    for (const job of downloadJobs) {
+      if (job.status === "completed") {
+        map.set(job.nexus_mod_id, job);
+      }
+    }
+    return map;
+  }, [downloadJobs]);
 
   const addInstalling = useCallback(
     (id: number) => setInstallingModIds((prev) => new Set(prev).add(id)),
@@ -87,6 +111,28 @@ export function useInstallFlow(gameName: string, archives: AvailableArchive[]) {
     [gameName, addInstalling, removeInstalling, checkConflicts, doInstall],
   );
 
+  const handleInstallByFilename = useCallback(
+    async (nexusModId: number, fileName: string) => {
+      addInstalling(nexusModId);
+      try {
+        const result = await checkConflicts.mutateAsync({
+          gameName,
+          archiveFilename: fileName,
+        });
+
+        if (result.conflicts.length > 0) {
+          setConflicts(result);
+          setConflictModId(nexusModId);
+        } else {
+          await doInstall(fileName, [], nexusModId);
+        }
+      } catch {
+        removeInstalling(nexusModId);
+      }
+    },
+    [gameName, addInstalling, removeInstalling, checkConflicts, doInstall],
+  );
+
   const handleInstallWithSkip = useCallback(async () => {
     if (!conflicts || conflictModId == null) return;
     try {
@@ -121,7 +167,10 @@ export function useInstallFlow(gameName: string, archives: AvailableArchive[]) {
     archiveByModId,
     installingModIds,
     conflicts,
+    activeDownloadByModId,
+    completedDownloadByModId,
     handleInstall,
+    handleInstallByFilename,
     handleInstallWithSkip,
     handleInstallOverwrite,
     dismissConflicts,

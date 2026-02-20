@@ -10,6 +10,10 @@ class DownloadRequest(BaseModel):
     nxm_expires: int | None = None
 
 
+class DownloadFromModRequest(BaseModel):
+    nexus_mod_id: int
+
+
 class DownloadJobOut(BaseModel):
     id: int
     nexus_mod_id: int

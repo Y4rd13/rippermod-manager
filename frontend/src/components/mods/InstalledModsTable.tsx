@@ -3,6 +3,7 @@ import {
   Download,
   ExternalLink,
   Loader2,
+  Package,
   Power,
   PowerOff,
   Trash2,
@@ -14,16 +15,18 @@ import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { useToggleMod, useUninstallMod } from "@/hooks/mutations";
+import { DownloadProgress } from "@/components/ui/DownloadProgress";
+import { useCancelDownload, useStartModDownload, useToggleMod, useUninstallMod } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { cn } from "@/lib/utils";
-import type { AvailableArchive, InstalledModOut, ModGroup } from "@/types/api";
+import type { AvailableArchive, DownloadJobOut, InstalledModOut, ModGroup } from "@/types/api";
 
 interface Props {
   mods: InstalledModOut[];
   gameName: string;
   recognizedMods?: ModGroup[];
   archives?: AvailableArchive[];
+  downloadJobs?: DownloadJobOut[];
 }
 
 type SortKey = "name" | "version" | "files" | "disabled";
@@ -174,21 +177,29 @@ function RecognizedModsGrid({
   archives,
   installedModIds,
   gameName,
+  downloadJobs,
 }: {
   mods: ModGroup[];
   archives: AvailableArchive[];
   installedModIds: Set<number>;
   gameName: string;
+  downloadJobs: DownloadJobOut[];
 }) {
   const {
     archiveByModId,
     installingModIds,
     conflicts,
+    activeDownloadByModId,
+    completedDownloadByModId,
     handleInstall,
+    handleInstallByFilename,
     handleInstallWithSkip,
     handleInstallOverwrite,
     dismissConflicts,
-  } = useInstallFlow(gameName, archives);
+  } = useInstallFlow(gameName, archives, downloadJobs);
+
+  const startModDownload = useStartModDownload();
+  const cancelDownload = useCancelDownload();
 
   return (
     <>
@@ -201,6 +212,8 @@ function RecognizedModsGrid({
           const archive = nexusModId != null ? archiveByModId.get(nexusModId) : undefined;
           const isInstalled = nexusModId != null && installedModIds.has(nexusModId);
           const isInstalling = nexusModId != null && installingModIds.has(nexusModId);
+          const activeDownload = nexusModId != null ? activeDownloadByModId.get(nexusModId) : undefined;
+          const completedDownload = nexusModId != null ? completedDownloadByModId.get(nexusModId) : undefined;
 
           let action: React.ReactNode;
           if (isInstalled) {
@@ -209,31 +222,63 @@ function RecognizedModsGrid({
                 <Check size={10} /> Installed
               </Badge>
             );
+          } else if (isInstalling) {
+            action = (
+              <span className="inline-flex items-center gap-1 text-xs text-text-muted">
+                <Loader2 size={12} className="animate-spin" /> Installing...
+              </span>
+            );
+          } else if (activeDownload) {
+            action = (
+              <div className="w-36">
+                <DownloadProgress
+                  job={activeDownload}
+                  onCancel={() => cancelDownload.mutate({ gameName, jobId: activeDownload.id })}
+                />
+              </div>
+            );
+          } else if (completedDownload) {
+            action = (
+              <button
+                onClick={() => handleInstallByFilename(nexusModId!, completedDownload.file_name)}
+                className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent/80"
+              >
+                <Package size={12} />
+                Install
+              </button>
+            );
           } else if (archive) {
             action = (
               <button
                 onClick={() => handleInstall(nexusModId!, archive)}
-                disabled={isInstalling || conflicts != null}
+                disabled={conflicts != null}
                 className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent/80 disabled:opacity-50"
                 title={`Install from ${archive.filename}`}
               >
-                {isInstalling ? (
-                  <Loader2 size={12} className="animate-spin" />
-                ) : (
-                  <Download size={12} />
-                )}
+                <Download size={12} />
                 Install
               </button>
             );
-          } else if (match.nexus_url) {
+          } else {
             action = (
-              <button
-                onClick={() => openUrl(match.nexus_url).catch(() => {})}
-                className="inline-flex items-center gap-1 rounded-md bg-surface-2 px-2 py-1 text-xs font-medium text-text-secondary hover:bg-surface-2/80 border border-border"
-              >
-                <ExternalLink size={12} />
-                Get on Nexus
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => startModDownload.mutate({ gameName, nexusModId: nexusModId! })}
+                  disabled={startModDownload.isPending}
+                  className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent/80 disabled:opacity-50"
+                >
+                  <Download size={12} />
+                  Download
+                </button>
+                {match.nexus_url && (
+                  <button
+                    onClick={() => openUrl(match.nexus_url).catch(() => {})}
+                    className="inline-flex items-center gap-1 rounded-md bg-surface-2 px-2 py-1 text-xs font-medium text-text-secondary hover:bg-surface-2/80 border border-border"
+                  >
+                    <ExternalLink size={12} />
+                  </button>
+                )}
+              </div>
             );
           }
 
@@ -271,7 +316,13 @@ function RecognizedModsGrid({
   );
 }
 
-export function InstalledModsTable({ mods, gameName, recognizedMods = [], archives = [] }: Props) {
+export function InstalledModsTable({
+  mods,
+  gameName,
+  recognizedMods = [],
+  archives = [],
+  downloadJobs = [],
+}: Props) {
   const installedNexusIds = useMemo(
     () => new Set(mods.filter((m) => m.nexus_mod_id != null).map((m) => m.nexus_mod_id!)),
     [mods],
@@ -319,6 +370,7 @@ export function InstalledModsTable({ mods, gameName, recognizedMods = [], archiv
             archives={archives}
             installedModIds={installedNexusIds}
             gameName={gameName}
+            downloadJobs={downloadJobs}
           />
         </div>
       )}
