@@ -98,7 +98,10 @@ async def check_updates(
                             # Skip if metadata is already up-to-date
                             if latest and meta.updated_at:
                                 latest_dt = datetime.fromtimestamp(latest, tz=UTC)
-                                if meta.updated_at >= latest_dt:
+                                meta_dt = meta.updated_at
+                                if meta_dt.tzinfo is None:
+                                    meta_dt = meta_dt.replace(tzinfo=UTC)
+                                if meta_dt >= latest_dt:
                                     continue
                             if latest:
                                 info = await client.get_mod_info(game.domain_name, nexus_mod_id)
