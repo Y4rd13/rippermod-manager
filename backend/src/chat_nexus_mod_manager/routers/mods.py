@@ -12,7 +12,7 @@ from chat_nexus_mod_manager.database import engine, get_session
 from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.mod import ModGroup
-from chat_nexus_mod_manager.models.nexus import NexusDownload
+from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
 from chat_nexus_mod_manager.schemas.mod import (
     CorrelateResult,
     CorrelationBrief,
@@ -39,15 +39,16 @@ def list_mod_groups(game_name: str, session: Session = Depends(get_session)) -> 
 
     group_ids = [g.id for g in groups]
     corr_rows = session.exec(
-        select(ModNexusCorrelation, NexusDownload)
+        select(ModNexusCorrelation, NexusDownload, NexusModMeta)
         .join(NexusDownload, ModNexusCorrelation.nexus_download_id == NexusDownload.id)
+        .outerjoin(NexusModMeta, NexusDownload.nexus_mod_id == NexusModMeta.nexus_mod_id)
         .where(ModNexusCorrelation.mod_group_id.in_(group_ids))  # type: ignore[union-attr]
     ).all()
-    corr_map: dict[int, tuple[ModNexusCorrelation, NexusDownload]] = {}
-    for corr, nd in corr_rows:
+    corr_map: dict[int, tuple[ModNexusCorrelation, NexusDownload, NexusModMeta | None]] = {}
+    for corr, nd, meta in corr_rows:
         existing = corr_map.get(corr.mod_group_id)
         if existing is None or corr.score > existing[0].score:
-            corr_map[corr.mod_group_id] = (corr, nd)
+            corr_map[corr.mod_group_id] = (corr, nd, meta)
 
     result: list[ModGroupOut] = []
     for g in groups:
@@ -55,13 +56,20 @@ def list_mod_groups(game_name: str, session: Session = Depends(get_session)) -> 
         nexus_match = None
         match = corr_map.get(g.id)  # type: ignore[arg-type]
         if match:
-            corr, nd = match
+            corr, nd, meta = match
             nexus_match = CorrelationBrief(
                 nexus_mod_id=nd.nexus_mod_id,
                 mod_name=nd.mod_name,
                 score=corr.score,
                 method=corr.method,
                 confirmed=corr.confirmed_by_user,
+                author=meta.author if meta else "",
+                summary=meta.summary if meta else "",
+                version=meta.version if meta else nd.version,
+                endorsement_count=meta.endorsement_count if meta else 0,
+                category=meta.category if meta else "",
+                picture_url=meta.picture_url if meta else "",
+                nexus_url=nd.nexus_url,
             )
 
         result.append(

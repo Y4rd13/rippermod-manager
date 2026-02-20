@@ -11,12 +11,13 @@ import {
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 
 import { ArchivesList } from "@/components/mods/ArchivesList";
 import { InstalledModsTable } from "@/components/mods/InstalledModsTable";
 import { ModsTable } from "@/components/mods/ModsTable";
+import { NexusMatchedGrid } from "@/components/mods/NexusMatchedGrid";
 import { ProfileManager } from "@/components/mods/ProfileManager";
 import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { Button } from "@/components/ui/Button";
@@ -39,10 +40,11 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import type { ModUpdate } from "@/types/api";
 
-type Tab = "mods" | "installed" | "archives" | "profiles" | "updates";
+type Tab = "mods" | "matched" | "installed" | "archives" | "profiles" | "updates";
 
 const TABS: { key: Tab; label: string; Icon: typeof Package }[] = [
   { key: "mods", label: "Scanned", Icon: Package },
+  { key: "matched", label: "Nexus Matched", Icon: Link2 },
   { key: "installed", label: "Installed", Icon: UserCheck },
   { key: "archives", label: "Archives", Icon: Archive },
   { key: "profiles", label: "Profiles", Icon: FolderOpen },
@@ -267,12 +269,12 @@ export function GameDetailPage() {
     }
   };
 
+  const nexusMatched = useMemo(() => mods.filter((m) => m.nexus_match), [mods]);
+  const enabledCount = installedMods.filter((m) => !m.disabled).length;
+
   if (!game) {
     return <p className="text-text-muted">Loading game...</p>;
   }
-
-  const matched = mods.filter((m) => m.nexus_match).length;
-  const enabledCount = installedMods.filter((m) => !m.disabled).length;
 
   return (
     <div className="space-y-6">
@@ -323,12 +325,15 @@ export function GameDetailPage() {
             </div>
           </div>
         </Card>
-        <Card>
+        <Card
+          className="hover:border-warning/40 transition-colors"
+          onClick={() => setTab("matched")}
+        >
           <div className="flex items-center gap-3">
             <Link2 size={18} className="text-warning" />
             <div>
               <p className="text-xs text-text-muted">Nexus Matched</p>
-              <p className="text-lg font-bold text-text-primary">{matched}</p>
+              <p className="text-lg font-bold text-text-primary">{nexusMatched.length}</p>
             </div>
           </div>
         </Card>
@@ -363,6 +368,9 @@ export function GameDetailPage() {
       </div>
 
       {tab === "mods" && <ModsTable mods={mods} />}
+      {tab === "matched" && (
+        <NexusMatchedGrid mods={nexusMatched} />
+      )}
       {tab === "installed" && (
         <InstalledModsTable mods={installedMods} gameName={name} />
       )}

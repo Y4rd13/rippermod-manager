@@ -25,6 +25,13 @@ class CorrelationBrief(BaseModel):
     score: float
     method: str
     confirmed: bool
+    author: str = ""
+    summary: str = ""
+    version: str = ""
+    endorsement_count: int = 0
+    category: str = ""
+    picture_url: str = ""
+    nexus_url: str = ""
 
 
 class ScanResult(BaseModel):

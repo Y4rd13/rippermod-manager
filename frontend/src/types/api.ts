@@ -39,6 +39,13 @@ export interface CorrelationBrief {
   score: number;
   method: string;
   confirmed: boolean;
+  author: string;
+  summary: string;
+  version: string;
+  endorsement_count: number;
+  category: string;
+  picture_url: string;
+  nexus_url: string;
 }
 
 export interface ModGroup {
