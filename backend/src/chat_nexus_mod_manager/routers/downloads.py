@@ -95,7 +95,21 @@ async def start_download_from_mod(
     game = get_game_or_404(game_name, session)
     api_key = _get_api_key(session)
 
+    from chat_nexus_mod_manager.models.download import DownloadJob
     from chat_nexus_mod_manager.nexus.client import NexusClient
+
+    # Return existing active job instead of creating duplicates
+    existing = session.exec(
+        select(DownloadJob).where(
+            DownloadJob.game_id == game.id,
+            DownloadJob.nexus_mod_id == body.nexus_mod_id,
+            DownloadJob.status.in_(["pending", "downloading"]),  # type: ignore[union-attr]
+        )
+    ).first()
+    if existing:
+        return DownloadStartResult(
+            job=_job_to_out(existing), requires_nxm=existing.status == "pending"
+        )
 
     async with NexusClient(api_key) as client:
         key_result = await client.validate_key()
@@ -108,11 +122,11 @@ async def start_download_from_mod(
     # Prefer main files (category_id == 1), fallback to latest file
     main_files = [f for f in nexus_files if f.get("category_id") == 1]
     target = main_files[-1] if main_files else nexus_files[-1]
-    nexus_file_id = target["file_id"]
+    nexus_file_id = target.get("file_id")
+    if not nexus_file_id:
+        raise HTTPException(502, "Nexus API returned a file entry without a file_id")
 
     if not key_result.is_premium:
-        from chat_nexus_mod_manager.models.download import DownloadJob
-
         job = DownloadJob(
             game_id=game.id,  # type: ignore[arg-type]
             nexus_mod_id=body.nexus_mod_id,

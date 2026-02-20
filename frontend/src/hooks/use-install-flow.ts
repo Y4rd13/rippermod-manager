@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { useCheckConflicts, useInstallMod } from "@/hooks/mutations";
+import {
+  useCancelDownload,
+  useCheckConflicts,
+  useInstallMod,
+  useStartModDownload,
+} from "@/hooks/mutations";
 import type { AvailableArchive, ConflictCheckResult, DownloadJobOut } from "@/types/api";
 
 export function useInstallFlow(
@@ -9,11 +14,14 @@ export function useInstallFlow(
   downloadJobs: DownloadJobOut[] = [],
 ) {
   const [installingModIds, setInstallingModIds] = useState<Set<number>>(new Set());
+  const [downloadingModId, setDownloadingModId] = useState<number | null>(null);
   const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
   const [conflictModId, setConflictModId] = useState<number | null>(null);
 
   const installMod = useInstallMod();
   const checkConflicts = useCheckConflicts();
+  const startModDownload = useStartModDownload();
+  const cancelDownload = useCancelDownload();
 
   const archiveByModId = useMemo(() => {
     const map = new Map<number, AvailableArchive>();
@@ -163,9 +171,28 @@ export function useInstallFlow(
     setConflictModId(null);
   }, [conflictModId, removeInstalling]);
 
+  const handleDownload = useCallback(
+    (nexusModId: number) => {
+      setDownloadingModId(nexusModId);
+      startModDownload.mutate(
+        { gameName, nexusModId },
+        { onSettled: () => setDownloadingModId(null) },
+      );
+    },
+    [gameName, startModDownload],
+  );
+
+  const handleCancelDownload = useCallback(
+    (jobId: number) => {
+      cancelDownload.mutate({ gameName, jobId });
+    },
+    [gameName, cancelDownload],
+  );
+
   return {
     archiveByModId,
     installingModIds,
+    downloadingModId,
     conflicts,
     activeDownloadByModId,
     completedDownloadByModId,
@@ -174,5 +201,7 @@ export function useInstallFlow(
     handleInstallWithSkip,
     handleInstallOverwrite,
     dismissConflicts,
+    handleDownload,
+    handleCancelDownload,
   };
 }

@@ -1,22 +1,16 @@
 import {
-  Check,
-  Download,
-  ExternalLink,
-  Loader2,
-  Package,
   Power,
   PowerOff,
   Trash2,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
+import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { DownloadProgress } from "@/components/ui/DownloadProgress";
-import { useCancelDownload, useStartModDownload, useToggleMod, useUninstallMod } from "@/hooks/mutations";
+import { useToggleMod, useUninstallMod } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { cn } from "@/lib/utils";
 import type { AvailableArchive, DownloadJobOut, InstalledModOut, ModGroup } from "@/types/api";
@@ -185,21 +179,7 @@ function RecognizedModsGrid({
   gameName: string;
   downloadJobs: DownloadJobOut[];
 }) {
-  const {
-    archiveByModId,
-    installingModIds,
-    conflicts,
-    activeDownloadByModId,
-    completedDownloadByModId,
-    handleInstall,
-    handleInstallByFilename,
-    handleInstallWithSkip,
-    handleInstallOverwrite,
-    dismissConflicts,
-  } = useInstallFlow(gameName, archives, downloadJobs);
-
-  const startModDownload = useStartModDownload();
-  const cancelDownload = useCancelDownload();
+  const flow = useInstallFlow(gameName, archives, downloadJobs);
 
   return (
     <>
@@ -209,78 +189,7 @@ function RecognizedModsGrid({
           if (!match) return null;
 
           const nexusModId = match.nexus_mod_id;
-          const archive = nexusModId != null ? archiveByModId.get(nexusModId) : undefined;
-          const isInstalled = nexusModId != null && installedModIds.has(nexusModId);
-          const isInstalling = nexusModId != null && installingModIds.has(nexusModId);
-          const activeDownload = nexusModId != null ? activeDownloadByModId.get(nexusModId) : undefined;
-          const completedDownload = nexusModId != null ? completedDownloadByModId.get(nexusModId) : undefined;
-
-          let action: React.ReactNode;
-          if (isInstalled) {
-            action = (
-              <Badge variant="success">
-                <Check size={10} /> Installed
-              </Badge>
-            );
-          } else if (isInstalling) {
-            action = (
-              <span className="inline-flex items-center gap-1 text-xs text-text-muted">
-                <Loader2 size={12} className="animate-spin" /> Installing...
-              </span>
-            );
-          } else if (activeDownload) {
-            action = (
-              <div className="w-36">
-                <DownloadProgress
-                  job={activeDownload}
-                  onCancel={() => cancelDownload.mutate({ gameName, jobId: activeDownload.id })}
-                />
-              </div>
-            );
-          } else if (completedDownload) {
-            action = (
-              <button
-                onClick={() => handleInstallByFilename(nexusModId!, completedDownload.file_name)}
-                className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent/80"
-              >
-                <Package size={12} />
-                Install
-              </button>
-            );
-          } else if (archive) {
-            action = (
-              <button
-                onClick={() => handleInstall(nexusModId!, archive)}
-                disabled={conflicts != null}
-                className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent/80 disabled:opacity-50"
-                title={`Install from ${archive.filename}`}
-              >
-                <Download size={12} />
-                Install
-              </button>
-            );
-          } else {
-            action = (
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => startModDownload.mutate({ gameName, nexusModId: nexusModId! })}
-                  disabled={startModDownload.isPending}
-                  className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent/80 disabled:opacity-50"
-                >
-                  <Download size={12} />
-                  Download
-                </button>
-                {match.nexus_url && (
-                  <button
-                    onClick={() => openUrl(match.nexus_url).catch(() => {})}
-                    className="inline-flex items-center gap-1 rounded-md bg-surface-2 px-2 py-1 text-xs font-medium text-text-secondary hover:bg-surface-2/80 border border-border"
-                  >
-                    <ExternalLink size={12} />
-                  </button>
-                )}
-              </div>
-            );
-          }
+          const archive = nexusModId != null ? flow.archiveByModId.get(nexusModId) : undefined;
 
           return (
             <NexusModCard
@@ -292,7 +201,29 @@ function RecognizedModsGrid({
               endorsementCount={match.endorsement_count}
               pictureUrl={match.picture_url}
               nexusUrl={match.nexus_url}
-              action={action}
+              action={
+                <ModCardAction
+                  nexusModId={nexusModId}
+                  isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
+                  isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
+                  activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
+                  completedDownload={nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined}
+                  archive={archive}
+                  nexusUrl={match.nexus_url}
+                  hasConflicts={flow.conflicts != null}
+                  isDownloading={flow.downloadingModId === nexusModId}
+                  onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
+                  onInstallByFilename={() => {
+                    const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
+                    if (nexusModId != null && dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
+                  }}
+                  onDownload={() => nexusModId != null && flow.handleDownload(nexusModId)}
+                  onCancelDownload={() => {
+                    const dl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
+                    if (dl) flow.handleCancelDownload(dl.id);
+                  }}
+                />
+              }
               footer={
                 <div className="flex items-center gap-1.5">
                   <ConfidenceBadge score={match.score} />
@@ -304,12 +235,12 @@ function RecognizedModsGrid({
         })}
       </div>
 
-      {conflicts && (
+      {flow.conflicts && (
         <ConflictDialog
-          conflicts={conflicts}
-          onCancel={dismissConflicts}
-          onSkip={handleInstallWithSkip}
-          onOverwrite={handleInstallOverwrite}
+          conflicts={flow.conflicts}
+          onCancel={flow.dismissConflicts}
+          onSkip={flow.handleInstallWithSkip}
+          onOverwrite={flow.handleInstallOverwrite}
         />
       )}
     </>

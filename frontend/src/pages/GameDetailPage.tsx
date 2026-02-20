@@ -181,9 +181,11 @@ export function GameDetailPage() {
     const completedIds = new Set(
       downloadJobs.filter((j) => j.status === "completed").map((j) => j.id),
     );
-    const hasNew = [...completedIds].some((id) => !prevCompletedRef.current.has(id));
-    if (hasNew) {
-      queryClient.invalidateQueries({ queryKey: ["available-archives", name] });
+    if (prevCompletedRef.current.size > 0) {
+      const hasNew = [...completedIds].some((id) => !prevCompletedRef.current.has(id));
+      if (hasNew) {
+        queryClient.invalidateQueries({ queryKey: ["available-archives", name] });
+      }
     }
     prevCompletedRef.current = completedIds;
   }, [downloadJobs, name, queryClient]);
