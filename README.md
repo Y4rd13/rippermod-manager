@@ -1,17 +1,32 @@
-# Chat Nexus Mod Manager
+<p align="center">
+  <img src="frontend/src-tauri/icons/128x128.png" alt="Chat Nexus Mod Manager" width="100" />
+</p>
 
-A desktop AI-powered mod manager for PC games. Scan, group, correlate, and manage your mods with an integrated chat assistant and [Nexus Mods](https://www.nexusmods.com/) integration.
+<h1 align="center">Chat Nexus Mod Manager</h1>
 
-Built with Cyberpunk 2077 as the primary target, but designed to support any game on Nexus Mods.
+<p align="center">
+  A desktop AI-powered mod manager for PC games.<br>
+  Scan, group, correlate, and manage your mods with an integrated chat assistant and <a href="https://www.nexusmods.com/">Nexus Mods</a> integration.
+</p>
+
+<p align="center">
+  Built with Cyberpunk 2077 as the primary target, but designed to support any game on Nexus Mods.
+</p>
+
+---
 
 ## Features
 
 - **Mod Scanner** — Recursively discovers mod files from configured game paths, groups them by name similarity using TF-IDF + DBSCAN clustering, and computes file hashes for integrity tracking.
 - **Nexus Mods Integration** — Validates API keys, syncs tracked/endorsed mods, fetches mod metadata, and checks for available updates.
 - **Auto-Correlation** — Matches local mod groups to Nexus downloads using Jaccard similarity + Jaro-Winkler distance scoring.
+- **Mod Installation** — Install mods from downloaded archives with conflict detection, skip/overwrite resolution, and enable/disable toggling.
+- **Download Manager** — Download mod archives directly from Nexus Mods with progress tracking and premium account support.
+- **Endorsed & Tracked Tabs** — Browse your endorsed and tracked mods from Nexus with install actions or direct Nexus links.
+- **Profile Manager** — Save, load, export, and import mod profiles to switch between mod configurations.
+- **Update Checker** — Compares local mod versions against Nexus metadata to surface available updates with one-click download.
 - **Semantic Search** — ChromaDB vector store indexes mods, Nexus metadata, and correlations for natural-language queries.
 - **Chat Assistant** — LangChain-powered agent with tool access to the local mod database and Nexus data, streamed via SSE.
-- **Update Checker** — Compares local mod versions against Nexus metadata to surface available updates.
 - **Guided Onboarding** — Step-by-step setup for API keys, game configuration, and initial mod scan.
 - **Custom Titlebar** — Native-feeling Tauri window with custom drag region and window controls.
 
@@ -54,9 +69,12 @@ chat-nexus-mod-manager/
 │   │   │   ├── games.py            #   CRUD games + mod paths
 │   │   │   ├── mods.py             #   List, scan, correlate mods
 │   │   │   ├── nexus.py            #   Validate, connect, sync Nexus
+│   │   │   ├── install.py          #   Install, uninstall, toggle mods
+│   │   │   ├── downloads.py        #   Download mods from Nexus
+│   │   │   ├── profiles.py         #   Save, load, export/import profiles
+│   │   │   ├── updates.py          #   Version diff + update check
 │   │   │   ├── settings.py         #   App settings + PC specs
 │   │   │   ├── onboarding.py       #   Onboarding status + completion
-│   │   │   ├── updates.py          #   Version diff + update check
 │   │   │   ├── chat.py             #   SSE chat endpoint
 │   │   │   └── vector.py           #   Reindex, search, stats
 │   │   ├── scanner/service.py      # File discovery + grouping
@@ -70,13 +88,14 @@ chat-nexus-mod-manager/
 │   │   │   ├── indexer.py          # Index mods/nexus/correlations
 │   │   │   └── search.py           # Semantic search queries
 │   │   └── agents/orchestrator.py  # LangChain agent + tools
-│   └── tests/                      # 127 pytest tests
+│   └── tests/                      # 305 pytest tests
 │       ├── conftest.py             # In-memory SQLite fixtures
 │       ├── matching/               # Grouper + correlator tests
 │       ├── scanner/                # File scanner tests
 │       ├── nexus/                  # Nexus API client tests (respx)
-│       ├── services/               # Nexus sync tests
-│       ├── routers/                # All 8 router test files
+│       ├── services/               # Sync, install, profile, update tests
+│       ├── routers/                # All router test files
+│       ├── archive/                # Archive handler tests
 │       ├── vector/                 # Indexer + search tests
 │       └── agents/                 # Orchestrator tool tests
 ├── frontend/
@@ -84,8 +103,11 @@ chat-nexus-mod-manager/
 │   │   ├── components/             # UI components
 │   │   │   ├── chat/               #   ChatPanel
 │   │   │   ├── layout/             #   Sidebar, Titlebar
-│   │   │   ├── mods/               #   ModsTable
-│   │   │   └── ui/                 #   Badge, Button, Card, Input
+│   │   │   ├── mods/               #   NexusModCard, NexusMatchedGrid,
+│   │   │   │                       #   NexusAccountGrid, InstalledModsTable,
+│   │   │   │                       #   ArchivesList, ProfileManager,
+│   │   │   │                       #   ConflictDialog, ModsTable
+│   │   │   └── ui/                 #   Badge, Button, Card, Input, Toast
 │   │   ├── pages/                  # Route pages
 │   │   │   ├── DashboardPage.tsx
 │   │   │   ├── GamesPage.tsx
@@ -93,7 +115,7 @@ chat-nexus-mod-manager/
 │   │   │   ├── SettingsPage.tsx
 │   │   │   ├── UpdatesPage.tsx
 │   │   │   └── OnboardingPage.tsx
-│   │   ├── hooks/                  # React Query hooks
+│   │   ├── hooks/                  # React Query hooks + useInstallFlow
 │   │   ├── stores/                 # Zustand stores
 │   │   ├── lib/                    # API client, SSE parser, utils
 │   │   ├── router/                 # Routes + OnboardingGuard
@@ -169,7 +191,7 @@ cd backend
 uv run uvicorn chat_nexus_mod_manager.main:app --reload --port 8425   # Dev server
 uv run ruff check src/ tests/                                         # Lint
 uv run ruff format src/ tests/                                        # Format
-uv run pytest tests/ -v                                               # Tests (127 tests)
+uv run pytest tests/ -v                                               # Tests (305 tests)
 ```
 
 ### Frontend commands
@@ -187,21 +209,99 @@ npx tauri build      # Production desktop build
 
 All endpoints are prefixed with `/api/v1/`.
 
+<details>
+<summary><strong>Games</strong></summary>
+
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/games/` | List all configured games |
 | `POST` | `/games/` | Add a new game |
 | `GET` | `/games/{name}` | Get game details |
 | `DELETE` | `/games/{name}` | Remove a game |
+| `GET` | `/games/{name}/version` | Get detected game version |
+
+</details>
+
+<details>
+<summary><strong>Mods</strong></summary>
+
+| Method | Endpoint | Description |
+|---|---|---|
 | `GET` | `/games/{name}/mods/` | List mod groups with files |
 | `POST` | `/games/{name}/mods/scan` | Scan and group mod files |
+| `POST` | `/games/{name}/mods/scan-stream` | Scan with SSE progress streaming |
 | `POST` | `/games/{name}/mods/correlate` | Match mods to Nexus downloads |
-| `GET` | `/games/{name}/updates/` | List available updates |
-| `POST` | `/games/{name}/updates/check` | Refresh update data from Nexus |
+
+</details>
+
+<details>
+<summary><strong>Install</strong></summary>
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/games/{name}/install/available` | List archives available for installation |
+| `GET` | `/games/{name}/install/installed` | List all installed mods |
+| `POST` | `/games/{name}/install/` | Install a mod from an archive |
+| `DELETE` | `/games/{name}/install/installed/{id}` | Uninstall a mod |
+| `PATCH` | `/games/{name}/install/installed/{id}/toggle` | Enable/disable a mod |
+| `GET` | `/games/{name}/install/conflicts` | Check for file conflicts |
+
+</details>
+
+<details>
+<summary><strong>Downloads</strong></summary>
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/games/{name}/downloads/` | Start a download from Nexus |
+| `GET` | `/games/{name}/downloads/` | List download jobs |
+| `GET` | `/games/{name}/downloads/{id}` | Get download job details |
+| `POST` | `/games/{name}/downloads/{id}/cancel` | Cancel a download |
+
+</details>
+
+<details>
+<summary><strong>Profiles</strong></summary>
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/games/{name}/profiles/` | List saved profiles |
+| `POST` | `/games/{name}/profiles/` | Save current state as a profile |
+| `GET` | `/games/{name}/profiles/{id}` | Get profile details |
+| `DELETE` | `/games/{name}/profiles/{id}` | Delete a profile |
+| `POST` | `/games/{name}/profiles/{id}/load` | Load a profile |
+| `POST` | `/games/{name}/profiles/{id}/export` | Export profile as JSON |
+| `POST` | `/games/{name}/profiles/import` | Import profile from JSON |
+
+</details>
+
+<details>
+<summary><strong>Nexus Mods</strong></summary>
+
+| Method | Endpoint | Description |
+|---|---|---|
 | `POST` | `/nexus/validate` | Validate a Nexus API key |
 | `POST` | `/nexus/connect` | Validate and store a Nexus key |
 | `POST` | `/nexus/sync-history/{name}` | Sync tracked/endorsed mods |
-| `GET` | `/nexus/downloads/{name}` | List synced Nexus downloads |
+| `GET` | `/nexus/downloads/{name}` | List synced downloads (filterable by `?source=endorsed\|tracked`) |
+
+</details>
+
+<details>
+<summary><strong>Updates</strong></summary>
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/games/{name}/updates/` | List available updates |
+| `POST` | `/games/{name}/updates/check` | Refresh update data from Nexus |
+
+</details>
+
+<details>
+<summary><strong>Settings, Onboarding, Chat, Vector</strong></summary>
+
+| Method | Endpoint | Description |
+|---|---|---|
 | `GET/PUT` | `/settings/` | Read/update app settings |
 | `GET` | `/settings/specs` | Get stored PC specs |
 | `POST` | `/settings/specs/capture` | Store PC specs |
@@ -213,9 +313,11 @@ All endpoints are prefixed with `/api/v1/`.
 | `GET` | `/vector/search?q=...` | Semantic search |
 | `GET` | `/vector/stats` | Vector collection statistics |
 
+</details>
+
 ### Testing
 
-The backend has a comprehensive test suite with 127 tests covering all modules:
+The backend has a comprehensive test suite with 305 tests across 25 test files covering all modules:
 
 ```bash
 cd backend
@@ -240,7 +342,7 @@ Tests use an in-memory SQLite database and patched ChromaDB for full isolation. 
 │              FastAPI Backend                      │
 │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐  │
 │  │ Routers  │ │ Scanner  │ │   Chat Agent     │  │
-│  │ (8 APIs) │ │ Grouper  │ │ (LangChain+OAI)  │  │
+│  │(11 APIs) │ │ Grouper  │ │ (LangChain+OAI)  │  │
 │  │          │ │Correlator│ │   7 tools        │  │
 │  └────┬─────┘ └────┬─────┘ └───────┬──────────┘  │
 │       │             │               │             │
