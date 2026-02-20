@@ -15,8 +15,11 @@ from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.archive.handler import ArchiveEntry, open_archive
 from chat_nexus_mod_manager.matching.filename_parser import parse_mod_filename
+from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
+from chat_nexus_mod_manager.models.download import DownloadJob
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.install import InstalledMod, InstalledModFile
+from chat_nexus_mod_manager.models.nexus import NexusDownload
 from chat_nexus_mod_manager.schemas.install import (
     InstallResult,
     ToggleResult,
@@ -140,6 +143,26 @@ def install_mod(
     )
     session.add(installed)
     session.flush()
+
+    # Enrich from download job and correlation data when nexus_mod_id is known
+    if parsed.nexus_mod_id:
+        job = session.exec(
+            select(DownloadJob).where(
+                DownloadJob.nexus_mod_id == parsed.nexus_mod_id,
+                DownloadJob.status == "completed",
+                DownloadJob.file_name == archive_path.name,
+            )
+        ).first()
+        if job:
+            installed.nexus_file_id = job.nexus_file_id
+
+        corr = session.exec(
+            select(ModNexusCorrelation)
+            .join(NexusDownload, ModNexusCorrelation.nexus_download_id == NexusDownload.id)
+            .where(NexusDownload.nexus_mod_id == parsed.nexus_mod_id)
+        ).first()
+        if corr:
+            installed.mod_group_id = corr.mod_group_id
 
     for rel_path in extracted_paths:
         session.add(
