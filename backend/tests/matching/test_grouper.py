@@ -148,3 +148,26 @@ class TestFolderAwareGrouping:
         assert len(result) == 1
         _, grouped, _ = result[0]
         assert len(grouped) == 2
+
+    def test_double_slash_path_treated_as_loose(self):
+        """Double-slash in file_path should not produce empty folder name."""
+        f = ModFile(
+            filename="init.lua",
+            file_path="mods//init.lua",
+            source_folder="mods",
+        )
+        result = group_mod_files([f])
+        assert len(result) == 1
+        assert result[0][0] != ""
+
+    def test_trailing_slash_on_source_folder(self):
+        """Trailing slash on source_folder should not break folder extraction."""
+        f = ModFile(
+            filename="init.lua",
+            file_path="mods/AppearanceMenuMod/init.lua",
+            source_folder="mods/",
+        )
+        result = group_mod_files([f])
+        assert len(result) == 1
+        assert result[0][0] == "AppearanceMenuMod"
+        assert result[0][2] == 1.0

@@ -21,13 +21,14 @@ def normalize_name(name: str) -> str:
 def _extract_mod_folder(f: ModFile) -> str | None:
     """Return the immediate subfolder name under source_folder, or None for loose files."""
     fp = f.file_path.replace("\\", "/")
-    sf = f.source_folder.replace("\\", "/")
+    sf = f.source_folder.replace("\\", "/").rstrip("/")
     if not fp.startswith(sf + "/"):
         return None
     remainder = fp[len(sf) + 1 :]
     if "/" not in remainder:
         return None
-    return remainder.split("/", 1)[0]
+    folder = remainder.split("/", 1)[0]
+    return folder if folder else None
 
 
 def _cluster_loose_files(
