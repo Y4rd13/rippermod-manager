@@ -159,15 +159,29 @@ def inspect_archive(archive_path: Path) -> ArchiveMetadata | None:
                 redmod_entry = entry
                 best_redmod_depth = depth
 
-        if fomod_entry is not None and fomod_entry.size <= _MAX_METADATA_SIZE:
-            xml_bytes = archive.read_file(fomod_entry)
-            result = _parse_fomod_info_xml(xml_bytes)
-            if result is not None:
-                return result
+        if fomod_entry is not None:
+            if fomod_entry.size > _MAX_METADATA_SIZE:
+                logger.debug(
+                    "Skipping oversized fomod/info.xml (%d bytes) in %s",
+                    fomod_entry.size,
+                    archive_path.name,
+                )
+            else:
+                xml_bytes = archive.read_file(fomod_entry)
+                result = _parse_fomod_info_xml(xml_bytes)
+                if result is not None:
+                    return result
 
-        if redmod_entry is not None and redmod_entry.size <= _MAX_METADATA_SIZE:
-            json_bytes = archive.read_file(redmod_entry)
-            return _parse_redmod_info_json(json_bytes)
+        if redmod_entry is not None:
+            if redmod_entry.size > _MAX_METADATA_SIZE:
+                logger.debug(
+                    "Skipping oversized info.json (%d bytes) in %s",
+                    redmod_entry.size,
+                    archive_path.name,
+                )
+            else:
+                json_bytes = archive.read_file(redmod_entry)
+                return _parse_redmod_info_json(json_bytes)
 
     return None
 
@@ -287,4 +301,4 @@ def _is_filename_derived(name: str) -> bool:
         return True
     if "_" in name:
         return True
-    return bool(re.search(r"\d{4,}", name))
+    return bool(re.search(r"\d{5,}", name))
