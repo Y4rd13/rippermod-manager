@@ -160,6 +160,7 @@ def install_mod(
             select(ModNexusCorrelation)
             .join(NexusDownload, ModNexusCorrelation.nexus_download_id == NexusDownload.id)
             .where(NexusDownload.nexus_mod_id == parsed.nexus_mod_id)
+            .order_by(ModNexusCorrelation.score.desc())  # type: ignore[union-attr]
         ).first()
         if corr:
             installed.mod_group_id = corr.mod_group_id

@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import httpx
 from fastapi import APIRouter, Depends
@@ -15,6 +18,9 @@ from chat_nexus_mod_manager.services.update_service import (
     check_correlation_updates,
     check_installed_mod_updates,
 )
+
+if TYPE_CHECKING:
+    from chat_nexus_mod_manager.nexus.client import NexusClient
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +95,11 @@ async def check_updates(
                             latest = mod_data.get("latest_file_update") or mod_data.get(
                                 "latest_mod_activity"
                             )
+                            # Skip if metadata is already up-to-date
+                            if latest and meta.updated_at:
+                                latest_dt = datetime.fromtimestamp(latest, tz=UTC)
+                                if meta.updated_at >= latest_dt:
+                                    continue
                             if latest:
                                 info = await client.get_mod_info(game.domain_name, nexus_mod_id)
                                 if info:
@@ -146,7 +157,7 @@ async def check_updates(
 
 
 async def _resolve_file_ids(
-    client: "NexusClient",  # type: ignore[name-defined]  # noqa: F821
+    client: NexusClient,
     game_domain: str,
     updates: list[dict],
 ) -> None:
@@ -177,6 +188,10 @@ async def _resolve_file_ids(
                     update_dict["nexus_version"] = best.get("version", update_dict["nexus_version"])
                     update_dict["nexus_timestamp"] = best.get("uploaded_timestamp")
             except Exception:
-                logger.warning("Failed to resolve file for mod %d", update_dict["nexus_mod_id"])
+                logger.warning(
+                    "Failed to resolve file for mod %d",
+                    update_dict["nexus_mod_id"],
+                    exc_info=True,
+                )
 
     await asyncio.gather(*(_resolve_one(u) for u in updates))
