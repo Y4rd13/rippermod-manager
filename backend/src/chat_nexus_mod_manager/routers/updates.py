@@ -33,6 +33,7 @@ class ModUpdate(BaseModel):
     source: str = "correlation"
     local_timestamp: int | None = None
     nexus_timestamp: int | None = None
+    timestamp_only: bool = False
 
 
 class UpdateCheckResult(BaseModel):
