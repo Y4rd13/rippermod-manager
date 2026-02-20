@@ -1,7 +1,9 @@
 import {
   Archive,
   Download,
+  Eye,
   FolderOpen,
+  Heart,
   Link2,
   Package,
   Play,
@@ -17,6 +19,7 @@ import { useParams } from "react-router";
 import { ArchivesList } from "@/components/mods/ArchivesList";
 import { InstalledModsTable } from "@/components/mods/InstalledModsTable";
 import { ModsTable } from "@/components/mods/ModsTable";
+import { NexusAccountGrid } from "@/components/mods/NexusAccountGrid";
 import { NexusMatchedGrid } from "@/components/mods/NexusMatchedGrid";
 import { ProfileManager } from "@/components/mods/ProfileManager";
 import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
@@ -27,11 +30,13 @@ import { useCheckUpdates, useStartDownload } from "@/hooks/mutations";
 import {
   useAvailableArchives,
   useDownloadJobs,
+  useEndorsedMods,
   useGame,
   useGameVersion,
   useInstalledMods,
   useMods,
   useProfiles,
+  useTrackedMods,
   useUpdates,
 } from "@/hooks/queries";
 import { api } from "@/lib/api-client";
@@ -40,11 +45,13 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import type { ModUpdate } from "@/types/api";
 
-type Tab = "mods" | "matched" | "installed" | "archives" | "profiles" | "updates";
+type Tab = "mods" | "matched" | "endorsed" | "tracked" | "installed" | "archives" | "profiles" | "updates";
 
 const TABS: { key: Tab; label: string; Icon: typeof Package }[] = [
   { key: "mods", label: "Scanned", Icon: Package },
   { key: "matched", label: "Nexus Matched", Icon: Link2 },
+  { key: "endorsed", label: "Endorsed", Icon: Heart },
+  { key: "tracked", label: "Tracked", Icon: Eye },
   { key: "installed", label: "Installed", Icon: UserCheck },
   { key: "archives", label: "Archives", Icon: Archive },
   { key: "profiles", label: "Profiles", Icon: FolderOpen },
@@ -155,6 +162,8 @@ export function GameDetailPage() {
   const { data: installedMods = [] } = useInstalledMods(name);
   const { data: archives = [] } = useAvailableArchives(name);
   const { data: profiles = [] } = useProfiles(name);
+  const { data: endorsedMods = [] } = useEndorsedMods(name);
+  const { data: trackedMods = [] } = useTrackedMods(name);
   const { data: updates } = useUpdates(name);
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("mods");
@@ -376,8 +385,31 @@ export function GameDetailPage() {
           gameName={name}
         />
       )}
+      {tab === "endorsed" && (
+        <NexusAccountGrid
+          mods={endorsedMods}
+          archives={archives}
+          installedMods={installedMods}
+          gameName={name}
+          emptyMessage="No endorsed mods. Sync your Nexus account to see mods you've endorsed."
+        />
+      )}
+      {tab === "tracked" && (
+        <NexusAccountGrid
+          mods={trackedMods}
+          archives={archives}
+          installedMods={installedMods}
+          gameName={name}
+          emptyMessage="No tracked mods. Sync your Nexus account to see mods you're tracking."
+        />
+      )}
       {tab === "installed" && (
-        <InstalledModsTable mods={installedMods} gameName={name} />
+        <InstalledModsTable
+          mods={installedMods}
+          gameName={name}
+          recognizedMods={nexusMatched}
+          archives={archives}
+        />
       )}
       {tab === "archives" && (
         <ArchivesList archives={archives} gameName={name} />

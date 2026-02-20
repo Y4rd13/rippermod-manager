@@ -91,6 +91,12 @@ export interface NexusDownload {
   category: string;
   downloaded_at: string | null;
   nexus_url: string;
+  is_tracked: boolean;
+  is_endorsed: boolean;
+  author: string;
+  summary: string;
+  endorsement_count: number;
+  picture_url: string;
 }
 
 export interface Setting {

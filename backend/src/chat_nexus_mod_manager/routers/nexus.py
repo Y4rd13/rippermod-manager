@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.database import get_session
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.settings import AppSetting
 from chat_nexus_mod_manager.schemas.nexus import (
-    NexusDownloadOut,
     NexusKeyResult,
     NexusKeyValidation,
+    NexusModEnrichedOut,
     NexusSyncResult,
 )
 
@@ -58,27 +60,46 @@ async def sync_history(game_name: str, session: Session = Depends(get_session)) 
     return await sync_nexus_history(game, key_setting.value, session)
 
 
-@router.get("/downloads/{game_name}", response_model=list[NexusDownloadOut])
+@router.get("/downloads/{game_name}", response_model=list[NexusModEnrichedOut])
 def list_downloads(
-    game_name: str, session: Session = Depends(get_session)
-) -> list[NexusDownloadOut]:
+    game_name: str,
+    source: Literal["endorsed", "tracked"] | None = Query(default=None),
+    session: Session = Depends(get_session),
+) -> list[NexusModEnrichedOut]:
     game = session.exec(select(Game).where(Game.name == game_name)).first()
     if not game:
         raise HTTPException(404, f"Game '{game_name}' not found")
 
-    from chat_nexus_mod_manager.models.nexus import NexusDownload
+    from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
 
-    downloads = session.exec(select(NexusDownload).where(NexusDownload.game_id == game.id)).all()
+    stmt = (
+        select(NexusDownload, NexusModMeta)
+        .outerjoin(NexusModMeta, NexusDownload.nexus_mod_id == NexusModMeta.nexus_mod_id)
+        .where(NexusDownload.game_id == game.id)
+    )
+
+    if source == "endorsed":
+        stmt = stmt.where(NexusDownload.is_endorsed.is_(True))  # type: ignore[union-attr]
+    elif source == "tracked":
+        stmt = stmt.where(NexusDownload.is_tracked.is_(True))  # type: ignore[union-attr]
+
+    rows = session.exec(stmt).all()
     return [
-        NexusDownloadOut(
-            id=d.id,  # type: ignore[arg-type]
-            nexus_mod_id=d.nexus_mod_id,
-            mod_name=d.mod_name,
-            file_name=d.file_name,
-            version=d.version,
-            category=d.category,
-            downloaded_at=d.downloaded_at,
-            nexus_url=d.nexus_url,
+        NexusModEnrichedOut(
+            id=dl.id,  # type: ignore[arg-type]
+            nexus_mod_id=dl.nexus_mod_id,
+            mod_name=dl.mod_name,
+            file_name=dl.file_name,
+            version=dl.version,
+            category=dl.category,
+            downloaded_at=dl.downloaded_at,
+            nexus_url=dl.nexus_url,
+            is_tracked=dl.is_tracked,
+            is_endorsed=dl.is_endorsed,
+            author=meta.author if meta else "",
+            summary=meta.summary if meta else "",
+            endorsement_count=meta.endorsement_count if meta else 0,
+            picture_url=meta.picture_url if meta else "",
         )
-        for d in downloads
+        for dl, meta in rows
     ]
