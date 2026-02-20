@@ -1,5 +1,6 @@
 import { AlertTriangle, Download, ExternalLink, Package } from "lucide-react";
 import { useEffect, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Button } from "@/components/ui/Button";
 import { DownloadProgress } from "@/components/ui/DownloadProgress";
@@ -184,14 +185,12 @@ export function UpdateDownloadCell({ update, gameName, downloadJobs }: Props) {
   // No file_id → link to Nexus
   if (!update.nexus_file_id) {
     return (
-      <a
-        href={update.nexus_url}
-        target="_blank"
-        rel="noreferrer"
+      <button
+        onClick={() => openUrl(update.nexus_url).catch(() => {})}
         className="inline-flex items-center gap-1 text-accent hover:underline text-xs"
       >
         <ExternalLink size={12} /> Nexus
-      </a>
+      </button>
     );
   }
 
