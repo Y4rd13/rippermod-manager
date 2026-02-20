@@ -62,6 +62,22 @@ export function useNexusDownloads(gameName: string) {
   });
 }
 
+export function useEndorsedMods(gameName: string) {
+  return useQuery<NexusDownload[]>({
+    queryKey: ["nexus-downloads", gameName, "endorsed"],
+    queryFn: () => api.get(`/api/v1/nexus/downloads/${gameName}?source=endorsed`),
+    enabled: !!gameName,
+  });
+}
+
+export function useTrackedMods(gameName: string) {
+  return useQuery<NexusDownload[]>({
+    queryKey: ["nexus-downloads", gameName, "tracked"],
+    queryFn: () => api.get(`/api/v1/nexus/downloads/${gameName}?source=tracked`),
+    enabled: !!gameName,
+  });
+}
+
 export function useUpdates(gameName: string) {
   return useQuery<UpdateCheckResult>({
     queryKey: ["updates", gameName],

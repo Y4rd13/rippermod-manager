@@ -11,25 +11,31 @@ logger = logging.getLogger(__name__)
 
 
 async def sync_nexus_history(game: Game, api_key: str, session: Session) -> NexusSyncResult:
-    tracked_count = 0
-    endorsed_count = 0
-
     async with NexusClient(api_key) as client:
-        mod_ids: set[int] = set()
+        tracked_ids: set[int] = set()
+        endorsed_ids: set[int] = set()
 
         tracked = await client.get_tracked_mods()
         for item in tracked:
             if item.get("domain_name") == game.domain_name:
-                mod_ids.add(item["mod_id"])
-                tracked_count += 1
+                tracked_ids.add(item["mod_id"])
 
         endorsements = await client.get_endorsements()
         for item in endorsements:
             if item.get("domain_name") == game.domain_name:
-                mod_ids.add(item["mod_id"])
-                endorsed_count += 1
+                endorsed_ids.add(item["mod_id"])
 
-        for mod_id in mod_ids:
+        all_mod_ids = tracked_ids | endorsed_ids
+
+        # Reset flags for all existing downloads of this game
+        existing_all = session.exec(
+            select(NexusDownload).where(NexusDownload.game_id == game.id)
+        ).all()
+        for dl in existing_all:
+            dl.is_tracked = dl.nexus_mod_id in tracked_ids
+            dl.is_endorsed = dl.nexus_mod_id in endorsed_ids
+
+        for mod_id in all_mod_ids:
             try:
                 info = await client.get_mod_info(game.domain_name, mod_id)
             except Exception:
@@ -53,6 +59,8 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
                     version=info.get("version", ""),
                     category=info.get("category_id", ""),
                     nexus_url=nexus_url,
+                    is_tracked=mod_id in tracked_ids,
+                    is_endorsed=mod_id in endorsed_ids,
                 )
                 session.add(dl)
             else:
@@ -100,7 +108,7 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
         logger.warning("Failed to auto-index after Nexus sync", exc_info=True)
 
     return NexusSyncResult(
-        tracked_mods=tracked_count,
-        endorsed_mods=endorsed_count,
+        tracked_mods=len(tracked_ids),
+        endorsed_mods=len(endorsed_ids),
         total_stored=len(total),
     )

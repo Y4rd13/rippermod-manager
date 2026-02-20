@@ -19,6 +19,16 @@ def _migrate_missing_columns() -> None:
             "picture_url",
             "ALTER TABLE nexus_mod_meta ADD COLUMN picture_url TEXT DEFAULT ''",
         ),
+        (
+            "nexus_downloads",
+            "is_tracked",
+            "ALTER TABLE nexus_downloads ADD COLUMN is_tracked BOOLEAN DEFAULT 0",
+        ),
+        (
+            "nexus_downloads",
+            "is_endorsed",
+            "ALTER TABLE nexus_downloads ADD COLUMN is_endorsed BOOLEAN DEFAULT 0",
+        ),
     ]
     with Session(engine) as session:
         for table, column, ddl in migrations:

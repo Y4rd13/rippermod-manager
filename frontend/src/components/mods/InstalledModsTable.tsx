@@ -1,20 +1,40 @@
-import { Power, PowerOff, Trash2 } from "lucide-react";
-import { useState } from "react";
+import {
+  Check,
+  Download,
+  ExternalLink,
+  Loader2,
+  Power,
+  PowerOff,
+  Trash2,
+} from "lucide-react";
+import { useMemo, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
-import { Badge } from "@/components/ui/Badge";
+import { ConflictDialog } from "@/components/mods/ConflictDialog";
+import { NexusModCard } from "@/components/mods/NexusModCard";
+import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useToggleMod, useUninstallMod } from "@/hooks/mutations";
+import { useInstallFlow } from "@/hooks/use-install-flow";
 import { cn } from "@/lib/utils";
-import type { InstalledModOut } from "@/types/api";
+import type { AvailableArchive, InstalledModOut, ModGroup } from "@/types/api";
 
 interface Props {
   mods: InstalledModOut[];
   gameName: string;
+  recognizedMods?: ModGroup[];
+  archives?: AvailableArchive[];
 }
 
 type SortKey = "name" | "version" | "files" | "disabled";
 
-export function InstalledModsTable({ mods, gameName }: Props) {
+function ManagedModsTable({
+  mods,
+  gameName,
+}: {
+  mods: InstalledModOut[];
+  gameName: string;
+}) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [confirming, setConfirming] = useState<number | null>(null);
@@ -45,14 +65,6 @@ export function InstalledModsTable({ mods, gameName }: Props) {
         return 0;
     }
   });
-
-  if (mods.length === 0) {
-    return (
-      <p className="py-4 text-sm text-text-muted">
-        No installed mods. Install mods from the Archives tab.
-      </p>
-    );
-  }
 
   return (
     <div className="overflow-x-auto">
@@ -153,6 +165,163 @@ export function InstalledModsTable({ mods, gameName }: Props) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function RecognizedModsGrid({
+  mods,
+  archives,
+  installedModIds,
+  gameName,
+}: {
+  mods: ModGroup[];
+  archives: AvailableArchive[];
+  installedModIds: Set<number>;
+  gameName: string;
+}) {
+  const {
+    archiveByModId,
+    installingModIds,
+    conflicts,
+    handleInstall,
+    handleInstallWithSkip,
+    handleInstallOverwrite,
+    dismissConflicts,
+  } = useInstallFlow(gameName, archives);
+
+  return (
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {mods.map((mod) => {
+          const match = mod.nexus_match;
+          if (!match) return null;
+
+          const nexusModId = match.nexus_mod_id;
+          const archive = nexusModId != null ? archiveByModId.get(nexusModId) : undefined;
+          const isInstalled = nexusModId != null && installedModIds.has(nexusModId);
+          const isInstalling = nexusModId != null && installingModIds.has(nexusModId);
+
+          let action: React.ReactNode;
+          if (isInstalled) {
+            action = (
+              <Badge variant="success">
+                <Check size={10} /> Installed
+              </Badge>
+            );
+          } else if (archive) {
+            action = (
+              <button
+                onClick={() => handleInstall(nexusModId!, archive)}
+                disabled={isInstalling || conflicts != null}
+                className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent/80 disabled:opacity-50"
+                title={`Install from ${archive.filename}`}
+              >
+                {isInstalling ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <Download size={12} />
+                )}
+                Install
+              </button>
+            );
+          } else if (match.nexus_url) {
+            action = (
+              <button
+                onClick={() => openUrl(match.nexus_url).catch(() => {})}
+                className="inline-flex items-center gap-1 rounded-md bg-surface-2 px-2 py-1 text-xs font-medium text-text-secondary hover:bg-surface-2/80 border border-border"
+              >
+                <ExternalLink size={12} />
+                Get on Nexus
+              </button>
+            );
+          }
+
+          return (
+            <NexusModCard
+              key={mod.id}
+              modName={match.mod_name}
+              summary={match.summary}
+              author={match.author}
+              version={match.version}
+              endorsementCount={match.endorsement_count}
+              pictureUrl={match.picture_url}
+              nexusUrl={match.nexus_url}
+              action={action}
+              footer={
+                <div className="flex items-center gap-1.5">
+                  <ConfidenceBadge score={match.score} />
+                  <Badge variant="neutral">{match.method}</Badge>
+                </div>
+              }
+            />
+          );
+        })}
+      </div>
+
+      {conflicts && (
+        <ConflictDialog
+          conflicts={conflicts}
+          onCancel={dismissConflicts}
+          onSkip={handleInstallWithSkip}
+          onOverwrite={handleInstallOverwrite}
+        />
+      )}
+    </>
+  );
+}
+
+export function InstalledModsTable({ mods, gameName, recognizedMods = [], archives = [] }: Props) {
+  const installedNexusIds = useMemo(
+    () => new Set(mods.filter((m) => m.nexus_mod_id != null).map((m) => m.nexus_mod_id!)),
+    [mods],
+  );
+
+  const recognized = useMemo(
+    () =>
+      recognizedMods.filter(
+        (m) => m.nexus_match && !installedNexusIds.has(m.nexus_match.nexus_mod_id),
+      ),
+    [recognizedMods, installedNexusIds],
+  );
+
+  if (mods.length === 0 && recognized.length === 0) {
+    return (
+      <p className="py-4 text-sm text-text-muted">
+        No installed mods. Install mods from the Archives tab or run a scan to discover recognized
+        mods.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {mods.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-text-primary mb-3">
+            Managed Mods ({mods.length})
+          </h3>
+          <ManagedModsTable mods={mods} gameName={gameName} />
+        </div>
+      )}
+
+      {recognized.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-text-primary mb-3">
+            Recognized Mods ({recognized.length})
+          </h3>
+          <p className="text-xs text-text-muted mb-3">
+            These mods were detected during scanning and matched to Nexus, but haven't been formally
+            installed through the manager yet.
+          </p>
+          <RecognizedModsGrid
+            mods={recognized}
+            archives={archives}
+            installedModIds={installedNexusIds}
+            gameName={gameName}
+          />
+        </div>
+      )}
     </div>
   );
 }
