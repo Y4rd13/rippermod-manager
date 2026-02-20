@@ -173,11 +173,6 @@ export function NexusAccountGrid({
               pictureUrl={mod.picture_url}
               nexusUrl={mod.nexus_url}
               action={action}
-              footer={
-                mod.version ? (
-                  <span className="text-xs text-text-muted">v{mod.version}</span>
-                ) : undefined
-              }
             />
           );
         })}
