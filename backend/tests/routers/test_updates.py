@@ -1,3 +1,10 @@
+from unittest.mock import AsyncMock
+
+import pytest
+
+from chat_nexus_mod_manager.routers.updates import _resolve_file_ids
+
+
 class TestListUpdates:
     def test_game_not_found(self, client):
         r = client.get("/api/v1/games/NoGame/updates/")
@@ -183,3 +190,101 @@ class TestCheckUpdates:
     def test_game_not_found(self, client):
         r = client.post("/api/v1/games/NoGame/updates/check")
         assert r.status_code == 404
+
+
+class TestResolveFileIds:
+    """Tests for the _resolve_file_ids helper."""
+
+    @pytest.mark.anyio
+    async def test_picks_most_recent_main_file(self):
+        mock_client = AsyncMock()
+        mock_client.get_mod_files.return_value = {
+            "files": [
+                {
+                    "file_id": 1,
+                    "category_id": 1,
+                    "uploaded_timestamp": 1000,
+                    "file_name": "old.zip",
+                    "version": "1.0",
+                },
+                {
+                    "file_id": 2,
+                    "category_id": 1,
+                    "uploaded_timestamp": 2000,
+                    "file_name": "new.zip",
+                    "version": "2.0",
+                },
+            ]
+        }
+        updates = [
+            {"nexus_mod_id": 10, "nexus_file_id": None, "nexus_version": "2.0"},
+        ]
+        await _resolve_file_ids(mock_client, "g", updates)
+
+        assert updates[0]["nexus_file_id"] == 2
+        assert updates[0]["nexus_file_name"] == "new.zip"
+        assert updates[0]["nexus_version"] == "2.0"
+        assert updates[0]["nexus_timestamp"] == 2000
+
+    @pytest.mark.anyio
+    async def test_skips_when_file_id_already_set(self):
+        mock_client = AsyncMock()
+        updates = [
+            {"nexus_mod_id": 10, "nexus_file_id": 99, "nexus_version": "1.0"},
+        ]
+        await _resolve_file_ids(mock_client, "g", updates)
+
+        mock_client.get_mod_files.assert_not_called()
+        assert updates[0]["nexus_file_id"] == 99
+
+    @pytest.mark.anyio
+    async def test_falls_back_to_non_archived_file(self):
+        """When no MAIN files exist, picks the most recent non-archived file."""
+        mock_client = AsyncMock()
+        mock_client.get_mod_files.return_value = {
+            "files": [
+                {
+                    "file_id": 5,
+                    "category_id": 7,
+                    "uploaded_timestamp": 3000,
+                    "file_name": "archived.zip",
+                    "version": "0.5",
+                },
+                {
+                    "file_id": 6,
+                    "category_id": 4,
+                    "uploaded_timestamp": 2000,
+                    "file_name": "optional.zip",
+                    "version": "1.0",
+                },
+            ]
+        }
+        updates = [
+            {"nexus_mod_id": 10, "nexus_file_id": None, "nexus_version": "1.0"},
+        ]
+        await _resolve_file_ids(mock_client, "g", updates)
+
+        assert updates[0]["nexus_file_id"] == 6
+        assert updates[0]["nexus_file_name"] == "optional.zip"
+
+    @pytest.mark.anyio
+    async def test_no_files_leaves_update_unchanged(self):
+        mock_client = AsyncMock()
+        mock_client.get_mod_files.return_value = {"files": []}
+        updates = [
+            {"nexus_mod_id": 10, "nexus_file_id": None, "nexus_version": "1.0"},
+        ]
+        await _resolve_file_ids(mock_client, "g", updates)
+
+        assert updates[0]["nexus_file_id"] is None
+
+    @pytest.mark.anyio
+    async def test_api_error_logs_warning_and_continues(self):
+        mock_client = AsyncMock()
+        mock_client.get_mod_files.side_effect = RuntimeError("API down")
+        updates = [
+            {"nexus_mod_id": 10, "nexus_file_id": None, "nexus_version": "1.0"},
+        ]
+        await _resolve_file_ids(mock_client, "g", updates)
+
+        assert updates[0]["nexus_file_id"] is None

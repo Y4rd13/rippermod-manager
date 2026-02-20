@@ -48,7 +48,8 @@ class TestSyncNexusHistory:
 
     @respx.mock
     @pytest.mark.asyncio
-    async def test_updates_existing(self, session, make_game):
+    async def test_updates_existing_preserves_version(self, session, make_game):
+        """Sync should update mod_name but preserve the discovery-time version."""
         game = make_game()
         session.add(
             NexusDownload(
@@ -76,7 +77,34 @@ class TestSyncNexusHistory:
         await sync_nexus_history(game, "key", session)
         dl = session.exec(select(NexusDownload)).first()
         assert dl.mod_name == "NewName"
-        assert dl.version == "1.0"
+        assert dl.version == "0.9"  # preserved, NOT overwritten to "1.0"
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_updates_metadata_version(self, session, make_game):
+        """Sync should update NexusModMeta.version to latest API value."""
+        game = make_game()
+        session.add(
+            NexusModMeta(nexus_mod_id=10, name="OldMod", version="0.9", game_domain="cyberpunk2077")
+        )
+        session.commit()
+        _setup_respx(
+            tracked=[{"domain_name": "cyberpunk2077", "mod_id": 10}],
+            endorsed=[],
+            mod_infos={
+                10: {
+                    "name": "NewMod",
+                    "version": "1.0",
+                    "summary": "",
+                    "author": "",
+                    "category_id": 0,
+                    "endorsement_count": 0,
+                }
+            },
+        )
+        await sync_nexus_history(game, "key", session)
+        meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == 10)).first()
+        assert meta.version == "1.0"  # metadata SHOULD be updated
 
     @respx.mock
     @pytest.mark.asyncio

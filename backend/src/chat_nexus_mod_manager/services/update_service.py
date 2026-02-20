@@ -8,7 +8,10 @@ from typing import Any
 import httpx
 from sqlmodel import Session, select
 
-from chat_nexus_mod_manager.matching.filename_parser import is_newer_version
+from chat_nexus_mod_manager.matching.filename_parser import (
+    is_newer_version,
+    parse_mod_filename,
+)
 from chat_nexus_mod_manager.matching.variant_scorer import pick_best_file
 from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
 from chat_nexus_mod_manager.models.install import InstalledMod
@@ -160,7 +163,9 @@ def check_correlation_updates(
     """Check updates via correlation pipeline using semantic version comparison.
 
     Uses is_newer_version() instead of simple != to avoid false positives
-    like "1.0" vs "1.0.0".
+    like "1.0" vs "1.0.0".  Prefers the version parsed from the archive
+    filename (what the user actually downloaded) over the frozen
+    NexusDownload.version snapshot.
     """
     correlations = session.exec(
         select(ModNexusCorrelation, ModGroup, NexusDownload)
@@ -170,20 +175,51 @@ def check_correlation_updates(
     ).all()
 
     total_checked = len(correlations)
+    logger.debug("check_correlation_updates: %d correlations for game %d", total_checked, game_id)
+
+    # Batch-load all NexusModMeta to avoid N+1 queries
+    mod_ids = {download.nexus_mod_id for _, _, download in correlations}
+    meta_rows = session.exec(
+        select(NexusModMeta).where(NexusModMeta.nexus_mod_id.in_(mod_ids))  # type: ignore[union-attr]
+    ).all()
+    meta_map = {m.nexus_mod_id: m for m in meta_rows}
+
     updates: list[dict[str, Any]] = []
     for _corr, group, download in correlations:
-        meta = session.exec(
-            select(NexusModMeta).where(NexusModMeta.nexus_mod_id == download.nexus_mod_id)
-        ).first()
-        if not meta or not meta.version or not download.version:
+        meta = meta_map.get(download.nexus_mod_id)
+        if not meta or not meta.version:
+            logger.debug(
+                "  skip %s (mod %d): no meta version",
+                group.display_name,
+                download.nexus_mod_id,
+            )
             continue
-        if is_newer_version(meta.version, download.version):
+
+        # Prefer filename-parsed version (actual downloaded archive) over frozen snapshot
+        parsed = parse_mod_filename(download.file_name) if download.file_name else None
+        local_version = (parsed.version if parsed and parsed.version else None) or download.version
+
+        if not local_version:
+            logger.debug(
+                "  skip %s (mod %d): no local version",
+                group.display_name,
+                download.nexus_mod_id,
+            )
+            continue
+
+        if is_newer_version(meta.version, local_version):
+            logger.debug(
+                "  UPDATE %s: local=%s, latest=%s",
+                group.display_name,
+                local_version,
+                meta.version,
+            )
             updates.append(
                 {
                     "installed_mod_id": None,
                     "mod_group_id": group.id,
                     "display_name": group.display_name,
-                    "local_version": download.version,
+                    "local_version": local_version,
                     "nexus_version": meta.version,
                     "nexus_mod_id": download.nexus_mod_id,
                     "nexus_file_id": None,
@@ -195,5 +231,13 @@ def check_correlation_updates(
                     "nexus_timestamp": None,
                 }
             )
+        else:
+            logger.debug(
+                "  ok %s: local=%s, latest=%s",
+                group.display_name,
+                local_version,
+                meta.version,
+            )
 
+    logger.debug("check_correlation_updates: found %d updates", len(updates))
     return UpdateResult(total_checked=total_checked, updates=updates)
