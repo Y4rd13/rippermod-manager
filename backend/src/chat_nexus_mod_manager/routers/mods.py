@@ -119,14 +119,24 @@ def scan_mods_stream(game_name: str) -> StreamingResponse:
                 from chat_nexus_mod_manager.scanner.service import scan_game_mods
                 from chat_nexus_mod_manager.services.archive_matcher import match_archives_by_md5
                 from chat_nexus_mod_manager.services.enrichment import enrich_from_filename_ids
+                from chat_nexus_mod_manager.services.fomod_parser import parse_archive_metadata
                 from chat_nexus_mod_manager.services.nexus_sync import sync_nexus_history
                 from chat_nexus_mod_manager.services.settings_helpers import get_setting
                 from chat_nexus_mod_manager.services.web_search_matcher import (
                     search_unmatched_mods,
                 )
 
-                # Phase 1: Scan files + group (0-85%)
+                # Phase 1: Scan files + group (0-83%)
                 scan_game_mods(game, session, on_progress=on_progress)
+
+                # Phase 1.5: FOMOD/REDmod metadata (83-85%)
+                on_progress("fomod", "Inspecting archive metadata...", 83)
+                fomod_result = parse_archive_metadata(game, session, on_progress)
+                on_progress(
+                    "fomod",
+                    f"Found {fomod_result.fomod_found} FOMOD + {fomod_result.redmod_found} REDmod",
+                    85,
+                )
 
                 api_key = get_setting(session, "nexus_api_key")
                 tavily_key = get_setting(session, "tavily_api_key")

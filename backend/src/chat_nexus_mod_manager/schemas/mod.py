@@ -57,4 +57,12 @@ class WebSearchResult(BaseModel):
     unmatched: int
 
 
+class FomodParseResult(BaseModel):
+    archives_inspected: int
+    fomod_found: int
+    redmod_found: int
+    nexus_ids_extracted: int
+    correlations_created: int
+
+
 ModGroupOut.model_rebuild()

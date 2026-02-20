@@ -13,6 +13,7 @@ const PHASE_LABELS: Record<string, string> = {
   scan: "Scanning files",
   group: "Grouping mods",
   index: "Indexing",
+  fomod: "Reading archive metadata",
   enrich: "Enriching mod data",
   md5: "Matching archives",
   sync: "Syncing Nexus",
