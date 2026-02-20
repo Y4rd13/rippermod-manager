@@ -369,7 +369,12 @@ export function GameDetailPage() {
 
       {tab === "mods" && <ModsTable mods={mods} />}
       {tab === "matched" && (
-        <NexusMatchedGrid mods={nexusMatched} />
+        <NexusMatchedGrid
+          mods={nexusMatched}
+          archives={archives}
+          installedMods={installedMods}
+          gameName={name}
+        />
       )}
       {tab === "installed" && (
         <InstalledModsTable mods={installedMods} gameName={name} />
