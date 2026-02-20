@@ -18,12 +18,24 @@ def normalize_name(name: str) -> str:
     return name.strip().lower()
 
 
-def group_mod_files(
-    files: list[ModFile], eps: float = 0.45
-) -> list[tuple[str, list[ModFile], float]]:
-    if not files:
-        return []
+def _extract_mod_folder(f: ModFile) -> str | None:
+    """Return the immediate subfolder name under source_folder, or None for loose files."""
+    fp = f.file_path.replace("\\", "/")
+    sf = f.source_folder.replace("\\", "/").rstrip("/")
+    if not fp.startswith(sf + "/"):
+        return None
+    remainder = fp[len(sf) + 1 :]
+    if "/" not in remainder:
+        return None
+    folder = remainder.split("/", 1)[0]
+    return folder if folder else None
 
+
+def _cluster_loose_files(
+    files: list[ModFile],
+    eps: float,
+) -> list[tuple[str, list[ModFile], float]]:
+    """Cluster loose files using TF-IDF + DBSCAN."""
     if len(files) == 1:
         name = normalize_name(files[0].filename) or files[0].filename
         return [(name, files, 1.0)]
@@ -70,5 +82,32 @@ def group_mod_files(
             confidence = 1.0
 
         results.append((group_name, cluster_files, round(confidence, 3)))
+
+    return results
+
+
+def group_mod_files(
+    files: list[ModFile], eps: float = 0.45
+) -> list[tuple[str, list[ModFile], float]]:
+    if not files:
+        return []
+
+    # Phase 1: Folder-based grouping (deterministic, O(n))
+    folder_groups: dict[str, list[ModFile]] = {}
+    loose_files: list[ModFile] = []
+    for f in files:
+        folder = _extract_mod_folder(f)
+        if folder is not None:
+            folder_groups.setdefault(folder, []).append(f)
+        else:
+            loose_files.append(f)
+
+    results: list[tuple[str, list[ModFile], float]] = []
+    for folder_name in sorted(folder_groups):
+        results.append((folder_name, folder_groups[folder_name], 1.0))
+
+    # Phase 2: TF-IDF + DBSCAN for loose files only
+    if loose_files:
+        results.extend(_cluster_loose_files(loose_files, eps))
 
     return results
