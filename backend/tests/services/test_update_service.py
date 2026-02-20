@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -10,6 +11,8 @@ from chat_nexus_mod_manager.models.install import InstalledMod
 from chat_nexus_mod_manager.models.mod import ModGroup
 from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
 from chat_nexus_mod_manager.services.update_service import (
+    UpdateResult,
+    _cache_update_result,
     check_all_updates,
     check_cached_updates,
     collect_tracked_mods,
@@ -361,6 +364,42 @@ class TestCheckCachedUpdates:
             assert result.updates[0]["source"] == "tracked"
             assert result.updates[0]["nexus_version"] == "3.0"
 
+    def test_cache_returns_cached_result_over_fallback(self, engine):
+        """When a cache exists, check_cached_updates returns it instead of live comparison."""
+        with Session(engine) as s:
+            game = Game(name="G8", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+            s.commit()
+
+            cached = UpdateResult(
+                total_checked=5,
+                updates=[
+                    {
+                        "installed_mod_id": None,
+                        "mod_group_id": None,
+                        "display_name": "CachedMod",
+                        "local_version": "1.0",
+                        "nexus_version": "2.0",
+                        "nexus_mod_id": 99,
+                        "nexus_file_id": None,
+                        "nexus_file_name": "",
+                        "nexus_url": "https://nexus/99",
+                        "author": "A",
+                        "source": "endorsed",
+                        "local_timestamp": None,
+                        "nexus_timestamp": None,
+                    }
+                ],
+            )
+            _cache_update_result(game.id, cached, s)
+
+            result = check_cached_updates(game.id, "g", s)
+            assert result.total_checked == 5
+            assert len(result.updates) == 1
+            assert result.updates[0]["display_name"] == "CachedMod"
+
 
 class TestCheckAllUpdates:
     @pytest.mark.anyio
@@ -420,4 +459,251 @@ class TestCheckAllUpdates:
             assert result.total_checked == 2
             assert len(result.updates) == 1
             assert result.updates[0]["nexus_mod_id"] == 10
+            assert result.updates[0]["nexus_version"] == "2.0"
+
+    @pytest.mark.anyio
+    async def test_skips_refresh_on_api_failure(self, engine):
+        """When get_updated_mods fails, no refresh is attempted but check still completes."""
+        with Session(engine) as s:
+            game = Game(name="G", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+
+            dl = NexusDownload(
+                game_id=game.id,
+                nexus_mod_id=10,
+                mod_name="Mod",
+                version="1.0",
+                is_endorsed=True,
+            )
+            s.add(dl)
+            s.add(NexusModMeta(nexus_mod_id=10, name="Mod", version="1.0", author="A"))
+            s.commit()
+
+            client = AsyncMock()
+            client.get_updated_mods.side_effect = ValueError("API error")
+
+            result = await check_all_updates(game.id, "g", client, s)
+
+            client.get_mod_info.assert_not_called()
+            assert result.total_checked == 1
+            assert len(result.updates) == 0
+
+    @pytest.mark.anyio
+    async def test_timestamp_detects_update_when_versions_match(self, engine):
+        """Same version strings but newer timestamp on Nexus → update detected."""
+        with Session(engine) as s:
+            game = Game(name="G", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+
+            dl = NexusDownload(
+                game_id=game.id,
+                nexus_mod_id=10,
+                mod_name="SameVer",
+                version="1.0",
+                is_endorsed=True,
+            )
+            s.add(dl)
+            # Baseline: updated_at = 1000 (old)
+            s.add(
+                NexusModMeta(
+                    nexus_mod_id=10,
+                    name="SameVer",
+                    version="1.0",
+                    author="A",
+                    updated_at=datetime.fromtimestamp(1000, tz=UTC),
+                )
+            )
+            s.commit()
+
+            client = AsyncMock()
+            # Nexus says latest_file_update = 5000 (newer than 1000)
+            client.get_updated_mods.return_value = [
+                {"mod_id": 10, "latest_file_update": 5000},
+            ]
+            # After refresh, version is still "1.0" but timestamp is updated
+            client.get_mod_info.return_value = {
+                "version": "1.0",
+                "updated_timestamp": 5000,
+                "name": "SameVer",
+            }
+            client.get_mod_files.return_value = {
+                "files": [
+                    {"file_id": 99, "category_id": 1, "uploaded_timestamp": 5000, "version": "1.0"}
+                ]
+            }
+
+            result = await check_all_updates(game.id, "g", client, s)
+
+            assert result.total_checked == 1
+            assert len(result.updates) == 1
+            assert result.updates[0]["nexus_mod_id"] == 10
+            assert result.updates[0]["display_name"] == "SameVer"
+
+    @pytest.mark.anyio
+    async def test_no_update_when_timestamps_not_newer(self, engine):
+        """latest_file_update <= updated_at → 0 updates (versions also match)."""
+        with Session(engine) as s:
+            game = Game(name="G", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+
+            dl = NexusDownload(
+                game_id=game.id,
+                nexus_mod_id=10,
+                mod_name="UpToDate",
+                version="1.0",
+                is_endorsed=True,
+            )
+            s.add(dl)
+            # Baseline: updated_at = 5000 (same as Nexus)
+            s.add(
+                NexusModMeta(
+                    nexus_mod_id=10,
+                    name="UpToDate",
+                    version="1.0",
+                    author="A",
+                    updated_at=datetime.fromtimestamp(5000, tz=UTC),
+                )
+            )
+            s.commit()
+
+            client = AsyncMock()
+            client.get_updated_mods.return_value = [
+                {"mod_id": 10, "latest_file_update": 5000},
+            ]
+
+            result = await check_all_updates(game.id, "g", client, s)
+
+            assert result.total_checked == 1
+            assert len(result.updates) == 0
+            # No refresh needed since timestamp not newer
+            client.get_mod_info.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_null_updated_at_flagged_as_update(self, engine):
+        """First check with NULL updated_at baseline → mod flagged for refresh."""
+        with Session(engine) as s:
+            game = Game(name="G", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+
+            dl = NexusDownload(
+                game_id=game.id,
+                nexus_mod_id=10,
+                mod_name="NullTs",
+                version="1.0",
+                is_endorsed=True,
+            )
+            s.add(dl)
+            # updated_at is NULL (never refreshed)
+            s.add(NexusModMeta(nexus_mod_id=10, name="NullTs", version="1.0", author="A"))
+            s.commit()
+
+            client = AsyncMock()
+            client.get_updated_mods.return_value = [
+                {"mod_id": 10, "latest_file_update": 5000},
+            ]
+            # After refresh, version changes to 2.0
+            client.get_mod_info.return_value = {
+                "version": "2.0",
+                "updated_timestamp": 5000,
+                "name": "NullTs",
+            }
+            client.get_mod_files.return_value = {
+                "files": [
+                    {"file_id": 1, "category_id": 1, "uploaded_timestamp": 5000, "version": "2.0"}
+                ]
+            }
+
+            result = await check_all_updates(game.id, "g", client, s)
+
+            # NULL updated_at should trigger refresh
+            client.get_mod_info.assert_called_once_with("g", 10)
+            assert result.total_checked == 1
+            assert len(result.updates) == 1
+
+    @pytest.mark.anyio
+    async def test_cache_persists_and_get_returns_it(self, engine):
+        """POST caches result, GET reads cache."""
+        with Session(engine) as s:
+            game = Game(name="G", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+
+            dl = NexusDownload(
+                game_id=game.id,
+                nexus_mod_id=10,
+                mod_name="CacheMod",
+                version="1.0",
+                is_endorsed=True,
+            )
+            s.add(dl)
+            s.add(
+                NexusModMeta(
+                    nexus_mod_id=10,
+                    name="CacheMod",
+                    version="1.0",
+                    author="A",
+                    updated_at=datetime.fromtimestamp(1000, tz=UTC),
+                )
+            )
+            s.commit()
+
+            client = AsyncMock()
+            client.get_updated_mods.return_value = [
+                {"mod_id": 10, "latest_file_update": 5000},
+            ]
+            client.get_mod_info.return_value = {
+                "version": "2.0",
+                "updated_timestamp": 5000,
+                "name": "CacheMod",
+            }
+            client.get_mod_files.return_value = {
+                "files": [
+                    {"file_id": 1, "category_id": 1, "uploaded_timestamp": 5000, "version": "2.0"}
+                ]
+            }
+
+            # POST: check_all_updates caches result
+            post_result = await check_all_updates(game.id, "g", client, s)
+            assert len(post_result.updates) == 1
+
+            # GET: check_cached_updates reads the cache
+            get_result = check_cached_updates(game.id, "g", s)
+            assert get_result.total_checked == post_result.total_checked
+            assert len(get_result.updates) == 1
+            assert get_result.updates[0]["nexus_mod_id"] == 10
+            assert get_result.updates[0]["nexus_version"] == "2.0"
+
+    @pytest.mark.anyio
+    async def test_cache_empty_falls_back_to_version_comparison(self, engine):
+        """No cache → offline version comparison fallback."""
+        with Session(engine) as s:
+            game = Game(name="G", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+
+            dl = NexusDownload(
+                game_id=game.id,
+                nexus_mod_id=10,
+                mod_name="FallbackMod",
+                version="1.0",
+                is_endorsed=True,
+            )
+            s.add(dl)
+            s.add(NexusModMeta(nexus_mod_id=10, name="FallbackMod", version="2.0", author="A"))
+            s.commit()
+
+            # No prior check_all_updates → no cache
+            result = check_cached_updates(game.id, "g", s)
+            assert result.total_checked == 1
+            assert len(result.updates) == 1
             assert result.updates[0]["nexus_version"] == "2.0"

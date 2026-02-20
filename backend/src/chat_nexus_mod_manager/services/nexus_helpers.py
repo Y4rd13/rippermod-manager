@@ -1,5 +1,6 @@
 """Shared helpers for creating/updating Nexus mod records."""
 
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlmodel import Session, select
@@ -70,6 +71,9 @@ def upsert_nexus_mod(
             category=str(info.get("category_id", "")),
             picture_url=info.get("picture_url", ""),
         )
+        ts = info.get("updated_timestamp")
+        if ts:
+            meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)
         session.add(meta)
     else:
         if mod_name:
@@ -84,5 +88,8 @@ def upsert_nexus_mod(
             existing_meta.endorsement_count = info["endorsement_count"]
         if info.get("picture_url"):
             existing_meta.picture_url = info["picture_url"]
+        ts = info.get("updated_timestamp")
+        if ts:
+            existing_meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)
 
     return dl
