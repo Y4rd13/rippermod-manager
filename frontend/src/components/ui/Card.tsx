@@ -11,6 +11,18 @@ export function Card({ children, className, onClick }: CardProps) {
     <div
       className={cn("rounded-xl border border-border bg-surface-1 p-5", className)}
       onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
     >
       {children}
     </div>

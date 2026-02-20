@@ -18,7 +18,6 @@ const PLACEHOLDER_IMG =
 
 interface Props {
   mods: ModGroup[];
-  gameName: string;
 }
 
 export function NexusMatchedGrid({ mods }: Props) {
@@ -38,8 +37,9 @@ export function NexusMatchedGrid({ mods }: Props) {
     });
 
     items.sort((a, b) => {
-      const ma = a.nexus_match!;
-      const mb = b.nexus_match!;
+      const ma = a.nexus_match;
+      const mb = b.nexus_match;
+      if (!ma || !mb) return 0;
       switch (sortKey) {
         case "score":
           return mb.score - ma.score;
@@ -96,7 +96,8 @@ export function NexusMatchedGrid({ mods }: Props) {
       {/* Card Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map((mod) => {
-          const match = mod.nexus_match!;
+          const match = mod.nexus_match;
+          if (!match) return null;
           return (
             <div
               key={mod.id}

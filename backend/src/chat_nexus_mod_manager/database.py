@@ -22,6 +22,7 @@ def _migrate_missing_columns() -> None:
     ]
     with Session(engine) as session:
         for table, column, ddl in migrations:
+            # table name from hardcoded migrations list, not user input
             rows = session.exec(text(f"PRAGMA table_info({table})")).all()  # type: ignore[arg-type]
             col_names = {r[1] for r in rows}
             if column not in col_names:
