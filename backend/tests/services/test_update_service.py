@@ -218,6 +218,77 @@ class TestCheckCorrelationUpdates:
             result = check_correlation_updates(game.id, s)
             assert len(result.updates) == 0
 
+    def test_filename_parsed_version_detects_update(self, engine):
+        """When file_name encodes version 1.0 but both download.version and meta.version
+        are "2.0" (same API call), the filename-parsed version should expose the delta."""
+        with Session(engine) as s:
+            game = Game(name="G4", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+            group = ModGroup(game_id=game.id, display_name="CET")
+            s.add(group)
+            dl = NexusDownload(
+                game_id=game.id,
+                nexus_mod_id=107,
+                mod_name="CET",
+                version="2.0",
+                file_name="CET 1.37.1-107-1-37-1-1759193708.zip",
+                nexus_url="https://nexus/107",
+            )
+            s.add(dl)
+            s.flush()
+            s.add(
+                ModNexusCorrelation(
+                    mod_group_id=group.id,
+                    nexus_download_id=dl.id,
+                    score=1.0,
+                    method="exact",
+                )
+            )
+            s.add(NexusModMeta(nexus_mod_id=107, name="CET", version="2.0", author="A"))
+            s.commit()
+
+            result = check_correlation_updates(game.id, s)
+            assert len(result.updates) == 1
+            assert result.updates[0]["local_version"] == "1.37.1"
+            assert result.updates[0]["nexus_version"] == "2.0"
+
+    def test_fallback_to_download_version_when_no_filename(self, engine):
+        """Without a file_name, should fall back to download.version as before."""
+        with Session(engine) as s:
+            game = Game(name="G5", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+            group = ModGroup(game_id=game.id, display_name="Mod5")
+            s.add(group)
+            dl = NexusDownload(
+                game_id=game.id,
+                nexus_mod_id=50,
+                mod_name="Mod5",
+                version="1.0",
+                file_name="",
+                nexus_url="https://nexus/50",
+            )
+            s.add(dl)
+            s.flush()
+            s.add(
+                ModNexusCorrelation(
+                    mod_group_id=group.id,
+                    nexus_download_id=dl.id,
+                    score=1.0,
+                    method="exact",
+                )
+            )
+            s.add(NexusModMeta(nexus_mod_id=50, name="Mod5", version="2.0", author="A"))
+            s.commit()
+
+            result = check_correlation_updates(game.id, s)
+            assert len(result.updates) == 1
+            assert result.updates[0]["local_version"] == "1.0"
+            assert result.updates[0]["nexus_version"] == "2.0"
+
 
 class TestCheckInstalledModUpdates:
     @pytest.mark.anyio

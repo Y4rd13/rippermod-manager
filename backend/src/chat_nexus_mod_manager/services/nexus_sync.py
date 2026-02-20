@@ -57,7 +57,7 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
                 session.add(dl)
             else:
                 existing_dl.mod_name = info.get("name", existing_dl.mod_name)
-                existing_dl.version = info.get("version", existing_dl.version)
+                # NOTE: do NOT overwrite version — preserves discovery-time snapshot
                 existing_dl.nexus_url = nexus_url
 
             existing_meta = session.exec(

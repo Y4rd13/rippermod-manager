@@ -45,8 +45,9 @@ def upsert_nexus_mod(
         dl = existing_dl
         if mod_name:
             dl.mod_name = mod_name
-        if version:
-            dl.version = version
+        # NOTE: intentionally do NOT overwrite dl.version — it represents
+        # the version at time of discovery (FOMOD/MD5/snapshot) and must
+        # be preserved for update detection.
         if file_name and not dl.file_name:
             dl.file_name = file_name
         if file_id and not dl.file_id:
