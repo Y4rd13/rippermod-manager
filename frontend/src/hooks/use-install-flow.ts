@@ -1,15 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { useCheckConflicts, useInstallMod } from "@/hooks/mutations";
-import type { AvailableArchive, ConflictCheckResult } from "@/types/api";
+import {
+  useCancelDownload,
+  useCheckConflicts,
+  useInstallMod,
+  useStartModDownload,
+} from "@/hooks/mutations";
+import type { AvailableArchive, ConflictCheckResult, DownloadJobOut } from "@/types/api";
 
-export function useInstallFlow(gameName: string, archives: AvailableArchive[]) {
+export function useInstallFlow(
+  gameName: string,
+  archives: AvailableArchive[],
+  downloadJobs: DownloadJobOut[] = [],
+) {
   const [installingModIds, setInstallingModIds] = useState<Set<number>>(new Set());
+  const [downloadingModId, setDownloadingModId] = useState<number | null>(null);
   const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
   const [conflictModId, setConflictModId] = useState<number | null>(null);
 
   const installMod = useInstallMod();
   const checkConflicts = useCheckConflicts();
+  const startModDownload = useStartModDownload();
+  const cancelDownload = useCancelDownload();
 
   const archiveByModId = useMemo(() => {
     const map = new Map<number, AvailableArchive>();
@@ -22,6 +34,26 @@ export function useInstallFlow(gameName: string, archives: AvailableArchive[]) {
     }
     return map;
   }, [archives]);
+
+  const activeDownloadByModId = useMemo(() => {
+    const map = new Map<number, DownloadJobOut>();
+    for (const job of downloadJobs) {
+      if (job.status === "downloading" || job.status === "pending") {
+        map.set(job.nexus_mod_id, job);
+      }
+    }
+    return map;
+  }, [downloadJobs]);
+
+  const completedDownloadByModId = useMemo(() => {
+    const map = new Map<number, DownloadJobOut>();
+    for (const job of downloadJobs) {
+      if (job.status === "completed") {
+        map.set(job.nexus_mod_id, job);
+      }
+    }
+    return map;
+  }, [downloadJobs]);
 
   const addInstalling = useCallback(
     (id: number) => setInstallingModIds((prev) => new Set(prev).add(id)),
@@ -87,6 +119,28 @@ export function useInstallFlow(gameName: string, archives: AvailableArchive[]) {
     [gameName, addInstalling, removeInstalling, checkConflicts, doInstall],
   );
 
+  const handleInstallByFilename = useCallback(
+    async (nexusModId: number, fileName: string) => {
+      addInstalling(nexusModId);
+      try {
+        const result = await checkConflicts.mutateAsync({
+          gameName,
+          archiveFilename: fileName,
+        });
+
+        if (result.conflicts.length > 0) {
+          setConflicts(result);
+          setConflictModId(nexusModId);
+        } else {
+          await doInstall(fileName, [], nexusModId);
+        }
+      } catch {
+        removeInstalling(nexusModId);
+      }
+    },
+    [gameName, addInstalling, removeInstalling, checkConflicts, doInstall],
+  );
+
   const handleInstallWithSkip = useCallback(async () => {
     if (!conflicts || conflictModId == null) return;
     try {
@@ -117,13 +171,37 @@ export function useInstallFlow(gameName: string, archives: AvailableArchive[]) {
     setConflictModId(null);
   }, [conflictModId, removeInstalling]);
 
+  const handleDownload = useCallback(
+    (nexusModId: number) => {
+      setDownloadingModId(nexusModId);
+      startModDownload.mutate(
+        { gameName, nexusModId },
+        { onSettled: () => setDownloadingModId(null) },
+      );
+    },
+    [gameName, startModDownload],
+  );
+
+  const handleCancelDownload = useCallback(
+    (jobId: number) => {
+      cancelDownload.mutate({ gameName, jobId });
+    },
+    [gameName, cancelDownload],
+  );
+
   return {
     archiveByModId,
     installingModIds,
+    downloadingModId,
     conflicts,
+    activeDownloadByModId,
+    completedDownloadByModId,
     handleInstall,
+    handleInstallByFilename,
     handleInstallWithSkip,
     handleInstallOverwrite,
     dismissConflicts,
+    handleDownload,
+    handleCancelDownload,
   };
 }
