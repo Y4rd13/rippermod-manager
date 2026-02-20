@@ -10,9 +10,9 @@ from chat_nexus_mod_manager.models.install import InstalledMod
 from chat_nexus_mod_manager.models.mod import ModGroup
 from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
 from chat_nexus_mod_manager.services.update_service import (
-    _check_update_for_installed_mod,
+    check_all_updates,
     check_correlation_updates,
-    check_installed_mod_updates,
+    collect_tracked_mods,
 )
 
 
@@ -65,69 +65,85 @@ class TestPickBestFile:
         assert result["file_id"] == 2
 
 
-class TestCheckUpdateForInstalledMod:
-    def test_newer_timestamp_detected(self):
-        mod = InstalledMod(
-            id=1,
-            game_id=1,
-            name="Mod",
-            nexus_mod_id=10,
-            upload_timestamp=1000,
-            installed_version="1.0",
-        )
-        files = [
-            {"file_id": 1, "uploaded_timestamp": 1000, "category_id": 1, "version": "1.0"},
-            {"file_id": 2, "uploaded_timestamp": 2000, "category_id": 1, "version": "2.0"},
-        ]
-        meta = NexusModMeta(nexus_mod_id=10, name="Mod", author="Auth", game_domain="g")
-        result = _check_update_for_installed_mod(mod, files, meta)
-        assert result is not None
-        assert result["source"] == "installed"
-        assert result["nexus_timestamp"] == 2000
-        assert result["local_timestamp"] == 1000
+class TestCollectTrackedMods:
+    def test_installed_has_priority_over_correlation(self, engine):
+        with Session(engine) as s:
+            game = Game(name="G", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
 
-    def test_same_timestamp_no_update(self):
-        mod = InstalledMod(
-            id=1,
-            game_id=1,
-            name="Mod",
-            nexus_mod_id=10,
-            upload_timestamp=1000,
-            installed_version="1.0",
-        )
-        files = [
-            {"file_id": 1, "uploaded_timestamp": 1000, "category_id": 1, "version": "1.0"},
-        ]
-        meta = NexusModMeta(nexus_mod_id=10, name="Mod", version="1.0")
-        result = _check_update_for_installed_mod(mod, files, meta)
-        assert result is None
+            group = ModGroup(game_id=game.id, display_name="Mod1")
+            s.add(group)
+            dl = NexusDownload(game_id=game.id, nexus_mod_id=10, mod_name="Mod1", version="0.5")
+            s.add(dl)
+            s.flush()
+            s.add(
+                ModNexusCorrelation(
+                    mod_group_id=group.id, nexus_download_id=dl.id, score=1.0, method="exact"
+                )
+            )
+            installed = InstalledMod(
+                game_id=game.id, name="Mod1", nexus_mod_id=10, installed_version="1.0"
+            )
+            s.add(installed)
+            s.commit()
 
-    def test_version_fallback_when_no_timestamps(self):
-        mod = InstalledMod(
-            id=1,
-            game_id=1,
-            name="Mod",
-            nexus_mod_id=10,
-            installed_version="1.0",
-        )
-        files = [
-            {"file_id": 1, "category_id": 1, "version": "2.0"},
-        ]
-        meta = NexusModMeta(nexus_mod_id=10, name="Mod", version="2.0", author="A")
-        result = _check_update_for_installed_mod(mod, files, meta)
-        assert result is not None
-        assert result["nexus_version"] == "2.0"
+            tracked = collect_tracked_mods(game.id, "g", s)
+            assert 10 in tracked
+            assert tracked[10].source == "installed"
+            assert tracked[10].local_version == "1.0"
 
-    def test_no_nexus_files_returns_none(self):
-        mod = InstalledMod(
-            id=1,
-            game_id=1,
-            name="Mod",
-            nexus_mod_id=10,
-            upload_timestamp=1000,
-        )
-        result = _check_update_for_installed_mod(mod, [], None)
-        assert result is None
+    def test_endorsed_tracked_after_correlation(self, engine):
+        with Session(engine) as s:
+            game = Game(name="G", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+
+            dl = NexusDownload(
+                game_id=game.id,
+                nexus_mod_id=20,
+                mod_name="Endorsed",
+                version="1.0",
+                is_endorsed=True,
+            )
+            s.add(dl)
+            s.commit()
+
+            tracked = collect_tracked_mods(game.id, "g", s)
+            assert 20 in tracked
+            assert tracked[20].source == "endorsed"
+            assert tracked[20].local_version == "1.0"
+
+    def test_deduplication_across_sources(self, engine):
+        with Session(engine) as s:
+            game = Game(name="G", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+
+            group = ModGroup(game_id=game.id, display_name="Mod")
+            s.add(group)
+            dl = NexusDownload(
+                game_id=game.id,
+                nexus_mod_id=10,
+                mod_name="Mod",
+                version="0.5",
+                is_endorsed=True,
+            )
+            s.add(dl)
+            s.flush()
+            s.add(
+                ModNexusCorrelation(
+                    mod_group_id=group.id, nexus_download_id=dl.id, score=1.0, method="exact"
+                )
+            )
+            s.commit()
+
+            tracked = collect_tracked_mods(game.id, "g", s)
+            assert len(tracked) == 1
+            assert tracked[10].source == "correlation"
 
 
 class TestCheckCorrelationUpdates:
@@ -289,66 +305,119 @@ class TestCheckCorrelationUpdates:
             assert result.updates[0]["local_version"] == "1.0"
             assert result.updates[0]["nexus_version"] == "2.0"
 
-
-class TestCheckInstalledModUpdates:
-    @pytest.mark.anyio
-    async def test_no_installed_mods(self, engine):
+    def test_endorsed_mod_update_detected(self, engine):
+        """Endorsed mods should also be checked for updates."""
         with Session(engine) as s:
-            game = Game(name="G", domain_name="g", install_path="/g")
+            game = Game(name="G6", domain_name="g", install_path="/g")
             s.add(game)
             s.flush()
-            s.commit()
-
-            client = AsyncMock()
-            result = await check_installed_mod_updates(game.id, "g", client, s)
-            assert result.total_checked == 0
-            assert result.updates == []
-
-    @pytest.mark.anyio
-    async def test_timestamp_update_detected(self, engine):
-        with Session(engine) as s:
-            game = Game(name="G", domain_name="g", install_path="/g")
-            s.add(game)
-            s.flush()
-            mod = InstalledMod(
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+            dl = NexusDownload(
                 game_id=game.id,
-                name="TestMod",
-                nexus_mod_id=100,
-                upload_timestamp=1000,
-                installed_version="1.0",
+                nexus_mod_id=60,
+                mod_name="EndorsedMod",
+                version="1.0",
+                is_endorsed=True,
+                nexus_url="https://nexus/60",
             )
-            s.add(mod)
+            s.add(dl)
             s.add(
                 NexusModMeta(
-                    nexus_mod_id=100,
-                    name="TestMod",
-                    version="2.0",
-                    author="Auth",
-                    game_domain="g",
+                    nexus_mod_id=60, name="EndorsedMod", version="2.0", author="A", game_domain="g"
                 )
             )
             s.commit()
 
+            result = check_correlation_updates(game.id, s)
+            assert len(result.updates) == 1
+            assert result.updates[0]["source"] == "endorsed"
+            assert result.updates[0]["nexus_version"] == "2.0"
+
+    def test_tracked_mod_update_detected(self, engine):
+        """Tracked mods should also be checked for updates."""
+        with Session(engine) as s:
+            game = Game(name="G7", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+            dl = NexusDownload(
+                game_id=game.id,
+                nexus_mod_id=70,
+                mod_name="TrackedMod",
+                version="1.0",
+                is_tracked=True,
+                nexus_url="https://nexus/70",
+            )
+            s.add(dl)
+            s.add(
+                NexusModMeta(
+                    nexus_mod_id=70, name="TrackedMod", version="3.0", author="A", game_domain="g"
+                )
+            )
+            s.commit()
+
+            result = check_correlation_updates(game.id, s)
+            assert len(result.updates) == 1
+            assert result.updates[0]["source"] == "tracked"
+            assert result.updates[0]["nexus_version"] == "3.0"
+
+
+class TestCheckAllUpdates:
+    @pytest.mark.anyio
+    async def test_no_tracked_mods(self, engine):
+        with Session(engine) as s:
+            game = Game(name="G", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.commit()
+
             client = AsyncMock()
+            result = await check_all_updates(game.id, "g", client, s)
+            assert result.total_checked == 0
+            assert result.updates == []
+            client.get_updated_mods.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_refreshes_only_recently_updated(self, engine):
+        with Session(engine) as s:
+            game = Game(name="G", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+
+            dl1 = NexusDownload(
+                game_id=game.id,
+                nexus_mod_id=10,
+                mod_name="Updated",
+                version="1.0",
+                is_endorsed=True,
+            )
+            dl2 = NexusDownload(
+                game_id=game.id,
+                nexus_mod_id=20,
+                mod_name="NotUpdated",
+                version="1.0",
+                is_endorsed=True,
+            )
+            s.add_all([dl1, dl2])
+            s.add(NexusModMeta(nexus_mod_id=10, name="Updated", version="1.0", author="A"))
+            s.add(NexusModMeta(nexus_mod_id=20, name="NotUpdated", version="1.0", author="B"))
+            s.commit()
+
+            client = AsyncMock()
+            client.get_updated_mods.return_value = [
+                {"mod_id": 10, "latest_file_update": 9999, "latest_mod_activity": 9999},
+            ]
+            client.get_mod_info.return_value = {"version": "2.0", "updated_timestamp": 9999}
             client.get_mod_files.return_value = {
-                "files": [
-                    {
-                        "file_id": 1,
-                        "uploaded_timestamp": 1000,
-                        "category_id": 1,
-                        "version": "1.0",
-                    },
-                    {
-                        "file_id": 2,
-                        "uploaded_timestamp": 2000,
-                        "category_id": 1,
-                        "version": "2.0",
-                    },
-                ]
+                "files": [{"file_id": 1, "category_id": 1, "uploaded_timestamp": 9999}]
             }
 
-            result = await check_installed_mod_updates(game.id, "g", client, s)
-            assert result.total_checked == 1
+            result = await check_all_updates(game.id, "g", client, s)
+
+            client.get_updated_mods.assert_called_once_with("g", "1m")
+            client.get_mod_info.assert_called_once_with("g", 10)
+            assert result.total_checked == 2
             assert len(result.updates) == 1
-            assert result.updates[0]["nexus_timestamp"] == 2000
-            assert result.updates[0]["source"] == "installed"
+            assert result.updates[0]["nexus_mod_id"] == 10
+            assert result.updates[0]["nexus_version"] == "2.0"

@@ -45,6 +45,13 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import type { ModUpdate } from "@/types/api";
 
+const SOURCE_STYLES: Record<string, { label: string; cls: string }> = {
+  installed: { label: "Installed", cls: "bg-success/15 text-success" },
+  correlation: { label: "Matched", cls: "bg-warning/15 text-warning" },
+  endorsed: { label: "Endorsed", cls: "bg-accent/15 text-accent" },
+  tracked: { label: "Tracked", cls: "bg-info/15 text-info" },
+};
+
 type Tab = "mods" | "matched" | "endorsed" | "tracked" | "installed" | "archives" | "profiles" | "updates";
 
 const TABS: { key: Tab; label: string; Icon: typeof Package }[] = [
@@ -123,6 +130,7 @@ function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdat
                 <th className="pb-2 pr-4">Mod</th>
                 <th className="pb-2 pr-4">Local Version</th>
                 <th className="pb-2 pr-4">Nexus Version</th>
+                <th className="pb-2 pr-4">Source</th>
                 <th className="pb-2 pr-4">Author</th>
                 <th className="pb-2" />
               </tr>
@@ -136,6 +144,16 @@ function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdat
                   <td className="py-2 pr-4 text-text-primary">{u.display_name}</td>
                   <td className="py-2 pr-4 text-text-muted">{u.local_version}</td>
                   <td className="py-2 pr-4 text-success font-medium">{u.nexus_version}</td>
+                  <td className="py-2 pr-4">
+                    {(() => {
+                      const s = SOURCE_STYLES[u.source] ?? { label: u.source, cls: "bg-accent/15 text-accent" };
+                      return (
+                        <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium", s.cls)}>
+                          {s.label}
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td className="py-2 pr-4 text-text-muted">{u.author}</td>
                   <td className="py-2">
                     <UpdateDownloadCell
