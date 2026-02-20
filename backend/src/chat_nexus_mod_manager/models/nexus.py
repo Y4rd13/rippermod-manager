@@ -31,3 +31,4 @@ class NexusModMeta(SQLModel, table=True):
     updated_at: datetime | None = None
     endorsement_count: int = 0
     category: str = ""
+    picture_url: str = ""

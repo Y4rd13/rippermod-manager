@@ -68,6 +68,7 @@ def upsert_nexus_mod(
             version=version,
             endorsement_count=info.get("endorsement_count", 0),
             category=str(info.get("category_id", "")),
+            picture_url=info.get("picture_url", ""),
         )
         session.add(meta)
     else:
@@ -81,5 +82,7 @@ def upsert_nexus_mod(
             existing_meta.author = info["author"]
         if info.get("endorsement_count") is not None:
             existing_meta.endorsement_count = info["endorsement_count"]
+        if info.get("picture_url"):
+            existing_meta.picture_url = info["picture_url"]
 
     return dl
