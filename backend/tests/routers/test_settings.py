@@ -12,7 +12,8 @@ class TestListSettings:
         r = client.get("/api/v1/settings/")
         settings = r.json()
         nexus = next(s for s in settings if s["key"] == "nexus_api_key")
-        assert nexus["value"] == "***"
+        assert nexus["value"] == "secr*t123"
+        assert "secret123" not in nexus["value"]
 
     def test_shows_non_sensitive(self, client):
         client.put(
@@ -49,7 +50,8 @@ class TestUpdateSettings:
             json={"settings": {"openai_api_key": "sk-test123"}},
         )
         data = r.json()
-        assert data[0]["value"] == "***"
+        assert data[0]["value"] == "sk-t**t123"
+        assert "sk-test123" not in data[0]["value"]
 
 
 class TestSpecs:
