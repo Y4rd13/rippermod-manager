@@ -146,13 +146,15 @@ function NexusSetupStep({ onNext }: { onNext: () => void }) {
     ? sso.result!.username
     : store.nexusUsername;
 
-  // Sync SSO username to onboarding store — guard prevents infinite loop
-  // since `store` ref changes on every Zustand state update
+  // Sync SSO username to onboarding store
+  const nexusUsername = useOnboardingStore((s) => s.nexusUsername);
+  const setNexusUsername = useOnboardingStore((s) => s.setNexusUsername);
+
   useEffect(() => {
-    if (ssoSuccess && sso.result && store.nexusUsername !== sso.result.username) {
-      store.setNexusUsername(sso.result.username);
+    if (ssoSuccess && sso.result && nexusUsername !== sso.result.username) {
+      setNexusUsername(sso.result.username);
     }
-  }, [ssoSuccess, sso.result, store]);
+  }, [ssoSuccess, sso.result, nexusUsername, setNexusUsername]);
 
   const handleManualValidate = () => {
     if (!store.nexusKey.trim()) {
