@@ -146,9 +146,10 @@ function NexusSetupStep({ onNext }: { onNext: () => void }) {
     ? sso.result!.username
     : store.nexusUsername;
 
-  // Sync SSO username to onboarding store (external system update, not local state)
+  // Sync SSO username to onboarding store — guard prevents infinite loop
+  // since `store` ref changes on every Zustand state update
   useEffect(() => {
-    if (ssoSuccess && sso.result) {
+    if (ssoSuccess && sso.result && store.nexusUsername !== sso.result.username) {
       store.setNexusUsername(sso.result.username);
     }
   }, [ssoSuccess, sso.result, store]);
