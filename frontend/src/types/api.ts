@@ -76,6 +76,19 @@ export interface NexusKeyResult {
   error: string;
 }
 
+export type SSOStatus = "pending" | "success" | "error" | "expired";
+
+export interface SSOStartResult {
+  uuid: string;
+  authorize_url: string;
+}
+
+export interface SSOPollResult {
+  status: SSOStatus;
+  result: NexusKeyResult | null;
+  error: string;
+}
+
 export interface NexusSyncResult {
   tracked_mods: number;
   endorsed_mods: number;
