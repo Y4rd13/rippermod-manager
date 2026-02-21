@@ -1,9 +1,10 @@
-import { Search } from "lucide-react";
+import { Check, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
+import { Badge } from "@/components/ui/Badge";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { isoToEpoch, timeAgo } from "@/lib/format";
 import type {
@@ -29,6 +30,7 @@ interface Props {
   gameName: string;
   emptyMessage: string;
   downloadJobs?: DownloadJobOut[];
+  onModClick?: (nexusModId: number) => void;
 }
 
 export function NexusAccountGrid({
@@ -38,6 +40,7 @@ export function NexusAccountGrid({
   gameName,
   emptyMessage,
   downloadJobs = [],
+  onModClick,
 }: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("updated");
@@ -124,6 +127,12 @@ export function NexusAccountGrid({
               version={mod.version}
               endorsementCount={mod.endorsement_count}
               pictureUrl={mod.picture_url}
+              onClick={() => onModClick?.(nexusModId)}
+              badge={
+                installedModIds.has(nexusModId)
+                  ? <Badge variant="success"><Check size={10} className="mr-0.5" />Installed</Badge>
+                  : undefined
+              }
               footer={
                 mod.updated_at ? (
                   <span className="text-xs text-text-muted">

@@ -19,6 +19,7 @@ const PHASE_LABELS: Record<string, string> = {
   sync: "Syncing Nexus",
   correlate: "Correlating mods",
   "web-search": "Web search",
+  "ai-search": "AI search",
   done: "Complete",
   error: "Error",
   complete: "Finishing",

@@ -125,7 +125,9 @@ def upsert_nexus_mod(
             summary=info.get("summary", ""),
             author=info.get("author", ""),
             version=version,
+            description=info.get("description", ""),
             endorsement_count=info.get("endorsement_count", 0),
+            mod_downloads=info.get("mod_downloads", 0),
             category=str(info.get("category_id", "")),
             picture_url=info.get("picture_url", ""),
         )
@@ -145,8 +147,12 @@ def upsert_nexus_mod(
             existing_meta.version = version
         if info.get("author"):
             existing_meta.author = info["author"]
+        if info.get("description"):
+            existing_meta.description = info["description"]
         if info.get("endorsement_count") is not None:
             existing_meta.endorsement_count = info["endorsement_count"]
+        if info.get("mod_downloads") is not None:
+            existing_meta.mod_downloads = info["mod_downloads"]
         if info.get("picture_url"):
             existing_meta.picture_url = info["picture_url"]
         created_ts = info.get("created_timestamp")

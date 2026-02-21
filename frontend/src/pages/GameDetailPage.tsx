@@ -19,7 +19,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 
 import { ArchivesList } from "@/components/mods/ArchivesList";
+import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { InstalledModsTable } from "@/components/mods/InstalledModsTable";
+import { ModCardAction } from "@/components/mods/ModCardAction";
+import { ModDetailModal } from "@/components/mods/ModDetailModal";
 import { ModsTable } from "@/components/mods/ModsTable";
 import { NexusAccountGrid } from "@/components/mods/NexusAccountGrid";
 import { NexusMatchedGrid } from "@/components/mods/NexusMatchedGrid";
@@ -30,7 +33,9 @@ import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ScanProgress, type ScanLog } from "@/components/ui/ScanProgress";
+import { Switch } from "@/components/ui/Switch";
 import { useCheckUpdates, useStartDownload } from "@/hooks/mutations";
+import { useInstallFlow } from "@/hooks/use-install-flow";
 import {
   useAvailableArchives,
   useDownloadJobs,
@@ -40,6 +45,7 @@ import {
   useInstalledMods,
   useMods,
   useProfiles,
+  useSettings,
   useTrackedMods,
   useTrendingMods,
   useUpdates,
@@ -240,8 +246,19 @@ export function GameDetailPage() {
   const { data: trendingResult } = useTrendingMods(name);
   const { data: updates } = useUpdates(name);
   const { data: downloadJobs = [] } = useDownloadJobs(name);
+  const { data: settings = [] } = useSettings();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("installed");
+  const [selectedModId, setSelectedModId] = useState<number | null>(null);
+  const [aiSearch, setAiSearch] = useState(false);
+  const hasOpenaiKey = settings.some((s) => s.key === "openai_api_key" && s.value);
+
+  const modalFlow = useInstallFlow(name, archives, downloadJobs);
+
+  const installedModIds = useMemo(
+    () => new Set(installedMods.filter((m) => m.nexus_mod_id != null).map((m) => m.nexus_mod_id!)),
+    [installedMods],
+  );
 
   const [isLaunching, setIsLaunching] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -341,7 +358,7 @@ export function GameDetailPage() {
       abortRef.current = controller;
       const response = await api.stream(
         `/api/v1/games/${name}/mods/scan-stream`,
-        undefined,
+        aiSearch ? { ai_search: true } : undefined,
         controller.signal,
       );
 
@@ -370,6 +387,12 @@ export function GameDetailPage() {
     }
   };
 
+  const updateByNexusId = useMemo(() => {
+    const map = new Map<number, ModUpdate>();
+    for (const u of updates?.updates ?? []) map.set(u.nexus_mod_id, u);
+    return map;
+  }, [updates]);
+
   const nexusMatched = useMemo(() => mods.filter((m) => m.nexus_match), [mods]);
   const enabledCount = installedMods.filter((m) => !m.disabled).length;
 
@@ -395,6 +418,9 @@ export function GameDetailPage() {
           <Button variant="secondary" onClick={handleLaunch} loading={isLaunching} disabled={!gameVersion?.exe_path}>
             <Play size={16} /> Play
           </Button>
+          {hasOpenaiKey && (
+            <Switch checked={aiSearch} onChange={setAiSearch} label="AI Search" disabled={isScanning} />
+          )}
           <Button onClick={handleFullScan} loading={isScanning}>
             <Scan size={16} /> Scan & Correlate
           </Button>
@@ -476,6 +502,7 @@ export function GameDetailPage() {
           installedMods={installedMods}
           gameName={name}
           downloadJobs={downloadJobs}
+          onModClick={setSelectedModId}
         />
       )}
       {tab === "endorsed" && (
@@ -486,6 +513,7 @@ export function GameDetailPage() {
           gameName={name}
           emptyMessage="No endorsed mods. Sync your Nexus account to see mods you've endorsed."
           downloadJobs={downloadJobs}
+          onModClick={setSelectedModId}
         />
       )}
       {tab === "tracked" && (
@@ -496,6 +524,7 @@ export function GameDetailPage() {
           gameName={name}
           emptyMessage="No tracked mods. Sync your Nexus account to see mods you're tracking."
           downloadJobs={downloadJobs}
+          onModClick={setSelectedModId}
         />
       )}
       {tab === "trending" && (
@@ -506,6 +535,7 @@ export function GameDetailPage() {
           installedMods={installedMods}
           gameName={name}
           downloadJobs={downloadJobs}
+          onModClick={setSelectedModId}
         />
       )}
       {tab === "installed" && (
@@ -515,6 +545,8 @@ export function GameDetailPage() {
           recognizedMods={nexusMatched}
           archives={archives}
           downloadJobs={downloadJobs}
+          updates={updates?.updates ?? []}
+          onModClick={setSelectedModId}
         />
       )}
       {tab === "archives" && (
@@ -525,6 +557,57 @@ export function GameDetailPage() {
       )}
       {tab === "updates" && (
         <UpdatesTab gameName={name} updates={updates?.updates ?? []} />
+      )}
+
+      {selectedModId != null && (() => {
+        const modUpdate = updateByNexusId.get(selectedModId);
+        const archive = modalFlow.archiveByModId.get(selectedModId);
+        return (
+          <ModDetailModal
+            gameDomain={game.domain_name}
+            modId={selectedModId}
+            update={modUpdate}
+            action={
+              modUpdate ? (
+                <UpdateDownloadCell
+                  update={modUpdate}
+                  gameName={name}
+                  downloadJobs={downloadJobs}
+                />
+              ) : (
+                <ModCardAction
+                  isInstalled={installedModIds.has(selectedModId)}
+                  isInstalling={modalFlow.installingModIds.has(selectedModId)}
+                  activeDownload={modalFlow.activeDownloadByModId.get(selectedModId)}
+                  completedDownload={modalFlow.completedDownloadByModId.get(selectedModId)}
+                  archive={archive}
+                  hasConflicts={modalFlow.conflicts != null}
+                  isDownloading={modalFlow.downloadingModId === selectedModId}
+                  onInstall={() => archive && modalFlow.handleInstall(selectedModId, archive)}
+                  onInstallByFilename={() => {
+                    const dl = modalFlow.completedDownloadByModId.get(selectedModId);
+                    if (dl) modalFlow.handleInstallByFilename(selectedModId, dl.file_name);
+                  }}
+                  onDownload={() => modalFlow.handleDownload(selectedModId)}
+                  onCancelDownload={() => {
+                    const dl = modalFlow.activeDownloadByModId.get(selectedModId);
+                    if (dl) modalFlow.handleCancelDownload(dl.id);
+                  }}
+                />
+              )
+            }
+            onClose={() => setSelectedModId(null)}
+          />
+        );
+      })()}
+
+      {modalFlow.conflicts && (
+        <ConflictDialog
+          conflicts={modalFlow.conflicts}
+          onCancel={modalFlow.dismissConflicts}
+          onSkip={modalFlow.handleInstallWithSkip}
+          onOverwrite={modalFlow.handleInstallOverwrite}
+        />
       )}
     </div>
   );

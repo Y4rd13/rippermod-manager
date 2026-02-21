@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.models.game import Game
-from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
+from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModFile, NexusModMeta
 from chat_nexus_mod_manager.nexus.client import NexusClient
 from chat_nexus_mod_manager.schemas.nexus import NexusSyncResult
 
@@ -101,6 +101,47 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
                 ts = info.get("updated_timestamp")
                 if ts:
                     existing_meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)
+
+        # Fetch file lists for endorsed/tracked mods
+        for mod_id in all_mod_ids:
+            if client.hourly_remaining is not None and client.hourly_remaining < 10:
+                logger.warning(
+                    "Rate limit low (%d remaining), stopping file list fetch",
+                    client.hourly_remaining,
+                )
+                break
+            try:
+                files_resp = await client.get_mod_files(
+                    game.domain_name,
+                    mod_id,
+                    category="main,update,optional,miscellaneous",
+                )
+            except Exception:
+                logger.warning("Failed to fetch files for %s/%d", game.domain_name, mod_id)
+                continue
+
+            existing_file_ids = {
+                row.file_id
+                for row in session.exec(
+                    select(NexusModFile).where(NexusModFile.nexus_mod_id == mod_id)
+                ).all()
+            }
+
+            for f in files_resp.get("files", []):
+                fid = f.get("file_id")
+                if not fid or fid in existing_file_ids:
+                    continue
+                session.add(
+                    NexusModFile(
+                        nexus_mod_id=mod_id,
+                        file_id=fid,
+                        file_name=f.get("file_name", ""),
+                        version=f.get("version", ""),
+                        category_id=f.get("category_id"),
+                        uploaded_timestamp=f.get("uploaded_timestamp"),
+                        file_size=f.get("size_in_bytes") or f.get("file_size", 0),
+                    )
+                )
 
         session.commit()
 

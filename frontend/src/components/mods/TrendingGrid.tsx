@@ -1,4 +1,4 @@
-import { Calendar, Clock, Download, Eye, Heart, RefreshCw, Search, TrendingUp, Users } from "lucide-react";
+import { Calendar, Check, Clock, Download, Eye, Heart, RefreshCw, Search, TrendingUp, Users } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -32,6 +32,7 @@ interface Props {
   installedMods: InstalledModOut[];
   gameName: string;
   downloadJobs?: DownloadJobOut[];
+  onModClick?: (nexusModId: number) => void;
 }
 
 export function TrendingGrid({
@@ -41,6 +42,7 @@ export function TrendingGrid({
   installedMods,
   gameName,
   downloadJobs = [],
+  onModClick,
 }: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("updated");
@@ -113,6 +115,12 @@ export function TrendingGrid({
         version={mod.version}
         endorsementCount={mod.endorsement_count}
         pictureUrl={mod.picture_url}
+        onClick={() => onModClick?.(nexusModId)}
+        badge={
+          isInstalled
+            ? <Badge variant="success"><Check size={10} className="mr-0.5" />Installed</Badge>
+            : undefined
+        }
         footer={
           <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center gap-1 text-xs text-text-muted">

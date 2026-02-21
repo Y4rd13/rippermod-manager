@@ -9,18 +9,26 @@ const variantStyles: Record<Variant, string> = {
   neutral: "bg-surface-3 text-text-secondary border-border",
 };
 
+const prominentVariantStyles: Record<Variant, string> = {
+  success: "bg-success/90 text-white border-success shadow-sm shadow-success/30",
+  warning: "bg-warning/90 text-black border-warning shadow-sm shadow-warning/30",
+  danger: "bg-danger/90 text-white border-danger shadow-sm shadow-danger/30",
+  neutral: "bg-surface-3 text-text-secondary border-border",
+};
+
 interface BadgeProps {
   variant?: Variant;
+  prominent?: boolean;
   children: React.ReactNode;
   className?: string;
 }
 
-export function Badge({ variant = "neutral", children, className }: BadgeProps) {
+export function Badge({ variant = "neutral", prominent, children, className }: BadgeProps) {
   return (
     <span
       className={cn(
         "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-        variantStyles[variant],
+        prominent ? prominentVariantStyles[variant] : variantStyles[variant],
         className,
       )}
     >

@@ -400,6 +400,39 @@ class TestCheckCachedUpdates:
             assert len(result.updates) == 1
             assert result.updates[0]["display_name"] == "CachedMod"
 
+    def test_unverified_version_triggers_update(self, engine):
+        """Endorsed mod with '0.0.0-unverified' sentinel → detected as update."""
+        with Session(engine) as s:
+            game = Game(name="G9", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+            dl = NexusDownload(
+                game_id=game.id,
+                nexus_mod_id=90,
+                mod_name="UnverifiedMod",
+                version="0.0.0-unverified",
+                is_endorsed=True,
+                nexus_url="https://nexus/90",
+            )
+            s.add(dl)
+            s.add(
+                NexusModMeta(
+                    nexus_mod_id=90,
+                    name="UnverifiedMod",
+                    version="2.35",
+                    author="A",
+                    game_domain="g",
+                )
+            )
+            s.commit()
+
+            result = check_cached_updates(game.id, "g", s)
+            assert len(result.updates) == 1
+            assert result.updates[0]["local_version"] == "0.0.0-unverified"
+            assert result.updates[0]["nexus_version"] == "2.35"
+            assert result.updates[0]["source"] == "endorsed"
+
 
 class TestCheckAllUpdates:
     @pytest.mark.anyio

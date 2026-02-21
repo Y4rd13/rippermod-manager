@@ -30,9 +30,10 @@ interface Props {
   installedMods: InstalledModOut[];
   gameName: string;
   downloadJobs?: DownloadJobOut[];
+  onModClick?: (nexusModId: number) => void;
 }
 
-export function NexusMatchedGrid({ mods, archives, installedMods, gameName, downloadJobs = [] }: Props) {
+export function NexusMatchedGrid({ mods, archives, installedMods, gameName, downloadJobs = [], onModClick }: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("score");
 
@@ -130,6 +131,7 @@ export function NexusMatchedGrid({ mods, archives, installedMods, gameName, down
               version={match.version}
               endorsementCount={match.endorsement_count}
               pictureUrl={match.picture_url}
+              onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
               action={
                 <ModCardAction
 

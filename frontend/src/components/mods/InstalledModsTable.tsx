@@ -1,4 +1,5 @@
 import {
+  ArrowUp,
   Power,
   PowerOff,
   Search,
@@ -15,7 +16,7 @@ import { useToggleMod, useUninstallMod } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { isoToEpoch, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { AvailableArchive, DownloadJobOut, InstalledModOut, ModGroup } from "@/types/api";
+import type { AvailableArchive, DownloadJobOut, InstalledModOut, ModGroup, ModUpdate } from "@/types/api";
 
 interface Props {
   mods: InstalledModOut[];
@@ -23,16 +24,33 @@ interface Props {
   recognizedMods?: ModGroup[];
   archives?: AvailableArchive[];
   downloadJobs?: DownloadJobOut[];
+  updates?: ModUpdate[];
+  onModClick?: (nexusModId: number) => void;
 }
 
 type SortKey = "name" | "version" | "files" | "disabled" | "updated";
 
+type RecognizedSortKey = "name" | "endorsements" | "updated" | "confidence";
+
+const RECOGNIZED_SORT_OPTIONS: { value: RecognizedSortKey; label: string }[] = [
+  { value: "confidence", label: "Match Confidence" },
+  { value: "name", label: "Mod Name" },
+  { value: "endorsements", label: "Endorsements" },
+  { value: "updated", label: "Recently Updated" },
+];
+
 function ManagedModsTable({
   mods,
   gameName,
+  updateByInstalledId,
+  updateByNexusId,
+  onModClick,
 }: {
   mods: InstalledModOut[];
   gameName: string;
+  updateByInstalledId: Map<number, ModUpdate>;
+  updateByNexusId: Map<number, ModUpdate>;
+  onModClick?: (nexusModId: number) => void;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -93,16 +111,29 @@ function ManagedModsTable({
           </tr>
         </thead>
         <tbody>
-          {sorted.map((mod) => (
+          {sorted.map((mod) => {
+            const update = updateByInstalledId.get(mod.id)
+              ?? (mod.nexus_mod_id ? updateByNexusId.get(mod.nexus_mod_id) : undefined);
+            return (
             <tr
               key={mod.id}
               className={cn(
                 "border-b border-border/50",
                 mod.disabled && "opacity-50",
+                update && !mod.disabled && "bg-warning/5",
               )}
             >
               <td className="py-2 pr-4">
-                <span className="text-text-primary">{mod.name}</span>
+                {mod.nexus_mod_id ? (
+                  <button
+                    className="text-text-primary hover:text-accent transition-colors text-left"
+                    onClick={() => onModClick?.(mod.nexus_mod_id!)}
+                  >
+                    {mod.name}
+                  </button>
+                ) : (
+                  <span className="text-text-primary">{mod.name}</span>
+                )}
                 {mod.nexus_mod_id && (
                   <span className="ml-2 text-xs text-text-muted">
                     #{mod.nexus_mod_id}
@@ -110,7 +141,13 @@ function ManagedModsTable({
                 )}
               </td>
               <td className="py-2 pr-4 text-text-muted">
-                {mod.installed_version || "--"}
+                <span>{mod.installed_version || "--"}</span>
+                {update && (
+                  <Badge variant="warning" prominent className="ml-2">
+                    <ArrowUp size={10} className="mr-0.5" />
+                    v{update.nexus_version}
+                  </Badge>
+                )}
               </td>
               <td className="py-2 pr-4 text-text-muted">{mod.file_count}</td>
               <td className="py-2 pr-4">
@@ -169,7 +206,8 @@ function ManagedModsTable({
                 </div>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -182,12 +220,16 @@ function RecognizedModsGrid({
   installedModIds,
   gameName,
   downloadJobs,
+  updateByNexusId,
+  onModClick,
 }: {
   mods: ModGroup[];
   archives: AvailableArchive[];
   installedModIds: Set<number>;
   gameName: string;
   downloadJobs: DownloadJobOut[];
+  updateByNexusId: Map<number, ModUpdate>;
+  onModClick?: (nexusModId: number) => void;
 }) {
   const flow = useInstallFlow(gameName, archives, downloadJobs);
 
@@ -200,6 +242,7 @@ function RecognizedModsGrid({
 
           const nexusModId = match.nexus_mod_id;
           const archive = nexusModId != null ? flow.archiveByModId.get(nexusModId) : undefined;
+          const update = nexusModId != null ? updateByNexusId.get(nexusModId) : undefined;
 
           return (
             <NexusModCard
@@ -210,6 +253,8 @@ function RecognizedModsGrid({
               version={match.version}
               endorsementCount={match.endorsement_count}
               pictureUrl={match.picture_url}
+              badge={update ? <Badge variant="warning" prominent>v{update.nexus_version} available</Badge> : undefined}
+              onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
               action={
                 <ModCardAction
 
@@ -262,8 +307,25 @@ export function InstalledModsTable({
   recognizedMods = [],
   archives = [],
   downloadJobs = [],
+  updates = [],
+  onModClick,
 }: Props) {
   const [filter, setFilter] = useState("");
+  const [recognizedSort, setRecognizedSort] = useState<RecognizedSortKey>("confidence");
+
+  const updateByNexusId = useMemo(() => {
+    const map = new Map<number, ModUpdate>();
+    for (const u of updates) map.set(u.nexus_mod_id, u);
+    return map;
+  }, [updates]);
+
+  const updateByInstalledId = useMemo(() => {
+    const map = new Map<number, ModUpdate>();
+    for (const u of updates) {
+      if (u.installed_mod_id != null) map.set(u.installed_mod_id, u);
+    }
+    return map;
+  }, [updates]);
 
   const installedNexusIds = useMemo(
     () => new Set(mods.filter((m) => m.nexus_mod_id != null).map((m) => m.nexus_mod_id!)),
@@ -286,13 +348,32 @@ export function InstalledModsTable({
   }, [mods, q]);
 
   const filteredRecognized = useMemo(() => {
-    if (!q) return recognized;
-    return recognized.filter(
-      (m) =>
-        m.display_name.toLowerCase().includes(q) ||
-        (m.nexus_match?.mod_name.toLowerCase().includes(q) ?? false),
-    );
-  }, [recognized, q]);
+    const items = q
+      ? recognized.filter(
+          (m) =>
+            m.display_name.toLowerCase().includes(q) ||
+            (m.nexus_match?.mod_name.toLowerCase().includes(q) ?? false),
+        )
+      : [...recognized];
+
+    items.sort((a, b) => {
+      const ma = a.nexus_match;
+      const mb = b.nexus_match;
+      if (!ma || !mb) return 0;
+      switch (recognizedSort) {
+        case "name":
+          return ma.mod_name.localeCompare(mb.mod_name);
+        case "endorsements":
+          return mb.endorsement_count - ma.endorsement_count;
+        case "updated":
+          return isoToEpoch(mb.updated_at) - isoToEpoch(ma.updated_at);
+        case "confidence":
+          return mb.score - ma.score;
+      }
+    });
+
+    return items;
+  }, [recognized, q, recognizedSort]);
 
   const totalCount = filteredMods.length + filteredRecognized.length;
 
@@ -318,6 +399,19 @@ export function InstalledModsTable({
             className="w-full rounded-lg border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
           />
         </div>
+        {recognized.length > 0 && (
+          <select
+            value={recognizedSort}
+            onChange={(e) => setRecognizedSort(e.target.value as RecognizedSortKey)}
+            className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
+          >
+            {RECOGNIZED_SORT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        )}
         <span className="text-xs text-text-muted">
           {totalCount} mod{totalCount !== 1 ? "s" : ""}
         </span>
@@ -328,7 +422,13 @@ export function InstalledModsTable({
           <h3 className="text-sm font-semibold text-text-primary mb-3">
             Managed Mods ({filteredMods.length})
           </h3>
-          <ManagedModsTable mods={filteredMods} gameName={gameName} />
+          <ManagedModsTable
+            mods={filteredMods}
+            gameName={gameName}
+            updateByInstalledId={updateByInstalledId}
+            updateByNexusId={updateByNexusId}
+            onModClick={onModClick}
+          />
         </div>
       )}
 
@@ -347,6 +447,8 @@ export function InstalledModsTable({
             installedModIds={installedNexusIds}
             gameName={gameName}
             downloadJobs={downloadJobs}
+            updateByNexusId={updateByNexusId}
+            onModClick={onModClick}
           />
         </div>
       )}

@@ -7,6 +7,7 @@ import type {
   Game,
   GameVersion,
   InstalledModOut,
+  ModDetail,
   ModGroup,
   NexusDownload,
   OnboardingStatus,
@@ -126,6 +127,15 @@ export function useDownloadJobs(gameName: string) {
     queryFn: () => api.get(`/api/v1/games/${gameName}/downloads/`),
     enabled: !!gameName,
     refetchInterval: 5000,
+  });
+}
+
+export function useModDetail(gameDomain: string, modId: number | null) {
+  return useQuery<ModDetail>({
+    queryKey: ["mod-detail", gameDomain, modId],
+    queryFn: () => api.get(`/api/v1/nexus/mods/${gameDomain}/${modId}/detail`),
+    enabled: !!gameDomain && modId != null,
+    staleTime: 10 * 60 * 1000,
   });
 }
 
