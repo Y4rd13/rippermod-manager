@@ -202,6 +202,7 @@ export interface InstallResult {
   name: string;
   files_extracted: number;
   files_skipped: number;
+  files_overwritten: number;
 }
 
 export interface UninstallResult {

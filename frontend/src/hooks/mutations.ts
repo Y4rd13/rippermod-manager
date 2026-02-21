@@ -123,10 +123,16 @@ export function useInstallMod() {
   return useMutation<InstallResult, Error, { gameName: string; data: InstallRequest }>({
     mutationFn: ({ gameName, data }) =>
       api.post(`/api/v1/games/${gameName}/install/`, data),
-    onSuccess: (_, { gameName }) => {
+    onSuccess: (result, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
-      toast.success("Mod installed");
+      toast.success("Mod installed", `${result.files_extracted} files extracted`);
+      if (result.files_overwritten > 0) {
+        toast.warning(
+          "Files overwritten",
+          `${result.files_overwritten} existing file${result.files_overwritten === 1 ? " was" : "s were"} replaced`,
+        );
+      }
     },
     onError: () => toast.error("Installation failed"),
   });
