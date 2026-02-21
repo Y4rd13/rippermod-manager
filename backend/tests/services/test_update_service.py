@@ -491,8 +491,8 @@ class TestCheckAllUpdates:
             assert len(result.updates) == 0
 
     @pytest.mark.anyio
-    async def test_timestamp_detects_update_when_versions_match(self, engine):
-        """Same version strings but newer timestamp on Nexus → update detected."""
+    async def test_timestamp_does_not_flag_when_versions_equal(self, engine):
+        """Same version strings but newer timestamp on Nexus → NOT an update (metadata-only change)."""
         with Session(engine) as s:
             game = Game(name="G", domain_name="g", install_path="/g")
             s.add(game)
@@ -507,7 +507,6 @@ class TestCheckAllUpdates:
                 is_endorsed=True,
             )
             s.add(dl)
-            # Baseline: updated_at = 1000 (old)
             s.add(
                 NexusModMeta(
                     nexus_mod_id=10,
@@ -520,11 +519,9 @@ class TestCheckAllUpdates:
             s.commit()
 
             client = AsyncMock()
-            # Nexus says latest_file_update = 5000 (newer than 1000)
             client.get_updated_mods.return_value = [
                 {"mod_id": 10, "latest_file_update": 5000},
             ]
-            # After refresh, version is still "1.0" but timestamp is updated
             client.get_mod_info.return_value = {
                 "version": "1.0",
                 "updated_timestamp": 5000,
@@ -539,9 +536,7 @@ class TestCheckAllUpdates:
             result = await check_all_updates(game.id, "g", client, s)
 
             assert result.total_checked == 1
-            assert len(result.updates) == 1
-            assert result.updates[0]["nexus_mod_id"] == 10
-            assert result.updates[0]["display_name"] == "SameVer"
+            assert len(result.updates) == 0
 
     @pytest.mark.anyio
     async def test_no_update_when_timestamps_not_newer(self, engine):

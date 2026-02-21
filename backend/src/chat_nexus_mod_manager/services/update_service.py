@@ -615,8 +615,10 @@ async def check_all_updates(
 
         # b) VERSION comparison (secondary)
         is_version_newer = is_newer_version(meta.version, mod.local_version)
+        is_version_equal = meta.version.strip() == mod.local_version.strip()
 
-        if is_ts_flagged or is_version_newer:
+        # Don't flag as update if versions are identical (metadata-only changes)
+        if is_version_newer or (is_ts_flagged and not is_version_equal):
             if is_ts_flagged and is_version_newer:
                 detection = "both"
                 both_detections += 1
