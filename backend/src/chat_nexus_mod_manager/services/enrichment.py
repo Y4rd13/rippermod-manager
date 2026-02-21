@@ -103,6 +103,7 @@ async def enrich_from_filename_ids(
                             nexus_files,
                             parsed_version=local_ver,
                             parsed_timestamp=local_ts,
+                            strict=True,
                         )
                         if matched:
                             file_name_resolved = matched.get("file_name", "")

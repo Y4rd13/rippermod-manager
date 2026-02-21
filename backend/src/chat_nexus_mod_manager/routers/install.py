@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.database import get_session
@@ -88,6 +88,7 @@ async def list_installed(
 async def install(
     game_name: str,
     data: InstallRequest,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ) -> InstallResult:
     """Install a mod from an archive in the staging folder."""
@@ -106,12 +107,19 @@ async def install(
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
 
-    # Best-effort async resolution of nexus_file_id
+    # Best-effort background resolution of nexus_file_id (does not block response)
     api_key = get_setting(session, "nexus_api_key")
     if api_key:
         installed = session.get(InstalledMod, result.installed_mod_id)
         if installed and not installed.nexus_file_id and installed.nexus_mod_id:
-            await resolve_installed_file_id(result.installed_mod_id, game, api_key, session)
+            background_tasks.add_task(
+                resolve_installed_file_id,
+                result.installed_mod_id,
+                game.domain_name,
+                installed.nexus_mod_id,
+                installed.source_archive,
+                api_key,
+            )
 
     return result
 

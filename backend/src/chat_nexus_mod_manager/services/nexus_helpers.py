@@ -15,6 +15,7 @@ def match_local_to_nexus_file(
     *,
     parsed_version: str | None = None,
     parsed_timestamp: int | None = None,
+    strict: bool = False,
 ) -> dict[str, Any] | None:
     """Match a local filename against Nexus file list entries.
 
@@ -23,6 +24,7 @@ def match_local_to_nexus_file(
     2. Timestamp match against ``uploaded_timestamp``
     3. Version + category match (prefer MAIN files, category_id=1)
     4. Fallback: most recent MAIN file, or most recent active file
+       (skipped when ``strict=True``)
 
     Always excludes archived files (category_id=7).
     """
@@ -33,10 +35,11 @@ def match_local_to_nexus_file(
     local_stem = PurePosixPath(local_filename).stem.lower()
 
     # 1. Exact stem match
-    for nf in active:
-        nexus_name = nf.get("file_name") or nf.get("name", "")
-        if PurePosixPath(nexus_name).stem.lower() == local_stem:
-            return nf
+    if local_stem:
+        for nf in active:
+            nexus_name = nf.get("file_name") or nf.get("name", "")
+            if PurePosixPath(nexus_name).stem.lower() == local_stem:
+                return nf
 
     # 2. Timestamp match
     if parsed_timestamp:
@@ -52,6 +55,9 @@ def match_local_to_nexus_file(
             return main_vm[0]
         if version_matches:
             return version_matches[0]
+
+    if strict:
+        return None
 
     # 4. Fallback: most recent MAIN file, or most recent active file
     main_files = [nf for nf in active if nf.get("category_id") == 1]

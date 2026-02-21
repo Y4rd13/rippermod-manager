@@ -225,8 +225,13 @@ async def _resolve_file_ids(
                         parsed_timestamp=parsed.upload_timestamp,
                     )
 
+                    # Save the originally-matched file_id (what's installed locally)
+                    # for persistence, before following the update chain.
+                    if best:
+                        update["_matched_file_id"] = best.get("file_id")
+
                     # Check file_updates chain: if matched file appears as old_file_id,
-                    # follow the chain to the newest replacement
+                    # follow the chain to the newest replacement (download target)
                     if best and file_updates:
                         matched_fid = best.get("file_id")
                         chain: dict[int, int] = {
@@ -240,7 +245,6 @@ async def _resolve_file_ids(
                             visited.add(current)
                             current = chain[current]
                         if current and current != matched_fid:
-                            # Find the new file details
                             new_file = next(
                                 (f for f in nexus_files if f.get("file_id") == current), None
                             )
@@ -248,7 +252,7 @@ async def _resolve_file_ids(
                                 best = new_file
 
                 if not best:
-                    # Fallback: most recent MAIN or active file
+                    # No local filename — fall back to most recent MAIN file
                     best = match_local_to_nexus_file("", nexus_files)
 
                 if best:
@@ -271,7 +275,12 @@ def _persist_resolved_file_ids(
     session: Session,
     game_id: int,
 ) -> None:
-    """Persist resolved nexus_file_ids back to InstalledMod and NexusDownload."""
+    """Persist resolved nexus_file_ids back to InstalledMod and NexusDownload.
+
+    For InstalledMod, uses the pre-chain ``_matched_file_id`` (the file that
+    corresponds to what's actually installed), not the chain-followed download
+    target in ``nexus_file_id``.
+    """
     for update in updates:
         fid = update.get("nexus_file_id")
         if not fid:
@@ -279,15 +288,17 @@ def _persist_resolved_file_ids(
 
         mid = update["nexus_mod_id"]
 
-        # Persist to InstalledMod if it exists and lacks file_id
+        # Use pre-chain file_id for InstalledMod (what's actually installed)
+        installed_fid = update.get("_matched_file_id") or fid
         installed_id = update.get("installed_mod_id")
         if installed_id:
             installed = session.get(InstalledMod, installed_id)
             if installed and not installed.nexus_file_id:
-                installed.nexus_file_id = fid
+                installed.nexus_file_id = installed_fid
                 session.add(installed)
 
-        # Persist to NexusDownload if it lacks file_id
+        # Use pre-chain file_id for NexusDownload (represents discovery-time file)
+        dl_fid = update.get("_matched_file_id") or fid
         nx_dl = session.exec(
             select(NexusDownload).where(
                 NexusDownload.game_id == game_id,
@@ -295,7 +306,7 @@ def _persist_resolved_file_ids(
             )
         ).first()
         if nx_dl and not nx_dl.file_id:
-            nx_dl.file_id = fid
+            nx_dl.file_id = dl_fid
             session.add(nx_dl)
 
     session.commit()

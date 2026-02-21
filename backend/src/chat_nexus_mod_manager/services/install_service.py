@@ -297,36 +297,50 @@ def toggle_mod(
 
 async def resolve_installed_file_id(
     installed_mod_id: int,
-    game: Game,
+    game_domain: str,
+    nexus_mod_id: int,
+    source_archive: str,
     api_key: str,
-    session: Session,
 ) -> None:
-    """Best-effort async resolution of nexus_file_id for an installed mod."""
-    installed = session.get(InstalledMod, installed_mod_id)
-    if not installed or installed.nexus_file_id or not installed.nexus_mod_id:
-        return
+    """Best-effort background resolution of nexus_file_id for an installed mod.
+
+    Creates its own DB session so it can run independently of the request lifecycle.
+    """
+    import asyncio
+
+    from chat_nexus_mod_manager.database import engine
 
     try:
         async with NexusClient(api_key) as client:
-            files_resp = await client.get_mod_files(game.domain_name, installed.nexus_mod_id)
+            files_resp = await client.get_mod_files(game_domain, nexus_mod_id)
     except Exception:
-        logger.debug("Could not fetch files for mod %d", installed.nexus_mod_id)
+        logger.debug("Could not fetch files for mod %d", nexus_mod_id)
         return
 
     nexus_files = files_resp.get("files", [])
     if not nexus_files:
         return
 
-    parsed = parse_mod_filename(installed.source_archive)
+    parsed = parse_mod_filename(source_archive)
     matched = match_local_to_nexus_file(
-        installed.source_archive,
+        source_archive,
         nexus_files,
         parsed_version=parsed.version,
         parsed_timestamp=parsed.upload_timestamp,
+        strict=True,
     )
-    if matched:
-        installed.nexus_file_id = matched.get("file_id")
-        if matched.get("uploaded_timestamp") and not installed.upload_timestamp:
-            installed.upload_timestamp = matched["uploaded_timestamp"]
-        session.add(installed)
-        session.commit()
+    if not matched:
+        return
+
+    def _persist() -> None:
+        with Session(engine) as session:
+            installed = session.get(InstalledMod, installed_mod_id)
+            if not installed or installed.nexus_file_id:
+                return
+            installed.nexus_file_id = matched.get("file_id")
+            if matched.get("uploaded_timestamp") and not installed.upload_timestamp:
+                installed.upload_timestamp = matched["uploaded_timestamp"]
+            session.add(installed)
+            session.commit()
+
+    await asyncio.to_thread(_persist)
