@@ -189,5 +189,9 @@ def delete_game(name: str, session: Session = Depends(get_session)) -> None:
 
     session.exec(delete(NexusDownload).where(NexusDownload.game_id == game_id))  # type: ignore[call-overload]
 
+    from chat_nexus_mod_manager.models.download import DownloadJob
+
+    session.exec(delete(DownloadJob).where(DownloadJob.game_id == game_id))  # type: ignore[call-overload]
+
     session.delete(game)
     session.commit()

@@ -253,7 +253,9 @@ export function useStartDownload() {
     onSuccess: (result, { gameName }) => {
       if (result.requires_nxm) {
         toast.warning("Premium required", "Open the mod on Nexus to download manually");
-      } else {
+        return;
+      }
+      if (result.job) {
         useDownloadStore.getState().setJob(result.job);
         toast.info("Download started", result.job.file_name);
       }
@@ -271,7 +273,9 @@ export function useStartModDownload() {
     onSuccess: (result, { gameName }) => {
       if (result.requires_nxm) {
         toast.warning("Premium required", "Open the mod on Nexus to download manually");
-      } else {
+        return;
+      }
+      if (result.job) {
         useDownloadStore.getState().setJob(result.job);
         toast.info("Download started", result.job.file_name);
       }
