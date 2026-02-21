@@ -49,7 +49,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import type { ModUpdate } from "@/types/api";
 
-type Tab = "mods" | "matched" | "endorsed" | "tracked" | "trending" | "installed" | "archives" | "profiles" | "updates";
+type Tab = "installed" | "updates" | "trending" | "endorsed" | "tracked" | "mods" | "matched" | "archives" | "profiles";
 
 const TABS: { key: Tab; label: string; Icon: typeof Package }[] = [
   { key: "installed", label: "Installed", Icon: UserCheck },
