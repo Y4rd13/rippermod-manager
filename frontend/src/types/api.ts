@@ -317,6 +317,7 @@ export interface TrendingMod {
 }
 
 export interface TrendingResult {
-  mods: TrendingMod[];
+  trending: TrendingMod[];
+  latest_updated: TrendingMod[];
   cached: boolean;
 }
