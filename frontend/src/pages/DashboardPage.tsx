@@ -3,6 +3,7 @@ import { Link } from "react-router";
 
 import { Card } from "@/components/ui/Card";
 import { useGames, useTrendingMods } from "@/hooks/queries";
+import { formatCount } from "@/lib/format";
 import type { TrendingMod } from "@/types/api";
 
 function StatCard({
@@ -31,22 +32,19 @@ function StatCard({
   );
 }
 
-function formatCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
-  return n.toLocaleString();
-}
+const PLACEHOLDER_IMG =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' fill='%231a1a2e'%3E%3Crect width='48' height='48'/%3E%3C/svg%3E";
 
 function TrendingMiniCard({ mod }: { mod: TrendingMod }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border border-border p-2 hover:bg-surface-2 transition-colors">
       <img
-        src={mod.picture_url || undefined}
+        src={mod.picture_url || PLACEHOLDER_IMG}
         alt={mod.name}
         loading="lazy"
         className="w-12 h-12 rounded-md object-cover bg-surface-2 shrink-0"
         onError={(e) => {
-          (e.target as HTMLImageElement).style.display = "none";
+          (e.target as HTMLImageElement).src = PLACEHOLDER_IMG;
         }}
       />
       <div className="min-w-0 flex-1">

@@ -206,8 +206,13 @@ async def fetch_trending_mods(
 
 
 def get_cached_trending(game_id: int, game_domain: str, session: Session) -> TrendingResult | None:
-    cached = _load_cached_trending(game_id, session)
-    if cached is None:
+    """Serve stale cache (ignore TTL) for error-fallback paths."""
+    raw = get_setting(session, _cache_key(game_id))
+    if not raw:
+        return None
+    try:
+        cached = json.loads(raw)
+    except json.JSONDecodeError:
         return None
     mods = _cross_reference(cached, game_id, game_domain, session)
     return TrendingResult(mods=mods, cached=True)

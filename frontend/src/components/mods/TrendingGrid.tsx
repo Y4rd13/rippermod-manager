@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useRefreshTrending } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
+import { formatCount } from "@/lib/format";
 import type {
   AvailableArchive,
   DownloadJobOut,
@@ -23,12 +24,6 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "endorsements", label: "Endorsements" },
   { value: "name", label: "Name" },
 ];
-
-function formatCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
-  return n.toLocaleString();
-}
 
 function timeAgo(timestamp: number): string {
   if (!timestamp) return "";
