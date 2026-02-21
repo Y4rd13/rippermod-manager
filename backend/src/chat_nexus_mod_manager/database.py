@@ -8,7 +8,11 @@ from chat_nexus_mod_manager.config import settings
 logger = logging.getLogger(__name__)
 
 settings.db_path.parent.mkdir(parents=True, exist_ok=True)
-engine = create_engine(f"sqlite:///{settings.db_path}", echo=False)
+engine = create_engine(
+    f"sqlite:///{settings.db_path}",
+    echo=False,
+    connect_args={"timeout": 30, "check_same_thread": False},
+)
 
 
 def _migrate_missing_columns() -> None:
@@ -48,6 +52,9 @@ def _migrate_missing_columns() -> None:
 
 def create_db_and_tables() -> None:
     SQLModel.metadata.create_all(engine)
+    with engine.connect() as conn:
+        conn.execute(text("PRAGMA journal_mode=WAL"))
+        conn.execute(text("PRAGMA synchronous=NORMAL"))
     _migrate_missing_columns()
 
 
