@@ -155,9 +155,12 @@ export function NexusMatchedGrid({ mods, archives, installedMods, gameName, down
                 />
               }
               footer={
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <ConfidenceBadge score={match.score} />
                   <Badge variant="neutral">{match.method}</Badge>
+                  <span className="text-xs text-text-muted truncate max-w-[120px]" title={mod.display_name}>
+                    {mod.display_name}
+                  </span>
                   {match.updated_at && (
                     <span className="text-xs text-text-muted">
                       {timeAgo(isoToEpoch(match.updated_at))}

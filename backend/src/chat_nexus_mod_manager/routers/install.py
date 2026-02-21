@@ -9,6 +9,7 @@ from sqlmodel import Session, select
 from chat_nexus_mod_manager.database import get_session
 from chat_nexus_mod_manager.matching.filename_parser import parse_mod_filename
 from chat_nexus_mod_manager.models.install import InstalledMod
+from chat_nexus_mod_manager.models.nexus import NexusModMeta
 from chat_nexus_mod_manager.routers.deps import get_game_or_404
 from chat_nexus_mod_manager.schemas.install import (
     AvailableArchive,
@@ -64,8 +65,6 @@ async def list_installed(
 ) -> list[InstalledModOut]:
     """List all installed mods for a game."""
     game = get_game_or_404(game_name, session)
-
-    from chat_nexus_mod_manager.models.nexus import NexusModMeta
 
     rows = session.exec(
         select(InstalledMod, NexusModMeta)

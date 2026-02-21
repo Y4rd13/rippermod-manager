@@ -29,6 +29,11 @@ def _migrate_missing_columns() -> None:
             "is_endorsed",
             "ALTER TABLE nexus_downloads ADD COLUMN is_endorsed BOOLEAN DEFAULT 0",
         ),
+        (
+            "nexus_mod_meta",
+            "created_at",
+            "ALTER TABLE nexus_mod_meta ADD COLUMN created_at TIMESTAMP",
+        ),
     ]
     with Session(engine) as session:
         for table, column, ddl in migrations:

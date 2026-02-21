@@ -40,7 +40,7 @@ export function NexusAccountGrid({
   downloadJobs = [],
 }: Props) {
   const [filter, setFilter] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortKey, setSortKey] = useState<SortKey>("updated");
 
   const flow = useInstallFlow(gameName, archives, downloadJobs);
 

@@ -8,6 +8,7 @@ export function formatCount(n: number): string {
 export function timeAgo(timestamp: number): string {
   if (!timestamp) return "";
   const seconds = Math.floor(Date.now() / 1000 - timestamp);
+  if (seconds < 0) return "just now";
   if (seconds < 60) return "just now";
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
@@ -21,5 +22,6 @@ export function timeAgo(timestamp: number): string {
 
 export function isoToEpoch(iso: string | null | undefined): number {
   if (!iso) return 0;
-  return Math.floor(new Date(iso).getTime() / 1000);
+  const ms = new Date(iso).getTime();
+  return Number.isNaN(ms) ? 0 : Math.floor(ms / 1000);
 }
