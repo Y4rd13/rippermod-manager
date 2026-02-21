@@ -10,13 +10,20 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 HIDDEN_KEYS = {"nexus_api_key", "openai_api_key"}
 
 
+def _mask_secret(value: str) -> str:
+    """Return a partially masked version of a secret value."""
+    if len(value) <= 8:
+        return "*" * len(value)
+    return f"{value[:4]}{'*' * min(len(value) - 8, 20)}{value[-4:]}"
+
+
 @router.get("/", response_model=list[SettingOut])
 def list_settings(session: Session = Depends(get_session)) -> list[SettingOut]:
     settings = session.exec(select(AppSetting)).all()
     return [
         SettingOut(
             key=s.key,
-            value="***" if s.key in HIDDEN_KEYS and s.value else s.value,
+            value=_mask_secret(s.value) if s.key in HIDDEN_KEYS and s.value else s.value,
         )
         for s in settings
     ]
@@ -37,7 +44,7 @@ def update_settings(
         results.append(
             SettingOut(
                 key=key,
-                value="***" if key in HIDDEN_KEYS else value,
+                value=_mask_secret(value) if key in HIDDEN_KEYS and value else value,
             )
         )
     session.commit()
