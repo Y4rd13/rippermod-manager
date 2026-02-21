@@ -1,3 +1,4 @@
+import { CheckCircle } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -5,6 +6,43 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { useSaveSettings } from "@/hooks/mutations";
 import { useSettings } from "@/hooks/queries";
+
+function ApiKeyField({
+  id,
+  label,
+  placeholder,
+  currentValue,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  placeholder: string;
+  currentValue?: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Input
+        id={id}
+        label={label}
+        type="password"
+        placeholder={currentValue ? "Enter new key to replace" : placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {currentValue && (
+        <div className="flex items-center gap-2 rounded-md bg-surface-2 px-3 py-2">
+          <CheckCircle size={14} className="shrink-0 text-success" />
+          <span className="min-w-0 flex-1 truncate font-mono text-xs text-text-secondary">
+            {currentValue}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function SettingsPage() {
   const { data: settings = [] } = useSettings();
@@ -38,32 +76,22 @@ export function SettingsPage() {
           API Keys
         </h2>
         <div className="space-y-4">
-          <div>
-            <Input
-              id="openai-key"
-              label="OpenAI API Key"
-              type="password"
-              placeholder={currentOpenai ? "Currently set (***)" : "sk-..."}
-              value={openaiKey}
-              onChange={(e) => setOpenaiKey(e.target.value)}
-            />
-            {currentOpenai && (
-              <p className="text-xs text-text-muted mt-1">Current: {currentOpenai}</p>
-            )}
-          </div>
-          <div>
-            <Input
-              id="nexus-key"
-              label="Nexus Mods API Key"
-              type="password"
-              placeholder={currentNexus ? "Currently set (***)" : "Your Nexus API key"}
-              value={nexusKey}
-              onChange={(e) => setNexusKey(e.target.value)}
-            />
-            {currentNexus && (
-              <p className="text-xs text-text-muted mt-1">Current: {currentNexus}</p>
-            )}
-          </div>
+          <ApiKeyField
+            id="openai-key"
+            label="OpenAI API Key"
+            placeholder="sk-..."
+            currentValue={currentOpenai}
+            value={openaiKey}
+            onChange={setOpenaiKey}
+          />
+          <ApiKeyField
+            id="nexus-key"
+            label="Nexus Mods API Key"
+            placeholder="Your Nexus API key"
+            currentValue={currentNexus}
+            value={nexusKey}
+            onChange={setNexusKey}
+          />
           <Button onClick={handleSave} loading={saveSettings.isPending}>
             Save Changes
           </Button>

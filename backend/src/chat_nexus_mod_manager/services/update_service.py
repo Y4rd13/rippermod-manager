@@ -34,6 +34,7 @@ from chat_nexus_mod_manager.models.install import InstalledMod
 from chat_nexus_mod_manager.models.mod import ModFile, ModGroup
 from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
 from chat_nexus_mod_manager.nexus.client import NexusClient
+from chat_nexus_mod_manager.services.nexus_helpers import match_local_to_nexus_file
 from chat_nexus_mod_manager.services.settings_helpers import get_setting, set_setting
 from chat_nexus_mod_manager.utils.paths import build_file_path
 
@@ -58,6 +59,7 @@ class TrackedMod:
     upload_timestamp: int | None = None
     nexus_url: str = ""
     local_file_mtime: int | None = None
+    source_archive: str = ""
 
 
 @dataclass
@@ -171,6 +173,7 @@ def collect_tracked_mods(
             local_file_mtime=_get_group_file_mtime(mod.mod_group_id, install_path, session)
             if install_path
             else None,
+            source_archive=mod.source_archive,
         )
 
     # Source 2: Correlated mods (Nexus Matched)
@@ -200,6 +203,7 @@ def collect_tracked_mods(
             mod_group_id=group.id,
             nexus_url=dl.nexus_url,
             local_file_mtime=mtime,
+            source_archive=dl.file_name,
         )
 
     # Source 3: Endorsed and tracked mods
@@ -223,6 +227,7 @@ def collect_tracked_mods(
             source=source,
             nexus_url=dl.nexus_url,
             local_file_mtime=corr_mtime_by_nexus_id.get(mid),
+            source_archive=dl.file_name,
         )
 
     # Enrich with downloaded archives (ground truth versions)
@@ -250,6 +255,7 @@ def collect_tracked_mods(
                         upload_timestamp=new_ts,
                         nexus_url=existing.nexus_url,
                         local_file_mtime=existing.local_file_mtime,
+                        source_archive=existing.source_archive,
                     )
 
     mtime_count = sum(1 for m in mods.values() if m.local_file_mtime is not None)
@@ -320,7 +326,11 @@ async def _resolve_file_ids(
     game_domain: str,
     updates: list[dict[str, Any]],
 ) -> None:
-    """Resolve nexus_file_id for updates that lack one."""
+    """Resolve nexus_file_id for updates that lack one.
+
+    Uses ``match_local_to_nexus_file()`` when a local filename is available,
+    then checks ``file_updates`` chains for direct replacement info.
+    """
     sem = asyncio.Semaphore(_MAX_CONCURRENT)
 
     async def resolve_one(update: dict[str, Any]) -> None:
@@ -330,16 +340,50 @@ async def _resolve_file_ids(
             try:
                 files_resp = await client.get_mod_files(game_domain, update["nexus_mod_id"])
                 nexus_files = files_resp.get("files", [])
-                main_files = [f for f in nexus_files if f.get("category_id") == 1]
-                if main_files:
-                    best = max(main_files, key=lambda f: f.get("uploaded_timestamp", 0))
-                else:
-                    active = [f for f in nexus_files if f.get("category_id") != 7]
-                    best = (
-                        max(active, key=lambda f: f.get("uploaded_timestamp", 0))
-                        if active
-                        else None
+                file_updates = files_resp.get("file_updates", [])
+
+                local_fn = update.get("local_filename", "")
+                best: dict[str, Any] | None = None
+
+                if local_fn:
+                    parsed = parse_mod_filename(local_fn)
+                    best = match_local_to_nexus_file(
+                        local_fn,
+                        nexus_files,
+                        parsed_version=parsed.version,
+                        parsed_timestamp=parsed.upload_timestamp,
                     )
+
+                    # Save the originally-matched file_id (what's installed locally)
+                    # for persistence, before following the update chain.
+                    if best:
+                        update["_matched_file_id"] = best.get("file_id")
+
+                    # Check file_updates chain: if matched file appears as old_file_id,
+                    # follow the chain to the newest replacement (download target)
+                    if best and file_updates:
+                        matched_fid = best.get("file_id")
+                        chain: dict[int, int] = {
+                            fu["old_file_id"]: fu["new_file_id"]
+                            for fu in file_updates
+                            if "old_file_id" in fu and "new_file_id" in fu
+                        }
+                        visited: set[int] = set()
+                        current = matched_fid
+                        while current in chain and current not in visited:
+                            visited.add(current)
+                            current = chain[current]
+                        if current and current != matched_fid:
+                            new_file = next(
+                                (f for f in nexus_files if f.get("file_id") == current), None
+                            )
+                            if new_file and new_file.get("category_id") != 7:
+                                best = new_file
+
+                if not best:
+                    # No local filename — fall back to most recent MAIN file
+                    best = match_local_to_nexus_file("", nexus_files)
+
                 if best:
                     update["nexus_file_id"] = best.get("file_id")
                     update["nexus_file_name"] = best.get("file_name", "")
@@ -353,6 +397,48 @@ async def _resolve_file_ids(
                 )
 
     await asyncio.gather(*(resolve_one(u) for u in updates))
+
+
+def _persist_resolved_file_ids(
+    updates: list[dict[str, Any]],
+    session: Session,
+    game_id: int,
+) -> None:
+    """Persist resolved nexus_file_ids back to InstalledMod and NexusDownload.
+
+    For InstalledMod, uses the pre-chain ``_matched_file_id`` (the file that
+    corresponds to what's actually installed), not the chain-followed download
+    target in ``nexus_file_id``.
+    """
+    for update in updates:
+        fid = update.get("nexus_file_id")
+        if not fid:
+            continue
+
+        mid = update["nexus_mod_id"]
+
+        # Use pre-chain file_id for InstalledMod (what's actually installed)
+        installed_fid = update.get("_matched_file_id") or fid
+        installed_id = update.get("installed_mod_id")
+        if installed_id:
+            installed = session.get(InstalledMod, installed_id)
+            if installed and not installed.nexus_file_id:
+                installed.nexus_file_id = installed_fid
+                session.add(installed)
+
+        # Use pre-chain file_id for NexusDownload (represents discovery-time file)
+        dl_fid = update.get("_matched_file_id") or fid
+        nx_dl = session.exec(
+            select(NexusDownload).where(
+                NexusDownload.game_id == game_id,
+                NexusDownload.nexus_mod_id == mid,
+            )
+        ).first()
+        if nx_dl and not nx_dl.file_id:
+            nx_dl.file_id = dl_fid
+            session.add(nx_dl)
+
+    session.commit()
 
 
 def _cache_update_result(game_id: int, result: UpdateResult, session: Session) -> None:
@@ -545,6 +631,7 @@ async def check_all_updates(
                     "local_timestamp": mod.upload_timestamp,
                     "nexus_timestamp": None,
                     "detection_method": detection,
+                    "local_filename": mod.source_archive,
                 }
             )
         else:
@@ -562,9 +649,10 @@ async def check_all_updates(
         both_detections,
     )
 
-    # Resolve file IDs and filter false positives
+    # Resolve file IDs for downloads, persist back to DB, and filter false positives
     if updates:
         await _resolve_file_ids(client, game_domain, updates)
+        _persist_resolved_file_ids(updates, session, game_id)
 
         # Filter false positives: timestamp-only detections where the resolved
         # file's uploaded_timestamp is actually <= local_file_mtime

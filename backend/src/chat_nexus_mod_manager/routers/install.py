@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.database import get_session
@@ -23,9 +23,11 @@ from chat_nexus_mod_manager.services.conflict_service import check_conflicts
 from chat_nexus_mod_manager.services.install_service import (
     install_mod,
     list_available_archives,
+    resolve_installed_file_id,
     toggle_mod,
     uninstall_mod,
 )
+from chat_nexus_mod_manager.services.settings_helpers import get_setting
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +88,7 @@ async def list_installed(
 async def install(
     game_name: str,
     data: InstallRequest,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ) -> InstallResult:
     """Install a mod from an archive in the staging folder."""
@@ -98,11 +101,27 @@ async def install(
         raise HTTPException(404, f"Archive not found: {data.archive_filename}")
 
     try:
-        return install_mod(game, archive_path, session, data.skip_conflicts)
+        result = install_mod(game, archive_path, session, data.skip_conflicts)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
+
+    # Best-effort background resolution of nexus_file_id (does not block response)
+    api_key = get_setting(session, "nexus_api_key")
+    if api_key:
+        installed = session.get(InstalledMod, result.installed_mod_id)
+        if installed and not installed.nexus_file_id and installed.nexus_mod_id:
+            background_tasks.add_task(
+                resolve_installed_file_id,
+                result.installed_mod_id,
+                game.domain_name,
+                installed.nexus_mod_id,
+                installed.source_archive,
+                api_key,
+            )
+
+    return result
 
 
 @router.delete("/installed/{mod_id}", response_model=UninstallResult)
