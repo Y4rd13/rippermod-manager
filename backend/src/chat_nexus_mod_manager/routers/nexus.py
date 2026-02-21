@@ -11,6 +11,8 @@ from chat_nexus_mod_manager.schemas.nexus import (
     NexusKeyValidation,
     NexusModEnrichedOut,
     NexusSyncResult,
+    SSOPollResult,
+    SSOStartResult,
 )
 
 router = APIRouter(prefix="/nexus", tags=["nexus"])
@@ -103,3 +105,51 @@ def list_downloads(
         )
         for dl, meta in rows
     ]
+
+
+@router.post("/sso/start", response_model=SSOStartResult)
+async def sso_start() -> SSOStartResult:
+    """Start a Nexus Mods SSO session."""
+    from chat_nexus_mod_manager.services.sso_service import start_sso
+
+    try:
+        session_uuid, authorize_url = await start_sso()
+        return SSOStartResult(uuid=session_uuid, authorize_url=authorize_url)
+    except RuntimeError as e:
+        raise HTTPException(500, f"Failed to start SSO: {e}") from e
+
+
+@router.get("/sso/poll/{session_uuid}", response_model=SSOPollResult)
+async def sso_poll(session_uuid: str, session: Session = Depends(get_session)) -> SSOPollResult:
+    """Poll an SSO session for completion."""
+    from chat_nexus_mod_manager.services.sso_service import poll_sso
+
+    sso = poll_sso(session_uuid)
+    if sso is None:
+        raise HTTPException(404, "SSO session not found or expired")
+
+    if sso.status.value == "success" and sso.api_key:
+        setting = session.exec(select(AppSetting).where(AppSetting.key == "nexus_api_key")).first()
+        if setting:
+            setting.value = sso.api_key
+        else:
+            setting = AppSetting(key="nexus_api_key", value=sso.api_key)
+            session.add(setting)
+        session.commit()
+
+    return SSOPollResult(
+        status=sso.status.value,
+        result=sso.result,
+        error=sso.error,
+    )
+
+
+@router.delete("/sso/{session_uuid}")
+async def sso_cancel(session_uuid: str) -> dict[str, bool]:
+    """Cancel an active SSO session."""
+    from chat_nexus_mod_manager.services.sso_service import cancel_sso
+
+    cancelled = cancel_sso(session_uuid)
+    if not cancelled:
+        raise HTTPException(404, "SSO session not found")
+    return {"cancelled": True}

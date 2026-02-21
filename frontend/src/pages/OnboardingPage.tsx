@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
-import { CheckCircle, FolderOpen, Search } from "lucide-react";
+import { CheckCircle, ExternalLink, FolderOpen, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -15,6 +15,7 @@ import {
   useSyncNexus,
   useValidatePath,
 } from "@/hooks/mutations";
+import { useNexusSSO } from "@/hooks/use-nexus-sso";
 import { api } from "@/lib/api-client";
 import { parseSSE } from "@/lib/sse-parser";
 import { useOnboardingStatus } from "@/hooks/queries";
@@ -134,10 +135,20 @@ function AISetupStep({ onNext }: { onNext: () => void }) {
 function NexusSetupStep({ onNext }: { onNext: () => void }) {
   const store = useOnboardingStore();
   const connectNexus = useConnectNexus();
+  const sso = useNexusSSO();
   const [error, setError] = useState("");
   const [validated, setValidated] = useState(false);
+  const [showManual, setShowManual] = useState(false);
 
-  const handleValidate = () => {
+  useEffect(() => {
+    if (sso.state === "success" && sso.result) {
+      store.setNexusUsername(sso.result.username);
+      setValidated(true);
+      setError("");
+    }
+  }, [sso.state, sso.result, store]);
+
+  const handleManualValidate = () => {
     if (!store.nexusKey.trim()) {
       setError("API key is required");
       return;
@@ -166,33 +177,90 @@ function NexusSetupStep({ onNext }: { onNext: () => void }) {
           Connect your Nexus Mods account to sync your mod history.
         </p>
       </div>
-      <Input
-        id="nexus-key"
-        label="Nexus Mods API Key"
-        type="password"
-        placeholder="Your API key from nexusmods.com/users/myaccount?tab=api+access"
-        value={store.nexusKey}
-        onChange={(e) => {
-          store.setNexusKey(e.target.value);
-          setError("");
-          setValidated(false);
-        }}
-        error={error}
-      />
-      {validated && (
-        <p className="text-success text-sm">
-          Connected as {store.nexusUsername}
-        </p>
-      )}
-      <div className="flex justify-end gap-3">
-        {!validated ? (
-          <Button onClick={handleValidate} loading={connectNexus.isPending}>
-            Validate & Connect
+
+      {validated ? (
+        <>
+          <p className="text-success text-sm">
+            Connected as {store.nexusUsername}
+          </p>
+          <div className="flex justify-end">
+            <Button onClick={onNext}>Continue</Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <Button
+            onClick={() => sso.startSSO()}
+            loading={sso.state === "connecting" || sso.state === "waiting"}
+            disabled={sso.state === "waiting"}
+            size="lg"
+            className="w-full"
+          >
+            <ExternalLink className="h-4 w-4" />
+            {sso.state === "waiting"
+              ? "Waiting for authorization..."
+              : "Sign in with Nexus Mods"}
           </Button>
-        ) : (
-          <Button onClick={onNext}>Continue</Button>
-        )}
-      </div>
+
+          {sso.state === "waiting" && (
+            <p className="text-text-muted text-xs text-center">
+              Complete the authorization in your browser, then return here.
+              <button
+                type="button"
+                onClick={() => sso.cancel()}
+                className="ml-2 text-accent underline"
+              >
+                Cancel
+              </button>
+            </p>
+          )}
+
+          {sso.error && <p className="text-danger text-sm">{sso.error}</p>}
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-surface-1 px-2 text-text-muted">or</span>
+            </div>
+          </div>
+
+          {!showManual ? (
+            <button
+              type="button"
+              onClick={() => setShowManual(true)}
+              className="text-sm text-text-muted hover:text-text-secondary underline w-full text-center"
+            >
+              Enter API key manually
+            </button>
+          ) : (
+            <div className="space-y-4">
+              <Input
+                id="nexus-key"
+                label="Nexus Mods API Key"
+                type="password"
+                placeholder="Your API key from nexusmods.com/users/myaccount?tab=api+access"
+                value={store.nexusKey}
+                onChange={(e) => {
+                  store.setNexusKey(e.target.value);
+                  setError("");
+                  setValidated(false);
+                }}
+                error={error}
+              />
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleManualValidate}
+                  loading={connectNexus.isPending}
+                >
+                  Validate & Connect
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

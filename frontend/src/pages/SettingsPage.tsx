@@ -1,10 +1,12 @@
-import { CheckCircle } from "lucide-react";
-import { useState } from "react";
+import { CheckCircle, ExternalLink } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { useSaveSettings } from "@/hooks/mutations";
+import { useNexusSSO } from "@/hooks/use-nexus-sso";
 import { useSettings } from "@/hooks/queries";
 
 function ApiKeyField({
@@ -47,8 +49,16 @@ function ApiKeyField({
 export function SettingsPage() {
   const { data: settings = [] } = useSettings();
   const saveSettings = useSaveSettings();
+  const sso = useNexusSSO();
+  const qc = useQueryClient();
   const [openaiKey, setOpenaiKey] = useState("");
   const [nexusKey, setNexusKey] = useState("");
+
+  useEffect(() => {
+    if (sso.state === "success") {
+      qc.invalidateQueries({ queryKey: ["settings"] });
+    }
+  }, [sso.state, qc]);
 
   const handleSave = () => {
     const updates: Record<string, string> = {};
@@ -84,14 +94,46 @@ export function SettingsPage() {
             value={openaiKey}
             onChange={setOpenaiKey}
           />
-          <ApiKeyField
-            id="nexus-key"
-            label="Nexus Mods API Key"
-            placeholder="Your Nexus API key"
-            currentValue={currentNexus}
-            value={nexusKey}
-            onChange={setNexusKey}
-          />
+          <div className="space-y-3">
+            <ApiKeyField
+              id="nexus-key"
+              label="Nexus Mods API Key"
+              placeholder="Your Nexus API key"
+              currentValue={currentNexus}
+              value={nexusKey}
+              onChange={setNexusKey}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => sso.startSSO()}
+              loading={sso.state === "connecting" || sso.state === "waiting"}
+              disabled={sso.state === "waiting"}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              {sso.state === "waiting"
+                ? "Waiting for authorization..."
+                : "Sign in with Nexus Mods"}
+            </Button>
+            {sso.state === "waiting" && (
+              <p className="text-text-muted text-xs">
+                Complete authorization in your browser.{" "}
+                <button
+                  type="button"
+                  onClick={() => sso.cancel()}
+                  className="text-accent underline"
+                >
+                  Cancel
+                </button>
+              </p>
+            )}
+            {sso.state === "success" && sso.result && (
+              <p className="text-success text-xs">
+                Connected as {sso.result.username}
+              </p>
+            )}
+            {sso.error && <p className="text-danger text-xs">{sso.error}</p>}
+          </div>
           <Button onClick={handleSave} loading={saveSettings.isPending}>
             Save Changes
           </Button>
