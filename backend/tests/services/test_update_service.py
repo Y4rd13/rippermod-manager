@@ -491,8 +491,8 @@ class TestCheckAllUpdates:
             assert len(result.updates) == 0
 
     @pytest.mark.anyio
-    async def test_timestamp_does_not_flag_when_versions_equal(self, engine):
-        """Same version + newer Nexus timestamp → not an update."""
+    async def test_file_upload_flags_even_when_versions_equal(self, engine):
+        """New file upload with same version → detected as update."""
         with Session(engine) as s:
             game = Game(name="G", domain_name="g", install_path="/g")
             s.add(game)
@@ -536,7 +536,49 @@ class TestCheckAllUpdates:
             result = await check_all_updates(game.id, "g", client, s)
 
             assert result.total_checked == 1
+            assert len(result.updates) == 1
+            assert result.updates[0]["detection_method"] == "timestamp"
+            assert result.updates[0]["nexus_version"] == "1.0"
+
+    @pytest.mark.anyio
+    async def test_metadata_only_does_not_flag_when_versions_equal(self, engine):
+        """Metadata-only change (no new file upload) with same version → not an update."""
+        with Session(engine) as s:
+            game = Game(name="G", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+
+            dl = NexusDownload(
+                game_id=game.id,
+                nexus_mod_id=10,
+                mod_name="MetaOnly",
+                version="1.0",
+                is_endorsed=True,
+            )
+            s.add(dl)
+            s.add(
+                NexusModMeta(
+                    nexus_mod_id=10,
+                    name="MetaOnly",
+                    version="1.0",
+                    author="A",
+                    updated_at=datetime.fromtimestamp(5000, tz=UTC),
+                )
+            )
+            s.commit()
+
+            client = AsyncMock()
+            # latest_file_update == baseline → no new file uploaded
+            client.get_updated_mods.return_value = [
+                {"mod_id": 10, "latest_file_update": 5000},
+            ]
+
+            result = await check_all_updates(game.id, "g", client, s)
+
+            assert result.total_checked == 1
             assert len(result.updates) == 0
+            client.get_mod_info.assert_not_called()
 
     @pytest.mark.anyio
     async def test_no_update_when_timestamps_not_newer(self, engine):

@@ -619,8 +619,13 @@ async def check_all_updates(
             mod.local_version, meta.version
         )
 
-        # Don't flag as update if versions are identical (metadata-only changes)
-        if is_version_newer or (is_ts_flagged and not is_version_equal):
+        # file_update_map entries come from Nexus get_updated_mods API
+        # (latest_file_update) — only changes when a new file is uploaded.
+        # meta.updated_at changes on any metadata edit — unreliable.
+        # Only suppress same-version detections for the unreliable source.
+        is_file_update = mid in file_update_map
+
+        if is_version_newer or (is_ts_flagged and (is_file_update or not is_version_equal)):
             if is_ts_flagged and is_version_newer:
                 detection = "both"
                 both_detections += 1
