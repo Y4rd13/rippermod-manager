@@ -9,6 +9,7 @@ import {
   Play,
   RefreshCw,
   Scan,
+  Search,
   TrendingUp,
   UserCheck,
 } from "lucide-react";
@@ -64,12 +65,49 @@ const TABS: { key: Tab; label: string; Icon: typeof Package }[] = [
   { key: "profiles", label: "Profiles", Icon: FolderOpen },
 ];
 
+type UpdateSortKey = "name" | "author" | "source" | "updated";
+
+const UPDATE_SORT_OPTIONS: { value: UpdateSortKey; label: string }[] = [
+  { value: "name", label: "Name" },
+  { value: "author", label: "Author" },
+  { value: "source", label: "Source" },
+  { value: "updated", label: "Last Updated" },
+];
+
 function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdate[] }) {
   const { data: downloadJobs = [] } = useDownloadJobs(gameName);
   const checkUpdates = useCheckUpdates();
   const startDownload = useStartDownload();
+  const [filter, setFilter] = useState("");
+  const [sortKey, setSortKey] = useState<UpdateSortKey>("name");
 
   const downloadableUpdates = updates.filter((u) => u.nexus_file_id != null);
+
+  const filteredUpdates = useMemo(() => {
+    const q = filter.toLowerCase();
+    const items = updates.filter((u) => {
+      if (!q) return true;
+      return (
+        u.display_name.toLowerCase().includes(q) ||
+        u.author.toLowerCase().includes(q)
+      );
+    });
+
+    items.sort((a, b) => {
+      switch (sortKey) {
+        case "name":
+          return a.display_name.localeCompare(b.display_name);
+        case "author":
+          return a.author.localeCompare(b.author);
+        case "source":
+          return a.source.localeCompare(b.source);
+        case "updated":
+          return (b.nexus_timestamp ?? 0) - (a.nexus_timestamp ?? 0);
+      }
+    });
+
+    return items;
+  }, [updates, filter, sortKey]);
 
   const handleUpdateAll = async () => {
     for (const u of downloadableUpdates) {
@@ -91,11 +129,32 @@ function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdat
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-text-muted text-xs">
-          {updates.length} update(s) available
-        </p>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-xs">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
+          <input
+            type="text"
+            placeholder="Filter by name or author..."
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="w-full rounded-lg border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+          />
+        </div>
+        <select
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value as UpdateSortKey)}
+          className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
+        >
+          {UPDATE_SORT_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <span className="text-xs text-text-muted">
+          {filteredUpdates.length} update{filteredUpdates.length !== 1 ? "s" : ""}
+        </span>
+        <div className="ml-auto flex items-center gap-2">
           {downloadableUpdates.length > 1 && (
             <Button
               variant="secondary"
@@ -136,7 +195,7 @@ function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdat
               </tr>
             </thead>
             <tbody>
-              {updates.map((u, i) => (
+              {filteredUpdates.map((u, i) => (
                 <tr
                   key={u.installed_mod_id ?? `group-${u.mod_group_id ?? i}`}
                   className="border-b border-border/50"

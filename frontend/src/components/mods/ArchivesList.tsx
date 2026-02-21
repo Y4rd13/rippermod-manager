@@ -1,11 +1,12 @@
-import { AlertTriangle, Download } from "lucide-react";
-import { useEffect, useState } from "react";
+import { AlertTriangle, Download, Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import {
   useCheckConflicts,
   useInstallMod,
 } from "@/hooks/mutations";
+import { formatBytes } from "@/lib/format";
 import type {
   AvailableArchive,
   ConflictCheckResult,
@@ -16,19 +17,45 @@ interface Props {
   gameName: string;
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
+type ArchiveSortKey = "name" | "size" | "version";
+
+const ARCHIVE_SORT_OPTIONS: { value: ArchiveSortKey; label: string }[] = [
+  { value: "name", label: "Name" },
+  { value: "size", label: "Size" },
+  { value: "version", label: "Version" },
+];
 
 export function ArchivesList({ archives, gameName }: Props) {
   const installMod = useInstallMod();
   const checkConflicts = useCheckConflicts();
   const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
   const [selectedArchive, setSelectedArchive] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
+  const [sortKey, setSortKey] = useState<ArchiveSortKey>("name");
+
+  const filtered = useMemo(() => {
+    const q = filter.toLowerCase();
+    const items = archives.filter((a) => {
+      if (!q) return true;
+      return (
+        a.filename.toLowerCase().includes(q) ||
+        a.parsed_name.toLowerCase().includes(q)
+      );
+    });
+
+    items.sort((a, b) => {
+      switch (sortKey) {
+        case "name":
+          return a.parsed_name.localeCompare(b.parsed_name);
+        case "size":
+          return b.size - a.size;
+        case "version":
+          return (a.parsed_version ?? "").localeCompare(b.parsed_version ?? "");
+      }
+    });
+
+    return items;
+  }, [archives, filter, sortKey]);
 
   const handleCheckConflicts = async (filename: string) => {
     setSelectedArchive(filename);
@@ -92,20 +119,48 @@ export function ArchivesList({ archives, gameName }: Props) {
 
   return (
     <>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-text-muted">
-              <th className="pb-2 pr-4">Archive</th>
-              <th className="pb-2 pr-4">Parsed Name</th>
-              <th className="pb-2 pr-4">Version</th>
-              <th className="pb-2 pr-4">Size</th>
-              <th className="pb-2 pr-4">Nexus ID</th>
-              <th className="pb-2 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {archives.map((a) => (
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-xs">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
+            <input
+              type="text"
+              placeholder="Filter by filename..."
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              className="w-full rounded-lg border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+            />
+          </div>
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as ArchiveSortKey)}
+            className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
+          >
+            {ARCHIVE_SORT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-text-muted">
+            {filtered.length} archive{filtered.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-text-muted">
+                <th className="pb-2 pr-4">Archive</th>
+                <th className="pb-2 pr-4">Parsed Name</th>
+                <th className="pb-2 pr-4">Version</th>
+                <th className="pb-2 pr-4">Size</th>
+                <th className="pb-2 pr-4">Nexus ID</th>
+                <th className="pb-2 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((a) => (
               <tr key={a.filename} className="border-b border-border/50">
                 <td className="py-2 pr-4 font-mono text-xs text-text-primary max-w-[200px] truncate">
                   {a.filename}
@@ -136,8 +191,9 @@ export function ArchivesList({ archives, gameName }: Props) {
                 </td>
               </tr>
             ))}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {conflicts && (
