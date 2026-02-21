@@ -22,6 +22,7 @@ import type {
   ScanResult,
   Setting,
   ToggleResult,
+  TrendingResult,
   UninstallResult,
   UpdateCheckResult,
 } from "@/types/api";
@@ -297,5 +298,18 @@ export function useValidatePath() {
   return useMutation<PathValidation, Error, { install_path: string; domain_name?: string }>({
     mutationFn: (data) =>
       api.post("/api/v1/games/validate-path", data),
+  });
+}
+
+export function useRefreshTrending() {
+  const qc = useQueryClient();
+  return useMutation<TrendingResult, Error, string>({
+    mutationFn: (gameName) =>
+      api.get(`/api/v1/games/${gameName}/trending/?refresh=true`),
+    onSuccess: (data, gameName) => {
+      qc.setQueryData(["trending", gameName], data);
+      toast.success("Trending mods refreshed");
+    },
+    onError: () => toast.error("Failed to refresh trending mods"),
   });
 }

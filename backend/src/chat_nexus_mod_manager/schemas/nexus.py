@@ -57,3 +57,26 @@ class NexusModEnrichedOut(BaseModel):
     summary: str = ""
     endorsement_count: int = 0
     picture_url: str = ""
+
+
+class TrendingModOut(BaseModel):
+    mod_id: int
+    name: str
+    summary: str = ""
+    author: str = ""
+    version: str = ""
+    picture_url: str = ""
+    endorsement_count: int = 0
+    mod_downloads: int = 0
+    mod_unique_downloads: int = 0
+    updated_timestamp: int = 0
+    category_id: int | None = None
+    nexus_url: str = ""
+    is_installed: bool = False
+    is_tracked: bool = False
+    is_endorsed: bool = False
+
+
+class TrendingResult(BaseModel):
+    mods: list[TrendingModOut]
+    cached: bool

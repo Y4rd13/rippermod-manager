@@ -12,6 +12,7 @@ import type {
   OnboardingStatus,
   ProfileOut,
   Setting,
+  TrendingResult,
   UpdateCheckResult,
 } from "@/types/api";
 
@@ -125,5 +126,14 @@ export function useDownloadJobs(gameName: string) {
     queryFn: () => api.get(`/api/v1/games/${gameName}/downloads/`),
     enabled: !!gameName,
     refetchInterval: 5000,
+  });
+}
+
+export function useTrendingMods(gameName: string) {
+  return useQuery<TrendingResult>({
+    queryKey: ["trending", gameName],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/trending/`),
+    enabled: !!gameName,
+    staleTime: 15 * 60 * 1000,
   });
 }

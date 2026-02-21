@@ -295,3 +295,28 @@ export interface DownloadStartResult {
   job: DownloadJobOut;
   requires_nxm: boolean;
 }
+
+// Trending feature types
+
+export interface TrendingMod {
+  mod_id: number;
+  name: string;
+  summary: string;
+  author: string;
+  version: string;
+  picture_url: string;
+  endorsement_count: number;
+  mod_downloads: number;
+  mod_unique_downloads: number;
+  updated_timestamp: number;
+  category_id: number | null;
+  nexus_url: string;
+  is_installed: boolean;
+  is_tracked: boolean;
+  is_endorsed: boolean;
+}
+
+export interface TrendingResult {
+  mods: TrendingMod[];
+  cached: boolean;
+}
