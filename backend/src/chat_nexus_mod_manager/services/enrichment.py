@@ -14,7 +14,10 @@ from chat_nexus_mod_manager.models.mod import ModFile
 from chat_nexus_mod_manager.models.nexus import NexusDownload
 from chat_nexus_mod_manager.nexus.client import NexusClient, NexusRateLimitError
 from chat_nexus_mod_manager.schemas.mod import EnrichResult
-from chat_nexus_mod_manager.services.nexus_helpers import upsert_nexus_mod
+from chat_nexus_mod_manager.services.nexus_helpers import (
+    match_local_to_nexus_file,
+    upsert_nexus_mod,
+)
 from chat_nexus_mod_manager.services.progress import ProgressCallback, noop_progress
 
 logger = logging.getLogger(__name__)
@@ -29,12 +32,16 @@ async def enrich_from_filename_ids(
     """Extract Nexus mod IDs from filenames and fetch mod info from the API."""
     files = session.exec(select(ModFile).where(ModFile.mod_group_id.is_not(None))).all()  # type: ignore[union-attr]
 
-    # Collect unique nexus mod IDs from filenames
+    # Collect unique nexus mod IDs and map mod_id -> local filenames (with parsed data)
     candidate_ids: set[int] = set()
+    id_to_filenames: dict[int, list[tuple[str, str | None, int | None]]] = {}
     for f in files:
         parsed = parse_mod_filename(f.filename)
         if parsed.nexus_mod_id:
             candidate_ids.add(parsed.nexus_mod_id)
+            id_to_filenames.setdefault(parsed.nexus_mod_id, []).append(
+                (f.filename, parsed.version, parsed.upload_timestamp)
+            )
 
     if not candidate_ids:
         on_progress("enrich", "No filename IDs found", 87)
@@ -82,12 +89,38 @@ async def enrich_from_filename_ids(
                 ids_failed += 1
                 continue
 
+            # Resolve file_id by matching local filenames against Nexus file list
+            file_name_resolved = ""
+            file_id_resolved: int | None = None
+            local_entries = id_to_filenames.get(mod_id, [])
+            if local_entries:
+                try:
+                    files_resp = await client.get_mod_files(game.domain_name, mod_id)
+                    nexus_files = files_resp.get("files", [])
+                    for local_fn, local_ver, local_ts in local_entries:
+                        matched = match_local_to_nexus_file(
+                            local_fn,
+                            nexus_files,
+                            parsed_version=local_ver,
+                            parsed_timestamp=local_ts,
+                        )
+                        if matched:
+                            file_name_resolved = matched.get("file_name", "")
+                            file_id_resolved = matched.get("file_id")
+                            break
+                except NexusRateLimitError:
+                    logger.debug("Rate limited fetching files for mod %d", mod_id)
+                except Exception:
+                    logger.debug("Could not fetch files for mod %d", mod_id)
+
             upsert_nexus_mod(
                 session,
                 game.id,
                 game.domain_name,
                 mod_id,
                 info,  # type: ignore[arg-type]
+                file_name=file_name_resolved,
+                file_id=file_id_resolved,
             )
 
             ids_new += 1

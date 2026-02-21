@@ -30,6 +30,7 @@ from chat_nexus_mod_manager.models.install import InstalledMod
 from chat_nexus_mod_manager.models.mod import ModGroup
 from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
 from chat_nexus_mod_manager.nexus.client import NexusClient
+from chat_nexus_mod_manager.services.nexus_helpers import match_local_to_nexus_file
 from chat_nexus_mod_manager.services.settings_helpers import get_setting, set_setting
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,7 @@ class TrackedMod:
     mod_group_id: int | None = None
     upload_timestamp: int | None = None
     nexus_url: str = ""
+    source_archive: str = ""
 
 
 @dataclass
@@ -88,6 +90,7 @@ def collect_tracked_mods(game_id: int, game_domain: str, session: Session) -> di
             mod_group_id=mod.mod_group_id,
             upload_timestamp=mod.upload_timestamp,
             nexus_url=nexus_url,
+            source_archive=mod.source_archive,
         )
 
     # Source 2: Correlated mods (Nexus Matched)
@@ -112,6 +115,7 @@ def collect_tracked_mods(game_id: int, game_domain: str, session: Session) -> di
             source="correlation",
             mod_group_id=group.id,
             nexus_url=dl.nexus_url,
+            source_archive=dl.file_name,
         )
 
     # Source 3: Endorsed and tracked mods
@@ -134,6 +138,7 @@ def collect_tracked_mods(game_id: int, game_domain: str, session: Session) -> di
             display_name=dl.mod_name,
             source=source,
             nexus_url=dl.nexus_url,
+            source_archive=dl.file_name,
         )
 
     return mods
@@ -192,7 +197,11 @@ async def _resolve_file_ids(
     game_domain: str,
     updates: list[dict[str, Any]],
 ) -> None:
-    """Resolve nexus_file_id for updates that lack one."""
+    """Resolve nexus_file_id for updates that lack one.
+
+    Uses ``match_local_to_nexus_file()`` when a local filename is available,
+    then checks ``file_updates`` chains for direct replacement info.
+    """
     sem = asyncio.Semaphore(_MAX_CONCURRENT)
 
     async def resolve_one(update: dict[str, Any]) -> None:
@@ -202,16 +211,46 @@ async def _resolve_file_ids(
             try:
                 files_resp = await client.get_mod_files(game_domain, update["nexus_mod_id"])
                 nexus_files = files_resp.get("files", [])
-                main_files = [f for f in nexus_files if f.get("category_id") == 1]
-                if main_files:
-                    best = max(main_files, key=lambda f: f.get("uploaded_timestamp", 0))
-                else:
-                    active = [f for f in nexus_files if f.get("category_id") != 7]
-                    best = (
-                        max(active, key=lambda f: f.get("uploaded_timestamp", 0))
-                        if active
-                        else None
+                file_updates = files_resp.get("file_updates", [])
+
+                local_fn = update.get("local_filename", "")
+                best: dict[str, Any] | None = None
+
+                if local_fn:
+                    parsed = parse_mod_filename(local_fn)
+                    best = match_local_to_nexus_file(
+                        local_fn,
+                        nexus_files,
+                        parsed_version=parsed.version,
+                        parsed_timestamp=parsed.upload_timestamp,
                     )
+
+                    # Check file_updates chain: if matched file appears as old_file_id,
+                    # follow the chain to the newest replacement
+                    if best and file_updates:
+                        matched_fid = best.get("file_id")
+                        chain: dict[int, int] = {
+                            fu["old_file_id"]: fu["new_file_id"]
+                            for fu in file_updates
+                            if "old_file_id" in fu and "new_file_id" in fu
+                        }
+                        visited: set[int] = set()
+                        current = matched_fid
+                        while current in chain and current not in visited:
+                            visited.add(current)
+                            current = chain[current]
+                        if current and current != matched_fid:
+                            # Find the new file details
+                            new_file = next(
+                                (f for f in nexus_files if f.get("file_id") == current), None
+                            )
+                            if new_file and new_file.get("category_id") != 7:
+                                best = new_file
+
+                if not best:
+                    # Fallback: most recent MAIN or active file
+                    best = match_local_to_nexus_file("", nexus_files)
+
                 if best:
                     update["nexus_file_id"] = best.get("file_id")
                     update["nexus_file_name"] = best.get("file_name", "")
@@ -225,6 +264,41 @@ async def _resolve_file_ids(
                 )
 
     await asyncio.gather(*(resolve_one(u) for u in updates))
+
+
+def _persist_resolved_file_ids(
+    updates: list[dict[str, Any]],
+    session: Session,
+    game_id: int,
+) -> None:
+    """Persist resolved nexus_file_ids back to InstalledMod and NexusDownload."""
+    for update in updates:
+        fid = update.get("nexus_file_id")
+        if not fid:
+            continue
+
+        mid = update["nexus_mod_id"]
+
+        # Persist to InstalledMod if it exists and lacks file_id
+        installed_id = update.get("installed_mod_id")
+        if installed_id:
+            installed = session.get(InstalledMod, installed_id)
+            if installed and not installed.nexus_file_id:
+                installed.nexus_file_id = fid
+                session.add(installed)
+
+        # Persist to NexusDownload if it lacks file_id
+        nx_dl = session.exec(
+            select(NexusDownload).where(
+                NexusDownload.game_id == game_id,
+                NexusDownload.nexus_mod_id == mid,
+            )
+        ).first()
+        if nx_dl and not nx_dl.file_id:
+            nx_dl.file_id = fid
+            session.add(nx_dl)
+
+    session.commit()
 
 
 def _cache_update_result(game_id: int, result: UpdateResult, session: Session) -> None:
@@ -364,6 +438,7 @@ async def check_all_updates(
                     "local_timestamp": mod.upload_timestamp,
                     "nexus_timestamp": None,
                     "timestamp_only": is_timestamp_flagged and not is_version_newer,
+                    "local_filename": mod.source_archive,
                 }
             )
         else:
@@ -374,9 +449,10 @@ async def check_all_updates(
                 meta.version,
             )
 
-    # Resolve file IDs for downloads
+    # Resolve file IDs for downloads and persist back to DB
     if updates:
         await _resolve_file_ids(client, game_domain, updates)
+        _persist_resolved_file_ids(updates, session, game_id)
 
     logger.info("Update check complete: %d updates from %d mods", len(updates), len(tracked))
 

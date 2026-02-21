@@ -23,9 +23,11 @@ from chat_nexus_mod_manager.services.conflict_service import check_conflicts
 from chat_nexus_mod_manager.services.install_service import (
     install_mod,
     list_available_archives,
+    resolve_installed_file_id,
     toggle_mod,
     uninstall_mod,
 )
+from chat_nexus_mod_manager.services.settings_helpers import get_setting
 
 logger = logging.getLogger(__name__)
 
@@ -98,11 +100,20 @@ async def install(
         raise HTTPException(404, f"Archive not found: {data.archive_filename}")
 
     try:
-        return install_mod(game, archive_path, session, data.skip_conflicts)
+        result = install_mod(game, archive_path, session, data.skip_conflicts)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
+
+    # Best-effort async resolution of nexus_file_id
+    api_key = get_setting(session, "nexus_api_key")
+    if api_key:
+        installed = session.get(InstalledMod, result.installed_mod_id)
+        if installed and not installed.nexus_file_id and installed.nexus_mod_id:
+            await resolve_installed_file_id(result.installed_mod_id, game, api_key, session)
+
+    return result
 
 
 @router.delete("/installed/{mod_id}", response_model=UninstallResult)
