@@ -108,7 +108,7 @@ export function SettingsPage() {
               size="sm"
               onClick={() => sso.startSSO()}
               loading={sso.state === "connecting" || sso.state === "waiting"}
-              disabled={sso.state === "waiting"}
+              disabled={sso.state === "connecting" || sso.state === "waiting"}
             >
               <ExternalLink className="h-3.5 w-3.5" />
               {sso.state === "waiting"

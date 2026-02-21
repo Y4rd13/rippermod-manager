@@ -115,8 +115,8 @@ async def sso_start() -> SSOStartResult:
     try:
         session_uuid, authorize_url = await start_sso()
         return SSOStartResult(uuid=session_uuid, authorize_url=authorize_url)
-    except RuntimeError as e:
-        raise HTTPException(500, f"Failed to start SSO: {e}") from e
+    except RuntimeError:
+        raise HTTPException(502, "Failed to connect to Nexus Mods SSO service") from None
 
 
 @router.get("/sso/poll/{session_uuid}", response_model=SSOPollResult)
@@ -128,7 +128,7 @@ async def sso_poll(session_uuid: str, session: Session = Depends(get_session)) -
     if sso is None:
         raise HTTPException(404, "SSO session not found or expired")
 
-    if sso.status.value == "success" and sso.api_key:
+    if sso.status.value == "success" and sso.api_key and not sso.result_persisted:
         setting = session.exec(select(AppSetting).where(AppSetting.key == "nexus_api_key")).first()
         if setting:
             setting.value = sso.api_key
@@ -136,6 +136,7 @@ async def sso_poll(session_uuid: str, session: Session = Depends(get_session)) -
             setting = AppSetting(key="nexus_api_key", value=sso.api_key)
             session.add(setting)
         session.commit()
+        sso.result_persisted = True
 
     return SSOPollResult(
         status=sso.status.value,

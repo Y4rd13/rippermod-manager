@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import os
 import time
 import uuid as uuid_mod
 from dataclasses import dataclass, field
@@ -17,7 +18,8 @@ logger = logging.getLogger(__name__)
 SSO_WS_URL = "wss://sso.nexusmods.com"
 SSO_AUTHORIZE_URL = "https://www.nexusmods.com/sso"
 SSO_TIMEOUT = 300  # 5 minutes
-APPLICATION_SLUG = "vortex"  # TODO: replace with registered slug
+APPLICATION_SLUG = os.environ.get("NEXUS_SSO_SLUG", "vortex")
+MAX_CONCURRENT_SESSIONS = 3
 
 
 class SSOStatus(StrEnum):
@@ -34,6 +36,7 @@ class SSOSession:
     connection_token: str = ""
     api_key: str = ""
     result: NexusKeyResult | None = None
+    result_persisted: bool = False
     error: str = ""
     task: asyncio.Task[None] | None = field(default=None, repr=False)
     created_at: float = field(default_factory=time.monotonic)
@@ -43,9 +46,10 @@ _sessions: dict[str, SSOSession] = {}
 
 
 def _cleanup_expired() -> None:
-    """Remove sessions older than SSO_TIMEOUT."""
+    """Remove sessions older than SSO_TIMEOUT + grace period."""
     now = time.monotonic()
-    expired = [k for k, v in _sessions.items() if now - v.created_at > SSO_TIMEOUT]
+    grace = SSO_TIMEOUT + 30
+    expired = [k for k, v in _sessions.items() if now - v.created_at > grace]
     for k in expired:
         session = _sessions.pop(k)
         if session.task and not session.task.done():
@@ -98,15 +102,19 @@ async def _sso_listener(session: SSOSession) -> None:
     except websockets.exceptions.ConnectionClosed:
         session.status = SSOStatus.ERROR
         session.error = "WebSocket connection closed unexpectedly"
-    except Exception as e:
+    except Exception:
         logger.exception("SSO listener error")
         session.status = SSOStatus.ERROR
-        session.error = str(e)
+        session.error = "An unexpected error occurred during SSO"
 
 
 async def start_sso() -> tuple[str, str]:
     """Start a new SSO session. Returns (uuid, authorize_url)."""
     _cleanup_expired()
+
+    active = sum(1 for s in _sessions.values() if s.status == SSOStatus.PENDING)
+    if active >= MAX_CONCURRENT_SESSIONS:
+        raise RuntimeError("Too many active SSO sessions")
 
     session_uuid = str(uuid_mod.uuid4())
     session = SSOSession(uuid=session_uuid)

@@ -137,16 +137,21 @@ function NexusSetupStep({ onNext }: { onNext: () => void }) {
   const connectNexus = useConnectNexus();
   const sso = useNexusSSO();
   const [error, setError] = useState("");
-  const [validated, setValidated] = useState(false);
+  const [manualValidated, setManualValidated] = useState(false);
   const [showManual, setShowManual] = useState(false);
 
+  const ssoSuccess = sso.state === "success" && sso.result !== null;
+  const validated = manualValidated || ssoSuccess;
+  const displayUsername = ssoSuccess
+    ? sso.result!.username
+    : store.nexusUsername;
+
+  // Sync SSO username to onboarding store (external system update, not local state)
   useEffect(() => {
-    if (sso.state === "success" && sso.result) {
+    if (ssoSuccess && sso.result) {
       store.setNexusUsername(sso.result.username);
-      setValidated(true);
-      setError("");
     }
-  }, [sso.state, sso.result, store]);
+  }, [ssoSuccess, sso.result, store]);
 
   const handleManualValidate = () => {
     if (!store.nexusKey.trim()) {
@@ -157,7 +162,7 @@ function NexusSetupStep({ onNext }: { onNext: () => void }) {
       onSuccess: (result) => {
         if (result.valid) {
           store.setNexusUsername(result.username);
-          setValidated(true);
+          setManualValidated(true);
           setError("");
         } else {
           setError(result.error || "Invalid API key");
@@ -181,7 +186,7 @@ function NexusSetupStep({ onNext }: { onNext: () => void }) {
       {validated ? (
         <>
           <p className="text-success text-sm">
-            Connected as {store.nexusUsername}
+            Connected as {displayUsername}
           </p>
           <div className="flex justify-end">
             <Button onClick={onNext}>Continue</Button>
@@ -192,7 +197,7 @@ function NexusSetupStep({ onNext }: { onNext: () => void }) {
           <Button
             onClick={() => sso.startSSO()}
             loading={sso.state === "connecting" || sso.state === "waiting"}
-            disabled={sso.state === "waiting"}
+            disabled={sso.state === "connecting" || sso.state === "waiting"}
             size="lg"
             className="w-full"
           >

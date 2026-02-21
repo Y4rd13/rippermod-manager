@@ -22,16 +22,17 @@ export function useNexusSSO(): UseNexusSSOReturn {
   const [error, setError] = useState("");
   const [result, setResult] = useState<NexusKeyResult | null>(null);
   const uuidRef = useRef<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const cleanup = useCallback(() => {
     if (timerRef.current) {
-      clearInterval(timerRef.current);
+      clearTimeout(timerRef.current);
       timerRef.current = undefined;
     }
     if (uuidRef.current) {
-      api.delete(`/api/v1/nexus/sso/${uuidRef.current}`).catch(() => {});
+      const uuid = uuidRef.current;
       uuidRef.current = null;
+      api.delete(`/api/v1/nexus/sso/${uuid}`).catch(() => {});
     }
   }, []);
 
@@ -53,31 +54,31 @@ export function useNexusSSO(): UseNexusSSOReturn {
       setState("waiting");
       toast.info("Authorize in browser", "Complete the login in your browser window");
 
-      timerRef.current = setInterval(async () => {
+      const poll = async () => {
         if (!uuidRef.current) return;
         try {
-          const poll = await api.get<SSOPollResult>(
+          const res = await api.get<SSOPollResult>(
             `/api/v1/nexus/sso/poll/${uuidRef.current}`,
           );
-          if (poll.status === "success" && poll.result) {
-            clearInterval(timerRef.current);
-            timerRef.current = undefined;
+          if (res.status === "success" && res.result) {
             uuidRef.current = null;
-            setResult(poll.result);
+            setResult(res.result);
             setState("success");
-            toast.success("Connected", `Signed in as ${poll.result.username}`);
-          } else if (poll.status === "error" || poll.status === "expired") {
-            clearInterval(timerRef.current);
-            timerRef.current = undefined;
+            toast.success("Connected", `Signed in as ${res.result.username}`);
+            return;
+          } else if (res.status === "error" || res.status === "expired") {
             uuidRef.current = null;
-            setError(poll.error || "SSO failed");
+            setError(res.error || "SSO failed");
             setState("error");
-            toast.error("SSO failed", poll.error);
+            toast.error("SSO failed", res.error);
+            return;
           }
         } catch {
-          // Transient network error — keep polling
+          // Transient network error — continue polling
         }
-      }, POLL_INTERVAL);
+        timerRef.current = setTimeout(poll, POLL_INTERVAL);
+      };
+      timerRef.current = setTimeout(poll, POLL_INTERVAL);
     } catch (e) {
       setState("error");
       setError(e instanceof Error ? e.message : "Failed to start SSO");
