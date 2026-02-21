@@ -9,6 +9,7 @@ import {
   Play,
   RefreshCw,
   Scan,
+  TrendingUp,
   UserCheck,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
@@ -21,6 +22,7 @@ import { InstalledModsTable } from "@/components/mods/InstalledModsTable";
 import { ModsTable } from "@/components/mods/ModsTable";
 import { NexusAccountGrid } from "@/components/mods/NexusAccountGrid";
 import { NexusMatchedGrid } from "@/components/mods/NexusMatchedGrid";
+import { TrendingGrid } from "@/components/mods/TrendingGrid";
 import { ProfileManager } from "@/components/mods/ProfileManager";
 import { SourceBadge } from "@/components/mods/SourceBadge";
 import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
@@ -38,6 +40,7 @@ import {
   useMods,
   useProfiles,
   useTrackedMods,
+  useTrendingMods,
   useUpdates,
 } from "@/hooks/queries";
 import { api } from "@/lib/api-client";
@@ -46,13 +49,14 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import type { ModUpdate } from "@/types/api";
 
-type Tab = "mods" | "matched" | "endorsed" | "tracked" | "installed" | "archives" | "profiles" | "updates";
+type Tab = "mods" | "matched" | "endorsed" | "tracked" | "trending" | "installed" | "archives" | "profiles" | "updates";
 
 const TABS: { key: Tab; label: string; Icon: typeof Package }[] = [
   { key: "mods", label: "Scanned", Icon: Package },
   { key: "matched", label: "Nexus Matched", Icon: Link2 },
   { key: "endorsed", label: "Endorsed", Icon: Heart },
   { key: "tracked", label: "Tracked", Icon: Eye },
+  { key: "trending", label: "Trending", Icon: TrendingUp },
   { key: "installed", label: "Installed", Icon: UserCheck },
   { key: "archives", label: "Archives", Icon: Archive },
   { key: "profiles", label: "Profiles", Icon: FolderOpen },
@@ -169,6 +173,7 @@ export function GameDetailPage() {
   const { data: profiles = [] } = useProfiles(name);
   const { data: endorsedMods = [] } = useEndorsedMods(name);
   const { data: trackedMods = [] } = useTrackedMods(name);
+  const { data: trendingResult } = useTrendingMods(name);
   const { data: updates } = useUpdates(name);
   const { data: downloadJobs = [] } = useDownloadJobs(name);
   const queryClient = useQueryClient();
@@ -426,6 +431,15 @@ export function GameDetailPage() {
           installedMods={installedMods}
           gameName={name}
           emptyMessage="No tracked mods. Sync your Nexus account to see mods you're tracking."
+          downloadJobs={downloadJobs}
+        />
+      )}
+      {tab === "trending" && (
+        <TrendingGrid
+          mods={trendingResult?.mods ?? []}
+          archives={archives}
+          installedMods={installedMods}
+          gameName={name}
           downloadJobs={downloadJobs}
         />
       )}
