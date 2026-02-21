@@ -95,7 +95,11 @@ async def enrich_from_filename_ids(
             local_entries = id_to_filenames.get(mod_id, [])
             if local_entries:
                 try:
-                    files_resp = await client.get_mod_files(game.domain_name, mod_id)
+                    files_resp = await client.get_mod_files(
+                        game.domain_name,
+                        mod_id,
+                        category="main,update,optional,miscellaneous",
+                    )
                     nexus_files = files_resp.get("files", [])
                     for local_fn, local_ver, local_ts in local_entries:
                         matched = match_local_to_nexus_file(

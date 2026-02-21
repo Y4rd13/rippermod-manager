@@ -333,6 +333,34 @@ export interface TrendingMod {
   is_endorsed: boolean;
 }
 
+export interface NexusModFileDetail {
+  file_id: number;
+  file_name: string;
+  version: string;
+  category_id: number | null;
+  uploaded_timestamp: number | null;
+  file_size: number;
+}
+
+export interface ModDetail {
+  nexus_mod_id: number;
+  game_domain: string;
+  name: string;
+  summary: string;
+  description: string;
+  author: string;
+  version: string;
+  created_at: string | null;
+  updated_at: string | null;
+  endorsement_count: number;
+  mod_downloads: number;
+  category: string;
+  picture_url: string;
+  nexus_url: string;
+  changelogs: Record<string, string[]>;
+  files: NexusModFileDetail[];
+}
+
 export interface TrendingResult {
   trending: TrendingMod[];
   latest_updated: TrendingMod[];

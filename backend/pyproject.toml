@@ -20,6 +20,7 @@ dependencies = [
     "defusedxml>=0.7.0",
     "pefile>=2024.8.26",
     "websockets>=14.0",
+    "openai>=1.60.0",
 ]
 
 [project.optional-dependencies]

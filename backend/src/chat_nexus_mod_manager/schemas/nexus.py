@@ -85,6 +85,34 @@ class TrendingResult(BaseModel):
     cached: bool
 
 
+class NexusModFileOut(BaseModel):
+    file_id: int
+    file_name: str
+    version: str
+    category_id: int | None
+    uploaded_timestamp: int | None
+    file_size: int
+
+
+class ModDetailOut(BaseModel):
+    nexus_mod_id: int
+    game_domain: str
+    name: str
+    summary: str
+    description: str
+    author: str
+    version: str
+    created_at: datetime | None
+    updated_at: datetime | None
+    endorsement_count: int
+    mod_downloads: int
+    category: str
+    picture_url: str
+    nexus_url: str
+    changelogs: dict[str, list[str]]
+    files: list[NexusModFileOut]
+
+
 class SSOStartResult(BaseModel):
     uuid: str
     authorize_url: str

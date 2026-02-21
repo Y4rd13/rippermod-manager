@@ -40,17 +40,21 @@ export function ModCardAction({
   onDownload,
   onCancelDownload,
 }: Props) {
+  const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
+
   if (isInstalled) {
     return (
-      <Badge variant="success">
-        <Check size={10} /> Installed
-      </Badge>
+      <div onClick={stopPropagation}>
+        <Badge variant="success">
+          <Check size={10} /> Installed
+        </Badge>
+      </div>
     );
   }
 
   if (isInstalling) {
     return (
-      <span className="inline-flex items-center gap-1 text-xs text-text-muted">
+      <span onClick={stopPropagation} className="inline-flex items-center gap-1 text-xs text-text-muted">
         <Loader2 size={12} className="animate-spin" /> Installing...
       </span>
     );
@@ -58,7 +62,7 @@ export function ModCardAction({
 
   if (activeDownload) {
     return (
-      <div className="w-36">
+      <div className="w-36" onClick={stopPropagation}>
         <DownloadProgress job={activeDownload} onCancel={onCancelDownload} />
       </div>
     );
@@ -67,7 +71,7 @@ export function ModCardAction({
   if (completedDownload) {
     return (
       <button
-        onClick={onInstallByFilename}
+        onClick={(e) => { e.stopPropagation(); onInstallByFilename(); }}
         className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent/80"
       >
         <Package size={12} />
@@ -79,7 +83,7 @@ export function ModCardAction({
   if (archive) {
     return (
       <button
-        onClick={onInstall}
+        onClick={(e) => { e.stopPropagation(); onInstall(); }}
         disabled={hasConflicts}
         className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent/80 disabled:opacity-50"
         title={`Install from ${archive.filename}`}
@@ -91,7 +95,7 @@ export function ModCardAction({
   }
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1" onClick={stopPropagation}>
       <button
         onClick={onDownload}
         disabled={isDownloading}

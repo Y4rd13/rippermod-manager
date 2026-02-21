@@ -18,6 +18,7 @@ from chat_nexus_mod_manager.schemas.mod import (
     CorrelationBrief,
     ModGroupOut,
     ScanResult,
+    ScanStreamRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,12 +51,25 @@ def list_mod_groups(game_name: str, session: Session = Depends(get_session)) -> 
         if existing is None or corr.score > existing[0].score:
             corr_map[corr.mod_group_id] = (corr, nd, meta)
 
+    # Deduplicate across groups: if multiple groups match the same nexus_mod_id,
+    # only the group with the highest score keeps the match.
+    nexus_id_best: dict[int, tuple[int, float]] = {}  # nexus_mod_id -> (group_id, score)
+    for group_id, (corr, nd, _meta) in corr_map.items():
+        nid = nd.nexus_mod_id
+        prev = nexus_id_best.get(nid)
+        if prev is None or corr.score > prev[1]:
+            nexus_id_best[nid] = (group_id, corr.score)
+
+    nexus_id_winner: set[int] = set()  # group_ids that won dedup
+    for _nid, (group_id, _score) in nexus_id_best.items():
+        nexus_id_winner.add(group_id)
+
     result: list[ModGroupOut] = []
     for g in groups:
         _ = g.files
         nexus_match = None
         match = corr_map.get(g.id)  # type: ignore[arg-type]
-        if match:
+        if match and g.id in nexus_id_winner:
             corr, nd, meta = match
             nexus_match = CorrelationBrief(
                 nexus_mod_id=nd.nexus_mod_id,
@@ -107,7 +121,8 @@ def scan_mods(game_name: str, session: Session = Depends(get_session)) -> ScanRe
 
 
 @router.post("/scan-stream")
-def scan_mods_stream(game_name: str) -> StreamingResponse:
+def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> StreamingResponse:
+    use_ai_search = body.ai_search if body else False
     q: queue.Queue[dict | None] = queue.Queue()
 
     def on_progress(phase: str, message: str, percent: int) -> None:
@@ -128,12 +143,18 @@ def scan_mods_stream(game_name: str) -> StreamingResponse:
                 from chat_nexus_mod_manager.scanner.service import scan_game_mods
                 from chat_nexus_mod_manager.services.archive_matcher import match_archives_by_md5
                 from chat_nexus_mod_manager.services.enrichment import enrich_from_filename_ids
+                from chat_nexus_mod_manager.services.file_list_matcher import (
+                    match_endorsed_by_name,
+                    match_endorsed_to_local,
+                )
                 from chat_nexus_mod_manager.services.fomod_parser import parse_archive_metadata
                 from chat_nexus_mod_manager.services.nexus_sync import sync_nexus_history
                 from chat_nexus_mod_manager.services.settings_helpers import get_setting
                 from chat_nexus_mod_manager.services.web_search_matcher import (
                     search_unmatched_mods,
                 )
+
+                openai_key = get_setting(session, "openai_api_key") if use_ai_search else None
 
                 # Phase 1: Scan files + group (0-83%)
                 scan_game_mods(game, session, on_progress=on_progress)
@@ -166,6 +187,26 @@ def scan_mods_stream(game_name: str) -> StreamingResponse:
                         await sync_nexus_history(game, api_key, session)
                         on_progress("sync", "Nexus sync complete", 97)
 
+                        # File list matching (97%) — between sync and correlate
+                        on_progress("file-list", "Matching endorsed mods to local files...", 97)
+                        fl_result = match_endorsed_to_local(game, session, on_progress)
+                        if fl_result.matched:
+                            on_progress(
+                                "file-list",
+                                f"File list: {fl_result.matched} endorsed mods matched",
+                                97,
+                            )
+
+                        # Endorsed name matching (97%) — catch mods without archives
+                        on_progress("endorsed-name", "Matching endorsed mods by name...", 97)
+                        en_result = match_endorsed_by_name(game, session)
+                        if en_result.matched:
+                            on_progress(
+                                "endorsed-name",
+                                f"Endorsed name: {en_result.matched} mods matched",
+                                97,
+                            )
+
                     # Correlate (97-99%)
                     on_progress("correlate", "Correlating mods...", 97)
                     result = correlate_game_mods(game, session)
@@ -175,8 +216,16 @@ def scan_mods_stream(game_name: str) -> StreamingResponse:
                         99,
                     )
 
-                    if api_key and tavily_key:
-                        # Tier 3 — Web search fallback (99-100%)
+                    if use_ai_search and openai_key and api_key:
+                        from chat_nexus_mod_manager.services.ai_search_matcher import (
+                            ai_search_unmatched_mods,
+                        )
+
+                        on_progress("ai-search", "AI searching unmatched mods...", 99)
+                        await ai_search_unmatched_mods(
+                            game, openai_key, api_key, session, on_progress
+                        )
+                    elif api_key and tavily_key:
                         try:
                             on_progress("web-search", "Searching unmatched mods...", 99)
                             await search_unmatched_mods(

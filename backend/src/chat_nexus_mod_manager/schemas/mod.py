@@ -67,4 +67,8 @@ class WebSearchResult(BaseModel):
     unmatched: int
 
 
+class ScanStreamRequest(BaseModel):
+    ai_search: bool = False
+
+
 ModGroupOut.model_rebuild()

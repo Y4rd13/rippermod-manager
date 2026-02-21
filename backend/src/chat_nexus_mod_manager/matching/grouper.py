@@ -5,15 +5,22 @@ from sklearn.cluster import DBSCAN
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+from chat_nexus_mod_manager.matching.normalization import (
+    SEPARATOR_RE,
+    clean_display_name,
+    split_camel,
+    strip_ordering_prefix,
+)
 from chat_nexus_mod_manager.models.mod import ModFile
 
 VERSION_RE = re.compile(r"[_\-.]?v?\d+\.\d+(\.\d+)?[_\-.]?", re.IGNORECASE)
-SEPARATOR_RE = re.compile(r"[_\-.\s]+")
 
 
 def normalize_name(name: str) -> str:
+    name = strip_ordering_prefix(name)
     name = name.rsplit(".", 1)[0]
     name = VERSION_RE.sub(" ", name)
+    name = split_camel(name)
     name = SEPARATOR_RE.sub(" ", name)
     return name.strip().lower()
 
@@ -86,6 +93,41 @@ def _cluster_loose_files(
     return results
 
 
+def _merge_same_name_groups(
+    groups: list[tuple[str, list[ModFile], float]],
+) -> list[tuple[str, list[ModFile], float]]:
+    """Merge groups whose normalized names are identical (exact match only)."""
+    buckets: dict[str, list[int]] = {}
+    for idx, (name, _files, _conf) in enumerate(groups):
+        key = normalize_name(name)
+        buckets.setdefault(key, []).append(idx)
+
+    merged: list[tuple[str, list[ModFile], float]] = []
+    seen: set[int] = set()
+    for idx, (name, files, conf) in enumerate(groups):
+        if idx in seen:
+            continue
+        key = normalize_name(name)
+        indices = buckets[key]
+        if len(indices) == 1:
+            merged.append((name, files, conf))
+        else:
+            # Merge all groups in this bucket
+            combined_files: list[ModFile] = []
+            best_name = name
+            best_conf = conf
+            for i in indices:
+                seen.add(i)
+                combined_files.extend(groups[i][1])
+                # Pick the longest display name (most informative)
+                if len(groups[i][0]) > len(best_name):
+                    best_name = groups[i][0]
+                best_conf = min(best_conf, groups[i][2])
+            merged.append((best_name, combined_files, best_conf))
+
+    return merged
+
+
 def group_mod_files(
     files: list[ModFile], eps: float = 0.45
 ) -> list[tuple[str, list[ModFile], float]]:
@@ -104,10 +146,14 @@ def group_mod_files(
 
     results: list[tuple[str, list[ModFile], float]] = []
     for folder_name in sorted(folder_groups):
-        results.append((folder_name, folder_groups[folder_name], 1.0))
+        display = clean_display_name(folder_name)
+        results.append((display, folder_groups[folder_name], 1.0))
 
     # Phase 2: TF-IDF + DBSCAN for loose files only
     if loose_files:
         results.extend(_cluster_loose_files(loose_files, eps))
+
+    # Phase 3: Merge groups with identical normalized names (cross-folder merge)
+    results = _merge_same_name_groups(results)
 
     return results

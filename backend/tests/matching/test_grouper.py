@@ -26,7 +26,7 @@ class TestNormalizeName:
         assert normalize_name("") == ""
 
     def test_lowercases(self):
-        assert normalize_name("MyMod.archive") == "mymod"
+        assert normalize_name("MyMod.archive") == "my mod"
 
 
 class TestGroupModFiles:
@@ -79,7 +79,7 @@ class TestFolderAwareGrouping:
         result = group_mod_files(files)
         assert len(result) == 2
         names = {r[0] for r in result}
-        assert names == {"AppearanceMenuMod", "CyberCat"}
+        assert names == {"Appearance Menu Mod", "Cyber Cat"}
 
     def test_folder_groups_have_confidence_one(self):
         files = [
@@ -89,7 +89,7 @@ class TestFolderAwareGrouping:
         result = group_mod_files(files)
         assert len(result) == 1
         name, grouped, confidence = result[0]
-        assert name == "ModA"
+        assert name == "Mod A"
         assert len(grouped) == 2
         assert confidence == 1.0
 
@@ -116,16 +116,16 @@ class TestFolderAwareGrouping:
         )
         result = group_mod_files([f])
         assert len(result) == 1
-        assert result[0][0] == "AppearanceMenuMod"
+        assert result[0][0] == "Appearance Menu Mod"
         assert result[0][2] == 1.0
 
-    def test_raw_folder_name_preserved(self):
-        """Folder names like ##########VendorsXL should be used as-is."""
+    def test_folder_name_cleaned_for_display(self):
+        """Folder names like ##########VendorsXL should be cleaned for display."""
         files = [
             _file("data.json", folder="mods", subfolder="##########VendorsXL"),
         ]
         result = group_mod_files(files)
-        assert result[0][0] == "##########VendorsXL"
+        assert result[0][0] == "Vendors XL"
 
     def test_deeply_nested_uses_first_component(self):
         """Deeply nested files use the first path component as the group name."""
@@ -169,5 +169,39 @@ class TestFolderAwareGrouping:
         )
         result = group_mod_files([f])
         assert len(result) == 1
-        assert result[0][0] == "AppearanceMenuMod"
+        assert result[0][0] == "Appearance Menu Mod"
         assert result[0][2] == 1.0
+
+
+class TestCrossFolderMerge:
+    def test_cet_folder_and_loose_archive_merge(self):
+        """CET folder ##EgghancedBloodFx + loose zEgghancedBloodFx.archive → 1 group."""
+        cet = "bin/x64/plugins/cyber_engine_tweaks/mods"
+        files = [
+            _file("init.lua", folder=cet, subfolder="##EgghancedBloodFx"),
+            _file("zEgghancedBloodFx.archive", folder="archive/pc/mod"),
+        ]
+        result = group_mod_files(files)
+        assert len(result) == 1
+        name, grouped, _conf = result[0]
+        assert len(grouped) == 2
+        assert "egghanced" in name.lower()
+
+    def test_different_names_not_merged(self):
+        """Groups with different normalized names stay separate."""
+        files = [
+            _file("init.lua", folder="mods", subfolder="ModAlpha"),
+            _file("init.lua", folder="mods", subfolder="ModBeta"),
+        ]
+        result = group_mod_files(files)
+        assert len(result) == 2
+
+    def test_hash_and_z_prefix_variants_merge(self):
+        """##ModName folder + zModName.archive → merged via identical normalized name."""
+        files = [
+            _file("config.json", folder="mods", subfolder="##ModName"),
+            _file("zModName.archive", folder="archive/pc/mod"),
+        ]
+        result = group_mod_files(files)
+        assert len(result) == 1
+        assert len(result[0][1]) == 2
