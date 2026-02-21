@@ -250,7 +250,7 @@ function NexusSetupStep({ onNext }: { onNext: () => void }) {
                 onChange={(e) => {
                   store.setNexusKey(e.target.value);
                   setError("");
-                  setValidated(false);
+                  setManualValidated(false);
                 }}
                 error={error}
               />
