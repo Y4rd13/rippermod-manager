@@ -33,7 +33,7 @@ class ModUpdate(BaseModel):
     source: str = "correlation"
     local_timestamp: int | None = None
     nexus_timestamp: int | None = None
-    timestamp_only: bool = False
+    detection_method: str = "version"
 
 
 class UpdateCheckResult(BaseModel):
@@ -77,6 +77,7 @@ async def check_updates(
                 game.domain_name,
                 client,
                 session,  # type: ignore[arg-type]
+                install_path=game.install_path,
             )
     else:
         result = check_cached_updates(game.id, game.domain_name, session)  # type: ignore[arg-type]

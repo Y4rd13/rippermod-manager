@@ -1,42 +1,48 @@
 """Unified update checking across installed, correlated, endorsed, and tracked mods.
 
-Strategy (optimal API usage):
-1. Collect ALL nexus_mod_ids from every source with local version info
+Strategy — timestamp-first detection:
+1. Collect ALL nexus_mod_ids from every source with local version + file mtime
 2. Deduplicate: installed > correlation > endorsed > tracked
-3. Fetch recently updated mods (1 API call: get_updated_mods("1m"))
-4. Compare latest_file_update timestamps against NexusModMeta.updated_at
-5. Refresh NexusModMeta only for mods flagged by timestamp comparison
-6. Build updates from BOTH timestamp flags and version comparison
-7. Resolve file IDs only for mods with confirmed updates
-8. Cache results in AppSetting for the GET endpoint
+3. Scan downloaded_mods/ archives for ground-truth local versions
+4. Fetch recently updated mods (1 API call: get_updated_mods("1m"))
+5. Flag mods needing metadata refresh (timestamp change OR missing meta)
+6. Refresh NexusModMeta only for flagged mods
+7. Detect updates via TIMESTAMP comparison (primary) + VERSION comparison (secondary)
+8. Resolve file IDs and filter false positives
+9. Cache results in AppSetting for the GET endpoint
 """
 
 import asyncio
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import httpx
 from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.matching.filename_parser import (
+    ParsedFilename,
     is_newer_version,
     parse_mod_filename,
 )
 from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
 from chat_nexus_mod_manager.models.install import InstalledMod
-from chat_nexus_mod_manager.models.mod import ModGroup
+from chat_nexus_mod_manager.models.mod import ModFile, ModGroup
 from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
 from chat_nexus_mod_manager.nexus.client import NexusClient
 from chat_nexus_mod_manager.services.settings_helpers import get_setting, set_setting
+from chat_nexus_mod_manager.utils.paths import build_file_path
 
 logger = logging.getLogger(__name__)
 
 _MAX_CONCURRENT = 5
 _CACHE_KEY_PREFIX = "update_cache_"
 _CACHE_TTL = timedelta(hours=24)
+_ARCHIVE_EXTENSIONS = {".zip", ".7z", ".rar"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +57,7 @@ class TrackedMod:
     mod_group_id: int | None = None
     upload_timestamp: int | None = None
     nexus_url: str = ""
+    local_file_mtime: int | None = None
 
 
 @dataclass
@@ -59,7 +66,80 @@ class UpdateResult:
     updates: list[dict[str, Any]] = field(default_factory=list)
 
 
-def collect_tracked_mods(game_id: int, game_domain: str, session: Session) -> dict[int, TrackedMod]:
+def _get_group_file_mtime(
+    mod_group_id: int | None,
+    install_path: str,
+    session: Session,
+) -> int | None:
+    """Get the earliest file mtime for a mod group as a proxy for install time.
+
+    Queries mod_files for the group, stats a representative file, returns
+    the mtime as a unix timestamp.  Returns None if the group has no files
+    or the file cannot be stat'd.
+    """
+    if mod_group_id is None:
+        return None
+    files = session.exec(
+        select(ModFile.file_path).where(ModFile.mod_group_id == mod_group_id).limit(5)
+    ).all()
+    if not files:
+        return None
+
+    min_mtime: int | None = None
+    for rel_path in files:
+        full_path = build_file_path(install_path, rel_path)
+        try:
+            st = os.stat(full_path)
+            mtime = int(st.st_mtime)
+            if min_mtime is None or mtime < min_mtime:
+                min_mtime = mtime
+        except OSError:
+            continue
+    return min_mtime
+
+
+def _scan_download_archives(install_path: str) -> dict[int, ParsedFilename]:
+    """Scan the downloaded_mods/ staging folder for Nexus archive filenames.
+
+    Returns a dict keyed by nexus_mod_id with the parsed filename info.
+    When multiple archives exist for the same mod, keeps the one with the
+    latest upload_timestamp.
+    """
+    from chat_nexus_mod_manager.utils.paths import to_native_path
+
+    staging = Path(to_native_path(install_path)) / "downloaded_mods"
+    if not staging.is_dir():
+        return {}
+
+    results: dict[int, ParsedFilename] = {}
+    try:
+        for entry in staging.iterdir():
+            if not entry.is_file():
+                continue
+            if entry.suffix.lower() not in _ARCHIVE_EXTENSIONS:
+                continue
+            parsed = parse_mod_filename(entry.name)
+            if parsed.nexus_mod_id is None:
+                continue
+            mid = parsed.nexus_mod_id
+            existing = results.get(mid)
+            newer_ts = parsed.upload_timestamp and (
+                not existing.upload_timestamp or parsed.upload_timestamp > existing.upload_timestamp
+            )
+            if existing is None or newer_ts:
+                results[mid] = parsed
+    except OSError:
+        logger.warning("Failed to scan downloaded_mods at %s", staging)
+
+    return results
+
+
+def collect_tracked_mods(
+    game_id: int,
+    game_domain: str,
+    session: Session,
+    install_path: str = "",
+) -> dict[int, TrackedMod]:
     """Collect all nexus_mod_ids with local versions, deduplicated by priority.
 
     Priority: installed > correlation > endorsed/tracked.
@@ -88,6 +168,9 @@ def collect_tracked_mods(game_id: int, game_domain: str, session: Session) -> di
             mod_group_id=mod.mod_group_id,
             upload_timestamp=mod.upload_timestamp,
             nexus_url=nexus_url,
+            local_file_mtime=_get_group_file_mtime(mod.mod_group_id, install_path, session)
+            if install_path
+            else None,
         )
 
     # Source 2: Correlated mods (Nexus Matched)
@@ -97,6 +180,8 @@ def collect_tracked_mods(game_id: int, game_domain: str, session: Session) -> di
         .join(NexusDownload, ModNexusCorrelation.nexus_download_id == NexusDownload.id)
         .where(ModGroup.game_id == game_id)
     ).all()
+    # Build a lookup so Source 3 can reuse mtimes from correlated groups
+    corr_mtime_by_nexus_id: dict[int, int | None] = {}
     for _corr, group, dl in correlations:
         mid = dl.nexus_mod_id
         if mid in mods:
@@ -105,6 +190,8 @@ def collect_tracked_mods(game_id: int, game_domain: str, session: Session) -> di
         local_v = (parsed.version if parsed and parsed.version else None) or dl.version
         if not local_v:
             continue
+        mtime = _get_group_file_mtime(group.id, install_path, session) if install_path else None
+        corr_mtime_by_nexus_id[mid] = mtime
         mods[mid] = TrackedMod(
             nexus_mod_id=mid,
             local_version=local_v,
@@ -112,6 +199,7 @@ def collect_tracked_mods(game_id: int, game_domain: str, session: Session) -> di
             source="correlation",
             mod_group_id=group.id,
             nexus_url=dl.nexus_url,
+            local_file_mtime=mtime,
         )
 
     # Source 3: Endorsed and tracked mods
@@ -134,7 +222,47 @@ def collect_tracked_mods(game_id: int, game_domain: str, session: Session) -> di
             display_name=dl.mod_name,
             source=source,
             nexus_url=dl.nexus_url,
+            local_file_mtime=corr_mtime_by_nexus_id.get(mid),
         )
+
+    # Enrich with downloaded archives (ground truth versions)
+    if install_path:
+        archives = _scan_download_archives(install_path)
+        if archives:
+            logger.info(
+                "Archive scan: found %d archives with Nexus filenames in downloaded_mods/",
+                len(archives),
+            )
+            for mid, parsed in archives.items():
+                if mid not in mods:
+                    continue
+                existing = mods[mid]
+                new_version = parsed.version or existing.local_version
+                new_ts = parsed.upload_timestamp or existing.upload_timestamp
+                if new_version != existing.local_version or new_ts != existing.upload_timestamp:
+                    mods[mid] = TrackedMod(
+                        nexus_mod_id=existing.nexus_mod_id,
+                        local_version=new_version,
+                        display_name=existing.display_name,
+                        source=existing.source,
+                        installed_mod_id=existing.installed_mod_id,
+                        mod_group_id=existing.mod_group_id,
+                        upload_timestamp=new_ts,
+                        nexus_url=existing.nexus_url,
+                        local_file_mtime=existing.local_file_mtime,
+                    )
+
+    mtime_count = sum(1 for m in mods.values() if m.local_file_mtime is not None)
+    installed_count = sum(1 for m in mods.values() if m.source == "installed")
+    corr_count = sum(1 for m in mods.values() if m.source == "correlation")
+    endorsed_tracked = sum(1 for m in mods.values() if m.source in ("endorsed", "tracked"))
+    logger.info(
+        "Collecting tracked mods: %d installed, %d correlated, %d endorsed/tracked",
+        installed_count,
+        corr_count,
+        endorsed_tracked,
+    )
+    logger.info("File mtime: obtained for %d/%d mod groups", mtime_count, len(mods))
 
     return mods
 
@@ -262,22 +390,21 @@ async def check_all_updates(
     game_domain: str,
     client: NexusClient,
     session: Session,
+    install_path: str = "",
 ) -> UpdateResult:
-    """Unified update check across all mod sources.
+    """Unified update check with timestamp-first detection.
 
-    1. Collect tracked mods from installed, correlated, endorsed, and tracked
+    1. Collect tracked mods with local_file_mtime + local_version
     2. Fetch recently updated mods from Nexus (1 API call)
-    3. Build file_update_map and compare against NexusModMeta.updated_at
-    4. Refresh metadata only for mods flagged by timestamp
-    5. Compare versions for all tracked mods (catches both paths)
-    6. Resolve file IDs for updates
+    3. Flag mods needing metadata refresh (timestamp OR missing meta)
+    4. Refresh metadata for flagged mods
+    5. Detect updates: timestamp comparison (primary) + version comparison (secondary)
+    6. Resolve file IDs, filter false positives
     7. Cache result for the GET endpoint
     """
-    tracked = collect_tracked_mods(game_id, game_domain, session)
+    tracked = collect_tracked_mods(game_id, game_domain, session, install_path)
     if not tracked:
         return UpdateResult()
-
-    logger.info("Update check: %d unique mods from all sources", len(tracked))
 
     # 1 API call: get all mods updated in last month
     file_update_map: dict[int, int] = {}
@@ -288,6 +415,13 @@ async def check_all_updates(
     except (httpx.HTTPError, ValueError):
         logger.warning("Failed to fetch recently updated mods", exc_info=True)
 
+    overlap_count = sum(1 for mid in tracked if mid in file_update_map)
+    logger.info(
+        "get_updated_mods: %d mods updated in last month, %d overlap with tracked",
+        len(file_update_map),
+        overlap_count,
+    )
+
     # Load pre-refresh updated_at baselines for our tracked mods
     tracked_ids = list(tracked.keys())
     meta_rows = session.exec(
@@ -297,26 +431,38 @@ async def check_all_updates(
     ).all()
     baseline_map: dict[int, datetime | None] = {m.nexus_mod_id: m.updated_at for m in meta_rows}
 
-    # Flag mods where latest_file_update > updated_at (or updated_at is NULL)
+    # Flag mods needing metadata refresh:
+    # - Mods in file_update_map where latest_file_update > baseline
+    # - Mods WITHOUT any NexusModMeta entry (fixes the line 305 bug)
     timestamp_flagged: set[int] = set()
+    missing_meta: set[int] = set()
     for mid in tracked:
+        if mid not in baseline_map:
+            missing_meta.add(mid)
+            continue
         latest_file_ts = file_update_map.get(mid)
         if latest_file_ts is None:
+            # Not updated in last month — still check via version later
             continue
-        baseline = baseline_map.get(mid)
+        baseline = baseline_map[mid]
         if baseline is None:
             timestamp_flagged.add(mid)
         else:
-            # SQLite drops tzinfo; treat naive datetimes as UTC
             baseline_utc = baseline.replace(tzinfo=UTC) if baseline.tzinfo is None else baseline
             baseline_epoch = int(baseline_utc.timestamp())
             if latest_file_ts > baseline_epoch:
                 timestamp_flagged.add(mid)
 
-    # Refresh metadata only for flagged mods
-    if timestamp_flagged:
-        logger.info("Refreshing metadata for %d timestamp-flagged mods", len(timestamp_flagged))
-        await _refresh_metadata(client, game_domain, timestamp_flagged, session)
+    to_refresh = timestamp_flagged | missing_meta
+    logger.info(
+        "Metadata refresh: %d mods flagged (%d timestamp, %d missing meta)",
+        len(to_refresh),
+        len(timestamp_flagged),
+        len(missing_meta),
+    )
+
+    if to_refresh:
+        await _refresh_metadata(client, game_domain, to_refresh, session)
 
     # Reload metadata after refresh
     meta_rows = session.exec(
@@ -326,26 +472,61 @@ async def check_all_updates(
     ).all()
     meta_map = {m.nexus_mod_id: m for m in meta_rows}
 
-    # Build updates from BOTH: timestamp flags OR version comparison
+    # Detect updates via TWO methods
     updates: list[dict[str, Any]] = []
+    ts_detections = 0
+    ver_detections = 0
+    both_detections = 0
+
     for mid, mod in tracked.items():
         meta = meta_map.get(mid)
         if not meta or not meta.version:
             logger.debug("Skip mod %d (%s): no metadata version", mid, mod.display_name)
             continue
 
-        is_timestamp_flagged = mid in timestamp_flagged
+        # a) TIMESTAMP comparison (primary)
+        is_ts_flagged = False
+        nexus_update_ts: int | None = None
+        if mid in file_update_map:
+            nexus_update_ts = file_update_map[mid]
+        elif meta.updated_at is not None:
+            updated = meta.updated_at
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=UTC)
+            nexus_update_ts = int(updated.timestamp())
+
+        if mod.local_file_mtime is not None and nexus_update_ts is not None:
+            # Precise comparison: Nexus file timestamp vs local file mtime
+            if nexus_update_ts > mod.local_file_mtime:
+                is_ts_flagged = True
+        elif mid in timestamp_flagged:
+            # Fallback for mods without local files (endorsed/tracked):
+            # Nexus updated since our last metadata refresh
+            is_ts_flagged = True
+
+        # b) VERSION comparison (secondary)
         is_version_newer = is_newer_version(meta.version, mod.local_version)
 
-        if is_timestamp_flagged or is_version_newer:
+        if is_ts_flagged or is_version_newer:
+            if is_ts_flagged and is_version_newer:
+                detection = "both"
+                both_detections += 1
+            elif is_ts_flagged:
+                detection = "timestamp"
+                ts_detections += 1
+            else:
+                detection = "version"
+                ver_detections += 1
+
             logger.debug(
-                "UPDATE %s: local=%s, nexus=%s (source=%s, ts_flag=%s, ver_flag=%s)",
+                "MOD %s (id=%d): local_v=%s, nexus_v=%s, local_mtime=%s, nexus_ts=%s -> %s",
                 mod.display_name,
+                mid,
                 mod.local_version,
                 meta.version,
-                mod.source,
-                is_timestamp_flagged,
-                is_version_newer,
+                mod.local_file_mtime,
+                nexus_update_ts,
+                detection,
             )
             updates.append(
                 {
@@ -363,7 +544,7 @@ async def check_all_updates(
                     "source": mod.source,
                     "local_timestamp": mod.upload_timestamp,
                     "nexus_timestamp": None,
-                    "timestamp_only": is_timestamp_flagged and not is_version_newer,
+                    "detection_method": detection,
                 }
             )
         else:
@@ -374,11 +555,45 @@ async def check_all_updates(
                 meta.version,
             )
 
-    # Resolve file IDs for downloads
+    logger.info(
+        "Update detection: %d by timestamp, %d by version, %d by both",
+        ts_detections,
+        ver_detections,
+        both_detections,
+    )
+
+    # Resolve file IDs and filter false positives
     if updates:
         await _resolve_file_ids(client, game_domain, updates)
 
-    logger.info("Update check complete: %d updates from %d mods", len(updates), len(tracked))
+        # Filter false positives: timestamp-only detections where the resolved
+        # file's uploaded_timestamp is actually <= local_file_mtime
+        filtered: list[dict[str, Any]] = []
+        for u in updates:
+            if u["detection_method"] == "timestamp":
+                nexus_file_ts = u.get("nexus_timestamp")
+                mid = u["nexus_mod_id"]
+                local_mtime = tracked[mid].local_file_mtime
+                if (
+                    nexus_file_ts is not None
+                    and local_mtime is not None
+                    and nexus_file_ts <= local_mtime
+                ):
+                    logger.debug(
+                        "False positive filtered: %s (file_ts=%d <= mtime=%d)",
+                        u["display_name"],
+                        nexus_file_ts,
+                        local_mtime,
+                    )
+                    continue
+            filtered.append(u)
+        updates = filtered
+
+    logger.info(
+        "Update check complete: %d updates from %d tracked mods",
+        len(updates),
+        len(tracked),
+    )
 
     result = UpdateResult(total_checked=len(tracked), updates=updates)
     _cache_update_result(game_id, result, session)
@@ -435,6 +650,7 @@ def check_cached_updates(
                     "source": mod.source,
                     "local_timestamp": mod.upload_timestamp,
                     "nexus_timestamp": None,
+                    "detection_method": "version",
                 }
             )
 
