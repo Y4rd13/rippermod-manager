@@ -130,7 +130,6 @@ export function NexusMatchedGrid({ mods, archives, installedMods, gameName, down
               version={match.version}
               endorsementCount={match.endorsement_count}
               pictureUrl={match.picture_url}
-              nexusUrl={match.nexus_url}
               action={
                 <ModCardAction
 

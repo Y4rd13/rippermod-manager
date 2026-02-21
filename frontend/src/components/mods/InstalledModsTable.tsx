@@ -210,7 +210,6 @@ function RecognizedModsGrid({
               version={match.version}
               endorsementCount={match.endorsement_count}
               pictureUrl={match.picture_url}
-              nexusUrl={match.nexus_url}
               action={
                 <ModCardAction
 
