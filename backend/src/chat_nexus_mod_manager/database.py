@@ -62,6 +62,7 @@ def create_db_and_tables() -> None:
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA synchronous=NORMAL")
         cursor.close()
+
     _migrate_missing_columns()
 
 
