@@ -81,8 +81,6 @@ function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdat
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<UpdateSortKey>("name");
 
-  const downloadableUpdates = updates.filter((u) => u.nexus_file_id != null);
-
   const filteredUpdates = useMemo(() => {
     const q = filter.toLowerCase();
     const items = updates.filter((u) => {
@@ -108,6 +106,8 @@ function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdat
 
     return items;
   }, [updates, filter, sortKey]);
+
+  const downloadableUpdates = filteredUpdates.filter((u) => u.nexus_file_id != null);
 
   const handleUpdateAll = async () => {
     for (const u of downloadableUpdates) {

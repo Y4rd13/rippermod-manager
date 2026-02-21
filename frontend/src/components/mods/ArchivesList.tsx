@@ -50,7 +50,7 @@ export function ArchivesList({ archives, gameName }: Props) {
         case "size":
           return b.size - a.size;
         case "version":
-          return (a.parsed_version ?? "").localeCompare(b.parsed_version ?? "");
+          return (a.parsed_version ?? "").localeCompare(b.parsed_version ?? "", undefined, { numeric: true });
       }
     });
 
@@ -194,6 +194,12 @@ export function ArchivesList({ archives, gameName }: Props) {
             </tbody>
           </table>
         </div>
+
+        {filtered.length === 0 && filter && (
+          <p className="py-4 text-sm text-text-muted">
+            No archives matching &quot;{filter}&quot;.
+          </p>
+        )}
       </div>
 
       {conflicts && (

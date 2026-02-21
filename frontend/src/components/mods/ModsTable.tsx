@@ -208,6 +208,12 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
           </tbody>
         </table>
       </div>
+
+      {filtered.length === 0 && filter && (
+        <p className="py-4 text-sm text-text-muted">
+          No mods matching &quot;{filter}&quot;.
+        </p>
+      )}
     </div>
   );
 }
