@@ -1,6 +1,7 @@
 import {
   Power,
   PowerOff,
+  Search,
   Trash2,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -263,6 +264,8 @@ export function InstalledModsTable({
   archives = [],
   downloadJobs = [],
 }: Props) {
+  const [filter, setFilter] = useState("");
+
   const installedNexusIds = useMemo(
     () => new Set(mods.filter((m) => m.nexus_mod_id != null).map((m) => m.nexus_mod_id!)),
     [mods],
@@ -276,6 +279,24 @@ export function InstalledModsTable({
     [recognizedMods, installedNexusIds],
   );
 
+  const q = filter.toLowerCase();
+
+  const filteredMods = useMemo(() => {
+    if (!q) return mods;
+    return mods.filter((m) => m.name.toLowerCase().includes(q));
+  }, [mods, q]);
+
+  const filteredRecognized = useMemo(() => {
+    if (!q) return recognized;
+    return recognized.filter(
+      (m) =>
+        m.display_name.toLowerCase().includes(q) ||
+        (m.nexus_match?.mod_name.toLowerCase().includes(q) ?? false),
+    );
+  }, [recognized, q]);
+
+  const totalCount = filteredMods.length + filteredRecognized.length;
+
   if (mods.length === 0 && recognized.length === 0) {
     return (
       <p className="py-4 text-sm text-text-muted">
@@ -287,32 +308,54 @@ export function InstalledModsTable({
 
   return (
     <div className="space-y-6">
-      {mods.length > 0 && (
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-xs">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
+          <input
+            type="text"
+            placeholder="Filter by name..."
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="w-full rounded-lg border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+          />
+        </div>
+        <span className="text-xs text-text-muted">
+          {totalCount} mod{totalCount !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      {filteredMods.length > 0 && (
         <div>
           <h3 className="text-sm font-semibold text-text-primary mb-3">
-            Managed Mods ({mods.length})
+            Managed Mods ({filteredMods.length})
           </h3>
-          <ManagedModsTable mods={mods} gameName={gameName} />
+          <ManagedModsTable mods={filteredMods} gameName={gameName} />
         </div>
       )}
 
-      {recognized.length > 0 && (
+      {filteredRecognized.length > 0 && (
         <div>
           <h3 className="text-sm font-semibold text-text-primary mb-3">
-            Recognized Mods ({recognized.length})
+            Recognized Mods ({filteredRecognized.length})
           </h3>
           <p className="text-xs text-text-muted mb-3">
-            These mods were detected during scanning and matched to Nexus, but haven't been formally
-            installed through the manager yet.
+            These mods were detected during scanning and matched to Nexus, but haven&apos;t been
+            formally installed through the manager yet.
           </p>
           <RecognizedModsGrid
-            mods={recognized}
+            mods={filteredRecognized}
             archives={archives}
             installedModIds={installedNexusIds}
             gameName={gameName}
             downloadJobs={downloadJobs}
           />
         </div>
+      )}
+
+      {totalCount === 0 && (mods.length > 0 || recognized.length > 0) && (
+        <p className="py-4 text-sm text-text-muted">
+          No mods matching &quot;{filter}&quot;.
+        </p>
       )}
     </div>
   );
