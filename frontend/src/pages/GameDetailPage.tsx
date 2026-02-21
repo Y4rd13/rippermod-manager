@@ -441,7 +441,8 @@ export function GameDetailPage() {
       )}
       {tab === "trending" && (
         <TrendingGrid
-          mods={trendingResult?.mods ?? []}
+          trendingMods={trendingResult?.trending ?? []}
+          latestUpdatedMods={trendingResult?.latest_updated ?? []}
           archives={archives}
           installedMods={installedMods}
           gameName={name}

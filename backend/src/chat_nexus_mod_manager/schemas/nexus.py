@@ -80,5 +80,17 @@ class TrendingModOut(BaseModel):
 
 
 class TrendingResult(BaseModel):
-    mods: list[TrendingModOut]
+    trending: list[TrendingModOut]
+    latest_updated: list[TrendingModOut]
     cached: bool
+
+
+class SSOStartResult(BaseModel):
+    uuid: str
+    authorize_url: str
+
+
+class SSOPollResult(BaseModel):
+    status: str
+    result: NexusKeyResult | None = None
+    error: str = ""
