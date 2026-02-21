@@ -146,12 +146,15 @@ function NexusSetupStep({ onNext }: { onNext: () => void }) {
     ? sso.result!.username
     : store.nexusUsername;
 
-  // Sync SSO username to onboarding store (external system update, not local state)
+  // Sync SSO username to onboarding store
+  const nexusUsername = useOnboardingStore((s) => s.nexusUsername);
+  const setNexusUsername = useOnboardingStore((s) => s.setNexusUsername);
+
   useEffect(() => {
-    if (ssoSuccess && sso.result) {
-      store.setNexusUsername(sso.result.username);
+    if (ssoSuccess && sso.result && nexusUsername !== sso.result.username) {
+      setNexusUsername(sso.result.username);
     }
-  }, [ssoSuccess, sso.result, store]);
+  }, [ssoSuccess, sso.result, nexusUsername, setNexusUsername]);
 
   const handleManualValidate = () => {
     if (!store.nexusKey.trim()) {
