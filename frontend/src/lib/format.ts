@@ -4,6 +4,7 @@ export function formatCount(n: number): string {
   return n.toLocaleString();
 }
 
+/** Convert a Unix timestamp to a human-readable relative time string. */
 export function timeAgo(timestamp: number): string {
   if (!timestamp) return "";
   const seconds = Math.floor(Date.now() / 1000 - timestamp);
