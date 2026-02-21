@@ -30,11 +30,14 @@ export function Sidebar() {
       )}
     >
       <div className="flex items-center justify-between p-3">
-        {!sidebarCollapsed && (
-          <span className="text-sm font-semibold text-text-primary truncate">
-            Mod Manager
-          </span>
-        )}
+        <div className="flex items-center gap-2 min-w-0">
+          <img src="/app-icon.png" alt="Chat Nexus" className="h-6 w-6 shrink-0" />
+          {!sidebarCollapsed && (
+            <span className="text-sm font-semibold text-text-primary truncate">
+              Mod Manager
+            </span>
+          )}
+        </div>
         <button
           onClick={toggleSidebar}
           className="rounded-md p-1.5 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"

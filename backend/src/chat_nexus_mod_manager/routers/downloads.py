@@ -58,19 +58,7 @@ async def start_download(
             key_result = await client.validate_key()
 
         if not key_result.is_premium:
-            # Create a pending job but don't start download
-            from chat_nexus_mod_manager.models.download import DownloadJob
-
-            job = DownloadJob(
-                game_id=game.id,  # type: ignore[arg-type]
-                nexus_mod_id=body.nexus_mod_id,
-                nexus_file_id=body.nexus_file_id,
-                status="pending",
-            )
-            session.add(job)
-            session.commit()
-            session.refresh(job)
-            return DownloadStartResult(job=_job_to_out(job), requires_nxm=True)
+            return DownloadStartResult(requires_nxm=True)
 
     job = await download_service.create_and_start_download(
         game=game,
@@ -103,13 +91,11 @@ async def start_download_from_mod(
         select(DownloadJob).where(
             DownloadJob.game_id == game.id,
             DownloadJob.nexus_mod_id == body.nexus_mod_id,
-            DownloadJob.status.in_(["pending", "downloading"]),  # type: ignore[union-attr]
+            DownloadJob.status == "downloading",
         )
     ).first()
     if existing:
-        return DownloadStartResult(
-            job=_job_to_out(existing), requires_nxm=existing.status == "pending"
-        )
+        return DownloadStartResult(job=_job_to_out(existing), requires_nxm=False)
 
     async with NexusClient(api_key) as client:
         key_result = await client.validate_key()
@@ -127,16 +113,7 @@ async def start_download_from_mod(
         raise HTTPException(502, "Nexus API returned a file entry without a file_id")
 
     if not key_result.is_premium:
-        job = DownloadJob(
-            game_id=game.id,  # type: ignore[arg-type]
-            nexus_mod_id=body.nexus_mod_id,
-            nexus_file_id=nexus_file_id,
-            status="pending",
-        )
-        session.add(job)
-        session.commit()
-        session.refresh(job)
-        return DownloadStartResult(job=_job_to_out(job), requires_nxm=True)
+        return DownloadStartResult(requires_nxm=True)
 
     job = await download_service.create_and_start_download(
         game=game,
