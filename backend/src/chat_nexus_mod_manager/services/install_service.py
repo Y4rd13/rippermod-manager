@@ -20,11 +20,13 @@ from chat_nexus_mod_manager.models.download import DownloadJob
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.install import InstalledMod, InstalledModFile
 from chat_nexus_mod_manager.models.nexus import NexusDownload
+from chat_nexus_mod_manager.nexus.client import NexusClient
 from chat_nexus_mod_manager.schemas.install import (
     InstallResult,
     ToggleResult,
     UninstallResult,
 )
+from chat_nexus_mod_manager.services.nexus_helpers import match_local_to_nexus_file
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +92,7 @@ def install_mod(
 
     extracted_paths: list[str] = []
     skipped = 0
+    overwritten = 0
 
     with open_archive(archive_path) as archive:
         all_entries = archive.list_entries()
@@ -122,6 +125,8 @@ def install_mod(
                 skipped += 1
                 continue
             target = game_dir / normalised
+            if target.exists():
+                overwritten += 1
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
             extracted_paths.append(normalised)
@@ -156,6 +161,18 @@ def install_mod(
         if job:
             installed.nexus_file_id = job.nexus_file_id
 
+        # Fallback: check NexusDownload for a previously resolved file_id
+        if not installed.nexus_file_id:
+            nx_dl = session.exec(
+                select(NexusDownload).where(
+                    NexusDownload.game_id == game.id,
+                    NexusDownload.nexus_mod_id == parsed.nexus_mod_id,
+                    NexusDownload.file_id.is_not(None),  # type: ignore[union-attr]
+                )
+            ).first()
+            if nx_dl and nx_dl.file_id:
+                installed.nexus_file_id = nx_dl.file_id
+
         corr = session.exec(
             select(ModNexusCorrelation)
             .join(NexusDownload, ModNexusCorrelation.nexus_download_id == NexusDownload.id)
@@ -176,12 +193,15 @@ def install_mod(
     session.commit()
     session.refresh(installed)
 
-    logger.info("Installed '%s' (%d files)", parsed.name, len(extracted_paths))
+    logger.info(
+        "Installed '%s' (%d files, %d overwritten)", parsed.name, len(extracted_paths), overwritten
+    )
     return InstallResult(
         installed_mod_id=installed.id,  # type: ignore[arg-type]
         name=parsed.name,
         files_extracted=len(extracted_paths),
         files_skipped=skipped,
+        files_overwritten=overwritten,
     )
 
 
@@ -273,3 +293,54 @@ def toggle_mod(
     action = "Disabled" if should_disable else "Enabled"
     logger.info("%s '%s' (%d files)", action, installed_mod.name, affected)
     return ToggleResult(disabled=should_disable, files_affected=affected)
+
+
+async def resolve_installed_file_id(
+    installed_mod_id: int,
+    game_domain: str,
+    nexus_mod_id: int,
+    source_archive: str,
+    api_key: str,
+) -> None:
+    """Best-effort background resolution of nexus_file_id for an installed mod.
+
+    Creates its own DB session so it can run independently of the request lifecycle.
+    """
+    import asyncio
+
+    from chat_nexus_mod_manager.database import engine
+
+    try:
+        async with NexusClient(api_key) as client:
+            files_resp = await client.get_mod_files(game_domain, nexus_mod_id)
+    except Exception:
+        logger.debug("Could not fetch files for mod %d", nexus_mod_id)
+        return
+
+    nexus_files = files_resp.get("files", [])
+    if not nexus_files:
+        return
+
+    parsed = parse_mod_filename(source_archive)
+    matched = match_local_to_nexus_file(
+        source_archive,
+        nexus_files,
+        parsed_version=parsed.version,
+        parsed_timestamp=parsed.upload_timestamp,
+        strict=True,
+    )
+    if not matched:
+        return
+
+    def _persist() -> None:
+        with Session(engine) as session:
+            installed = session.get(InstalledMod, installed_mod_id)
+            if not installed or installed.nexus_file_id:
+                return
+            installed.nexus_file_id = matched.get("file_id")
+            if matched.get("uploaded_timestamp") and not installed.upload_timestamp:
+                installed.upload_timestamp = matched["uploaded_timestamp"]
+            session.add(installed)
+            session.commit()
+
+    await asyncio.to_thread(_persist)

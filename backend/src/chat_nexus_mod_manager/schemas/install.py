@@ -13,6 +13,7 @@ class InstallResult(BaseModel):
     name: str
     files_extracted: int
     files_skipped: int
+    files_overwritten: int
 
 
 class InstalledModOut(BaseModel):
