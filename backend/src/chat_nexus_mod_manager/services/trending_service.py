@@ -1,5 +1,6 @@
-"""Service for fetching and caching trending (latest updated) mods from Nexus."""
+"""Service for fetching and caching trending and latest updated mods from Nexus."""
 
+import asyncio
 import json
 import logging
 import time
@@ -19,16 +20,8 @@ logger = logging.getLogger(__name__)
 _CACHE_TTL = 15 * 60  # 15 minutes
 
 
-def _cache_key(game_id: int) -> str:
-    return f"trending_cache_{game_id}"
-
-
-def _cache_ts_key(game_id: int) -> str:
-    return f"trending_cache_ts_{game_id}"
-
-
-def _load_cached_trending(game_id: int, session: Session) -> list[dict[str, Any]] | None:
-    ts_raw = get_setting(session, _cache_ts_key(game_id))
+def _load_cached(prefix: str, game_id: int, session: Session) -> list[dict[str, Any]] | None:
+    ts_raw = get_setting(session, f"{prefix}_ts_{game_id}")
     if not ts_raw:
         return None
     try:
@@ -37,7 +30,7 @@ def _load_cached_trending(game_id: int, session: Session) -> list[dict[str, Any]
         return None
     if time.time() - cached_at > _CACHE_TTL:
         return None
-    raw = get_setting(session, _cache_key(game_id))
+    raw = get_setting(session, f"{prefix}_{game_id}")
     if not raw:
         return None
     try:
@@ -46,9 +39,11 @@ def _load_cached_trending(game_id: int, session: Session) -> list[dict[str, Any]
         return None
 
 
-def _save_cached_trending(game_id: int, mods_data: list[dict[str, Any]], session: Session) -> None:
-    set_setting(session, _cache_key(game_id), json.dumps(mods_data))
-    set_setting(session, _cache_ts_key(game_id), str(time.time()))
+def _save_cached(
+    prefix: str, game_id: int, mods_data: list[dict[str, Any]], session: Session
+) -> None:
+    set_setting(session, f"{prefix}_{game_id}", json.dumps(mods_data))
+    set_setting(session, f"{prefix}_ts_{game_id}", str(time.time()))
 
 
 def _upsert_trending_metadata(
@@ -191,28 +186,44 @@ async def fetch_trending_mods(
     force_refresh: bool = False,
 ) -> TrendingResult:
     if not force_refresh:
-        cached = _load_cached_trending(game_id, session)
-        if cached is not None:
-            mods = _cross_reference(cached, game_id, game_domain, session)
-            return TrendingResult(mods=mods, cached=True)
+        cached_trending = _load_cached("trending_cache", game_id, session)
+        cached_latest = _load_cached("latest_updated_cache", game_id, session)
+        if cached_trending is not None and cached_latest is not None:
+            trending = _cross_reference(cached_trending, game_id, game_domain, session)
+            latest = _cross_reference(cached_latest, game_id, game_domain, session)
+            return TrendingResult(trending=trending, latest_updated=latest, cached=True)
 
-    raw = await client.get_latest_updated(game_domain)
-    normalized = _normalize_api_response(raw)
-    _upsert_trending_metadata(normalized, game_domain, session)
-    _save_cached_trending(game_id, normalized, session)
+    raw_trending, raw_latest = await asyncio.gather(
+        client.get_trending(game_domain),
+        client.get_latest_updated(game_domain),
+    )
+
+    normalized_trending = _normalize_api_response(raw_trending)
+    normalized_latest = _normalize_api_response(raw_latest)
+
+    all_mods = {m["mod_id"]: m for m in normalized_trending + normalized_latest}
+    _upsert_trending_metadata(list(all_mods.values()), game_domain, session)
+
+    _save_cached("trending_cache", game_id, normalized_trending, session)
+    _save_cached("latest_updated_cache", game_id, normalized_latest, session)
     session.commit()
-    mods = _cross_reference(normalized, game_id, game_domain, session)
-    return TrendingResult(mods=mods, cached=False)
+
+    trending = _cross_reference(normalized_trending, game_id, game_domain, session)
+    latest = _cross_reference(normalized_latest, game_id, game_domain, session)
+    return TrendingResult(trending=trending, latest_updated=latest, cached=False)
 
 
 def get_cached_trending(game_id: int, game_domain: str, session: Session) -> TrendingResult | None:
     """Serve stale cache (ignore TTL) for error-fallback paths."""
-    raw = get_setting(session, _cache_key(game_id))
-    if not raw:
+    raw_trending = get_setting(session, f"trending_cache_{game_id}")
+    raw_latest = get_setting(session, f"latest_updated_cache_{game_id}")
+    if not raw_trending and not raw_latest:
         return None
     try:
-        cached = json.loads(raw)
+        trending_data = json.loads(raw_trending) if raw_trending else []
+        latest_data = json.loads(raw_latest) if raw_latest else []
     except json.JSONDecodeError:
         return None
-    mods = _cross_reference(cached, game_id, game_domain, session)
-    return TrendingResult(mods=mods, cached=True)
+    trending = _cross_reference(trending_data, game_id, game_domain, session)
+    latest = _cross_reference(latest_data, game_id, game_domain, session)
+    return TrendingResult(trending=trending, latest_updated=latest, cached=True)

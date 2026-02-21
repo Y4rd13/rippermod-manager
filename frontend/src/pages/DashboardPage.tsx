@@ -71,11 +71,9 @@ function TrendingMiniCard({ mod }: { mod: TrendingMod }) {
 
 function CommunityActivity({ gameName }: { gameName: string }) {
   const { data: trending } = useTrendingMods(gameName);
-  const mods = trending?.mods ?? [];
+  const mods = trending?.trending ?? [];
 
   if (mods.length === 0) return null;
-
-  const topMods = mods.slice(0, 4);
 
   return (
     <div className="space-y-2">
@@ -87,7 +85,7 @@ function CommunityActivity({ gameName }: { gameName: string }) {
         to={`/games/${gameName}`}
         className="grid grid-cols-1 sm:grid-cols-2 gap-2"
       >
-        {topMods.map((mod) => (
+        {mods.map((mod) => (
           <TrendingMiniCard key={mod.mod_id} mod={mod} />
         ))}
       </Link>
