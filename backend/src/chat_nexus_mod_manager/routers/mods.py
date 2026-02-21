@@ -70,6 +70,7 @@ def list_mod_groups(game_name: str, session: Session = Depends(get_session)) -> 
                 category=meta.category if meta else "",
                 picture_url=meta.picture_url if meta else "",
                 nexus_url=nd.nexus_url,
+                updated_at=meta.updated_at if meta else None,
             )
 
         result.append(

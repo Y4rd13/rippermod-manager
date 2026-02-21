@@ -129,6 +129,9 @@ def upsert_nexus_mod(
             category=str(info.get("category_id", "")),
             picture_url=info.get("picture_url", ""),
         )
+        created_ts = info.get("created_timestamp")
+        if created_ts:
+            meta.created_at = datetime.fromtimestamp(created_ts, tz=UTC)
         ts = info.get("updated_timestamp")
         if ts:
             meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)
@@ -146,6 +149,9 @@ def upsert_nexus_mod(
             existing_meta.endorsement_count = info["endorsement_count"]
         if info.get("picture_url"):
             existing_meta.picture_url = info["picture_url"]
+        created_ts = info.get("created_timestamp")
+        if created_ts:
+            existing_meta.created_at = datetime.fromtimestamp(created_ts, tz=UTC)
         ts = info.get("updated_timestamp")
         if ts:
             existing_meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)

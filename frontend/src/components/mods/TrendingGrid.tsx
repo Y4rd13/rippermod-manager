@@ -1,4 +1,4 @@
-import { Clock, Download, Eye, Heart, RefreshCw, Search, TrendingUp, Users } from "lucide-react";
+import { Calendar, Clock, Download, Eye, Heart, RefreshCw, Search, TrendingUp, Users } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useRefreshTrending } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
-import { formatCount } from "@/lib/format";
+import { formatCount, timeAgo } from "@/lib/format";
 import type {
   AvailableArchive,
   DownloadJobOut,
@@ -24,18 +24,6 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "endorsements", label: "Endorsements" },
   { value: "name", label: "Name" },
 ];
-
-function timeAgo(timestamp: number): string {
-  if (!timestamp) return "";
-  const seconds = Math.floor(Date.now() / 1000 - timestamp);
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
 
 interface Props {
   trendingMods: TrendingMod[];
@@ -141,6 +129,12 @@ export function TrendingGrid({
             {mod.updated_timestamp > 0 && (
               <span className="text-xs text-text-muted">
                 {timeAgo(mod.updated_timestamp)}
+              </span>
+            )}
+            {mod.created_timestamp > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-xs text-text-muted">
+                <Calendar size={10} />
+                {timeAgo(mod.created_timestamp)}
               </span>
             )}
             {mod.is_tracked && (

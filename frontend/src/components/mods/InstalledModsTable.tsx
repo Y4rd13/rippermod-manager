@@ -12,6 +12,7 @@ import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useToggleMod, useUninstallMod } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
+import { isoToEpoch, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { AvailableArchive, DownloadJobOut, InstalledModOut, ModGroup } from "@/types/api";
 
@@ -23,7 +24,7 @@ interface Props {
   downloadJobs?: DownloadJobOut[];
 }
 
-type SortKey = "name" | "version" | "files" | "disabled";
+type SortKey = "name" | "version" | "files" | "disabled" | "updated";
 
 function ManagedModsTable({
   mods,
@@ -58,6 +59,8 @@ function ManagedModsTable({
         return (a.file_count - b.file_count) * dir;
       case "disabled":
         return (Number(a.disabled) - Number(b.disabled)) * dir;
+      case "updated":
+        return (isoToEpoch(a.nexus_updated_at) - isoToEpoch(b.nexus_updated_at)) * dir;
       default:
         return 0;
     }
@@ -74,6 +77,7 @@ function ManagedModsTable({
                 ["version", "Version"],
                 ["files", "Files"],
                 ["disabled", "Status"],
+                ["updated", "Updated"],
               ] as const
             ).map(([key, label]) => (
               <th
@@ -112,6 +116,11 @@ function ManagedModsTable({
                 <Badge variant={mod.disabled ? "danger" : "success"}>
                   {mod.disabled ? "Disabled" : "Enabled"}
                 </Badge>
+              </td>
+              <td className="py-2 pr-4 text-text-muted">
+                {mod.nexus_updated_at
+                  ? timeAgo(isoToEpoch(mod.nexus_updated_at))
+                  : "—"}
               </td>
               <td className="py-2 text-right">
                 <div className="flex items-center justify-end gap-1">
