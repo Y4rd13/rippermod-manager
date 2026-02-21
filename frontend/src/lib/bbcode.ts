@@ -45,7 +45,7 @@ export function bbcodeToHtml(bbcode: string): string {
   s = s.replace(
     /\[url\]([\s\S]*?)\[\/url\]/gi,
     (_, href) =>
-      `<a href="${sanitizeUrl(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(href)}</a>`,
+      `<a href="${sanitizeUrl(href)}" target="_blank" rel="noopener noreferrer">${href}</a>`,
   );
 
   // [img]...[/img]

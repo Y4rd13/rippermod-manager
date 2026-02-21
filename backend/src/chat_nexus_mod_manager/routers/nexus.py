@@ -129,7 +129,9 @@ async def mod_detail(
         async with NexusClient(api_key) as client:
             info = await client.get_mod_info(game_domain, mod_id)
         game = session.exec(select(Game).where(Game.domain_name == game_domain)).first()
-        game_id = game.id if game else 0
+        if not game:
+            raise HTTPException(404, f"Game domain '{game_domain}' not found")
+        game_id = game.id
         upsert_nexus_mod(session, game_id, game_domain, mod_id, info)
         session.commit()
         meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()

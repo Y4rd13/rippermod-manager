@@ -22,7 +22,7 @@ import { ArchivesList } from "@/components/mods/ArchivesList";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { InstalledModsTable } from "@/components/mods/InstalledModsTable";
 import { ModCardAction } from "@/components/mods/ModCardAction";
-import { ModDetailDrawer } from "@/components/mods/ModDetailDrawer";
+import { ModDetailModal } from "@/components/mods/ModDetailModal";
 import { ModsTable } from "@/components/mods/ModsTable";
 import { NexusAccountGrid } from "@/components/mods/NexusAccountGrid";
 import { NexusMatchedGrid } from "@/components/mods/NexusMatchedGrid";
@@ -563,7 +563,7 @@ export function GameDetailPage() {
         const modUpdate = updateByNexusId.get(selectedModId);
         const archive = modalFlow.archiveByModId.get(selectedModId);
         return (
-          <ModDetailDrawer
+          <ModDetailModal
             gameDomain={game.domain_name}
             modId={selectedModId}
             update={modUpdate}

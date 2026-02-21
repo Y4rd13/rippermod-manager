@@ -41,7 +41,7 @@ interface Props {
   onClose: () => void;
 }
 
-export function ModDetailDrawer({ gameDomain, modId, update, action, onClose }: Props) {
+export function ModDetailModal({ gameDomain, modId, update, action, onClose }: Props) {
   const { data: detail, isLoading } = useModDetail(gameDomain, modId);
   const [activeTab, setActiveTab] = useState<ModalTab>("about");
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
@@ -55,7 +55,11 @@ export function ModDetailDrawer({ gameDomain, modId, update, action, onClose }: 
 
   useEffect(() => {
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "";
+    };
   }, [handleKeyDown]);
 
   const sortedChangelogVersions = detail?.changelogs

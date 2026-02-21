@@ -5,7 +5,11 @@ import jellyfish
 from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.matching.filename_parser import parse_mod_filename
-from chat_nexus_mod_manager.matching.normalization import split_camel, strip_ordering_prefix
+from chat_nexus_mod_manager.matching.normalization import (
+    SEPARATOR_RE,
+    split_camel,
+    strip_ordering_prefix,
+)
 from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.mod import ModGroup
@@ -13,8 +17,6 @@ from chat_nexus_mod_manager.models.nexus import NexusDownload
 from chat_nexus_mod_manager.schemas.mod import CorrelateResult
 
 logger = logging.getLogger(__name__)
-
-SEPARATOR_RE = re.compile(r"[_\-.\s]+")
 # Characters that filesystem paths often strip (apostrophes, quotes, parens)
 PUNCTUATION_RE = re.compile(r"['\"\(\)]+")
 

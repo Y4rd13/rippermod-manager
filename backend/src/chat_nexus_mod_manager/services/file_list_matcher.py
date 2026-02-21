@@ -7,6 +7,7 @@ Fallback: parse ``nexus_mod_id`` from archive filenames via regex.
 
 import logging
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -136,7 +137,7 @@ def _match_archive_to_local(
 def match_endorsed_to_local(
     game: Game,
     session: Session,
-    on_progress: object = None,
+    on_progress: "Callable[[str, str, int], None] | None" = None,
 ) -> FileListMatchResult:
     """Match endorsed/tracked mods to local files via CDN filename lookup."""
     result = FileListMatchResult()

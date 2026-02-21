@@ -6,6 +6,7 @@ correct Nexus Mods page.
 """
 
 import asyncio
+import json
 import logging
 import re
 
@@ -187,8 +188,6 @@ async def ai_search_unmatched_mods(
                     text={"format": _RESPONSE_SCHEMA},
                 )
 
-                import json
-
                 raw = response.output_text
                 data = json.loads(raw)
                 match = AISearchMatch(**data)
@@ -230,7 +229,8 @@ async def ai_search_unmatched_mods(
     async with NexusClient(nexus_api_key) as nexus:
         for group_id, match in found.items():
             mod_id = match.nexus_mod_id
-            assert mod_id is not None
+            if mod_id is None:
+                continue
 
             if mod_id in corr_nexus_ids:
                 logger.info("AI search: skipping mod %d, already correlated", mod_id)
