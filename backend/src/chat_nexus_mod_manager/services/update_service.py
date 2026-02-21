@@ -615,9 +615,8 @@ async def check_all_updates(
 
         # b) VERSION comparison (secondary)
         is_version_newer = is_newer_version(meta.version, mod.local_version)
-        is_version_equal = (
-            not is_version_newer
-            and not is_newer_version(mod.local_version, meta.version)
+        is_version_equal = not is_version_newer and not is_newer_version(
+            mod.local_version, meta.version
         )
 
         # Don't flag as update if versions are identical (metadata-only changes)
