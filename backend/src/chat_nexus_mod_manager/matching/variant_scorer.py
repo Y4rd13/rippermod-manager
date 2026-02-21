@@ -20,7 +20,7 @@ VARIANT_KEYWORDS: list[tuple[set[str], set[str]]] = [
     ({"performance"}, {"quality"}),
 ]
 
-_ARCHIVED_CATEGORY_ID = 3
+_ARCHIVED_CATEGORY_ID = 7
 
 
 def _tokenize(text: str) -> set[str]:

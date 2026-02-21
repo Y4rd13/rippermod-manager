@@ -5,6 +5,7 @@ import jellyfish
 from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.matching.filename_parser import parse_mod_filename
+from chat_nexus_mod_manager.matching.normalization import split_camel, strip_ordering_prefix
 from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.mod import ModGroup
@@ -14,9 +15,14 @@ from chat_nexus_mod_manager.schemas.mod import CorrelateResult
 logger = logging.getLogger(__name__)
 
 SEPARATOR_RE = re.compile(r"[_\-.\s]+")
+# Characters that filesystem paths often strip (apostrophes, quotes, parens)
+PUNCTUATION_RE = re.compile(r"['\"\(\)]+")
 
 
 def normalize(s: str) -> str:
+    s = strip_ordering_prefix(s)
+    s = split_camel(s)
+    s = PUNCTUATION_RE.sub("", s)
     s = SEPARATOR_RE.sub(" ", s).strip().lower()
     return s
 
@@ -42,10 +48,67 @@ def compute_name_score(local_name: str, nexus_name: str) -> tuple[float, str]:
         return 0.9, "substring"
 
     jaccard = token_jaccard(local_name, nexus_name)
+    if jaccard == 0.0:
+        return 0.0, "fuzzy"
+
     jw = jellyfish.jaro_winkler_similarity(ln, nn)
     combined = 0.5 * jaccard + 0.5 * jw
 
     return round(combined, 3), "fuzzy"
+
+
+def _dedup_correlations(groups: list[ModGroup], session: Session) -> int:
+    """Remove duplicate correlations pointing to the same nexus_mod_id.
+
+    When multiple groups correlate to the same Nexus mod, keep only the
+    correlation with the highest score.  Tie-break by group file count.
+    """
+    group_ids = [g.id for g in groups]
+    if not group_ids:
+        return 0
+
+    all_corr = session.exec(
+        select(ModNexusCorrelation, NexusDownload)
+        .join(NexusDownload, ModNexusCorrelation.nexus_download_id == NexusDownload.id)
+        .where(
+            ModNexusCorrelation.mod_group_id.in_(group_ids)  # type: ignore[union-attr]
+        )
+    ).all()
+
+    # Group correlations by nexus_mod_id
+    by_nexus: dict[int, list[tuple[ModNexusCorrelation, NexusDownload]]] = {}
+    for corr, dl in all_corr:
+        by_nexus.setdefault(dl.nexus_mod_id, []).append((corr, dl))
+
+    group_file_counts: dict[int, int] = {g.id: len(g.files) for g in groups if g.id is not None}
+
+    purged = 0
+    for nexus_id, entries in by_nexus.items():
+        if len(entries) <= 1:
+            continue
+
+        # Sort: highest score first, then most files
+        entries.sort(
+            key=lambda e: (e[0].score, group_file_counts.get(e[0].mod_group_id, 0)),
+            reverse=True,
+        )
+
+        # Keep first (best), delete rest
+        for corr, _dl in entries[1:]:
+            if corr.confirmed_by_user:
+                continue
+            logger.info(
+                "Dedup: removing duplicate correlation group=%d -> nexus=%d (score=%.2f)",
+                corr.mod_group_id,
+                nexus_id,
+                corr.score,
+            )
+            session.delete(corr)
+            purged += 1
+
+    if purged:
+        logger.info("Dedup: removed %d duplicate correlations", purged)
+    return purged
 
 
 def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
@@ -61,9 +124,47 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
             ModNexusCorrelation.mod_group_id.in_([g.id for g in groups])  # type: ignore[union-attr]
         )
     ).all()
+
+    # Re-validate name-based correlations: NexusDownload names may have
+    # changed since the correlation was created (sync updates mod_name).
+    # Purge stale ones so they get re-evaluated with current names.
+    _NAME_METHODS = {"exact", "substring", "fuzzy"}
+    dl_map: dict[int, NexusDownload] = {dl.id: dl for dl in downloads if dl.id is not None}
+    group_map: dict[int, ModGroup] = {g.id: g for g in groups if g.id is not None}
+    purged = 0
+    for corr in list(existing):
+        if corr.confirmed_by_user or corr.method not in _NAME_METHODS:
+            continue
+        grp = group_map.get(corr.mod_group_id)
+        dl = dl_map.get(corr.nexus_download_id)
+        if not grp or not dl:
+            session.delete(corr)
+            existing.remove(corr)
+            purged += 1
+            continue
+        score, _ = compute_name_score(grp.display_name, dl.mod_name)
+        if score < 0.4:
+            logger.info(
+                "Purging stale correlation: '%s' -> '%s' (was %s/%.2f, now %.2f)",
+                grp.display_name,
+                dl.mod_name,
+                corr.method,
+                corr.score,
+                score,
+            )
+            session.delete(corr)
+            existing.remove(corr)
+            purged += 1
+    if purged:
+        logger.info("Purged %d stale name-based correlations", purged)
+
     already_matched: set[int] = set()
+    already_matched_nexus_ids: set[int] = set()
     for corr in existing:
         already_matched.add(corr.mod_group_id)
+        dl = dl_map.get(corr.nexus_download_id)
+        if dl:
+            already_matched_nexus_ids.add(dl.nexus_mod_id)
 
     nexus_id_map: dict[int, NexusDownload] = {}
     for dl in downloads:
@@ -85,14 +186,18 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
         for f in group.files:
             parsed = parse_mod_filename(f.filename)
             if parsed.nexus_mod_id and parsed.nexus_mod_id in nexus_id_map:
-                best_download = nexus_id_map[parsed.nexus_mod_id]
-                best_score = 0.95
-                best_method = "filename_id"
+                dl_candidate = nexus_id_map[parsed.nexus_mod_id]
+                if dl_candidate.nexus_mod_id not in already_matched_nexus_ids:
+                    best_download = dl_candidate
+                    best_score = 0.95
+                    best_method = "filename_id"
                 break
 
         # Slow path: fuzzy name matching
         if not best_download:
             for dl in downloads:
+                if dl.nexus_mod_id in already_matched_nexus_ids:
+                    continue
                 score, method = compute_name_score(group.display_name, dl.mod_name)
                 if score > best_score:
                     best_score = score
@@ -120,7 +225,11 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
                 ),
             )
             session.add(corr)
+            already_matched_nexus_ids.add(best_download.nexus_mod_id)
             matched += 1
+
+    # Deduplicate: if multiple groups point to the same nexus_mod_id, keep best
+    _dedup_correlations(groups, session)
 
     session.commit()
 

@@ -39,6 +39,16 @@ def _migrate_missing_columns() -> None:
             "created_at",
             "ALTER TABLE nexus_mod_meta ADD COLUMN created_at TIMESTAMP",
         ),
+        (
+            "nexus_mod_meta",
+            "description",
+            "ALTER TABLE nexus_mod_meta ADD COLUMN description TEXT DEFAULT ''",
+        ),
+        (
+            "nexus_mod_meta",
+            "mod_downloads",
+            "ALTER TABLE nexus_mod_meta ADD COLUMN mod_downloads INTEGER DEFAULT 0",
+        ),
     ]
     with Session(engine) as session:
         for table, column, ddl in migrations:

@@ -32,6 +32,18 @@ class TestNormalize:
     def test_dots(self):
         assert normalize("v1.2.3") == "v1 2 3"
 
+    def test_camel_case_splitting(self):
+        assert normalize("EgghancedBloodFx") == "egghanced blood fx"
+
+    def test_ordering_prefix_stripped(self):
+        assert normalize("##EgghancedBloodFx") == "egghanced blood fx"
+
+    def test_z_prefix_stripped(self):
+        assert normalize("zModName") == "mod name"
+
+    def test_z_lowercase_preserved(self):
+        assert normalize("zebra") == "zebra"
+
 
 class TestComputeNameScore:
     def test_exact_match(self):
@@ -52,6 +64,27 @@ class TestComputeNameScore:
     def test_poor_match(self):
         score, _ = compute_name_score("alpha", "zzzzzz")
         assert score < 0.5
+
+    def test_zero_jaccard_returns_zero(self):
+        """When tokens have zero overlap, score should be 0.0 regardless of Jaro-Winkler."""
+        score, method = compute_name_score("AutoLoot", "Lizzie's Braindances")
+        assert score == 0.0
+        assert method == "fuzzy"
+
+    def test_no_match_for_zero_token_overlap(self):
+        """Completely unrelated mod names must not correlate even with short names."""
+        score, _ = compute_name_score("Quickhack", "Vehicles")
+        assert score == 0.0
+
+    def test_camel_case_vs_spaced_nexus_name(self):
+        """CamelCase local name should match dash-separated Nexus name."""
+        score, _method = compute_name_score("##EgghancedBloodFx", "BLOOD FX - EGGHANCED")
+        # Jaccard is 1.0, Jaro-Winkler is lower due to word reordering; combined >= 0.6
+        assert score >= 0.6
+
+    def test_z_prefix_local_vs_clean_nexus(self):
+        score, _method = compute_name_score("zVendorsXL", "Vendors XL")
+        assert score >= 0.8
 
 
 class TestCorrelateGameMods:
@@ -107,3 +140,86 @@ class TestCorrelateGameMods:
         result = correlate_game_mods(game, session)
         assert result.matched == 1
         assert result.unmatched == 0
+
+    def test_purges_stale_name_correlation(self, session, make_game):
+        """Correlation becomes stale when NexusDownload name changes after sync."""
+        from sqlmodel import select
+
+        game = make_game()
+        group = ModGroup(game_id=game.id, display_name="Yaiba Muramasa")
+        session.add(group)
+        dl = NexusDownload(
+            game_id=game.id,
+            nexus_mod_id=500,
+            mod_name="Lizzie's Braindances",  # name updated by sync
+        )
+        session.add(dl)
+        session.flush()
+        # Stale correlation: was "exact" when dl.mod_name matched, now doesn't
+        session.add(
+            ModNexusCorrelation(
+                mod_group_id=group.id,
+                nexus_download_id=dl.id,
+                score=1.0,
+                method="exact",
+            )
+        )
+        session.commit()
+
+        result = correlate_game_mods(game, session)
+        # Stale correlation purged, group now unmatched
+        assert result.matched == 0
+        assert result.unmatched == 1
+        corrs = session.exec(select(ModNexusCorrelation)).all()
+        assert len(corrs) == 0
+
+    def test_preserves_confirmed_correlation(self, session, make_game):
+        """User-confirmed correlations are never purged."""
+        game = make_game()
+        group = ModGroup(game_id=game.id, display_name="CustomMod")
+        session.add(group)
+        dl = NexusDownload(
+            game_id=game.id,
+            nexus_mod_id=600,
+            mod_name="Totally Different Name",
+        )
+        session.add(dl)
+        session.flush()
+        session.add(
+            ModNexusCorrelation(
+                mod_group_id=group.id,
+                nexus_download_id=dl.id,
+                score=1.0,
+                method="exact",
+                confirmed_by_user=True,
+            )
+        )
+        session.commit()
+
+        result = correlate_game_mods(game, session)
+        assert result.matched == 1  # preserved
+
+    def test_preserves_non_name_methods(self, session, make_game):
+        """Correlations via filename_id, md5, file_list are never purged."""
+        game = make_game()
+        group = ModGroup(game_id=game.id, display_name="SomeMod")
+        session.add(group)
+        dl = NexusDownload(
+            game_id=game.id,
+            nexus_mod_id=700,
+            mod_name="Completely Unrelated",
+        )
+        session.add(dl)
+        session.flush()
+        session.add(
+            ModNexusCorrelation(
+                mod_group_id=group.id,
+                nexus_download_id=dl.id,
+                score=0.95,
+                method="filename_id",
+            )
+        )
+        session.commit()
+
+        result = correlate_game_mods(game, session)
+        assert result.matched == 1  # preserved

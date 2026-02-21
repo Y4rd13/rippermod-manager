@@ -7,9 +7,11 @@ from chat_nexus_mod_manager.database import get_session
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.settings import AppSetting
 from chat_nexus_mod_manager.schemas.nexus import (
+    ModDetailOut,
     NexusKeyResult,
     NexusKeyValidation,
     NexusModEnrichedOut,
+    NexusModFileOut,
     NexusSyncResult,
     SSOPollResult,
     SSOStartResult,
@@ -106,6 +108,75 @@ def list_downloads(
         )
         for dl, meta in rows
     ]
+
+
+@router.get("/mods/{game_domain}/{mod_id}/detail", response_model=ModDetailOut)
+async def mod_detail(
+    game_domain: str, mod_id: int, session: Session = Depends(get_session)
+) -> ModDetailOut:
+    from chat_nexus_mod_manager.models.nexus import NexusModFile, NexusModMeta
+    from chat_nexus_mod_manager.nexus.client import NexusClient
+    from chat_nexus_mod_manager.services.nexus_helpers import upsert_nexus_mod
+
+    meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
+
+    key_setting = session.exec(select(AppSetting).where(AppSetting.key == "nexus_api_key")).first()
+    api_key = key_setting.value if key_setting else ""
+
+    if not meta or not meta.description:
+        if not api_key:
+            raise HTTPException(404, "Mod metadata not found and no API key configured")
+        async with NexusClient(api_key) as client:
+            info = await client.get_mod_info(game_domain, mod_id)
+        game = session.exec(select(Game).where(Game.domain_name == game_domain)).first()
+        game_id = game.id if game else 0
+        upsert_nexus_mod(session, game_id, game_domain, mod_id, info)
+        session.commit()
+        meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
+
+    if not meta:
+        raise HTTPException(404, "Mod metadata not found")
+
+    changelogs: dict[str, list[str]] = {}
+    if api_key:
+        try:
+            async with NexusClient(api_key) as client:
+                changelogs = await client.get_changelogs(game_domain, mod_id)
+        except Exception:
+            pass
+
+    files = session.exec(select(NexusModFile).where(NexusModFile.nexus_mod_id == mod_id)).all()
+
+    nexus_url = f"https://www.nexusmods.com/{game_domain}/mods/{mod_id}"
+
+    return ModDetailOut(
+        nexus_mod_id=meta.nexus_mod_id,
+        game_domain=meta.game_domain,
+        name=meta.name,
+        summary=meta.summary,
+        description=meta.description,
+        author=meta.author,
+        version=meta.version,
+        created_at=meta.created_at,
+        updated_at=meta.updated_at,
+        endorsement_count=meta.endorsement_count,
+        mod_downloads=meta.mod_downloads,
+        category=meta.category,
+        picture_url=meta.picture_url,
+        nexus_url=nexus_url,
+        changelogs=changelogs,
+        files=[
+            NexusModFileOut(
+                file_id=f.file_id,
+                file_name=f.file_name,
+                version=f.version,
+                category_id=f.category_id,
+                uploaded_timestamp=f.uploaded_timestamp,
+                file_size=f.file_size,
+            )
+            for f in files
+        ],
+    )
 
 
 @router.post("/sso/start", response_model=SSOStartResult)
