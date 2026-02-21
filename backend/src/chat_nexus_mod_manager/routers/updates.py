@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -33,7 +34,7 @@ class ModUpdate(BaseModel):
     source: str = "correlation"
     local_timestamp: int | None = None
     nexus_timestamp: int | None = None
-    detection_method: str = "version"
+    detection_method: Literal["timestamp", "version", "both"] = "version"
 
 
 class UpdateCheckResult(BaseModel):

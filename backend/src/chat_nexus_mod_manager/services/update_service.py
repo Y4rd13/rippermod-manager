@@ -36,7 +36,7 @@ from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
 from chat_nexus_mod_manager.nexus.client import NexusClient
 from chat_nexus_mod_manager.services.nexus_helpers import match_local_to_nexus_file
 from chat_nexus_mod_manager.services.settings_helpers import get_setting, set_setting
-from chat_nexus_mod_manager.utils.paths import build_file_path
+from chat_nexus_mod_manager.utils.paths import build_file_path, to_native_path
 
 logger = logging.getLogger(__name__)
 
@@ -68,36 +68,48 @@ class UpdateResult:
     updates: list[dict[str, Any]] = field(default_factory=list)
 
 
-def _get_group_file_mtime(
-    mod_group_id: int | None,
+def _batch_group_file_mtimes(
+    group_ids: list[int],
     install_path: str,
     session: Session,
-) -> int | None:
-    """Get the earliest file mtime for a mod group as a proxy for install time.
+) -> dict[int, int]:
+    """Get the earliest file mtime for multiple mod groups in a single query.
 
-    Queries mod_files for the group, stats a representative file, returns
-    the mtime as a unix timestamp.  Returns None if the group has no files
-    or the file cannot be stat'd.
+    Returns a dict mapping mod_group_id → min mtime (unix timestamp).
+    Groups with no files or no stat-able files are omitted.
     """
-    if mod_group_id is None:
-        return None
-    files = session.exec(
-        select(ModFile.file_path).where(ModFile.mod_group_id == mod_group_id).limit(5)
-    ).all()
-    if not files:
-        return None
+    if not group_ids or not install_path:
+        return {}
 
-    min_mtime: int | None = None
-    for rel_path in files:
-        full_path = build_file_path(install_path, rel_path)
-        try:
-            st = os.stat(full_path)
-            mtime = int(st.st_mtime)
-            if min_mtime is None or mtime < min_mtime:
-                min_mtime = mtime
-        except OSError:
+    # Single query: fetch one representative file path per group
+    rows = session.exec(
+        select(ModFile.mod_group_id, ModFile.file_path).where(
+            ModFile.mod_group_id.in_(group_ids)  # type: ignore[union-attr]
+        )
+    ).all()
+
+    # Group file paths by mod_group_id
+    paths_by_group: dict[int, list[str]] = {}
+    for gid, fpath in rows:
+        if gid is None:
             continue
-    return min_mtime
+        paths_by_group.setdefault(gid, []).append(fpath)
+
+    result: dict[int, int] = {}
+    for gid, paths in paths_by_group.items():
+        min_mtime: int | None = None
+        for rel_path in paths[:5]:
+            full_path = build_file_path(install_path, rel_path)
+            try:
+                st = os.stat(full_path)
+                mtime = int(st.st_mtime)
+                if min_mtime is None or mtime < min_mtime:
+                    min_mtime = mtime
+            except OSError:
+                continue
+        if min_mtime is not None:
+            result[gid] = min_mtime
+    return result
 
 
 def _scan_download_archives(install_path: str) -> dict[int, ParsedFilename]:
@@ -107,8 +119,6 @@ def _scan_download_archives(install_path: str) -> dict[int, ParsedFilename]:
     When multiple archives exist for the same mod, keeps the one with the
     latest upload_timestamp.
     """
-    from chat_nexus_mod_manager.utils.paths import to_native_path
-
     staging = Path(to_native_path(install_path)) / "downloaded_mods"
     if not staging.is_dir():
         return {}
@@ -125,10 +135,13 @@ def _scan_download_archives(install_path: str) -> dict[int, ParsedFilename]:
                 continue
             mid = parsed.nexus_mod_id
             existing = results.get(mid)
+            if existing is None:
+                results[mid] = parsed
+                continue
             newer_ts = parsed.upload_timestamp and (
                 not existing.upload_timestamp or parsed.upload_timestamp > existing.upload_timestamp
             )
-            if existing is None or newer_ts:
+            if newer_ts:
                 results[mid] = parsed
     except OSError:
         logger.warning("Failed to scan downloaded_mods at %s", staging)
@@ -156,6 +169,25 @@ def collect_tracked_mods(
             InstalledMod.nexus_mod_id.is_not(None),  # type: ignore[union-attr]
         )
     ).all()
+
+    # Source 2: Correlated mods (Nexus Matched)
+    correlations = session.exec(
+        select(ModNexusCorrelation, ModGroup, NexusDownload)
+        .join(ModGroup, ModNexusCorrelation.mod_group_id == ModGroup.id)
+        .join(NexusDownload, ModNexusCorrelation.nexus_download_id == NexusDownload.id)
+        .where(ModGroup.game_id == game_id)
+    ).all()
+
+    # Batch-query file mtimes for all mod groups (single DB query + stat calls)
+    all_group_ids: list[int] = []
+    for mod in installed:
+        if mod.mod_group_id is not None:
+            all_group_ids.append(mod.mod_group_id)
+    for _corr, group, _dl in correlations:
+        if group.id is not None:
+            all_group_ids.append(group.id)
+    mtime_map = _batch_group_file_mtimes(all_group_ids, install_path, session)
+
     for mod in installed:
         mid = mod.nexus_mod_id
         if not mid or not mod.installed_version:
@@ -170,19 +202,10 @@ def collect_tracked_mods(
             mod_group_id=mod.mod_group_id,
             upload_timestamp=mod.upload_timestamp,
             nexus_url=nexus_url,
-            local_file_mtime=_get_group_file_mtime(mod.mod_group_id, install_path, session)
-            if install_path
-            else None,
+            local_file_mtime=mtime_map.get(mod.mod_group_id) if mod.mod_group_id else None,
             source_archive=mod.source_archive,
         )
 
-    # Source 2: Correlated mods (Nexus Matched)
-    correlations = session.exec(
-        select(ModNexusCorrelation, ModGroup, NexusDownload)
-        .join(ModGroup, ModNexusCorrelation.mod_group_id == ModGroup.id)
-        .join(NexusDownload, ModNexusCorrelation.nexus_download_id == NexusDownload.id)
-        .where(ModGroup.game_id == game_id)
-    ).all()
     # Build a lookup so Source 3 can reuse mtimes from correlated groups
     corr_mtime_by_nexus_id: dict[int, int | None] = {}
     for _corr, group, dl in correlations:
@@ -193,7 +216,7 @@ def collect_tracked_mods(
         local_v = (parsed.version if parsed and parsed.version else None) or dl.version
         if not local_v:
             continue
-        mtime = _get_group_file_mtime(group.id, install_path, session) if install_path else None
+        mtime = mtime_map.get(group.id) if group.id else None
         corr_mtime_by_nexus_id[mid] = mtime
         mods[mid] = TrackedMod(
             nexus_mod_id=mid,
@@ -652,6 +675,8 @@ async def check_all_updates(
     # Resolve file IDs for downloads, persist back to DB, and filter false positives
     if updates:
         await _resolve_file_ids(client, game_domain, updates)
+        # Persist file IDs before filtering — we want the mapping even for
+        # mods that turn out to be false positives (useful for future checks).
         _persist_resolved_file_ids(updates, session, game_id)
 
         # Filter false positives: timestamp-only detections where the resolved
