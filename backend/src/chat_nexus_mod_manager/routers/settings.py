@@ -44,7 +44,7 @@ def update_settings(
         results.append(
             SettingOut(
                 key=key,
-                value=_mask_secret(value) if key in HIDDEN_KEYS else value,
+                value=_mask_secret(value) if key in HIDDEN_KEYS and value else value,
             )
         )
     session.commit()
