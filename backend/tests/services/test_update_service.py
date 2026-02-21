@@ -492,7 +492,7 @@ class TestCheckAllUpdates:
 
     @pytest.mark.anyio
     async def test_timestamp_does_not_flag_when_versions_equal(self, engine):
-        """Same version strings but newer timestamp on Nexus → NOT an update (metadata-only change)."""
+        """Same version + newer Nexus timestamp → not an update."""
         with Session(engine) as s:
             game = Game(name="G", domain_name="g", install_path="/g")
             s.add(game)
