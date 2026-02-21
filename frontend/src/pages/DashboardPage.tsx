@@ -1,8 +1,9 @@
-import { Gamepad2, Package, RefreshCw, Link2 } from "lucide-react";
+import { Download, Gamepad2, Heart, Link2, Package, RefreshCw, TrendingUp } from "lucide-react";
 import { Link } from "react-router";
 
 import { Card } from "@/components/ui/Card";
-import { useGames } from "@/hooks/queries";
+import { useGames, useTrendingMods } from "@/hooks/queries";
+import type { TrendingMod } from "@/types/api";
 
 function StatCard({
   icon: Icon,
@@ -27,6 +28,72 @@ function StatCard({
         </div>
       </div>
     </Card>
+  );
+}
+
+function formatCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  return n.toLocaleString();
+}
+
+function TrendingMiniCard({ mod }: { mod: TrendingMod }) {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-border p-2 hover:bg-surface-2 transition-colors">
+      <img
+        src={mod.picture_url || undefined}
+        alt={mod.name}
+        loading="lazy"
+        className="w-12 h-12 rounded-md object-cover bg-surface-2 shrink-0"
+        onError={(e) => {
+          (e.target as HTMLImageElement).style.display = "none";
+        }}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-text-primary truncate">
+          {mod.name}
+        </p>
+        <p className="text-xs text-text-muted truncate">{mod.author}</p>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="inline-flex items-center gap-0.5 text-xs text-text-muted">
+            <Download size={10} />
+            {formatCount(mod.mod_downloads)}
+          </span>
+          {mod.endorsement_count > 0 && (
+            <span className="inline-flex items-center gap-0.5 text-xs text-text-muted">
+              <Heart size={10} />
+              {formatCount(mod.endorsement_count)}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CommunityActivity({ gameName }: { gameName: string }) {
+  const { data: trending } = useTrendingMods(gameName);
+  const mods = trending?.mods ?? [];
+
+  if (mods.length === 0) return null;
+
+  const topMods = mods.slice(0, 4);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <TrendingUp size={14} className="text-accent" />
+        <h3 className="text-sm font-medium text-text-secondary">{gameName}</h3>
+      </div>
+      <Link
+        to={`/games/${gameName}`}
+        className="grid grid-cols-1 sm:grid-cols-2 gap-2"
+      >
+        {topMods.map((mod) => (
+          <TrendingMiniCard key={mod.mod_id} mod={mod} />
+        ))}
+      </Link>
+    </div>
   );
 }
 
@@ -95,6 +162,19 @@ export function DashboardPage() {
           </div>
         )}
       </Card>
+
+      {games.length > 0 && (
+        <Card>
+          <h2 className="text-lg font-semibold text-text-primary mb-4">
+            Community Activity
+          </h2>
+          <div className="space-y-4">
+            {games.map((game) => (
+              <CommunityActivity key={game.id} gameName={game.name} />
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

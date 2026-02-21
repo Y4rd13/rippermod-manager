@@ -106,6 +106,9 @@ class NexusClient:
     async def get_updated_mods(self, game_domain: str, period: str = "1w") -> list[dict[str, Any]]:
         return await self._get(f"/v1/games/{game_domain}/mods/updated.json?period={period}")
 
+    async def get_latest_updated(self, game_domain: str) -> list[dict[str, Any]]:
+        return await self._get(f"/v1/games/{game_domain}/mods/latest_updated.json")
+
     async def md5_search(self, game_domain: str, md5_hash: str) -> list[dict[str, Any]]:
         return await self._get(f"/v1/games/{game_domain}/mods/md5_search/{md5_hash}.json")
 
