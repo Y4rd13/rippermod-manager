@@ -30,6 +30,7 @@ class NexusModMeta(SQLModel, table=True):
     summary: str = ""
     author: str = ""
     version: str = ""
+    created_at: datetime | None = None
     updated_at: datetime | None = None
     endorsement_count: int = 0
     category: str = ""
