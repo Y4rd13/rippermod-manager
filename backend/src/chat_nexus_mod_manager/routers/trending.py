@@ -1,4 +1,4 @@
-"""Router for trending (latest updated) mods from Nexus."""
+"""Router for trending and latest updated mods from Nexus."""
 
 import logging
 
