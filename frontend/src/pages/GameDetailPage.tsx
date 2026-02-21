@@ -49,18 +49,18 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import type { ModUpdate } from "@/types/api";
 
-type Tab = "mods" | "matched" | "endorsed" | "tracked" | "trending" | "installed" | "archives" | "profiles" | "updates";
+type Tab = "installed" | "updates" | "trending" | "endorsed" | "tracked" | "mods" | "matched" | "archives" | "profiles";
 
 const TABS: { key: Tab; label: string; Icon: typeof Package }[] = [
-  { key: "mods", label: "Scanned", Icon: Package },
-  { key: "matched", label: "Nexus Matched", Icon: Link2 },
+  { key: "installed", label: "Installed", Icon: UserCheck },
+  { key: "updates", label: "Updates", Icon: RefreshCw },
+  { key: "trending", label: "Trending", Icon: TrendingUp },
   { key: "endorsed", label: "Endorsed", Icon: Heart },
   { key: "tracked", label: "Tracked", Icon: Eye },
-  { key: "trending", label: "Trending", Icon: TrendingUp },
-  { key: "installed", label: "Installed", Icon: UserCheck },
+  { key: "mods", label: "Scanned", Icon: Package },
+  { key: "matched", label: "Nexus Matched", Icon: Link2 },
   { key: "archives", label: "Archives", Icon: Archive },
   { key: "profiles", label: "Profiles", Icon: FolderOpen },
-  { key: "updates", label: "Updates", Icon: RefreshCw },
 ];
 
 function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdate[] }) {
@@ -177,7 +177,7 @@ export function GameDetailPage() {
   const { data: updates } = useUpdates(name);
   const { data: downloadJobs = [] } = useDownloadJobs(name);
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<Tab>("mods");
+  const [tab, setTab] = useState<Tab>("installed");
 
   const [isLaunching, setIsLaunching] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
