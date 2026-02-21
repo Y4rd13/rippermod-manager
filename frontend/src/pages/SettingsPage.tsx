@@ -1,4 +1,4 @@
-import { CheckCircle, Eye, EyeOff } from "lucide-react";
+import { CheckCircle } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -6,11 +6,6 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { useSaveSettings } from "@/hooks/mutations";
 import { useSettings } from "@/hooks/queries";
-
-function maskKey(key: string): string {
-  if (key.length <= 8) return "*".repeat(key.length);
-  return `${key.slice(0, 4)}${"*".repeat(Math.min(key.length - 8, 20))}${key.slice(-4)}`;
-}
 
 function ApiKeyField({
   id,
@@ -27,8 +22,6 @@ function ApiKeyField({
   value: string;
   onChange: (value: string) => void;
 }) {
-  const [visible, setVisible] = useState(false);
-
   return (
     <div className="space-y-2">
       <Input
@@ -43,16 +36,8 @@ function ApiKeyField({
         <div className="flex items-center gap-2 rounded-md bg-surface-2 px-3 py-2">
           <CheckCircle size={14} className="shrink-0 text-success" />
           <span className="min-w-0 flex-1 truncate font-mono text-xs text-text-secondary">
-            {visible ? currentValue : maskKey(currentValue)}
+            {currentValue}
           </span>
-          <button
-            type="button"
-            onClick={() => setVisible(!visible)}
-            className="shrink-0 text-text-muted transition-colors hover:text-text-primary"
-            aria-label={visible ? "Hide API key" : "Show API key"}
-          >
-            {visible ? <EyeOff size={14} /> : <Eye size={14} />}
-          </button>
         </div>
       )}
     </div>
