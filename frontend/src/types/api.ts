@@ -46,6 +46,7 @@ export interface CorrelationBrief {
   category: string;
   picture_url: string;
   nexus_url: string;
+  updated_at: string | null;
 }
 
 export interface ModGroup {
@@ -97,6 +98,7 @@ export interface NexusDownload {
   summary: string;
   endorsement_count: number;
   picture_url: string;
+  updated_at: string | null;
 }
 
 export interface Setting {
@@ -190,6 +192,7 @@ export interface InstalledModOut {
   installed_at: string;
   file_count: number;
   mod_group_id: number | null;
+  nexus_updated_at: string | null;
 }
 
 export interface InstallRequest {
@@ -308,6 +311,7 @@ export interface TrendingMod {
   endorsement_count: number;
   mod_downloads: number;
   mod_unique_downloads: number;
+  created_timestamp: number;
   updated_timestamp: number;
   category_id: number | null;
   nexus_url: string;

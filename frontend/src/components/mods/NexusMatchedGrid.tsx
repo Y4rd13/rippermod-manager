@@ -6,6 +6,7 @@ import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
 import { useInstallFlow } from "@/hooks/use-install-flow";
+import { isoToEpoch, timeAgo } from "@/lib/format";
 import type {
   AvailableArchive,
   DownloadJobOut,
@@ -13,10 +14,11 @@ import type {
   ModGroup,
 } from "@/types/api";
 
-type SortKey = "score" | "name" | "endorsements" | "author";
+type SortKey = "score" | "name" | "endorsements" | "author" | "updated";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "score", label: "Match Score" },
+  { value: "updated", label: "Recently Updated" },
   { value: "name", label: "Mod Name" },
   { value: "endorsements", label: "Endorsements" },
   { value: "author", label: "Author" },
@@ -60,6 +62,8 @@ export function NexusMatchedGrid({ mods, archives, installedMods, gameName, down
       switch (sortKey) {
         case "score":
           return mb.score - ma.score;
+        case "updated":
+          return isoToEpoch(mb.updated_at) - isoToEpoch(ma.updated_at);
         case "name":
           return ma.mod_name.localeCompare(mb.mod_name);
         case "endorsements":
@@ -154,9 +158,11 @@ export function NexusMatchedGrid({ mods, archives, installedMods, gameName, down
                 <div className="flex items-center gap-1.5">
                   <ConfidenceBadge score={match.score} />
                   <Badge variant="neutral">{match.method}</Badge>
-                  <span className="text-xs text-text-muted truncate max-w-[100px]" title={mod.display_name}>
-                    {mod.display_name}
-                  </span>
+                  {match.updated_at && (
+                    <span className="text-xs text-text-muted">
+                      {timeAgo(isoToEpoch(match.updated_at))}
+                    </span>
+                  )}
                 </div>
               }
             />

@@ -44,6 +44,7 @@ import {
   useUpdates,
 } from "@/hooks/queries";
 import { api } from "@/lib/api-client";
+import { timeAgo } from "@/lib/format";
 import { parseSSE } from "@/lib/sse-parser";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
@@ -130,6 +131,7 @@ function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdat
                 <th className="pb-2 pr-4">Nexus Version</th>
                 <th className="pb-2 pr-4">Source</th>
                 <th className="pb-2 pr-4">Author</th>
+                <th className="pb-2 pr-4">Updated</th>
                 <th className="pb-2" />
               </tr>
             </thead>
@@ -146,6 +148,9 @@ function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdat
                     <SourceBadge source={u.source} />
                   </td>
                   <td className="py-2 pr-4 text-text-muted">{u.author}</td>
+                  <td className="py-2 pr-4 text-text-muted">
+                    {u.nexus_timestamp ? timeAgo(u.nexus_timestamp) : "—"}
+                  </td>
                   <td className="py-2">
                     <UpdateDownloadCell
                       update={u}

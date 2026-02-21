@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -32,6 +34,7 @@ class CorrelationBrief(BaseModel):
     category: str = ""
     picture_url: str = ""
     nexus_url: str = ""
+    updated_at: datetime | None = None
 
 
 class ScanResult(BaseModel):

@@ -64,9 +64,20 @@ async def list_installed(
 ) -> list[InstalledModOut]:
     """List all installed mods for a game."""
     game = get_game_or_404(game_name, session)
-    mods = session.exec(select(InstalledMod).where(InstalledMod.game_id == game.id)).all()
+
+    from chat_nexus_mod_manager.models.nexus import NexusModMeta
+
+    rows = session.exec(
+        select(InstalledMod, NexusModMeta)
+        .outerjoin(
+            NexusModMeta,
+            InstalledMod.nexus_mod_id == NexusModMeta.nexus_mod_id,
+        )
+        .where(InstalledMod.game_id == game.id)
+    ).all()
+
     result: list[InstalledModOut] = []
-    for mod in mods:
+    for mod, meta in rows:
         _ = mod.files
         result.append(
             InstalledModOut(
@@ -79,6 +90,7 @@ async def list_installed(
                 installed_at=mod.installed_at,
                 file_count=len(mod.files),
                 mod_group_id=mod.mod_group_id,
+                nexus_updated_at=meta.updated_at if meta else None,
             )
         )
     return result

@@ -75,6 +75,9 @@ def _upsert_trending_metadata(
                 category=str(info.get("category_id", "")),
                 picture_url=info.get("picture_url", ""),
             )
+            created_ts = info.get("created_timestamp")
+            if created_ts:
+                meta.created_at = datetime.fromtimestamp(created_ts, tz=UTC)
             ts = info.get("updated_timestamp")
             if ts:
                 meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)
@@ -92,6 +95,9 @@ def _upsert_trending_metadata(
                 existing.endorsement_count = info["endorsement_count"]
             if info.get("picture_url"):
                 existing.picture_url = info["picture_url"]
+            created_ts = info.get("created_timestamp")
+            if created_ts:
+                existing.created_at = datetime.fromtimestamp(created_ts, tz=UTC)
             ts = info.get("updated_timestamp")
             if ts:
                 existing.updated_at = datetime.fromtimestamp(ts, tz=UTC)
@@ -112,6 +118,7 @@ def _normalize_api_response(raw_mods: list[dict[str, Any]]) -> list[dict[str, An
                 "endorsement_count": m.get("endorsement_count", 0),
                 "mod_downloads": m.get("mod_downloads", 0),
                 "mod_unique_downloads": m.get("mod_unique_downloads", 0),
+                "created_timestamp": m.get("created_timestamp", 0),
                 "updated_timestamp": m.get("updated_timestamp", 0),
                 "category_id": m.get("category_id"),
             }
@@ -171,6 +178,7 @@ def _cross_reference(
                 endorsement_count=m.get("endorsement_count", 0),
                 mod_downloads=m.get("mod_downloads", 0),
                 mod_unique_downloads=m.get("mod_unique_downloads", 0),
+                created_timestamp=m.get("created_timestamp", 0),
                 updated_timestamp=m.get("updated_timestamp", 0),
                 category_id=m.get("category_id"),
                 nexus_url=f"{nexus_url_base}/{mid}",

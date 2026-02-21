@@ -26,6 +26,7 @@ class InstalledModOut(BaseModel):
     installed_at: datetime
     file_count: int
     mod_group_id: int | None = None
+    nexus_updated_at: datetime | None = None
 
 
 class UninstallResult(BaseModel):

@@ -100,6 +100,7 @@ def list_downloads(
             summary=meta.summary if meta else "",
             endorsement_count=meta.endorsement_count if meta else 0,
             picture_url=meta.picture_url if meta else "",
+            updated_at=meta.updated_at if meta else None,
         )
         for dl, meta in rows
     ]

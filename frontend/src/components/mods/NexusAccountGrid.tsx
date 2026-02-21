@@ -5,6 +5,7 @@ import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { useInstallFlow } from "@/hooks/use-install-flow";
+import { isoToEpoch, timeAgo } from "@/lib/format";
 import type {
   AvailableArchive,
   DownloadJobOut,
@@ -12,9 +13,10 @@ import type {
   NexusDownload,
 } from "@/types/api";
 
-type SortKey = "name" | "endorsements" | "author";
+type SortKey = "name" | "endorsements" | "author" | "updated";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "updated", label: "Recently Updated" },
   { value: "name", label: "Mod Name" },
   { value: "endorsements", label: "Endorsements" },
   { value: "author", label: "Author" },
@@ -59,6 +61,8 @@ export function NexusAccountGrid({
 
     items.sort((a, b) => {
       switch (sortKey) {
+        case "updated":
+          return isoToEpoch(b.updated_at) - isoToEpoch(a.updated_at);
         case "name":
           return a.mod_name.localeCompare(b.mod_name);
         case "endorsements":
@@ -121,6 +125,13 @@ export function NexusAccountGrid({
               endorsementCount={mod.endorsement_count}
               pictureUrl={mod.picture_url}
               nexusUrl={mod.nexus_url}
+              footer={
+                mod.updated_at ? (
+                  <span className="text-xs text-text-muted">
+                    {timeAgo(isoToEpoch(mod.updated_at))}
+                  </span>
+                ) : undefined
+              }
               action={
                 <ModCardAction
 

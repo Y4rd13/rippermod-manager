@@ -57,6 +57,7 @@ class NexusModEnrichedOut(BaseModel):
     summary: str = ""
     endorsement_count: int = 0
     picture_url: str = ""
+    updated_at: datetime | None = None
 
 
 class TrendingModOut(BaseModel):
@@ -69,6 +70,7 @@ class TrendingModOut(BaseModel):
     endorsement_count: int = 0
     mod_downloads: int = 0
     mod_unique_downloads: int = 0
+    created_timestamp: int = 0
     updated_timestamp: int = 0
     category_id: int | None = None
     nexus_url: str = ""
