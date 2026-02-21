@@ -124,7 +124,6 @@ export function NexusAccountGrid({
               version={mod.version}
               endorsementCount={mod.endorsement_count}
               pictureUrl={mod.picture_url}
-              nexusUrl={mod.nexus_url}
               footer={
                 mod.updated_at ? (
                   <span className="text-xs text-text-muted">

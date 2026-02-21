@@ -308,7 +308,7 @@ export interface DownloadJobOut {
 }
 
 export interface DownloadStartResult {
-  job: DownloadJobOut;
+  job: DownloadJobOut | null;
   requires_nxm: boolean;
 }
 

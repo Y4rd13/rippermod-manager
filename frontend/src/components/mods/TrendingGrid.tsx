@@ -113,7 +113,6 @@ export function TrendingGrid({
         version={mod.version}
         endorsementCount={mod.endorsement_count}
         pictureUrl={mod.picture_url}
-        nexusUrl={mod.nexus_url}
         footer={
           <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center gap-1 text-xs text-text-muted">

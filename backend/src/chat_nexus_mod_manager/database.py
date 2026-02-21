@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Generator
 
+from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine, text
 
 from chat_nexus_mod_manager.config import settings
@@ -8,7 +9,11 @@ from chat_nexus_mod_manager.config import settings
 logger = logging.getLogger(__name__)
 
 settings.db_path.parent.mkdir(parents=True, exist_ok=True)
-engine = create_engine(f"sqlite:///{settings.db_path}", echo=False)
+engine = create_engine(
+    f"sqlite:///{settings.db_path}",
+    echo=False,
+    connect_args={"timeout": 30, "check_same_thread": False},
+)
 
 
 def _migrate_missing_columns() -> None:
@@ -48,6 +53,16 @@ def _migrate_missing_columns() -> None:
 
 def create_db_and_tables() -> None:
     SQLModel.metadata.create_all(engine)
+    with engine.connect() as conn:
+        conn.execute(text("PRAGMA journal_mode=WAL"))
+        conn.commit()
+
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.close()
+
     _migrate_missing_columns()
 
 

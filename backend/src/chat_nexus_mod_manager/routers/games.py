@@ -161,6 +161,7 @@ def delete_game(name: str, session: Session = Depends(get_session)) -> None:
 
     delete_game_vectors(game_id)
 
+    from chat_nexus_mod_manager.models.download import DownloadJob
     from chat_nexus_mod_manager.models.install import InstalledMod, InstalledModFile
     from chat_nexus_mod_manager.models.mod import ModFile, ModGroup, ModGroupAlias
     from chat_nexus_mod_manager.models.nexus import NexusDownload
@@ -188,6 +189,7 @@ def delete_game(name: str, session: Session = Depends(get_session)) -> None:
     session.exec(delete(ModGroup).where(ModGroup.game_id == game_id))  # type: ignore[call-overload]
 
     session.exec(delete(NexusDownload).where(NexusDownload.game_id == game_id))  # type: ignore[call-overload]
+    session.exec(delete(DownloadJob).where(DownloadJob.game_id == game_id))  # type: ignore[call-overload]
 
     session.delete(game)
     session.commit()

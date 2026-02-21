@@ -205,6 +205,7 @@ export function GamesPage() {
   const { data: games = [] } = useGames();
   const deleteGame = useDeleteGame();
   const [showAdd, setShowAdd] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   return (
     <div className="space-y-6">
@@ -241,14 +242,30 @@ export function GamesPage() {
                     </p>
                   </div>
                 </Link>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() => deleteGame.mutate(game.name)}
-                  loading={deleteGame.isPending}
-                >
-                  <Trash2 size={14} />
-                </Button>
+                {confirmDelete === game.name ? (
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    loading={
+                      deleteGame.isPending &&
+                      deleteGame.variables === game.name
+                    }
+                    onClick={() => {
+                      deleteGame.mutate(game.name);
+                      setConfirmDelete(null);
+                    }}
+                  >
+                    Confirm
+                  </Button>
+                ) : (
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => setConfirmDelete(game.name)}
+                  >
+                    <Trash2 size={14} />
+                  </Button>
+                )}
               </div>
             </Card>
           ))}
