@@ -67,6 +67,10 @@ class WebSearchResult(BaseModel):
     unmatched: int
 
 
+class CorrelationReassign(BaseModel):
+    nexus_mod_id: int
+
+
 class ScanStreamRequest(BaseModel):
     ai_search: bool = False
 

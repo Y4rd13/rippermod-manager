@@ -114,6 +114,13 @@ export interface NexusDownload {
   updated_at: string | null;
 }
 
+export interface NexusDownloadBrief {
+  nexus_mod_id: number;
+  mod_name: string;
+  version: string;
+  nexus_url: string;
+}
+
 export interface Setting {
   key: string;
   value: string;
@@ -220,6 +227,12 @@ export interface InstalledModOut {
   file_count: number;
   mod_group_id: number | null;
   nexus_updated_at: string | null;
+  nexus_name: string | null;
+  summary: string | null;
+  author: string | null;
+  endorsement_count: number | null;
+  picture_url: string | null;
+  category: string | null;
 }
 
 export interface InstallRequest {
