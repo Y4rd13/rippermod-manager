@@ -155,6 +155,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
       if (e.key === "Escape") {
         setConflicts(null);
         setSelectedArchive(null);
+        processNextInQueue();
       }
     };
     document.addEventListener("keydown", handleKeyDown);
@@ -342,6 +343,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                 onClick={() => {
                   setConflicts(null);
                   setSelectedArchive(null);
+                  processNextInQueue();
                 }}
               >
                 Cancel
