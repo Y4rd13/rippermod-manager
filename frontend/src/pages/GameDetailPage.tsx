@@ -77,7 +77,7 @@ export function GameDetailPage() {
   const { data: profiles = [], isLoading: profilesLoading } = useProfiles(name);
   const { data: endorsedMods = [], isLoading: endorsedLoading } = useEndorsedMods(name);
   const { data: trackedMods = [], isLoading: trackedLoading } = useTrackedMods(name);
-  const { data: trendingResult, isLoading: trendingLoading } = useTrendingMods(name);
+  const { data: trendingResult, isLoading: trendingLoading, dataUpdatedAt: trendingUpdatedAt } = useTrendingMods(name);
   const { data: updates, isLoading: updatesLoading } = useUpdates(name);
   const { data: downloadJobs = [] } = useDownloadJobs(name);
   const { data: settings = [] } = useSettings();
@@ -417,6 +417,7 @@ export function GameDetailPage() {
           gameName={name}
           downloadJobs={downloadJobs}
           isLoading={trendingLoading}
+          dataUpdatedAt={trendingUpdatedAt}
           onModClick={setSelectedModId}
         />
       )}

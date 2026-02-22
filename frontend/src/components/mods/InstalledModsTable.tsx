@@ -383,6 +383,22 @@ function RecognizedModsGrid({
 }) {
   const flow = useInstallFlow(gameName, archives, downloadJobs);
 
+  const modIds = useMemo(() => mods.map((m) => String(m.id)), [mods]);
+  const bulk = useBulkSelect(modIds);
+
+  const handleBulkInstall = async () => {
+    for (const modIdStr of bulk.selectedIds) {
+      const mod = mods.find((m) => String(m.id) === modIdStr);
+      const nexusModId = mod?.nexus_match?.nexus_mod_id;
+      if (nexusModId == null) continue;
+      const archive = flow.archiveByModId.get(nexusModId);
+      if (archive) {
+        flow.handleInstall(nexusModId, archive);
+      }
+    }
+    bulk.deselectAll();
+  };
+
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -395,53 +411,74 @@ function RecognizedModsGrid({
           const update = nexusModId != null ? updateByNexusId.get(nexusModId) : undefined;
 
           return (
-            <NexusModCard
-              key={mod.id}
-              modName={match.mod_name}
-              summary={match.summary}
-              author={match.author}
-              version={match.version}
-              endorsementCount={match.endorsement_count}
-              pictureUrl={match.picture_url}
-              badge={update ? <Badge variant="warning" prominent>v{update.nexus_version} available</Badge> : undefined}
-              onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
-              action={
-                <ModCardAction
-                  isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
-                  isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
-                  activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
-                  completedDownload={nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined}
-                  archive={archive}
-                  nexusUrl={match.nexus_url}
-                  hasConflicts={flow.conflicts != null}
-                  isDownloading={flow.downloadingModId === nexusModId}
-                  isUpdate={!!update}
-                  updateVersion={update?.nexus_version}
-                  onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
-                  onInstallByFilename={() => {
-                    const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
-                    if (nexusModId != null && dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
-                  }}
-                  onDownload={() => nexusModId != null && flow.handleDownload(nexusModId)}
-                  onCancelDownload={() => {
-                    const dl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
-                    if (dl) flow.handleCancelDownload(dl.id);
-                  }}
+            <div key={mod.id} className="relative">
+              <div className="absolute top-2 left-2 z-10">
+                <input
+                  type="checkbox"
+                  checked={bulk.isSelected(String(mod.id))}
+                  onChange={() => bulk.toggle(String(mod.id))}
+                  className="rounded border-border accent-accent"
                 />
-              }
-              footer={
-                <div className="flex items-center gap-1.5">
-                  <ConfidenceBadge score={match.score} />
-                  <Badge variant="neutral">{match.method}</Badge>
-                  {match.updated_at && (
-                    <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
-                  )}
-                </div>
-              }
-            />
+              </div>
+              <NexusModCard
+                modName={match.mod_name}
+                summary={match.summary}
+                author={match.author}
+                version={match.version}
+                endorsementCount={match.endorsement_count}
+                pictureUrl={match.picture_url}
+                badge={update ? <Badge variant="warning" prominent>v{update.nexus_version} available</Badge> : undefined}
+                onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
+                action={
+                  <ModCardAction
+                    isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
+                    isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
+                    activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
+                    completedDownload={nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined}
+                    archive={archive}
+                    nexusUrl={match.nexus_url}
+                    hasConflicts={flow.conflicts != null}
+                    isDownloading={flow.downloadingModId === nexusModId}
+                    isUpdate={!!update}
+                    updateVersion={update?.nexus_version}
+                    onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
+                    onInstallByFilename={() => {
+                      const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
+                      if (nexusModId != null && dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
+                    }}
+                    onDownload={() => nexusModId != null && flow.handleDownload(nexusModId)}
+                    onCancelDownload={() => {
+                      const dl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
+                      if (dl) flow.handleCancelDownload(dl.id);
+                    }}
+                  />
+                }
+                footer={
+                  <div className="flex items-center gap-1.5">
+                    <ConfidenceBadge score={match.score} />
+                    <Badge variant="neutral">{match.method}</Badge>
+                    {match.updated_at && (
+                      <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
+                    )}
+                  </div>
+                }
+              />
+            </div>
           );
         })}
       </div>
+
+      <BulkActionBar
+        selectedCount={bulk.selectedCount}
+        totalCount={mods.length}
+        onSelectAll={bulk.selectAll}
+        onDeselectAll={bulk.deselectAll}
+        isAllSelected={bulk.isAllSelected}
+      >
+        <Button size="sm" onClick={handleBulkInstall}>
+          Install {bulk.selectedCount} Selected
+        </Button>
+      </BulkActionBar>
 
       {flow.conflicts && (
         <ConflictDialog

@@ -119,9 +119,14 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
   ];
 
   const installQueueRef = useRef<string[]>([]);
+  const [queueProgress, setQueueProgress] = useState<{ current: number; total: number } | null>(null);
 
   const processNextInQueue = () => {
-    if (installQueueRef.current.length === 0) return;
+    if (installQueueRef.current.length === 0) {
+      setQueueProgress(null);
+      return;
+    }
+    setQueueProgress((prev) => prev ? { ...prev, current: prev.current + 1 } : null);
     const next = installQueueRef.current.shift()!;
     handleCheckConflicts(next);
   };
@@ -157,7 +162,9 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
   };
 
   const handleBulkInstall = () => {
-    installQueueRef.current = [...bulk.selectedIds];
+    const items = [...bulk.selectedIds];
+    installQueueRef.current = items;
+    setQueueProgress({ current: 0, total: items.length });
     bulk.deselectAll();
     processNextInQueue();
   };
@@ -379,6 +386,12 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
           <Trash2 size={14} /> Delete {bulk.selectedCount}
         </Button>
       </BulkActionBar>
+
+      {queueProgress && (
+        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-40 rounded-lg border border-border bg-surface-1 px-4 py-2 shadow-lg text-sm text-text-primary">
+          Installing {queueProgress.current} of {queueProgress.total}...
+        </div>
+      )}
 
       {menuState.visible && menuState.data && (
         <ContextMenu

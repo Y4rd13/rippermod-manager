@@ -1,5 +1,5 @@
 import { Check, Clock, Copy, Download, ExternalLink, Eye, Heart, Info, RefreshCw, Search, TrendingUp } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
@@ -47,6 +47,7 @@ interface Props {
   gameName: string;
   downloadJobs?: DownloadJobOut[];
   isLoading?: boolean;
+  dataUpdatedAt?: number;
   onModClick?: (nexusModId: number) => void;
 }
 
@@ -58,11 +59,21 @@ export function TrendingGrid({
   gameName,
   downloadJobs = [],
   isLoading = false,
+  dataUpdatedAt,
   onModClick,
 }: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("updated");
   const [chip, setChip] = useState<ChipKey>("all");
+  const [isStale, setIsStale] = useState(false);
+
+  useEffect(() => {
+    if (dataUpdatedAt == null) return;
+    const check = () => setIsStale(Date.now() - dataUpdatedAt > 30 * 60 * 1000);
+    check();
+    const timer = setInterval(check, 60_000);
+    return () => clearInterval(timer);
+  }, [dataUpdatedAt]);
 
   const flow = useInstallFlow(gameName, archives, downloadJobs);
   const refreshTrending = useRefreshTrending();
@@ -262,6 +273,11 @@ export function TrendingGrid({
           <span className="text-xs text-text-muted">
             {totalCount} mod{totalCount !== 1 ? "s" : ""}
           </span>
+          {isStale && dataUpdatedAt != null && (
+            <span className="text-xs text-warning" title="Data may be outdated — click Refresh to update">
+              Updated {timeAgo(Math.floor(dataUpdatedAt / 1000))}
+            </span>
+          )}
         </div>
         <FilterChips
           chips={FILTER_CHIPS}

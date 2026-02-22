@@ -38,6 +38,92 @@ import { useContextMenu } from "@/hooks/use-context-menu";
 import { isoToEpoch, timeAgo } from "@/lib/format";
 import type { ProfileCompareOut, ProfileDiffOut, ProfileExport, ProfileOut } from "@/types/api";
 
+function CreateProfileForm({
+  installedCount,
+  recognizedCount,
+  isPending,
+  onSave,
+  onCancel,
+}: {
+  installedCount: number;
+  recognizedCount: number;
+  isPending: boolean;
+  onSave: (name: string, description: string) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+
+  const handleCreate = () => {
+    if (!name.trim()) return;
+    onSave(name.trim(), description.trim());
+  };
+
+  return (
+    <Card>
+      <div className="space-y-3">
+        {installedCount === 0 && recognizedCount > 0 && (
+          <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2">
+            <AlertTriangle size={14} className="text-warning mt-0.5 shrink-0" />
+            <p className="text-xs text-text-secondary">
+              You have <strong>{recognizedCount} recognized mods</strong> but no managed mods yet.
+              Profiles only snapshot mods that have been <strong>installed through the manager</strong>.
+              Go to the Installed tab and install your recognized mods first, then save a profile.
+            </p>
+          </div>
+        )}
+        {installedCount === 0 && recognizedCount === 0 && (
+          <div className="flex items-start gap-2 rounded-lg border border-border bg-surface-2/50 px-3 py-2">
+            <Info size={14} className="text-text-muted mt-0.5 shrink-0" />
+            <p className="text-xs text-text-secondary">
+              No mods installed yet. Run a scan first to discover mods, then install them to create a profile.
+            </p>
+          </div>
+        )}
+        {installedCount > 0 && (
+          <div className="flex items-start gap-2 rounded-lg border border-border bg-surface-2/50 px-3 py-2">
+            <Info size={14} className="text-text-muted mt-0.5 shrink-0" />
+            <p className="text-xs text-text-secondary">
+              This will snapshot your <strong>{installedCount} managed mod{installedCount !== 1 ? "s" : ""}</strong> and their enabled/disabled states.
+            </p>
+          </div>
+        )}
+        <div className="flex items-end gap-3">
+          <div className="flex-1">
+            <Input
+              id="profile-name"
+              label="Profile Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Performance, Visuals, Full Setup"
+              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+            />
+          </div>
+          <Button
+            size="sm"
+            loading={isPending}
+            onClick={handleCreate}
+            disabled={installedCount === 0}
+            title={installedCount === 0 ? "No managed mods to save — install mods first" : "Save current mod state as a profile"}
+          >
+            <Save size={14} /> Save
+          </Button>
+          <Button variant="secondary" size="sm" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+        <textarea
+          className="w-full rounded-lg border border-border bg-surface-0 px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-accent focus:outline-none"
+          rows={2}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Optional description or notes..."
+        />
+      </div>
+    </Card>
+  );
+}
+
 const CONTEXT_MENU_ITEMS: ContextMenuItem[] = [
   { key: "load", label: "Load", icon: FolderOpen },
   { key: "export", label: "Export", icon: Download },
@@ -57,8 +143,6 @@ interface Props {
 
 export function ProfileManager({ profiles, gameName, isLoading = false, installedCount = 0, recognizedCount = 0 }: Props) {
   const [showCreate, setShowCreate] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newDescription, setNewDescription] = useState("");
   const [importError, setImportError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -96,17 +180,10 @@ export function ProfileManager({ profiles, gameName, isLoading = false, installe
 
   const { menuState, openMenu, closeMenu } = useContextMenu<ProfileOut>();
 
-  const handleCreate = () => {
-    if (!newName.trim()) return;
+  const handleCreate = (name: string, description: string) => {
     saveProfile.mutate(
-      { gameName, name: newName.trim(), description: newDescription.trim() },
-      {
-        onSuccess: () => {
-          setNewName("");
-          setNewDescription("");
-          setShowCreate(false);
-        },
-      },
+      { gameName, name, description },
+      { onSuccess: () => setShowCreate(false) },
     );
   };
 
@@ -306,7 +383,7 @@ export function ProfileManager({ profiles, gameName, isLoading = false, installe
 
   return (
     <div
-      className={`space-y-4 ${isDragOver ? "outline outline-2 outline-dashed outline-accent rounded-xl" : ""}`}
+      className={`space-y-4 transition-all ${isDragOver ? "outline outline-2 outline-dashed outline-accent rounded-xl bg-accent/5" : ""}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -376,75 +453,13 @@ export function ProfileManager({ profiles, gameName, isLoading = false, installe
       )}
 
       {showCreate && (
-        <Card>
-          <div className="space-y-3">
-            {installedCount === 0 && recognizedCount > 0 && (
-              <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2">
-                <AlertTriangle size={14} className="text-warning mt-0.5 shrink-0" />
-                <p className="text-xs text-text-secondary">
-                  You have <strong>{recognizedCount} recognized mods</strong> but no managed mods yet.
-                  Profiles only snapshot mods that have been <strong>installed through the manager</strong>.
-                  Go to the Installed tab and install your recognized mods first, then save a profile.
-                </p>
-              </div>
-            )}
-            {installedCount === 0 && recognizedCount === 0 && (
-              <div className="flex items-start gap-2 rounded-lg border border-border bg-surface-2/50 px-3 py-2">
-                <Info size={14} className="text-text-muted mt-0.5 shrink-0" />
-                <p className="text-xs text-text-secondary">
-                  No mods installed yet. Run a scan first to discover mods, then install them to create a profile.
-                </p>
-              </div>
-            )}
-            {installedCount > 0 && (
-              <div className="flex items-start gap-2 rounded-lg border border-border bg-surface-2/50 px-3 py-2">
-                <Info size={14} className="text-text-muted mt-0.5 shrink-0" />
-                <p className="text-xs text-text-secondary">
-                  This will snapshot your <strong>{installedCount} managed mod{installedCount !== 1 ? "s" : ""}</strong> and their enabled/disabled states.
-                </p>
-              </div>
-            )}
-            <div className="flex items-end gap-3">
-              <div className="flex-1">
-                <Input
-                  id="profile-name"
-                  label="Profile Name"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="e.g. Performance, Visuals, Full Setup"
-                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                />
-              </div>
-              <Button
-                size="sm"
-                loading={saveProfile.isPending}
-                onClick={handleCreate}
-                disabled={installedCount === 0}
-                title={installedCount === 0 ? "No managed mods to save — install mods first" : "Save current mod state as a profile"}
-              >
-                <Save size={14} /> Save
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  setShowCreate(false);
-                  setNewName("");
-                  setNewDescription("");
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-            <textarea
-              className="w-full rounded-lg border border-border bg-surface-0 px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-accent focus:outline-none"
-              rows={2}
-              value={newDescription}
-              onChange={(e) => setNewDescription(e.target.value)}
-              placeholder="Optional description or notes..."
-            />
-          </div>
-        </Card>
+        <CreateProfileForm
+          installedCount={installedCount}
+          recognizedCount={recognizedCount}
+          isPending={saveProfile.isPending}
+          onSave={handleCreate}
+          onCancel={() => setShowCreate(false)}
+        />
       )}
 
       {importError && (
@@ -455,11 +470,14 @@ export function ProfileManager({ profiles, gameName, isLoading = false, installe
         <EmptyState
           icon={FolderOpen}
           title="No Saved Profiles"
-          description="Profiles let you save and restore which mods are enabled or disabled. Install mods through the manager first, then save a snapshot of your setup here. You can also drag & drop a .json file to import."
+          description="Profiles let you save and restore which mods are enabled or disabled. Install mods through the manager first, then save a snapshot of your setup here."
           actions={
-            <Button size="sm" title="Save your current mod setup as a reusable profile" onClick={() => setShowCreate(true)}>
-              <Plus size={14} /> Save Current
-            </Button>
+            <>
+              <Button size="sm" title="Save your current mod setup as a reusable profile" onClick={() => setShowCreate(true)}>
+                <Plus size={14} /> Save Current
+              </Button>
+              <p className="text-xs text-text-muted mt-2">or drop a .json file here to import</p>
+            </>
           }
         />
       ) : (
