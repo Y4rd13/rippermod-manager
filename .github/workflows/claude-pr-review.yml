@@ -51,7 +51,12 @@ jobs:
             🟡 SUGGESTED: improvements
             🟢 POSITIVE: good patterns found
 
+            After posting all inline and top-level comments, submit a formal PR review:
+            - Use `gh pr review --approve -b "message"` if there are NO blocking issues
+            - Use `gh pr review --request-changes -b "message"` if there ARE blocking issues
+            Always include a brief summary in the review body.
+
           claude_args: |
             --model claude-opus-4-6
             --max-turns 50
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git fetch:*)"
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git fetch:*),Bash(gh pr review:*)"
