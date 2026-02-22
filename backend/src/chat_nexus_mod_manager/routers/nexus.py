@@ -123,13 +123,14 @@ def search_downloads(
 
     from chat_nexus_mod_manager.models.nexus import NexusDownload
 
+    escaped_q = q.replace("%", r"\%").replace("_", r"\_")
     stmt = (
         select(NexusDownload)
         .where(
             NexusDownload.game_id == game.id,
-            col(NexusDownload.mod_name).ilike(f"%{q}%"),
+            col(NexusDownload.mod_name).ilike(f"%{escaped_q}%"),
         )
-        .distinct(NexusDownload.nexus_mod_id)  # type: ignore[arg-type]
+        .group_by(NexusDownload.nexus_mod_id)
         .limit(20)
     )
     rows = session.exec(stmt).all()

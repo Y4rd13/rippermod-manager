@@ -36,7 +36,12 @@ export function ReassignDialog({ gameName, modGroupId, onClose }: Props) {
 
   useEffect(() => {
     inputRef.current?.focus();
-  }, []);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
