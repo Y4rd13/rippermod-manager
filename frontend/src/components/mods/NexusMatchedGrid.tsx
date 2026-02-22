@@ -1,7 +1,9 @@
-import { Link2, Search } from "lucide-react";
+import { CheckCircle, Link2, Pencil, Search, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
+import { CorrelationActions } from "@/components/mods/CorrelationActions";
+import { ReassignDialog } from "@/components/mods/ReassignDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
@@ -10,6 +12,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { useContextMenu } from "@/hooks/use-context-menu";
+import { useConfirmCorrelation, useRejectCorrelation } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { isoToEpoch, timeAgo } from "@/lib/format";
 import type {
@@ -108,10 +111,18 @@ export function NexusMatchedGrid({
     return items;
   }, [mods, filter, sortKey, chip]);
 
+  const confirmCorrelation = useConfirmCorrelation();
+  const rejectCorrelation = useRejectCorrelation();
+  const [reassignGroupId, setReassignGroupId] = useState<number | null>(null);
+
   const contextMenuItems: ContextMenuItem[] = [
     { key: "view", label: "View Details" },
     { key: "open-nexus", label: "Open on Nexus" },
     { key: "copy-name", label: "Copy Name" },
+    { key: "sep-corr", label: "", separator: true },
+    { key: "accept-match", label: "Accept Match", icon: CheckCircle },
+    { key: "reject-match", label: "Reject Match", icon: XCircle },
+    { key: "correct-match", label: "Correct Match", icon: Pencil },
   ];
 
   function handleContextMenuSelect(key: string) {
@@ -124,6 +135,14 @@ export function NexusMatchedGrid({
       window.open(match.nexus_url, "_blank", "noopener,noreferrer");
     } else if (key === "copy-name" && match?.mod_name) {
       navigator.clipboard.writeText(match.mod_name);
+    } else if (key === "accept-match") {
+      confirmCorrelation.mutate({ gameName, modGroupId: mod.id });
+    } else if (key === "reject-match") {
+      if (window.confirm("Remove this Nexus match?")) {
+        rejectCorrelation.mutate({ gameName, modGroupId: mod.id });
+      }
+    } else if (key === "correct-match") {
+      setReassignGroupId(mod.id);
     }
   }
 
@@ -217,9 +236,11 @@ export function NexusMatchedGrid({
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <ConfidenceBadge score={match.score} />
                   <Badge variant="neutral">{match.method}</Badge>
-                  <span className="text-xs text-text-muted truncate max-w-[120px]" title={mod.display_name}>
-                    {mod.display_name}
-                  </span>
+                  <CorrelationActions
+                    gameName={gameName}
+                    modGroupId={mod.id}
+                    confirmed={match.confirmed}
+                  />
                   {match.updated_at && (
                     <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
                   )}
@@ -245,6 +266,14 @@ export function NexusMatchedGrid({
           position={menuState.position}
           onSelect={handleContextMenuSelect}
           onClose={closeMenu}
+        />
+      )}
+
+      {reassignGroupId != null && (
+        <ReassignDialog
+          gameName={gameName}
+          modGroupId={reassignGroupId}
+          onClose={() => setReassignGroupId(null)}
         />
       )}
     </div>

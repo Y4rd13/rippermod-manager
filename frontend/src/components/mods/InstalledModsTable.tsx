@@ -11,6 +11,8 @@ import {
 import { useMemo, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
+import { CorrelationActions } from "@/components/mods/CorrelationActions";
+import { InstalledModCardAction } from "@/components/mods/InstalledModCardAction";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
@@ -19,7 +21,7 @@ import { Button } from "@/components/ui/Button";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
-import { SkeletonTable } from "@/components/ui/SkeletonTable";
+import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { useBulkSelect } from "@/hooks/use-bulk-select";
 import { useContextMenu } from "@/hooks/use-context-menu";
@@ -61,7 +63,15 @@ const RECOGNIZED_SORT_OPTIONS: { value: RecognizedSortKey; label: string }[] = [
   { value: "updated", label: "Recently Updated" },
 ];
 
-function ManagedModsTable({
+const MANAGED_SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "updated", label: "Recently Updated" },
+  { value: "name", label: "Mod Name" },
+  { value: "disabled", label: "Status" },
+  { value: "version", label: "Version" },
+  { value: "files", label: "File Count" },
+];
+
+function ManagedModsGrid({
   mods,
   gameName,
   updateByInstalledId,
@@ -75,40 +85,28 @@ function ManagedModsTable({
   onModClick?: (nexusModId: number) => void;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("updated");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [confirming, setConfirming] = useState<number | null>(null);
   const toggleMod = useToggleMod();
   const uninstallMod = useUninstallMod();
-
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir(sortDir === "asc" ? "desc" : "asc");
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  };
 
   const sorted = useMemo(
     () =>
       [...mods].sort((a, b) => {
-        const dir = sortDir === "asc" ? 1 : -1;
         switch (sortKey) {
           case "name":
-            return a.name.localeCompare(b.name) * dir;
+            return (a.nexus_name || a.name).localeCompare(b.nexus_name || b.name);
           case "version":
-            return a.installed_version.localeCompare(b.installed_version) * dir;
+            return a.installed_version.localeCompare(b.installed_version);
           case "files":
-            return (a.file_count - b.file_count) * dir;
+            return b.file_count - a.file_count;
           case "disabled":
-            return (Number(a.disabled) - Number(b.disabled)) * dir;
+            return Number(a.disabled) - Number(b.disabled);
           case "updated":
-            return (isoToEpoch(a.nexus_updated_at) - isoToEpoch(b.nexus_updated_at)) * dir;
+            return isoToEpoch(b.nexus_updated_at) - isoToEpoch(a.nexus_updated_at);
           default:
             return 0;
         }
       }),
-    [mods, sortKey, sortDir],
+    [mods, sortKey],
   );
 
   const sortedIds = useMemo(() => sorted.map((m) => m.id), [sorted]);
@@ -145,10 +143,10 @@ function ManagedModsTable({
         if (mod.nexus_mod_id) onModClick?.(mod.nexus_mod_id);
         break;
       case "copy":
-        void navigator.clipboard.writeText(mod.name);
+        void navigator.clipboard.writeText(mod.nexus_name || mod.name);
         break;
       case "delete":
-        setConfirming(mod.id);
+        uninstallMod.mutate({ gameName, modId: mod.id });
         break;
     }
   };
@@ -192,6 +190,14 @@ function ManagedModsTable({
 
   return (
     <>
+      <div className="flex items-center justify-between mb-3">
+        <SortSelect
+          value={sortKey}
+          onChange={(v) => setSortKey(v as SortKey)}
+          options={MANAGED_SORT_OPTIONS}
+        />
+      </div>
+
       <BulkActionBar
         selectedCount={bulk.selectedCount}
         totalCount={sorted.length}
@@ -214,142 +220,64 @@ function ManagedModsTable({
         </Button>
       </BulkActionBar>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-text-muted sticky top-0 z-10 bg-surface-0">
-              <th className="py-2 pr-4 w-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {sorted.map((mod) => {
+          const update =
+            updateByInstalledId.get(mod.id) ??
+            (mod.nexus_mod_id ? updateByNexusId.get(mod.nexus_mod_id) : undefined);
+          return (
+            <div key={mod.id} className={cn("relative", mod.disabled && "opacity-60")}>
+              <div className="absolute top-2 left-2 z-10">
                 <input
                   type="checkbox"
-                  checked={bulk.isAllSelected}
-                  onChange={bulk.isAllSelected ? bulk.deselectAll : bulk.selectAll}
-                  className="h-4 w-4 rounded accent-accent"
+                  checked={bulk.isSelected(mod.id)}
+                  onChange={() => bulk.toggle(mod.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="rounded border-border accent-accent"
                 />
-              </th>
-              {(
-                [
-                  ["name", "Mod Name"],
-                  ["version", "Version"],
-                  ["files", "Files"],
-                  ["disabled", "Status"],
-                  ["updated", "Updated"],
-                ] as const
-              ).map(([key, label]) => (
-                <th
-                  key={key}
-                  className="cursor-pointer select-none py-2 pr-4 hover:text-text-primary"
-                  onClick={() => handleSort(key)}
-                >
-                  {label} {sortKey === key && (sortDir === "asc" ? "^" : "v")}
-                </th>
-              ))}
-              <th className="py-2 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((mod) => {
-              const update =
-                updateByInstalledId.get(mod.id) ??
-                (mod.nexus_mod_id ? updateByNexusId.get(mod.nexus_mod_id) : undefined);
-              return (
-                <tr
-                  key={mod.id}
-                  className={cn(
-                    "border-b border-border/50",
-                    mod.disabled && "opacity-50",
-                    update && !mod.disabled && "bg-warning/5",
-                    bulk.isSelected(mod.id) && "bg-accent/5",
-                  )}
-                  onContextMenu={(e) => openMenu(e, mod)}
-                >
-                  <td className="py-2 pr-4">
-                    <input
-                      type="checkbox"
-                      checked={bulk.isSelected(mod.id)}
-                      onChange={() => bulk.toggle(mod.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="h-4 w-4 rounded accent-accent"
-                    />
-                  </td>
-                  <td className="py-2 pr-4">
-                    {mod.nexus_mod_id ? (
-                      <button
-                        className="text-text-primary hover:text-accent transition-colors text-left"
-                        onClick={() => onModClick?.(mod.nexus_mod_id!)}
-                      >
-                        {mod.name}
-                      </button>
-                    ) : (
-                      <span className="text-text-primary">{mod.name}</span>
-                    )}
-                    {mod.nexus_mod_id && (
-                      <span className="ml-2 text-xs text-text-muted">#{mod.nexus_mod_id}</span>
-                    )}
-                  </td>
-                  <td className="py-2 pr-4 text-text-muted">
-                    <span>{mod.installed_version || "--"}</span>
-                    {update && (
-                      <Badge variant="warning" prominent className="ml-2">
-                        <ArrowUp size={10} className="mr-0.5" />
-                        v{update.nexus_version}
-                      </Badge>
-                    )}
-                  </td>
-                  <td className="py-2 pr-4 text-text-muted">{mod.file_count}</td>
-                  <td className="py-2 pr-4">
+              </div>
+              <NexusModCard
+                modName={mod.nexus_name || mod.name}
+                summary={mod.summary ?? undefined}
+                author={mod.author ?? undefined}
+                version={mod.installed_version || undefined}
+                endorsementCount={mod.endorsement_count ?? undefined}
+                pictureUrl={mod.picture_url ?? undefined}
+                badge={
+                  update ? (
+                    <Badge variant="warning" prominent>
+                      <ArrowUp size={10} className="mr-0.5" />
+                      v{update.nexus_version}
+                    </Badge>
+                  ) : undefined
+                }
+                footer={
+                  <div className="flex items-center gap-1.5">
                     <Badge variant={mod.disabled ? "danger" : "success"}>
                       {mod.disabled ? "Disabled" : "Enabled"}
                     </Badge>
-                  </td>
-                  <td className="py-2 pr-4 text-text-muted">
-                    {mod.nexus_updated_at ? timeAgo(isoToEpoch(mod.nexus_updated_at)) : "—"}
-                  </td>
-                  <td className="py-2 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        title={mod.disabled ? "Enable this mod" : "Disable this mod"}
-                        loading={toggleMod.isPending && toggleMod.variables?.modId === mod.id}
-                        onClick={() => toggleMod.mutate({ gameName, modId: mod.id })}
-                      >
-                        {mod.disabled ? (
-                          <Power size={14} className="text-success" />
-                        ) : (
-                          <PowerOff size={14} className="text-warning" />
-                        )}
-                      </Button>
-                      {confirming === mod.id ? (
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          loading={
-                            uninstallMod.isPending && uninstallMod.variables?.modId === mod.id
-                          }
-                          onClick={() => {
-                            uninstallMod.mutate({ gameName, modId: mod.id });
-                            setConfirming(null);
-                          }}
-                        >
-                          Confirm
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          title="Uninstall this mod"
-                          onClick={() => setConfirming(mod.id)}
-                        >
-                          <Trash2 size={14} className="text-danger" />
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    {mod.nexus_updated_at && (
+                      <span className="text-xs text-text-muted">
+                        {timeAgo(isoToEpoch(mod.nexus_updated_at))}
+                      </span>
+                    )}
+                  </div>
+                }
+                action={
+                  <InstalledModCardAction
+                    disabled={mod.disabled}
+                    isToggling={toggleMod.isPending && toggleMod.variables?.modId === mod.id}
+                    isUninstalling={uninstallMod.isPending && uninstallMod.variables?.modId === mod.id}
+                    onToggle={() => toggleMod.mutate({ gameName, modId: mod.id })}
+                    onUninstall={() => uninstallMod.mutate({ gameName, modId: mod.id })}
+                  />
+                }
+                onClick={mod.nexus_mod_id ? () => onModClick?.(mod.nexus_mod_id!) : undefined}
+                onContextMenu={(e) => openMenu(e, mod)}
+              />
+            </div>
+          );
+        })}
       </div>
 
       {menuState.visible && menuState.data && (
@@ -461,6 +389,11 @@ function RecognizedModsGrid({
                   <div className="flex items-center gap-1.5">
                     <ConfidenceBadge score={match.score} />
                     <Badge variant="neutral">{match.method}</Badge>
+                    <CorrelationActions
+                      gameName={gameName}
+                      modGroupId={mod.id}
+                      confirmed={match.confirmed}
+                    />
                     {match.updated_at && (
                       <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
                     )}
@@ -541,7 +474,13 @@ export function InstalledModsTable({
   const q = filter.toLowerCase();
 
   const filteredMods = useMemo(() => {
-    let items = q ? mods.filter((m) => m.name.toLowerCase().includes(q)) : mods;
+    let items = q
+      ? mods.filter(
+          (m) =>
+            m.name.toLowerCase().includes(q) ||
+            (m.nexus_name?.toLowerCase().includes(q) ?? false),
+        )
+      : mods;
 
     if (chip === "enabled") {
       items = items.filter((m) => !m.disabled);
@@ -589,7 +528,7 @@ export function InstalledModsTable({
   const totalCount = filteredMods.length + filteredRecognized.length;
 
   if (isLoading) {
-    return <SkeletonTable columns={6} rows={5} />;
+    return <SkeletonCardGrid count={6} />;
   }
 
   if (mods.length === 0 && recognized.length === 0) {
@@ -646,7 +585,7 @@ export function InstalledModsTable({
               onChange={(v) => setChip(v as ChipKey)}
             />
           </div>
-          <ManagedModsTable
+          <ManagedModsGrid
             mods={filteredMods}
             gameName={gameName}
             updateByInstalledId={updateByInstalledId}

@@ -1,13 +1,14 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from chat_nexus_mod_manager.database import get_session
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.settings import AppSetting
 from chat_nexus_mod_manager.schemas.nexus import (
     ModDetailOut,
+    NexusDownloadBrief,
     NexusKeyResult,
     NexusKeyValidation,
     NexusModEnrichedOut,
@@ -107,6 +108,40 @@ def list_downloads(
             updated_at=meta.updated_at if meta else None,
         )
         for dl, meta in rows
+    ]
+
+
+@router.get("/downloads/{game_name}/search", response_model=list[NexusDownloadBrief])
+def search_downloads(
+    game_name: str,
+    q: str = Query(min_length=2),
+    session: Session = Depends(get_session),
+) -> list[NexusDownloadBrief]:
+    game = session.exec(select(Game).where(Game.name == game_name)).first()
+    if not game:
+        raise HTTPException(404, f"Game '{game_name}' not found")
+
+    from chat_nexus_mod_manager.models.nexus import NexusDownload
+
+    escaped_q = q.replace("%", r"\%").replace("_", r"\_")
+    stmt = (
+        select(NexusDownload)
+        .where(
+            NexusDownload.game_id == game.id,
+            col(NexusDownload.mod_name).ilike(f"%{escaped_q}%", escape="\\"),
+        )
+        .group_by(NexusDownload.nexus_mod_id)
+        .limit(20)
+    )
+    rows = session.exec(stmt).all()
+    return [
+        NexusDownloadBrief(
+            nexus_mod_id=dl.nexus_mod_id,
+            mod_name=dl.mod_name,
+            version=dl.version,
+            nexus_url=dl.nexus_url,
+        )
+        for dl in rows
     ]
 
 
