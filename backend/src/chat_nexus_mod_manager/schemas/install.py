@@ -27,6 +27,13 @@ class InstalledModOut(BaseModel):
     file_count: int
     mod_group_id: int | None = None
     nexus_updated_at: datetime | None = None
+    nexus_name: str | None = None
+    summary: str | None = None
+    author: str | None = None
+    endorsement_count: int | None = None
+    picture_url: str | None = None
+    category: str | None = None
+    last_downloaded_at: datetime | None = None
 
 
 class UninstallResult(BaseModel):
@@ -58,6 +65,7 @@ class AvailableArchive(BaseModel):
     parsed_name: str = ""
     parsed_version: str | None = None
     is_installed: bool = False
+    last_downloaded_at: datetime | None = None
 
 
 class ArchiveDeleteResult(BaseModel):

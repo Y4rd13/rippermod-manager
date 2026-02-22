@@ -18,7 +18,7 @@ import {
 } from "@/hooks/mutations";
 import { useBulkSelect } from "@/hooks/use-bulk-select";
 import { useContextMenu } from "@/hooks/use-context-menu";
-import { formatBytes } from "@/lib/format";
+import { formatBytes, isoToEpoch, timeAgo } from "@/lib/format";
 import type {
   AvailableArchive,
   ConflictCheckResult,
@@ -281,6 +281,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                 <th className="py-2 pr-4">Version</th>
                 <th className="py-2 pr-4">Size</th>
                 <th className="py-2 pr-4">Nexus ID</th>
+                <th className="py-2 pr-4">Downloaded</th>
                 <th className="py-2 pr-4">Status</th>
                 <th className="py-2 text-right">Actions</th>
               </tr>
@@ -314,6 +315,9 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                   </td>
                   <td className="py-2 pr-4 text-text-muted">
                     {a.nexus_mod_id ?? "--"}
+                  </td>
+                  <td className="py-2 pr-4 text-text-muted text-xs">
+                    {a.last_downloaded_at ? timeAgo(isoToEpoch(a.last_downloaded_at)) : "--"}
                   </td>
                   <td className="py-2 pr-4">
                     {a.is_installed ? (
