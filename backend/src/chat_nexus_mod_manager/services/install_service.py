@@ -22,7 +22,9 @@ from chat_nexus_mod_manager.models.install import InstalledMod, InstalledModFile
 from chat_nexus_mod_manager.models.nexus import NexusDownload
 from chat_nexus_mod_manager.nexus.client import NexusClient
 from chat_nexus_mod_manager.schemas.install import (
+    ArchiveDeleteResult,
     InstallResult,
+    OrphanCleanupResult,
     ToggleResult,
     UninstallResult,
 )
@@ -344,3 +346,99 @@ async def resolve_installed_file_id(
             session.commit()
 
     await asyncio.to_thread(_persist)
+
+
+def delete_archive(game_path: str, filename: str) -> ArchiveDeleteResult:
+    """Delete a single archive file from the staging folder.
+
+    Validates the filename to prevent path traversal attacks.
+    """
+    staging = Path(game_path) / "downloaded_mods"
+    archive_path = staging / filename
+    if not archive_path.resolve().is_relative_to(staging.resolve()):
+        return ArchiveDeleteResult(filename=filename, deleted=False, message="Invalid filename")
+
+    if not archive_path.exists():
+        return ArchiveDeleteResult(filename=filename, deleted=False, message="File not found")
+
+    try:
+        archive_path.unlink()
+    except OSError as exc:
+        logger.warning("Failed to delete archive %s: %s", archive_path, exc)
+        return ArchiveDeleteResult(filename=filename, deleted=False, message=str(exc))
+
+    logger.info("Deleted archive: %s", filename)
+    return ArchiveDeleteResult(filename=filename, deleted=True, message="Deleted")
+
+
+def find_orphaned_archives(
+    game: Game,
+    session: Session,
+) -> list[str]:
+    """Return archive filenames not referenced by any installed mod or active download."""
+    staging = Path(game.install_path) / "downloaded_mods"
+    if not staging.is_dir():
+        return []
+
+    all_files = {
+        p.name
+        for p in staging.iterdir()
+        if p.is_file() and p.suffix.lower() in {".zip", ".7z", ".rar"}
+    }
+    if not all_files:
+        return []
+
+    installed_archives: set[str] = set()
+    installed_mods = session.exec(
+        select(InstalledMod.source_archive).where(
+            InstalledMod.game_id == game.id,
+            InstalledMod.source_archive != "",
+        )
+    ).all()
+    for sa in installed_mods:
+        installed_archives.add(sa)
+
+    active_downloads: set[str] = set()
+    active_jobs = session.exec(
+        select(DownloadJob.file_name).where(
+            DownloadJob.game_id == game.id,
+            DownloadJob.status.in_(["pending", "downloading", "completed"]),
+            DownloadJob.file_name != "",
+        )
+    ).all()
+    for fn in active_jobs:
+        active_downloads.add(fn)
+
+    referenced = installed_archives | active_downloads
+    return sorted(all_files - referenced)
+
+
+def delete_orphaned_archives(
+    game: Game,
+    session: Session,
+) -> OrphanCleanupResult:
+    """Delete all orphaned archives and return a summary."""
+    orphans = find_orphaned_archives(game, session)
+    staging = Path(game.install_path) / "downloaded_mods"
+
+    deleted_files: list[str] = []
+    freed_bytes = 0
+
+    for filename in orphans:
+        archive_path = staging / filename
+        try:
+            size = archive_path.stat().st_size
+            archive_path.unlink()
+            freed_bytes += size
+            deleted_files.append(filename)
+        except OSError as exc:
+            logger.warning("Failed to delete orphan %s: %s", filename, exc)
+
+    if deleted_files:
+        logger.info("Cleaned %d orphan archives, freed %d bytes", len(deleted_files), freed_bytes)
+
+    return OrphanCleanupResult(
+        deleted_count=len(deleted_files),
+        freed_bytes=freed_bytes,
+        deleted_files=deleted_files,
+    )

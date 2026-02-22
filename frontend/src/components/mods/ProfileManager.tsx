@@ -1,9 +1,11 @@
 import {
+  AlertTriangle,
   Check,
   Copy,
   Download,
   FolderOpen,
   GitCompare,
+  Info,
   Pencil,
   Plus,
   Save,
@@ -49,9 +51,11 @@ interface Props {
   profiles: ProfileOut[];
   gameName: string;
   isLoading?: boolean;
+  installedCount?: number;
+  recognizedCount?: number;
 }
 
-export function ProfileManager({ profiles, gameName, isLoading = false }: Props) {
+export function ProfileManager({ profiles, gameName, isLoading = false, installedCount = 0, recognizedCount = 0 }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
@@ -314,6 +318,7 @@ export function ProfileManager({ profiles, gameName, isLoading = false }: Props)
             <Button
               variant={compareMode ? "primary" : "secondary"}
               size="sm"
+              title="Compare two profiles side by side to see differences"
               onClick={() => {
                 setCompareMode(!compareMode);
                 setSelectedForCompare([]);
@@ -325,6 +330,7 @@ export function ProfileManager({ profiles, gameName, isLoading = false }: Props)
           <Button
             variant="secondary"
             size="sm"
+            title="Import a profile from a .json file"
             onClick={() => fileInputRef.current?.click()}
           >
             <Upload size={14} /> Import
@@ -336,7 +342,7 @@ export function ProfileManager({ profiles, gameName, isLoading = false }: Props)
             className="hidden"
             onChange={handleImport}
           />
-          <Button size="sm" onClick={() => setShowCreate(true)}>
+          <Button size="sm" title="Save your current mod setup as a reusable profile" onClick={() => setShowCreate(true)}>
             <Plus size={14} /> Save Current
           </Button>
         </div>
@@ -372,6 +378,32 @@ export function ProfileManager({ profiles, gameName, isLoading = false }: Props)
       {showCreate && (
         <Card>
           <div className="space-y-3">
+            {installedCount === 0 && recognizedCount > 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2">
+                <AlertTriangle size={14} className="text-warning mt-0.5 shrink-0" />
+                <p className="text-xs text-text-secondary">
+                  You have <strong>{recognizedCount} recognized mods</strong> but no managed mods yet.
+                  Profiles only snapshot mods that have been <strong>installed through the manager</strong>.
+                  Go to the Installed tab and install your recognized mods first, then save a profile.
+                </p>
+              </div>
+            )}
+            {installedCount === 0 && recognizedCount === 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-border bg-surface-2/50 px-3 py-2">
+                <Info size={14} className="text-text-muted mt-0.5 shrink-0" />
+                <p className="text-xs text-text-secondary">
+                  No mods installed yet. Run a scan first to discover mods, then install them to create a profile.
+                </p>
+              </div>
+            )}
+            {installedCount > 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-border bg-surface-2/50 px-3 py-2">
+                <Info size={14} className="text-text-muted mt-0.5 shrink-0" />
+                <p className="text-xs text-text-secondary">
+                  This will snapshot your <strong>{installedCount} managed mod{installedCount !== 1 ? "s" : ""}</strong> and their enabled/disabled states.
+                </p>
+              </div>
+            )}
             <div className="flex items-end gap-3">
               <div className="flex-1">
                 <Input
@@ -387,6 +419,8 @@ export function ProfileManager({ profiles, gameName, isLoading = false }: Props)
                 size="sm"
                 loading={saveProfile.isPending}
                 onClick={handleCreate}
+                disabled={installedCount === 0}
+                title={installedCount === 0 ? "No managed mods to save — install mods first" : "Save current mod state as a profile"}
               >
                 <Save size={14} /> Save
               </Button>
@@ -421,9 +455,9 @@ export function ProfileManager({ profiles, gameName, isLoading = false }: Props)
         <EmptyState
           icon={FolderOpen}
           title="No Saved Profiles"
-          description="Save your current mod setup as a profile to easily switch between configurations. You can also drag & drop a .json file to import."
+          description="Profiles let you save and restore which mods are enabled or disabled. Install mods through the manager first, then save a snapshot of your setup here. You can also drag & drop a .json file to import."
           actions={
-            <Button size="sm" onClick={() => setShowCreate(true)}>
+            <Button size="sm" title="Save your current mod setup as a reusable profile" onClick={() => setShowCreate(true)}>
               <Plus size={14} /> Save Current
             </Button>
           }
@@ -512,10 +546,14 @@ export function ProfileManager({ profiles, gameName, isLoading = false }: Props)
                         {p.name}
                       </p>
                       {p.is_active && !p.is_drifted && (
-                        <Badge variant="success" prominent>Active</Badge>
+                        <span title="This profile is currently loaded and matches your mod state">
+                          <Badge variant="success" prominent>Active</Badge>
+                        </span>
                       )}
                       {p.is_active && p.is_drifted && (
-                        <Badge variant="warning" prominent>Active (modified)</Badge>
+                        <span title="This profile is loaded but your mod state has changed since loading it">
+                          <Badge variant="warning" prominent>Active (modified)</Badge>
+                        </span>
                       )}
                     </div>
                     {p.description && (
@@ -535,6 +573,7 @@ export function ProfileManager({ profiles, gameName, isLoading = false }: Props)
                     <Button
                       variant="ghost"
                       size="sm"
+                      title="Load this profile — preview changes before applying"
                       loading={
                         previewProfile.isPending &&
                         previewProfile.variables?.profileId === p.id
@@ -546,6 +585,7 @@ export function ProfileManager({ profiles, gameName, isLoading = false }: Props)
                     <Button
                       variant="ghost"
                       size="sm"
+                      title="Export this profile as a .json file"
                       loading={
                         exportProfile.isPending &&
                         exportProfile.variables?.profileId === p.id
@@ -573,6 +613,7 @@ export function ProfileManager({ profiles, gameName, isLoading = false }: Props)
                       <Button
                         variant="ghost"
                         size="sm"
+                        title="Delete this profile"
                         onClick={() => setConfirmDelete(p.id)}
                       >
                         <Trash2 size={14} className="text-danger" />

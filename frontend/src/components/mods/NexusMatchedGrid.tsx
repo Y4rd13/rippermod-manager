@@ -31,9 +31,9 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 
 const CONFIDENCE_CHIPS = [
   { key: "all", label: "All" },
-  { key: "high", label: "High" },
-  { key: "medium", label: "Medium" },
-  { key: "low", label: "Low" },
+  { key: "high", label: "High (90%+)" },
+  { key: "medium", label: "Medium (75-89%)" },
+  { key: "low", label: "Low (<75%)" },
 ];
 
 interface Props {
@@ -56,7 +56,7 @@ export function NexusMatchedGrid({
   onModClick,
 }: Props) {
   const [filter, setFilter] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("score");
+  const [sortKey, setSortKey] = useState<SortKey>("updated");
   const [chip, setChip] = useState("all");
 
   const flow = useInstallFlow(gameName, archives, downloadJobs);

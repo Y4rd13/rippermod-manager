@@ -57,3 +57,16 @@ class AvailableArchive(BaseModel):
     nexus_mod_id: int | None = None
     parsed_name: str = ""
     parsed_version: str | None = None
+    is_installed: bool = False
+
+
+class ArchiveDeleteResult(BaseModel):
+    filename: str
+    deleted: bool
+    message: str
+
+
+class OrphanCleanupResult(BaseModel):
+    deleted_count: int
+    freed_bytes: int
+    deleted_files: list[str]

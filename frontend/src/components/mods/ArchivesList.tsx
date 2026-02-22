@@ -1,6 +1,7 @@
-import { AlertTriangle, Archive, Copy, Download, Search } from "lucide-react";
+import { AlertTriangle, Archive, Check, Copy, Download, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { BulkActionBar } from "@/components/ui/BulkActionBar";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
@@ -9,6 +10,8 @@ import { FilterChips } from "@/components/ui/FilterChips";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import {
   useCheckConflicts,
+  useCleanupOrphans,
+  useDeleteArchive,
   useInstallMod,
 } from "@/hooks/mutations";
 import { useBulkSelect } from "@/hooks/use-bulk-select";
@@ -27,7 +30,7 @@ interface Props {
 
 type ArchiveSortKey = "name" | "size" | "version";
 
-type LinkChip = "all" | "linked" | "unlinked";
+type LinkChip = "all" | "linked" | "unlinked" | "installed" | "orphan";
 
 const ARCHIVE_SORT_OPTIONS: { value: ArchiveSortKey; label: string }[] = [
   { value: "name", label: "Name" },
@@ -38,11 +41,14 @@ const ARCHIVE_SORT_OPTIONS: { value: ArchiveSortKey; label: string }[] = [
 const ROW_CONTEXT_ITEMS: ContextMenuItem[] = [
   { key: "install", label: "Install", icon: Download },
   { key: "copy", label: "Copy Filename", icon: Copy },
+  { key: "delete", label: "Delete Archive", icon: Trash2, variant: "danger" },
 ];
 
 export function ArchivesList({ archives, gameName, isLoading }: Props) {
   const installMod = useInstallMod();
   const checkConflicts = useCheckConflicts();
+  const deleteArchive = useDeleteArchive();
+  const cleanupOrphans = useCleanupOrphans();
   const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
   const [selectedArchive, setSelectedArchive] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
@@ -56,6 +62,8 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
     const items = archives.filter((a) => {
       if (linkChip === "linked" && a.nexus_mod_id == null) return false;
       if (linkChip === "unlinked" && a.nexus_mod_id != null) return false;
+      if (linkChip === "installed" && !a.is_installed) return false;
+      if (linkChip === "orphan" && a.is_installed) return false;
       if (!q) return true;
       return (
         a.filename.toLowerCase().includes(q) ||
@@ -89,10 +97,22 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
     [archives],
   );
 
+  const installedCount = useMemo(
+    () => archives.filter((a) => a.is_installed).length,
+    [archives],
+  );
+
+  const orphanCount = useMemo(
+    () => archives.filter((a) => !a.is_installed).length,
+    [archives],
+  );
+
   const filterChips = [
     { key: "all", label: "All", count: archives.length },
     { key: "linked", label: "Linked", count: linkedCount },
     { key: "unlinked", label: "Unlinked", count: unlinkedCount },
+    { key: "installed", label: "Installed", count: installedCount },
+    { key: "orphan", label: "Orphan", count: orphanCount },
   ];
 
   const installQueueRef = useRef<string[]>([]);
@@ -146,6 +166,8 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
       handleCheckConflicts(archive.filename);
     } else if (key === "copy") {
       navigator.clipboard.writeText(archive.filename);
+    } else if (key === "delete") {
+      deleteArchive.mutate({ gameName, filename: archive.filename });
     }
   };
 
@@ -210,6 +232,17 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
           <span className="text-xs text-text-muted">
             {filtered.length} archive{filtered.length !== 1 ? "s" : ""}
           </span>
+          {orphanCount > 0 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => cleanupOrphans.mutate(gameName)}
+              loading={cleanupOrphans.isPending}
+              title={`Delete ${orphanCount} archive${orphanCount !== 1 ? "s" : ""} not linked to any installed mod`}
+            >
+              <Trash2 size={14} /> Clean {orphanCount} Orphan{orphanCount !== 1 ? "s" : ""}
+            </Button>
+          )}
         </div>
 
         <div className="overflow-x-auto">
@@ -229,6 +262,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                 <th className="py-2 pr-4">Version</th>
                 <th className="py-2 pr-4">Size</th>
                 <th className="py-2 pr-4">Nexus ID</th>
+                <th className="py-2 pr-4">Status</th>
                 <th className="py-2 text-right">Actions</th>
               </tr>
             </thead>
@@ -262,17 +296,34 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                   <td className="py-2 pr-4 text-text-muted">
                     {a.nexus_mod_id ?? "--"}
                   </td>
+                  <td className="py-2 pr-4">
+                    {a.is_installed ? (
+                      <Badge variant="success"><Check size={10} /> Installed</Badge>
+                    ) : (
+                      <Badge variant="neutral">Orphan</Badge>
+                    )}
+                  </td>
                   <td className="py-2 text-right">
-                    <Button
-                      size="sm"
-                      loading={
-                        (checkConflicts.isPending || installMod.isPending) &&
-                        selectedArchive === a.filename
-                      }
-                      onClick={() => handleCheckConflicts(a.filename)}
-                    >
-                      <Download size={14} /> Install
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        size="sm"
+                        loading={
+                          (checkConflicts.isPending || installMod.isPending) &&
+                          selectedArchive === a.filename
+                        }
+                        onClick={() => handleCheckConflicts(a.filename)}
+                      >
+                        <Download size={14} /> Install
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => deleteArchive.mutate({ gameName, filename: a.filename })}
+                        title="Delete this archive file"
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -300,6 +351,20 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
           onClick={handleBulkInstall}
         >
           <Download size={14} /> Install {bulk.selectedCount} Archive{bulk.selectedCount !== 1 ? "s" : ""}
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={deleteArchive.isPending}
+          onClick={async () => {
+            const filenames = [...bulk.selectedIds];
+            for (const filename of filenames) {
+              await deleteArchive.mutateAsync({ gameName, filename });
+            }
+            bulk.deselectAll();
+          }}
+        >
+          <Trash2 size={14} /> Delete {bulk.selectedCount}
         </Button>
       </BulkActionBar>
 
