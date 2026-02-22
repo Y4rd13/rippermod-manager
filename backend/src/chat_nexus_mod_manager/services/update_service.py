@@ -665,6 +665,7 @@ async def check_all_updates(
                     "local_version": mod.local_version,
                     "nexus_version": meta.version,
                     "_initial_nexus_version": meta.version,
+                    "_is_file_update": is_file_update,
                     "nexus_mod_id": mid,
                     "nexus_file_id": None,
                     "nexus_file_name": "",
@@ -711,14 +712,22 @@ async def check_all_updates(
         # Filter false positives
         filtered: list[dict[str, Any]] = []
         for u in updates:
-            # Post-resolution version re-check: file-level version is ground
-            # truth.  If the resolved Nexus file version is not newer than
-            # local, there is no update — regardless of detection method.
-            # (Same-version hotfixes can't be detected without hash comparison;
-            # showing "update available" for identical versions confuses users.)
             resolved_nexus_v = u.get("nexus_version", "")
             local_v = u.get("local_version", "")
-            if resolved_nexus_v and local_v and not is_newer_version(resolved_nexus_v, local_v):
+            is_file_upd = u.get("_is_file_update", False)
+
+            # Post-resolution version re-check: file-level version is ground
+            # truth.  If the resolved Nexus file version is not newer than
+            # local, there is no update — UNLESS a new file was uploaded
+            # (same-version re-uploads / hotfixes are real when confirmed by
+            # the get_updated_mods API; the timestamp filter below handles
+            # the case where the user already has the latest file).
+            if (
+                resolved_nexus_v
+                and local_v
+                and not is_newer_version(resolved_nexus_v, local_v)
+                and not is_file_upd
+            ):
                 logger.debug(
                     "Filtered (resolved version not newer): %s — nexus=%s, local=%s",
                     u["display_name"],
