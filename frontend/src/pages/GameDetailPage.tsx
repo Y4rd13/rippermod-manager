@@ -62,16 +62,16 @@ import type { ModUpdate } from "@/types/api";
 
 type Tab = "installed" | "updates" | "trending" | "endorsed" | "tracked" | "mods" | "matched" | "archives" | "profiles";
 
-const TABS: { key: Tab; label: string; Icon: typeof Package }[] = [
-  { key: "installed", label: "Installed", Icon: UserCheck },
-  { key: "updates", label: "Updates", Icon: RefreshCw },
-  { key: "trending", label: "Trending", Icon: TrendingUp },
-  { key: "endorsed", label: "Endorsed", Icon: Heart },
-  { key: "tracked", label: "Tracked", Icon: Eye },
-  { key: "mods", label: "Scanned", Icon: Package },
-  { key: "matched", label: "Nexus Matched", Icon: Link2 },
-  { key: "archives", label: "Archives", Icon: Archive },
-  { key: "profiles", label: "Profiles", Icon: FolderOpen },
+const TABS: { key: Tab; label: string; Icon: typeof Package; tooltip: string }[] = [
+  { key: "installed", label: "Installed", Icon: UserCheck, tooltip: "Managed and recognized mods on your system" },
+  { key: "updates", label: "Updates", Icon: RefreshCw, tooltip: "Mods with newer versions available on Nexus" },
+  { key: "trending", label: "Trending", Icon: TrendingUp, tooltip: "Popular and recently updated mods on Nexus" },
+  { key: "endorsed", label: "Endorsed", Icon: Heart, tooltip: "Mods you've endorsed on your Nexus account" },
+  { key: "tracked", label: "Tracked", Icon: Eye, tooltip: "Mods you're tracking on your Nexus account" },
+  { key: "mods", label: "Scanned", Icon: Package, tooltip: "All mod file groups found by scanning your game folder" },
+  { key: "matched", label: "Nexus Matched", Icon: Link2, tooltip: "Scanned mods matched to Nexus Mods entries" },
+  { key: "archives", label: "Archives", Icon: Archive, tooltip: "Downloaded mod archives ready to install" },
+  { key: "profiles", label: "Profiles", Icon: FolderOpen, tooltip: "Saved snapshots of your mod enabled/disabled states" },
 ];
 
 type UpdateSortKey = "name" | "author" | "source" | "updated";
@@ -88,7 +88,7 @@ function UpdatesTab({ gameName, updates, isLoading }: { gameName: string; update
   const checkUpdates = useCheckUpdates();
   const startDownload = useStartDownload();
   const [filter, setFilter] = useState("");
-  const [sortKey, setSortKey] = useState<UpdateSortKey>("name");
+  const [sortKey, setSortKey] = useState<UpdateSortKey>("updated");
   const [chip, setChip] = useState("all");
 
   const filteredUpdates = useMemo(() => {
@@ -181,6 +181,7 @@ function UpdatesTab({ gameName, updates, isLoading }: { gameName: string; update
               size="sm"
               onClick={handleUpdateAll}
               loading={startDownload.isPending}
+              title="Download all available updates from Nexus"
             >
               <Download className="h-3.5 w-3.5 mr-1" />
               Update All ({downloadableUpdates.length})
@@ -191,6 +192,7 @@ function UpdatesTab({ gameName, updates, isLoading }: { gameName: string; update
             size="sm"
             onClick={() => checkUpdates.mutate(gameName)}
             loading={checkUpdates.isPending}
+            title="Check Nexus for newer versions of your mods"
           >
             <RefreshCw className="h-3.5 w-3.5 mr-1" />
             Check Now
@@ -427,8 +429,13 @@ export function GameDetailPage() {
   const nexusMatched = useMemo(() => mods.filter((m) => m.nexus_match), [mods]);
   const enabledCount = installedMods.filter((m) => !m.disabled).length;
 
+  const recognizedNotInstalled = useMemo(() => {
+    const installedIds = new Set(installedMods.filter((m) => m.nexus_mod_id != null).map((m) => m.nexus_mod_id!));
+    return nexusMatched.filter((m) => m.nexus_match && !installedIds.has(m.nexus_match.nexus_mod_id)).length;
+  }, [nexusMatched, installedMods]);
+
   const tabCounts = useMemo<Partial<Record<Tab, number>>>(() => ({
-    installed: installedLoading ? undefined : installedMods.length,
+    installed: installedLoading ? undefined : installedMods.length + recognizedNotInstalled,
     updates: updatesLoading ? undefined : updates?.updates_available,
     trending: trendingLoading ? undefined : (trendingResult?.trending.length ?? 0) + (trendingResult?.latest_updated.length ?? 0),
     endorsed: endorsedLoading ? undefined : endorsedMods.length,
@@ -438,7 +445,7 @@ export function GameDetailPage() {
     archives: archivesLoading ? undefined : archives.length,
     profiles: profilesLoading ? undefined : profiles.length,
   }), [
-    installedMods.length, installedLoading,
+    installedMods.length, installedLoading, recognizedNotInstalled,
     updates?.updates_available, updatesLoading,
     trendingResult, trendingLoading,
     endorsedMods.length, endorsedLoading,
@@ -468,13 +475,15 @@ export function GameDetailPage() {
           <p className="text-sm text-text-muted">{game.install_path}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={handleLaunch} loading={isLaunching} disabled={!gameVersion?.exe_path}>
+          <Button variant="secondary" onClick={handleLaunch} loading={isLaunching} disabled={!gameVersion?.exe_path} title="Launch the game executable">
             <Play size={16} /> Play
           </Button>
           {hasOpenaiKey && (
-            <Switch checked={aiSearch} onChange={setAiSearch} label="AI Search" disabled={isScanning} />
+            <span title="Use AI-powered semantic search to improve mod matching accuracy (uses OpenAI API)">
+              <Switch checked={aiSearch} onChange={setAiSearch} label="AI Search" disabled={isScanning} />
+            </span>
           )}
-          <Button onClick={handleFullScan} loading={isScanning}>
+          <Button onClick={handleFullScan} loading={isScanning} title="Scan game folder for mods, group files, and match them to Nexus Mods">
             <Scan size={16} /> Scan & Correlate
           </Button>
         </div>
@@ -485,7 +494,7 @@ export function GameDetailPage() {
       )}
 
       <div className="grid grid-cols-4 gap-4">
-        <Card>
+        <Card title="Total mod groups found by scanning your game folder">
           <div className="flex items-center gap-3">
             <Package size={18} className="text-success" />
             <div>
@@ -494,11 +503,11 @@ export function GameDetailPage() {
             </div>
           </div>
         </Card>
-        <Card>
+        <Card title="Mods managed through this app (enabled / total)">
           <div className="flex items-center gap-3">
             <UserCheck size={18} className="text-accent" />
             <div>
-              <p className="text-xs text-text-muted">Installed</p>
+              <p className="text-xs text-text-muted">Managed</p>
               <p className="text-lg font-bold text-text-primary">
                 {enabledCount}/{installedMods.length}
               </p>
@@ -508,6 +517,7 @@ export function GameDetailPage() {
         <Card
           className="hover:border-warning/40 transition-colors"
           onClick={() => setTab("matched")}
+          title="Scanned mods matched to Nexus Mods entries"
         >
           <div className="flex items-center gap-3">
             <Link2 size={18} className="text-warning" />
@@ -517,7 +527,7 @@ export function GameDetailPage() {
             </div>
           </div>
         </Card>
-        <Card>
+        <Card title="Newer versions available on Nexus for your mods">
           <div className="flex items-center gap-3">
             <RefreshCw size={18} className="text-danger" />
             <div>
@@ -531,10 +541,11 @@ export function GameDetailPage() {
       </div>
 
       <div className="flex gap-1 border-b border-border overflow-x-auto">
-        {TABS.map(({ key, label }) => (
+        {TABS.map(({ key, label, tooltip }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
+            title={tooltip}
             className={cn(
               "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap flex items-center gap-1",
               tab === key
@@ -625,7 +636,7 @@ export function GameDetailPage() {
         <ArchivesList archives={archives} gameName={name} isLoading={archivesLoading} />
       )}
       {tab === "profiles" && (
-        <ProfileManager profiles={profiles} gameName={name} isLoading={profilesLoading} />
+        <ProfileManager profiles={profiles} gameName={name} isLoading={profilesLoading} installedCount={installedMods.length} recognizedCount={recognizedNotInstalled} />
       )}
       {tab === "updates" && (
         <UpdatesTab gameName={name} updates={updates?.updates ?? []} isLoading={updatesLoading} />

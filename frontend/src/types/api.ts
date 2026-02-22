@@ -151,6 +151,7 @@ export interface ModUpdate {
   source: string;
   local_timestamp: number | null;
   nexus_timestamp: number | null;
+  source_archive: string | null;
 }
 
 export interface GameVersion {
@@ -193,6 +194,19 @@ export interface AvailableArchive {
   nexus_mod_id: number | null;
   parsed_name: string;
   parsed_version: string | null;
+  is_installed: boolean;
+}
+
+export interface ArchiveDeleteResult {
+  filename: string;
+  deleted: boolean;
+  message: string;
+}
+
+export interface OrphanCleanupResult {
+  deleted_count: number;
+  freed_bytes: number;
+  deleted_files: string[];
 }
 
 export interface InstalledModOut {

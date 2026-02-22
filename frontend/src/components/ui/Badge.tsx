@@ -40,5 +40,10 @@ export function Badge({ variant = "neutral", prominent, children, className }: B
 export function ConfidenceBadge({ score }: { score: number }) {
   const variant = score >= 0.9 ? "success" : score >= 0.75 ? "warning" : "danger";
   const pct = Math.round(score * 100);
-  return <Badge variant={variant}>{pct}%</Badge>;
+  const label = score >= 0.9 ? "High" : score >= 0.75 ? "Medium" : "Low";
+  return (
+    <span title={`${label} confidence match (${pct}%) — how closely this mod matches the Nexus entry`}>
+      <Badge variant={variant}>{pct}%</Badge>
+    </span>
+  );
 }

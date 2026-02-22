@@ -11,6 +11,7 @@ import {
   useStartDownload,
   useUninstallMod,
 } from "@/hooks/mutations";
+import { api } from "@/lib/api-client";
 import { useDownloadStore } from "@/stores/download-store";
 import { toast } from "@/stores/toast-store";
 import type { ConflictCheckResult, DownloadJobOut, ModUpdate } from "@/types/api";
@@ -62,6 +63,8 @@ export function UpdateDownloadCell({ update, gameName, downloadJobs }: Props) {
   }, [conflicts]);
 
   const doInstall = async (fileName: string, skipConflicts: string[]) => {
+    const oldArchive = update.source_archive;
+
     // Uninstall old version right before install (after conflict check)
     if (update.installed_mod_id) {
       await uninstallMod.mutateAsync({ gameName, modId: update.installed_mod_id });
@@ -71,6 +74,15 @@ export function UpdateDownloadCell({ update, gameName, downloadJobs }: Props) {
       data: { archive_filename: fileName, skip_conflicts: skipConflicts },
     });
     toast.success("Mod updated", update.display_name);
+
+    // Auto-cleanup: silently delete old archive after successful update install
+    if (oldArchive && oldArchive !== fileName) {
+      api
+        .delete(
+          `/api/v1/games/${gameName}/install/archives/${encodeURIComponent(oldArchive)}`,
+        )
+        .catch(() => {});
+    }
   };
 
   const handleInstall = async (fileName: string) => {

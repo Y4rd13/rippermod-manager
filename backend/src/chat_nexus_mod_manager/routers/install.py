@@ -12,16 +12,20 @@ from chat_nexus_mod_manager.models.install import InstalledMod
 from chat_nexus_mod_manager.models.nexus import NexusModMeta
 from chat_nexus_mod_manager.routers.deps import get_game_or_404
 from chat_nexus_mod_manager.schemas.install import (
+    ArchiveDeleteResult,
     AvailableArchive,
     ConflictCheckResult,
     InstalledModOut,
     InstallRequest,
     InstallResult,
+    OrphanCleanupResult,
     ToggleResult,
     UninstallResult,
 )
 from chat_nexus_mod_manager.services.conflict_service import check_conflicts
 from chat_nexus_mod_manager.services.install_service import (
+    delete_archive,
+    delete_orphaned_archives,
     install_mod,
     list_available_archives,
     resolve_installed_file_id,
@@ -43,6 +47,17 @@ async def list_archives(
     """List mod archives available for installation."""
     game = get_game_or_404(game_name, session)
     archives = list_available_archives(game)
+
+    installed_archives: set[str] = set()
+    rows = session.exec(
+        select(InstalledMod.source_archive).where(
+            InstalledMod.game_id == game.id,
+            InstalledMod.source_archive != "",
+        )
+    ).all()
+    for sa in rows:
+        installed_archives.add(sa)
+
     result: list[AvailableArchive] = []
     for path in archives:
         parsed = parse_mod_filename(path.name)
@@ -53,6 +68,7 @@ async def list_archives(
                 nexus_mod_id=parsed.nexus_mod_id,
                 parsed_name=parsed.name,
                 parsed_version=parsed.version,
+                is_installed=path.name in installed_archives,
             )
         )
     return result
@@ -178,3 +194,24 @@ async def conflicts(
     if not archive_path.is_file():
         raise HTTPException(404, f"Archive not found: {archive_filename}")
     return check_conflicts(game, archive_path, session)
+
+
+@router.delete("/archives/{filename}", response_model=ArchiveDeleteResult)
+async def delete_archive_endpoint(
+    game_name: str,
+    filename: str,
+    session: Session = Depends(get_session),
+) -> ArchiveDeleteResult:
+    """Delete a single archive file from the staging folder."""
+    game = get_game_or_404(game_name, session)
+    return delete_archive(game.install_path, filename)
+
+
+@router.post("/archives/cleanup-orphans", response_model=OrphanCleanupResult)
+async def cleanup_orphans(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> OrphanCleanupResult:
+    """Delete all archives not referenced by any installed mod or active download."""
+    game = get_game_or_404(game_name, session)
+    return delete_orphaned_archives(game, session)

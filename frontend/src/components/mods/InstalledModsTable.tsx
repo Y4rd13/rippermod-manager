@@ -73,8 +73,8 @@ function ManagedModsTable({
   updateByNexusId: Map<number, ModUpdate>;
   onModClick?: (nexusModId: number) => void;
 }) {
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortKey, setSortKey] = useState<SortKey>("updated");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [confirming, setConfirming] = useState<number | null>(null);
   const toggleMod = useToggleMod();
   const uninstallMod = useUninstallMod();
@@ -308,6 +308,7 @@ function ManagedModsTable({
                       <Button
                         variant="ghost"
                         size="sm"
+                        title={mod.disabled ? "Enable this mod" : "Disable this mod"}
                         loading={toggleMod.isPending && toggleMod.variables?.modId === mod.id}
                         onClick={() => toggleMod.mutate({ gameName, modId: mod.id })}
                       >
@@ -335,6 +336,7 @@ function ManagedModsTable({
                         <Button
                           variant="ghost"
                           size="sm"
+                          title="Uninstall this mod"
                           onClick={() => setConfirming(mod.id)}
                         >
                           <Trash2 size={14} className="text-danger" />
@@ -412,6 +414,8 @@ function RecognizedModsGrid({
                   nexusUrl={match.nexus_url}
                   hasConflicts={flow.conflicts != null}
                   isDownloading={flow.downloadingModId === nexusModId}
+                  isUpdate={!!update}
+                  updateVersion={update?.nexus_version}
                   onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
                   onInstallByFilename={() => {
                     const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
@@ -428,6 +432,9 @@ function RecognizedModsGrid({
                 <div className="flex items-center gap-1.5">
                   <ConfidenceBadge score={match.score} />
                   <Badge variant="neutral">{match.method}</Badge>
+                  {match.updated_at && (
+                    <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
+                  )}
                 </div>
               }
             />
@@ -460,7 +467,7 @@ export function InstalledModsTable({
 }: Props) {
   const [filter, setFilter] = useState("");
   const [chip, setChip] = useState<ChipKey>("all");
-  const [recognizedSort, setRecognizedSort] = useState<RecognizedSortKey>("confidence");
+  const [recognizedSort, setRecognizedSort] = useState<RecognizedSortKey>("updated");
 
   const updateByNexusId = useMemo(() => {
     const map = new Map<number, ModUpdate>();
@@ -594,7 +601,7 @@ export function InstalledModsTable({
       {filteredMods.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-text-primary">
+            <h3 className="text-sm font-semibold text-text-primary" title="Mods installed and managed through this app — you can enable, disable, or uninstall them">
               Managed Mods ({filteredMods.length})
             </h3>
             <FilterChips
@@ -615,12 +622,12 @@ export function InstalledModsTable({
 
       {filteredRecognized.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-text-primary mb-3">
+          <h3 className="text-sm font-semibold text-text-primary mb-3" title="Mods found on disk and matched to Nexus — click Install to manage them">
             Recognized Mods ({filteredRecognized.length})
           </h3>
           <p className="text-xs text-text-muted mb-3">
             These mods were detected during scanning and matched to Nexus, but haven&apos;t been
-            formally installed through the manager yet.
+            installed through the manager yet. Install them to enable features like profiles and updates.
           </p>
           <RecognizedModsGrid
             mods={filteredRecognized}

@@ -1,9 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api-client";
+import { formatBytes } from "@/lib/format";
 import { useDownloadStore } from "@/stores/download-store";
 import { toast } from "@/stores/toast-store";
 import type {
+  ArchiveDeleteResult,
   ConflictCheckResult,
   CorrelateResult,
   DownloadJobOut,
@@ -16,6 +18,7 @@ import type {
   NexusKeyResult,
   NexusSyncResult,
   OnboardingStatus,
+  OrphanCleanupResult,
   PathValidation,
   ProfileCompareOut,
   ProfileCompareRequest,
@@ -176,6 +179,44 @@ export function useCheckConflicts() {
       api.get(
         `/api/v1/games/${gameName}/install/conflicts?archive_filename=${encodeURIComponent(archiveFilename)}`,
       ),
+  });
+}
+
+export function useDeleteArchive() {
+  const qc = useQueryClient();
+  return useMutation<ArchiveDeleteResult, Error, { gameName: string; filename: string }>({
+    mutationFn: ({ gameName, filename }) =>
+      api.delete(`/api/v1/games/${gameName}/install/archives/${encodeURIComponent(filename)}`),
+    onSuccess: (result, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
+      if (result.deleted) {
+        toast.success("Archive deleted", result.filename);
+      } else {
+        toast.error("Could not delete archive", result.message);
+      }
+    },
+    onError: () => toast.error("Failed to delete archive"),
+  });
+}
+
+export function useCleanupOrphans() {
+  const qc = useQueryClient();
+  return useMutation<OrphanCleanupResult, Error, string>({
+    mutationFn: (gameName) =>
+      api.post(`/api/v1/games/${gameName}/install/archives/cleanup-orphans`),
+    onSuccess: (result, gameName) => {
+      qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
+      if (result.deleted_count > 0) {
+        const freed = formatBytes(result.freed_bytes);
+        toast.success(
+          "Orphan archives cleaned",
+          `${result.deleted_count} file${result.deleted_count === 1 ? "" : "s"} removed, ${freed} freed`,
+        );
+      } else {
+        toast.info("No orphan archives found");
+      }
+    },
+    onError: () => toast.error("Failed to clean orphan archives"),
   });
 }
 
