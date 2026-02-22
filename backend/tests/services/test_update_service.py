@@ -524,8 +524,8 @@ class TestCheckAllUpdates:
             assert len(result.updates) == 0
 
     @pytest.mark.anyio
-    async def test_file_upload_flags_even_when_versions_equal(self, engine):
-        """New file upload with same version → detected as update."""
+    async def test_file_upload_same_version_filtered_as_false_positive(self, engine):
+        """New file upload with same version → filtered (can't detect without hashes)."""
         with Session(engine) as s:
             game = Game(name="G", domain_name="g", install_path="/g")
             s.add(game)
@@ -569,9 +569,7 @@ class TestCheckAllUpdates:
             result = await check_all_updates(game.id, "g", client, s)
 
             assert result.total_checked == 1
-            assert len(result.updates) == 1
-            assert result.updates[0]["detection_method"] == "timestamp"
-            assert result.updates[0]["nexus_version"] == "1.0"
+            assert len(result.updates) == 0
 
     @pytest.mark.anyio
     async def test_metadata_only_does_not_flag_when_versions_equal(self, engine):

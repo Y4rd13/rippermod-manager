@@ -9,6 +9,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { CorrelationActions } from "@/components/mods/CorrelationActions";
@@ -275,6 +276,18 @@ function ManagedModsGrid({
                       <span className="text-xs text-text-muted" title="Last downloaded">
                         DL: {timeAgo(isoToEpoch(mod.last_downloaded_at))}
                       </span>
+                    )}
+                    {mod.nexus_mod_id != null && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openUrl(`https://www.nexusmods.com/${gameName}/mods/${mod.nexus_mod_id}`).catch(() => {});
+                        }}
+                        title="Open mod page on Nexus Mods"
+                        className="ml-auto text-text-muted hover:text-accent shrink-0"
+                      >
+                        <ExternalLink size={12} />
+                      </button>
                     )}
                   </div>
                 }
