@@ -56,6 +56,7 @@ export interface ModGroup {
   confidence: number;
   files: ModFileOut[];
   nexus_match: CorrelationBrief | null;
+  earliest_file_mtime: number | null;
 }
 
 export interface ScanResult {
@@ -160,6 +161,7 @@ export interface ModUpdate {
   nexus_timestamp: number | null;
   source_archive: string | null;
   reason: string;
+  local_download_date: number | null;
 }
 
 export interface GameVersion {

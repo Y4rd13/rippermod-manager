@@ -1,7 +1,6 @@
 """Endpoints for mod installation, uninstallation, enable/disable, and conflict checking."""
 
 import logging
-from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -9,7 +8,6 @@ from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.database import get_session
 from chat_nexus_mod_manager.matching.filename_parser import parse_mod_filename
-from chat_nexus_mod_manager.models.download import DownloadJob
 from chat_nexus_mod_manager.models.install import InstalledMod
 from chat_nexus_mod_manager.models.nexus import NexusModMeta
 from chat_nexus_mod_manager.routers.deps import get_game_or_404
@@ -25,6 +23,7 @@ from chat_nexus_mod_manager.schemas.install import (
     UninstallResult,
 )
 from chat_nexus_mod_manager.services.conflict_service import check_conflicts
+from chat_nexus_mod_manager.services.download_dates import archive_download_dates
 from chat_nexus_mod_manager.services.install_service import (
     delete_archive,
     delete_orphaned_archives,
@@ -39,27 +38,6 @@ from chat_nexus_mod_manager.services.settings_helpers import get_setting
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/games/{game_name}/install", tags=["install"])
-
-
-def _download_date_map(session: Session, game_id: int, filenames: set[str]) -> dict[str, datetime]:
-    """Build a mapping of filename → most recent completed_at from DownloadJobs."""
-    if not filenames:
-        return {}
-    dl_rows = session.exec(
-        select(DownloadJob.file_name, DownloadJob.completed_at).where(
-            DownloadJob.game_id == game_id,
-            DownloadJob.status == "completed",
-            DownloadJob.completed_at.is_not(None),  # type: ignore[union-attr]
-            DownloadJob.file_name.in_(filenames),  # type: ignore[union-attr]
-        )
-    ).all()
-    result: dict[str, datetime] = {}
-    for fn, completed in dl_rows:
-        if fn and completed:
-            existing = result.get(fn)
-            if existing is None or completed > existing:
-                result[fn] = completed
-    return result
 
 
 @router.get("/available", response_model=list[AvailableArchive])
@@ -82,13 +60,18 @@ async def list_archives(
         installed_archives.add(sa)
 
     archive_names = {p.name for p in archives}
-    dl_date_map = _download_date_map(session, game.id, archive_names)
+    dl_date_map = archive_download_dates(
+        session,
+        game.id,
+        game.install_path,
+        archive_names,  # type: ignore[arg-type]
+    )
 
     result: list[AvailableArchive] = []
     for path in archives:
         parsed = parse_mod_filename(path.name)
         stat = path.stat()
-        dl_date = dl_date_map.get(path.name) or datetime.fromtimestamp(stat.st_mtime, tz=UTC)
+        dl_date = dl_date_map.get(path.name)
         result.append(
             AvailableArchive(
                 filename=path.name,
@@ -121,11 +104,17 @@ async def list_installed(
     ).all()
 
     source_archives = {mod.source_archive for mod, _ in rows if mod.source_archive}
-    dl_date_map = _download_date_map(session, game.id, source_archives)
+    dl_date_map = archive_download_dates(
+        session,
+        game.id,
+        game.install_path,
+        source_archives,  # type: ignore[arg-type]
+    )
 
     result: list[InstalledModOut] = []
     for mod, meta in rows:
         _ = mod.files
+        dl_date = dl_date_map.get(mod.source_archive) if mod.source_archive else None
         result.append(
             InstalledModOut(
                 id=mod.id,  # type: ignore[arg-type]
@@ -144,9 +133,7 @@ async def list_installed(
                 endorsement_count=meta.endorsement_count if meta else None,
                 picture_url=meta.picture_url if meta else None,
                 category=meta.category if meta else None,
-                last_downloaded_at=(
-                    dl_date_map.get(mod.source_archive) if mod.source_archive else None
-                ),
+                last_downloaded_at=dl_date,
             )
         )
     return result
