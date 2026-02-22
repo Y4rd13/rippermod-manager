@@ -393,7 +393,11 @@ function RecognizedModsGrid({
       if (nexusModId == null) continue;
       const archive = flow.archiveByModId.get(nexusModId);
       if (archive) {
-        flow.handleInstall(nexusModId, archive);
+        try {
+          await flow.handleInstall(nexusModId, archive);
+        } catch {
+          // Continue with remaining mods on individual failure
+        }
       }
     }
     bulk.deselectAll();

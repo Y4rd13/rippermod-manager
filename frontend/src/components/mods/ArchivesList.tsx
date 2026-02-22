@@ -128,7 +128,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
     }
     setQueueProgress((prev) => prev ? { ...prev, current: prev.current + 1 } : null);
     const next = installQueueRef.current.shift()!;
-    handleCheckConflicts(next);
+    handleCheckConflicts(next).catch(() => processNextInQueue());
   };
 
   const handleCheckConflicts = async (filename: string) => {

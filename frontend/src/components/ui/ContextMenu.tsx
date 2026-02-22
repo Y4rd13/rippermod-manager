@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 export interface ContextMenuItem {
   key: string;
@@ -93,7 +93,14 @@ export function ContextMenu({ items, position, onSelect, onClose }: ContextMenuP
     };
   }, [onClose, moveFocus, actionableItems.length]);
 
-  let actionIndex = 0;
+  const actionIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    let idx = 0;
+    for (const item of items) {
+      if (!item.separator) map.set(item.key, idx++);
+    }
+    return map;
+  }, [items]);
 
   return (
     <div
@@ -106,7 +113,7 @@ export function ContextMenu({ items, position, onSelect, onClose }: ContextMenuP
         if (item.separator) {
           return <div key={item.key} role="separator" className="border-t border-border my-1" />;
         }
-        const idx = actionIndex++;
+        const idx = actionIndexMap.get(item.key)!;
         return (
           <button
             key={item.key}

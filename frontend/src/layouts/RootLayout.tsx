@@ -19,9 +19,9 @@ export function RootLayout() {
       }
       if (e.key === "Escape" && useUIStore.getState().chatPanelOpen) {
         const activeEl = document.activeElement?.tagName;
-        if (activeEl !== "INPUT" && activeEl !== "TEXTAREA" && activeEl !== "SELECT") {
-          setChatPanelOpen(false);
-        }
+        if (activeEl === "INPUT" || activeEl === "TEXTAREA" || activeEl === "SELECT") return;
+        if (document.querySelector("[role='dialog']") || document.querySelector("[role='menu']")) return;
+        setChatPanelOpen(false);
       }
     };
     document.addEventListener("keydown", handleKeyDown);

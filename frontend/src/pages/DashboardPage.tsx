@@ -112,14 +112,13 @@ function CommunityActivity({ gameName }: { gameName: string }) {
         <TrendingUp size={14} className="text-accent" />
         <h3 className="text-sm font-medium text-text-secondary">{gameName}</h3>
       </div>
-      <Link
-        to={`/games/${gameName}`}
-        className="grid grid-cols-1 sm:grid-cols-2 gap-2"
-      >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {mods.map((mod) => (
-          <TrendingMiniCard key={mod.mod_id} mod={mod} />
+          <Link key={mod.mod_id} to={`/games/${gameName}`}>
+            <TrendingMiniCard mod={mod} />
+          </Link>
         ))}
-      </Link>
+      </div>
     </div>
   );
 }

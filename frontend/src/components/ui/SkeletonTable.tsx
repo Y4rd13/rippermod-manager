@@ -1,7 +1,22 @@
+import { useEffect, useState } from "react";
+
 const WIDTHS = ["w-2/3", "w-1/2", "w-3/4", "w-1/3", "w-2/5"];
 
+function computeRows() {
+  return Math.max(3, Math.floor((window.innerHeight - 300) / 44));
+}
+
 export function SkeletonTable({ columns = 5, rows }: { columns?: number; rows?: number }) {
-  const effectiveRows = rows ?? Math.max(3, Math.floor((window.innerHeight - 300) / 44));
+  const [autoRows, setAutoRows] = useState(computeRows);
+
+  useEffect(() => {
+    if (rows != null) return;
+    const onResize = () => setAutoRows(computeRows());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [rows]);
+
+  const effectiveRows = rows ?? autoRows;
   return (
     <table className="w-full text-sm">
       <thead>
