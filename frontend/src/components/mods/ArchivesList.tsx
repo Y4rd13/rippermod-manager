@@ -355,11 +355,13 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
         <Button
           variant="secondary"
           size="sm"
-          onClick={() => {
-            for (const filename of bulk.selectedIds) {
-              deleteArchive.mutate({ gameName, filename });
-            }
+          loading={deleteArchive.isPending}
+          onClick={async () => {
+            const filenames = [...bulk.selectedIds];
             bulk.deselectAll();
+            for (const filename of filenames) {
+              await deleteArchive.mutateAsync({ gameName, filename });
+            }
           }}
         >
           <Trash2 size={14} /> Delete {bulk.selectedCount}

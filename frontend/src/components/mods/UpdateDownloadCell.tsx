@@ -69,11 +69,20 @@ export function UpdateDownloadCell({ update, gameName, downloadJobs }: Props) {
     if (update.installed_mod_id) {
       await uninstallMod.mutateAsync({ gameName, modId: update.installed_mod_id });
     }
-    await installMod.mutateAsync({
-      gameName,
-      data: { archive_filename: fileName, skip_conflicts: skipConflicts },
-    });
-    toast.success("Mod updated", update.display_name);
+
+    try {
+      await installMod.mutateAsync({
+        gameName,
+        data: { archive_filename: fileName, skip_conflicts: skipConflicts },
+      });
+      toast.success("Mod updated", update.display_name);
+    } catch {
+      toast.error(
+        "Update partially failed",
+        `Old version was removed but new version failed to install. Please install "${fileName}" manually from the Archives tab.`,
+      );
+      return;
+    }
 
     // Auto-cleanup: silently delete old archive after successful update install
     if (oldArchive && oldArchive !== fileName) {

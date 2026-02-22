@@ -353,29 +353,22 @@ def delete_archive(game_path: str, filename: str) -> ArchiveDeleteResult:
 
     Validates the filename to prevent path traversal attacks.
     """
-    if "/" in filename or "\\" in filename or ".." in filename:
-        return ArchiveDeleteResult(
-            filename=filename, deleted=False, message="Invalid filename"
-        )
+    staging = Path(game_path) / "downloaded_mods"
+    archive_path = staging / filename
+    if not archive_path.resolve().is_relative_to(staging.resolve()):
+        return ArchiveDeleteResult(filename=filename, deleted=False, message="Invalid filename")
 
-    archive_path = Path(game_path) / "downloaded_mods" / filename
     if not archive_path.exists():
-        return ArchiveDeleteResult(
-            filename=filename, deleted=False, message="File not found"
-        )
+        return ArchiveDeleteResult(filename=filename, deleted=False, message="File not found")
 
     try:
         archive_path.unlink()
     except OSError as exc:
         logger.warning("Failed to delete archive %s: %s", archive_path, exc)
-        return ArchiveDeleteResult(
-            filename=filename, deleted=False, message=str(exc)
-        )
+        return ArchiveDeleteResult(filename=filename, deleted=False, message=str(exc))
 
     logger.info("Deleted archive: %s", filename)
-    return ArchiveDeleteResult(
-        filename=filename, deleted=True, message="Deleted"
-    )
+    return ArchiveDeleteResult(filename=filename, deleted=True, message="Deleted")
 
 
 def find_orphaned_archives(
@@ -434,16 +427,15 @@ def delete_orphaned_archives(
     for filename in orphans:
         archive_path = staging / filename
         try:
-            freed_bytes += archive_path.stat().st_size
+            size = archive_path.stat().st_size
             archive_path.unlink()
+            freed_bytes += size
             deleted_files.append(filename)
         except OSError as exc:
             logger.warning("Failed to delete orphan %s: %s", filename, exc)
 
     if deleted_files:
-        logger.info(
-            "Cleaned %d orphan archives, freed %d bytes", len(deleted_files), freed_bytes
-        )
+        logger.info("Cleaned %d orphan archives, freed %d bytes", len(deleted_files), freed_bytes)
 
     return OrphanCleanupResult(
         deleted_count=len(deleted_files),
