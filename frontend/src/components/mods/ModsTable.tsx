@@ -200,8 +200,8 @@ export function ModsTable({ mods, isLoading }: { mods: ModGroup[]; isLoading?: b
                 className="py-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
                 onClick={() => toggleSort("confidence")}
               >
-                <span className="flex items-center gap-1">
-                  Confidence <SortIcon col="confidence" sortKey={sortKey} sortDir={sortDir} />
+                <span className="flex items-center gap-1" title="How tightly the files in this mod group cluster together">
+                  Cluster <SortIcon col="confidence" sortKey={sortKey} sortDir={sortDir} />
                 </span>
               </th>
             </tr>

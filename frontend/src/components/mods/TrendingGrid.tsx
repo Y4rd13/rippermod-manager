@@ -1,4 +1,4 @@
-import { Calendar, Check, Clock, Copy, Download, ExternalLink, Eye, Heart, Info, RefreshCw, Search, TrendingUp, Users } from "lucide-react";
+import { Check, Clock, Copy, Download, ExternalLink, Eye, Heart, Info, RefreshCw, Search, TrendingUp } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -10,6 +10,7 @@ import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
+import { SortSelect } from "@/components/ui/SortSelect";
 import { useRefreshTrending } from "@/hooks/mutations";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useInstallFlow } from "@/hooks/use-install-flow";
@@ -145,36 +146,12 @@ export function TrendingGrid({
         onClick={() => onModClick?.(nexusModId)}
         onContextMenu={(e) => openMenu(e, mod)}
         badge={
-          isInstalled ? (
-            <Badge variant="success">
-              <Check size={10} className="mr-0.5" />
-              Installed
-            </Badge>
-          ) : undefined
-        }
-        footer={
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center gap-1 text-xs text-text-muted">
-              <Download size={11} />
-              {formatCount(mod.mod_downloads)}
-            </span>
-            {mod.mod_unique_downloads > 0 && (
-              <span
-                className="inline-flex items-center gap-1 text-xs text-text-muted"
-                title="Unique downloads"
-              >
-                <Users size={11} />
-                {formatCount(mod.mod_unique_downloads)}
-              </span>
-            )}
-            {mod.updated_timestamp > 0 && (
-              <span className="text-xs text-text-muted">{timeAgo(mod.updated_timestamp)}</span>
-            )}
-            {mod.created_timestamp > 0 && (
-              <span className="inline-flex items-center gap-0.5 text-xs text-text-muted">
-                <Calendar size={10} />
-                {timeAgo(mod.created_timestamp)}
-              </span>
+          <div className="flex items-center gap-1">
+            {isInstalled && (
+              <Badge variant="success">
+                <Check size={10} className="mr-0.5" />
+                Installed
+              </Badge>
             )}
             {mod.is_tracked && (
               <Badge variant="neutral">
@@ -185,6 +162,17 @@ export function TrendingGrid({
               <Badge variant="success">
                 <Heart size={10} className="mr-0.5" /> Endorsed
               </Badge>
+            )}
+          </div>
+        }
+        footer={
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-xs text-text-muted">
+              <Download size={11} />
+              {formatCount(mod.mod_downloads)}
+            </span>
+            {mod.updated_timestamp > 0 && (
+              <span className="text-xs text-text-muted">{timeAgo(mod.updated_timestamp)}</span>
             )}
           </div>
         }
@@ -257,17 +245,11 @@ export function TrendingGrid({
               className="w-full rounded-lg border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
             />
           </div>
-          <select
+          <SortSelect
             value={sortKey}
-            onChange={(e) => setSortKey(e.target.value as SortKey)}
-            className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
-          >
-            {SORT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => setSortKey(v as SortKey)}
+            options={SORT_OPTIONS}
+          />
           <Button
             variant="ghost"
             size="sm"

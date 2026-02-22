@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
+import { SortSelect } from "@/components/ui/SortSelect";
 import { useCheckUpdates, useStartDownload } from "@/hooks/mutations";
 import { useDownloadJobs } from "@/hooks/queries";
 import { timeAgo } from "@/lib/format";
@@ -104,17 +105,11 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
             className="w-full rounded-lg border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
           />
         </div>
-        <select
+        <SortSelect
           value={sortKey}
-          onChange={(e) => setSortKey(e.target.value as UpdateSortKey)}
-          className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
-        >
-          {UPDATE_SORT_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+          onChange={(v) => setSortKey(v as UpdateSortKey)}
+          options={UPDATE_SORT_OPTIONS}
+        />
         <span className="text-xs text-text-muted">
           {filteredUpdates.length} update{filteredUpdates.length !== 1 ? "s" : ""}
         </span>

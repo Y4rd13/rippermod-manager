@@ -20,6 +20,7 @@ import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
+import { SortSelect } from "@/components/ui/SortSelect";
 import { useBulkSelect } from "@/hooks/use-bulk-select";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useToggleMod, useUninstallMod } from "@/hooks/mutations";
@@ -581,17 +582,11 @@ export function InstalledModsTable({
           />
         </div>
         {recognized.length > 0 && (
-          <select
+          <SortSelect
             value={recognizedSort}
-            onChange={(e) => setRecognizedSort(e.target.value as RecognizedSortKey)}
-            className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
-          >
-            {RECOGNIZED_SORT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => setRecognizedSort(v as RecognizedSortKey)}
+            options={RECOGNIZED_SORT_OPTIONS}
+          />
         )}
         <span className="text-xs text-text-muted">
           {totalCount} mod{totalCount !== 1 ? "s" : ""}

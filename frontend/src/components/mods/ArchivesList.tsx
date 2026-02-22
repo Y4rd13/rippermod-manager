@@ -9,6 +9,7 @@ import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
+import { SortSelect } from "@/components/ui/SortSelect";
 import {
   useCheckConflicts,
   useCleanupOrphans,
@@ -220,17 +221,11 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
               className="w-full rounded-lg border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
             />
           </div>
-          <select
+          <SortSelect
             value={sortKey}
-            onChange={(e) => setSortKey(e.target.value as ArchiveSortKey)}
-            className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
-          >
-            {ARCHIVE_SORT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => setSortKey(v as ArchiveSortKey)}
+            options={ARCHIVE_SORT_OPTIONS}
+          />
           <span className="text-xs text-text-muted">
             {filtered.length} archive{filtered.length !== 1 ? "s" : ""}
           </span>
