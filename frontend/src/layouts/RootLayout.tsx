@@ -28,7 +28,8 @@ export function RootLayout() {
       if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const tag = document.activeElement?.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-        if (document.querySelector("[role='dialog']")) return;
+        const openDialog = document.querySelector("[role='dialog']");
+        if (openDialog && !openDialog.querySelector("#shortcuts-title")) return;
         setShowShortcuts((prev) => !prev);
       }
     };
