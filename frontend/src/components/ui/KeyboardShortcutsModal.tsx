@@ -6,7 +6,7 @@ interface Props {
 }
 
 const SHORTCUTS: { keys: string[]; description: string }[] = [
-  { keys: ["Ctrl", "K"], description: "Toggle chat panel" },
+  { keys: [navigator.platform?.startsWith("Mac") ? "⌘" : "Ctrl", "K"], description: "Toggle chat panel" },
   { keys: ["Esc"], description: "Close chat / dialog / menu" },
   { keys: ["?"], description: "Show keyboard shortcuts" },
 ];

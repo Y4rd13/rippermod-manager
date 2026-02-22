@@ -29,7 +29,7 @@ export function RootLayout() {
         const tag = document.activeElement?.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
         if (document.querySelector("[role='dialog']")) return;
-        setShowShortcuts(true);
+        setShowShortcuts((prev) => !prev);
       }
     };
     document.addEventListener("keydown", handleKeyDown);

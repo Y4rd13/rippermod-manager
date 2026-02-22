@@ -240,7 +240,11 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
           </div>
           <SortSelect
             value={sortKey}
-            onChange={(v) => setSortKey(v as ArchiveSortKey)}
+            onChange={(v) => {
+              const key = v as ArchiveSortKey;
+              setSortKey(key);
+              setSortDir(key === "size" ? "desc" : "asc");
+            }}
             options={ARCHIVE_SORT_OPTIONS}
             sortDir={sortDir}
             onSortDirChange={setSortDir}
