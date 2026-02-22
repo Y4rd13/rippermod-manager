@@ -255,9 +255,78 @@ export interface ProfileOut {
   id: number;
   name: string;
   game_id: number;
+  description: string;
   created_at: string;
+  last_loaded_at: string | null;
+  is_active: boolean;
+  is_drifted: boolean;
   mod_count: number;
   mods: ProfileModOut[];
+}
+
+export interface ProfileUpdate {
+  name?: string;
+  description?: string;
+}
+
+export interface ProfileDiffEntry {
+  mod_name: string;
+  installed_mod_id: number | null;
+  action: "enable" | "disable" | "missing" | "unchanged";
+}
+
+export interface ProfileDiffOut {
+  profile_name: string;
+  entries: ProfileDiffEntry[];
+  enable_count: number;
+  disable_count: number;
+  missing_count: number;
+  unchanged_count: number;
+}
+
+export interface SkippedMod {
+  name: string;
+  installed_mod_id: number | null;
+}
+
+export interface ProfileLoadResult {
+  profile: ProfileOut;
+  skipped_mods: SkippedMod[];
+  skipped_count: number;
+}
+
+export interface ProfileImportResult {
+  profile: ProfileOut;
+  matched_count: number;
+  skipped_mods: SkippedMod[];
+  skipped_count: number;
+}
+
+export interface ProfileDuplicateRequest {
+  name: string;
+}
+
+export interface ProfileCompareEntry {
+  mod_name: string;
+  installed_mod_id: number | null;
+  enabled_in_a: boolean | null;
+  enabled_in_b: boolean | null;
+}
+
+export interface ProfileCompareOut {
+  profile_a_name: string;
+  profile_b_name: string;
+  only_in_a: ProfileCompareEntry[];
+  only_in_b: ProfileCompareEntry[];
+  in_both: ProfileCompareEntry[];
+  only_in_a_count: number;
+  only_in_b_count: number;
+  in_both_count: number;
+}
+
+export interface ProfileCompareRequest {
+  profile_id_a: number;
+  profile_id_b: number;
 }
 
 export interface ProfileExportMod {

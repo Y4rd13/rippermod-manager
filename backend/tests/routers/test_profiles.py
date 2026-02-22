@@ -76,6 +76,15 @@ class TestCreateProfile:
         assert data["name"] == "MyProfile"
         assert "id" in data
 
+    def test_create_with_description(self, client, game_setup):
+        game_name, _, _ = game_setup
+        r = client.post(
+            f"/api/v1/games/{game_name}/profiles/",
+            json={"name": "Described", "description": "My notes"},
+        )
+        assert r.status_code == 201
+        assert r.json()["description"] == "My notes"
+
     def test_game_not_found_returns_404(self, client):
         r = client.post("/api/v1/games/Missing/profiles/", json={"name": "X"})
         assert r.status_code == 404
@@ -153,7 +162,10 @@ class TestLoadProfile:
 
         r = client.post(f"/api/v1/games/{game_name}/profiles/{profile_id}/load")
         assert r.status_code == 200
-        assert r.json()["name"] == "LoadMe"
+        data = r.json()
+        assert data["profile"]["name"] == "LoadMe"
+        assert "skipped_mods" in data
+        assert "skipped_count" in data
 
     def test_load_not_found_returns_404(self, client, game_setup):
         game_name, _, _ = game_setup
@@ -209,7 +221,10 @@ class TestImportProfile:
         }
         r = client.post(f"/api/v1/games/{game_name}/profiles/import", json=payload)
         assert r.status_code == 201
-        assert r.json()["name"] == "Imported"
+        data = r.json()
+        assert data["profile"]["name"] == "Imported"
+        assert "matched_count" in data
+        assert "skipped_mods" in data
 
     def test_import_matches_installed_mod(self, client, game_setup):
         game_name, _game_dir, staging = game_setup
@@ -225,7 +240,7 @@ class TestImportProfile:
         r = client.post(f"/api/v1/games/{game_name}/profiles/import", json=payload)
         assert r.status_code == 201
         data = r.json()
-        assert data["mod_count"] == 1
+        assert data["matched_count"] == 1
 
     def test_import_game_not_found_returns_404(self, client):
         payload = {
@@ -249,4 +264,106 @@ class TestImportProfile:
         }
         r = client.post(f"/api/v1/games/{game_name}/profiles/import", json=payload)
         assert r.status_code == 201
-        assert r.json()["mod_count"] == 0
+        data = r.json()
+        assert data["profile"]["mod_count"] == 0
+        assert data["skipped_count"] == 1
+
+
+class TestPreviewProfile:
+    def test_preview_returns_200(self, client, game_setup):
+        game_name, _, _ = game_setup
+        create_resp = client.post(
+            f"/api/v1/games/{game_name}/profiles/", json={"name": "PreviewMe"}
+        )
+        profile_id = create_resp.json()["id"]
+
+        r = client.post(f"/api/v1/games/{game_name}/profiles/{profile_id}/preview")
+        assert r.status_code == 200
+        data = r.json()
+        assert "entries" in data
+        assert "enable_count" in data
+
+    def test_preview_not_found_returns_404(self, client, game_setup):
+        game_name, _, _ = game_setup
+        r = client.post(f"/api/v1/games/{game_name}/profiles/99999/preview")
+        assert r.status_code == 404
+
+
+class TestUpdateProfile:
+    def test_rename_returns_200(self, client, game_setup):
+        game_name, _, _ = game_setup
+        create_resp = client.post(f"/api/v1/games/{game_name}/profiles/", json={"name": "OldName"})
+        profile_id = create_resp.json()["id"]
+
+        r = client.patch(
+            f"/api/v1/games/{game_name}/profiles/{profile_id}",
+            json={"name": "NewName"},
+        )
+        assert r.status_code == 200
+        assert r.json()["name"] == "NewName"
+
+    def test_update_description_returns_200(self, client, game_setup):
+        game_name, _, _ = game_setup
+        create_resp = client.post(f"/api/v1/games/{game_name}/profiles/", json={"name": "DescTest"})
+        profile_id = create_resp.json()["id"]
+
+        r = client.patch(
+            f"/api/v1/games/{game_name}/profiles/{profile_id}",
+            json={"description": "Updated notes"},
+        )
+        assert r.status_code == 200
+        assert r.json()["description"] == "Updated notes"
+
+    def test_update_not_found_returns_404(self, client, game_setup):
+        game_name, _, _ = game_setup
+        r = client.patch(f"/api/v1/games/{game_name}/profiles/99999", json={"name": "X"})
+        assert r.status_code == 404
+
+
+class TestDuplicateProfile:
+    def test_duplicate_returns_201(self, client, game_setup):
+        game_name, _, _ = game_setup
+        create_resp = client.post(f"/api/v1/games/{game_name}/profiles/", json={"name": "Source"})
+        profile_id = create_resp.json()["id"]
+
+        r = client.post(
+            f"/api/v1/games/{game_name}/profiles/{profile_id}/duplicate",
+            json={"name": "Copy"},
+        )
+        assert r.status_code == 201
+        assert r.json()["name"] == "Copy"
+
+    def test_duplicate_not_found_returns_404(self, client, game_setup):
+        game_name, _, _ = game_setup
+        r = client.post(
+            f"/api/v1/games/{game_name}/profiles/99999/duplicate",
+            json={"name": "X"},
+        )
+        assert r.status_code == 404
+
+
+class TestCompareProfiles:
+    def test_compare_returns_200(self, client, game_setup):
+        game_name, _, _ = game_setup
+        r1 = client.post(f"/api/v1/games/{game_name}/profiles/", json={"name": "CmpA"})
+        r2 = client.post(f"/api/v1/games/{game_name}/profiles/", json={"name": "CmpB"})
+
+        r = client.post(
+            f"/api/v1/games/{game_name}/profiles/compare",
+            json={"profile_id_a": r1.json()["id"], "profile_id_b": r2.json()["id"]},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert "only_in_a" in data
+        assert "only_in_b" in data
+        assert "in_both" in data
+
+    def test_compare_not_found_returns_404(self, client, game_setup):
+        game_name, _, _ = game_setup
+        r1 = client.post(f"/api/v1/games/{game_name}/profiles/", json={"name": "Exists"})
+
+        r = client.post(
+            f"/api/v1/games/{game_name}/profiles/compare",
+            json={"profile_id_a": r1.json()["id"], "profile_id_b": 99999},
+        )
+        assert r.status_code == 404

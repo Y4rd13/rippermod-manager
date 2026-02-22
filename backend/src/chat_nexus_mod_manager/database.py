@@ -49,6 +49,21 @@ def _migrate_missing_columns() -> None:
             "mod_downloads",
             "ALTER TABLE nexus_mod_meta ADD COLUMN mod_downloads INTEGER DEFAULT 0",
         ),
+        (
+            "profiles",
+            "description",
+            "ALTER TABLE profiles ADD COLUMN description TEXT DEFAULT ''",
+        ),
+        (
+            "profiles",
+            "last_loaded_at",
+            "ALTER TABLE profiles ADD COLUMN last_loaded_at TIMESTAMP",
+        ),
+        (
+            "games",
+            "active_profile_id",
+            "ALTER TABLE games ADD COLUMN active_profile_id INTEGER",
+        ),
     ]
     with Session(engine) as session:
         for table, column, ddl in migrations:
