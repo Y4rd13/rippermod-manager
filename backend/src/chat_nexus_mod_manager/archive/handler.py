@@ -108,11 +108,12 @@ class SevenZipHandler(ArchiveHandler):
         """Extract *targets* to a temp dir and return their contents as bytes."""
         self._archive.reset()
         with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir).resolve()
             self._archive.extract(path=tmpdir, targets=targets)
             result: dict[str, bytes] = {}
             for name in targets:
-                extracted = Path(tmpdir) / name
-                if extracted.is_file():
+                extracted = (tmpdir_path / name).resolve()
+                if extracted.is_file() and tmpdir_path in extracted.parents:
                     result[name] = extracted.read_bytes()
         return result
 
@@ -124,7 +125,6 @@ class SevenZipHandler(ArchiveHandler):
 
     def read_all_files(self, entries: list[ArchiveEntry]) -> dict[str, bytes]:
         """Read all files in a single pass, avoiding O(N²) resets."""
-        self._archive.reset()
         targets = [e.filename for e in entries if not e.is_dir]
         result = self._extract_to_bytes(targets)
         self._cache = result
