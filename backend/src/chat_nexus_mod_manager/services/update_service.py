@@ -711,50 +711,58 @@ async def check_all_updates(
             if resolved_v and resolved_v != initial_v:
                 u["reason"] = f"Newer version available: v{resolved_v}"
 
-        # Filter false positives
+        # Filter false positives after file resolution.
+        #
+        # Multi-edition mods (e.g. Lite / Enhanced / Customizable on the
+        # same Nexus page) can trigger false updates: the mod-page version
+        # may be "3.0" while the user's installed edition is still "2.6".
+        # File resolution correctly identifies the user's file and version,
+        # so we compare the *resolved* version + timestamp against local.
         filtered: list[dict[str, Any]] = []
         for u in updates:
             resolved_nexus_v = u.get("nexus_version", "")
             local_v = u.get("local_version", "")
             is_file_upd = u.get("_is_file_update", False)
+            mid = u["nexus_mod_id"]
+            nexus_file_ts = u.get("nexus_timestamp")
+            local_mtime = tracked[mid].local_file_mtime
 
-            # Post-resolution version re-check: file-level version is ground
-            # truth.  If the resolved Nexus file version is not newer than
-            # local, there is no update — UNLESS a new file was uploaded
-            # (same-version re-uploads / hotfixes are real when confirmed by
-            # the get_updated_mods API; the timestamp filter below handles
-            # the case where the user already has the latest file).
-            if (
-                resolved_nexus_v
-                and local_v
-                and not is_newer_version(resolved_nexus_v, local_v)
-                and not is_file_upd
-            ):
-                logger.debug(
-                    "Filtered (resolved version not newer): %s — nexus=%s, local=%s",
-                    u["display_name"],
-                    resolved_nexus_v,
-                    local_v,
-                )
-                continue
-
-            # Secondary: resolved file's timestamp <= local mtime
-            if u["detection_method"] == "timestamp":
-                nexus_file_ts = u.get("nexus_timestamp")
-                mid = u["nexus_mod_id"]
-                local_mtime = tracked[mid].local_file_mtime
-                if (
-                    nexus_file_ts is not None
-                    and local_mtime is not None
-                    and nexus_file_ts <= local_mtime
-                ):
+            if resolved_nexus_v and local_v and not is_newer_version(resolved_nexus_v, local_v):
+                if not is_file_upd:
                     logger.debug(
-                        "False positive filtered: %s (file_ts=%d <= local_ts=%d)",
+                        "Filtered (resolved version not newer): %s — nexus=%s, local=%s",
+                        u["display_name"],
+                        resolved_nexus_v,
+                        local_v,
+                    )
+                    continue
+                # File-update signal exists (get_updated_mods confirmed a new
+                # file upload) — but the resolved file may belong to a
+                # *different* edition.  Verify that the resolved file is
+                # actually newer than the local file before keeping.
+                #
+                # When no local timestamp is available (endorsed/tracked mods
+                # without local files), there is nothing to update locally.
+                if local_mtime is None:
+                    logger.debug(
+                        "Filtered (same-version, no local timestamp): %s",
+                        u["display_name"],
+                    )
+                    continue
+                if nexus_file_ts is not None and nexus_file_ts <= local_mtime:
+                    logger.debug(
+                        "Filtered (same-version, file not newer): %s — file_ts=%d <= local_ts=%d",
                         u["display_name"],
                         nexus_file_ts,
                         local_mtime,
                     )
                     continue
+                if nexus_file_ts is None:
+                    logger.debug(
+                        "Kept (same-version, file-update signal, no resolved timestamp): %s",
+                        u["display_name"],
+                    )
+
             filtered.append(u)
         updates = filtered
 

@@ -775,3 +775,77 @@ class TestCheckAllUpdates:
             assert result.total_checked == 1
             assert len(result.updates) == 1
             assert result.updates[0]["nexus_version"] == "2.0"
+
+    @pytest.mark.anyio
+    async def test_multi_edition_mod_no_false_positive(self, engine):
+        """Multi-edition mod: new edition on same page doesn't flag installed edition.
+
+        Scenario: user installed "Lite edition v2.6" (file 100). The mod author
+        later released "Customizable edition v3.0" (file 200) on the same Nexus
+        page, bumping the mod-page version to "3.0". The user's Lite edition
+        should NOT show as needing an update.
+        """
+        with Session(engine) as s:
+            game = Game(name="G", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+
+            s.add(
+                InstalledMod(
+                    game_id=game.id,
+                    name="Cosmo Lite",
+                    nexus_mod_id=50,
+                    installed_version="2.6lite",
+                    upload_timestamp=1000,
+                    source_archive="Cosmo Lite-50-2-6lite-1000.7z",
+                )
+            )
+            s.add(
+                NexusModMeta(
+                    nexus_mod_id=50,
+                    name="Cosmo",
+                    version="3.0",
+                    author="A",
+                    updated_at=datetime.fromtimestamp(2000, tz=UTC),
+                )
+            )
+            s.commit()
+
+            client = AsyncMock()
+            # Mod was recently updated (new edition uploaded)
+            client.get_updated_mods.return_value = [
+                {"mod_id": 50, "latest_file_update": 2000},
+            ]
+            client.get_mod_info.return_value = {
+                "version": "3.0",
+                "updated_timestamp": 2000,
+                "name": "Cosmo",
+            }
+            # Two editions on the same page: Lite (old) and Customizable (new)
+            client.get_mod_files.return_value = {
+                "files": [
+                    {
+                        "file_id": 100,
+                        "file_name": "Cosmo Lite-50-2-6lite-1000.7z",
+                        "category_id": 1,
+                        "uploaded_timestamp": 1000,
+                        "version": "2.6lite",
+                    },
+                    {
+                        "file_id": 200,
+                        "file_name": "Customizable Cosmo-50-3-0-2000.7z",
+                        "category_id": 1,
+                        "uploaded_timestamp": 2000,
+                        "version": "3.0",
+                    },
+                ],
+                "file_updates": [],
+            }
+
+            result = await check_all_updates(game.id, "g", client, s)
+
+            assert result.total_checked == 1
+            assert len(result.updates) == 0, (
+                "Multi-edition mod should not flag installed edition as needing update"
+            )
