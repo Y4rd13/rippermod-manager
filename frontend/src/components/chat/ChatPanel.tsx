@@ -140,12 +140,6 @@ export function ChatPanel() {
     };
   }, []);
 
-  const cycleEffort = useCallback(() => {
-    const currentIdx = EFFORT_CYCLE.indexOf(reasoningEffort);
-    const nextIdx = (currentIdx + 1) % EFFORT_CYCLE.length;
-    setReasoningEffort(EFFORT_CYCLE[nextIdx]);
-  }, [reasoningEffort, setReasoningEffort]);
-
   const handleSend = useCallback(async (text?: string) => {
     const msg = text ?? input.trim();
     if (!msg || useChatStore.getState().isStreaming) return;
@@ -223,7 +217,7 @@ export function ChatPanel() {
   if (!chatPanelOpen) return null;
 
   return (
-    <div className="fixed right-0 top-9 bottom-0 w-96 flex flex-col border-l border-border bg-surface-1 z-40 shadow-xl">
+    <div className="fixed right-0 top-9 bottom-0 w-full sm:w-96 flex flex-col border-l border-border bg-surface-1 z-40 shadow-xl">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
           <MessageSquare size={16} className="text-accent" />
@@ -285,20 +279,25 @@ export function ChatPanel() {
             className="flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent"
             disabled={isStreaming}
           />
-          <button
-            type="button"
-            onClick={cycleEffort}
+          <div
             className={cn(
               "flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors",
               reasoningEffort !== "none"
                 ? "border-accent bg-accent/10 text-accent"
-                : "border-border bg-surface-2 text-text-muted hover:text-text-secondary",
+                : "border-border bg-surface-2 text-text-muted",
             )}
-            title={`Reasoning: ${EFFORT_LABELS[reasoningEffort]}`}
           >
             <Brain size={14} />
-            <span>{EFFORT_LABELS[reasoningEffort]}</span>
-          </button>
+            <select
+              value={reasoningEffort}
+              onChange={(e) => setReasoningEffort(e.target.value as ReasoningEffort)}
+              className="bg-transparent text-inherit text-xs focus:outline-none cursor-pointer"
+            >
+              {EFFORT_CYCLE.map((e) => (
+                <option key={e} value={e}>{EFFORT_LABELS[e]}</option>
+              ))}
+            </select>
+          </div>
           <Button
             type="submit"
             size="sm"

@@ -14,13 +14,13 @@ interface FilterChipsProps {
 
 export function FilterChips({ chips, active, onChange }: FilterChipsProps) {
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
+    <div className="flex items-center gap-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
       {chips.map((chip) => (
         <button
           key={chip.key}
           onClick={() => onChange(chip.key)}
           className={cn(
-            "rounded-full px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-surface-0",
+            "shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-surface-0",
             active === chip.key
               ? "bg-accent text-white"
               : "bg-surface-2 text-text-muted hover:bg-surface-3 hover:text-text-secondary",
