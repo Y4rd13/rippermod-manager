@@ -1,7 +1,7 @@
 """Endpoints for mod installation, uninstallation, enable/disable, and conflict checking."""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -87,15 +87,17 @@ async def list_archives(
     result: list[AvailableArchive] = []
     for path in archives:
         parsed = parse_mod_filename(path.name)
+        stat = path.stat()
+        dl_date = dl_date_map.get(path.name) or datetime.fromtimestamp(stat.st_mtime, tz=UTC)
         result.append(
             AvailableArchive(
                 filename=path.name,
-                size=path.stat().st_size,
+                size=stat.st_size,
                 nexus_mod_id=parsed.nexus_mod_id,
                 parsed_name=parsed.name,
                 parsed_version=parsed.version,
                 is_installed=path.name in installed_archives,
-                last_downloaded_at=dl_date_map.get(path.name),
+                last_downloaded_at=dl_date,
             )
         )
     return result
