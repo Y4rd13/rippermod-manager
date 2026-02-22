@@ -1,8 +1,9 @@
-import { Download, Gamepad2, Heart, Link2, Package, RefreshCw, TrendingUp } from "lucide-react";
+import { AlertTriangle, Download, Gamepad2, Heart, Link2, Package, RefreshCw, Scan, TrendingUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import { Card } from "@/components/ui/Card";
+import { cn } from "@/lib/utils";
 import { useGames, useInstalledMods, useMods, useTrendingMods, useUpdates } from "@/hooks/queries";
 import { formatCount } from "@/lib/format";
 import type { TrendingMod } from "@/types/api";
@@ -18,14 +19,24 @@ function StatCard({
   label,
   value,
   color,
+  hoverBorder,
+  onClick,
+  title,
 }: {
   icon: React.ElementType;
   label: string;
   value: string | number;
   color: string;
+  hoverBorder?: string;
+  onClick?: () => void;
+  title?: string;
 }) {
   return (
-    <Card>
+    <Card
+      className={cn(hoverBorder && `${hoverBorder} transition-colors`)}
+      onClick={onClick}
+      title={title}
+    >
       <div className="flex items-center gap-4">
         <div className={`rounded-lg p-2.5 ${color}`}>
           <Icon size={20} />
@@ -126,6 +137,7 @@ function CommunityActivity({ gameName }: { gameName: string }) {
 export function DashboardPage() {
   const { data: games = [] } = useGames();
   const [gameStats, setGameStats] = useState<Record<string, GameStatsData>>({});
+  const navigate = useNavigate();
 
   const handleReport = useCallback((name: string, stats: GameStatsData) => {
     setGameStats((prev) => ({ ...prev, [name]: stats }));
@@ -143,6 +155,14 @@ export function DashboardPage() {
     return { totalInstalled, nexusMatched, updatesAvailable };
   }, [gameStats]);
 
+  const firstGame = games[0]?.name;
+
+  const gamesWithUpdates = useMemo(() => {
+    return Object.entries(gameStats)
+      .filter(([, s]) => s.updatesAvailable > 0)
+      .map(([name, s]) => ({ name, count: s.updatesAvailable }));
+  }, [gameStats]);
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-text-primary">Dashboard</h1>
@@ -157,26 +177,78 @@ export function DashboardPage() {
           label="Games"
           value={games.length}
           color="bg-accent/10 text-accent"
+          hoverBorder="hover:border-accent/40"
+          onClick={firstGame ? () => navigate(`/games/${firstGame}`) : undefined}
+          title="View your games"
         />
         <StatCard
           icon={Package}
           label="Total Mods"
           value={games.length > 0 ? totals.totalInstalled : "--"}
           color="bg-success/10 text-success"
+          hoverBorder="hover:border-success/40"
+          onClick={firstGame ? () => navigate(`/games/${firstGame}`) : undefined}
+          title="View installed mods"
         />
         <StatCard
           icon={Link2}
           label="Nexus Matched"
           value={games.length > 0 ? totals.nexusMatched : "--"}
           color="bg-warning/10 text-warning"
+          hoverBorder="hover:border-warning/40"
+          onClick={firstGame ? () => navigate(`/games/${firstGame}`) : undefined}
+          title="View Nexus matched mods"
         />
         <StatCard
           icon={RefreshCw}
           label="Updates Available"
           value={games.length > 0 ? totals.updatesAvailable : "--"}
           color="bg-danger/10 text-danger"
+          hoverBorder="hover:border-danger/40"
+          onClick={firstGame ? () => navigate(`/games/${firstGame}`) : undefined}
+          title="View available updates"
         />
       </div>
+
+      {gamesWithUpdates.length > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3">
+          <AlertTriangle size={18} className="text-warning shrink-0" />
+          <p className="text-sm text-text-secondary flex-1">
+            Updates available:{" "}
+            {gamesWithUpdates.map((g, i) => (
+              <span key={g.name}>
+                {i > 0 && ", "}
+                <Link to={`/games/${g.name}`} className="font-medium text-warning hover:underline">
+                  {g.name}
+                </Link>
+                {" "}({g.count})
+              </span>
+            ))}
+          </p>
+        </div>
+      )}
+
+      {games.length > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-text-secondary">Quick Actions</span>
+          <Link
+            to={`/games/${firstGame}`}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-1 px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2 hover:text-text-primary transition-colors"
+          >
+            <Scan size={14} />
+            Go to Scan & Correlate
+          </Link>
+          {totals.updatesAvailable > 0 && (
+            <Link
+              to={`/games/${firstGame}`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-1 px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2 hover:text-text-primary transition-colors"
+            >
+              <RefreshCw size={14} />
+              Go to Updates
+            </Link>
+          )}
+        </div>
+      )}
 
       <Card>
         <h2 className="text-lg font-semibold text-text-primary mb-4">
@@ -186,26 +258,37 @@ export function DashboardPage() {
           <p className="text-text-muted text-sm">No games configured yet.</p>
         ) : (
           <div className="space-y-2">
-            {games.map((game) => (
-              <Link
-                key={game.id}
-                to={`/games/${game.name}`}
-                className="flex items-center justify-between rounded-lg border border-border p-3 hover:bg-surface-2 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <Gamepad2 size={18} className="text-accent" />
-                  <div>
-                    <p className="text-sm font-medium text-text-primary">
-                      {game.name}
-                    </p>
-                    <p className="text-xs text-text-muted">{game.install_path}</p>
+            {games.map((game) => {
+              const stats = gameStats[game.name];
+              return (
+                <Link
+                  key={game.id}
+                  to={`/games/${game.name}`}
+                  className="flex items-center justify-between rounded-lg border border-border p-3 hover:bg-surface-2 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Gamepad2 size={18} className="text-accent" />
+                    <div>
+                      <p className="text-sm font-medium text-text-primary">
+                        {game.name}
+                      </p>
+                      <p className="text-xs text-text-muted">{game.install_path}</p>
+                    </div>
                   </div>
-                </div>
-                <span className="text-xs text-text-muted">
-                  {game.mod_paths.length} mod paths
-                </span>
-              </Link>
-            ))}
+                  <div className="flex items-center gap-3">
+                    {stats && stats.updatesAvailable > 0 && (
+                      <span className="inline-flex items-center gap-1 text-xs text-warning">
+                        <RefreshCw size={12} />
+                        {stats.updatesAvailable}
+                      </span>
+                    )}
+                    <span className="text-xs text-text-muted">
+                      {stats ? `${stats.totalInstalled} mods` : `${game.mod_paths.length} mod paths`}
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         )}
       </Card>
