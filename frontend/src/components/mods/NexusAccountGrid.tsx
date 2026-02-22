@@ -1,10 +1,12 @@
-import { Check, Eye, Heart, Search } from "lucide-react";
+import { Check, Eye, Heart, Search, Settings } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
@@ -124,6 +126,13 @@ export function NexusAccountGrid({
         icon={EmptyIcon}
         title={emptyTitle}
         description={emptyMessage}
+        actions={
+          <Link to="/settings">
+            <Button size="sm" variant="secondary">
+              <Settings size={14} /> Nexus Settings
+            </Button>
+          </Link>
+        }
       />
     );
   }

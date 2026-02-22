@@ -81,3 +81,37 @@ body {
 .animate-fade-in {
   animation: fade-in 150ms ease-out;
 }
+
+input[type="checkbox"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--color-border-bright);
+  border-radius: 4px;
+  background-color: var(--color-surface-2);
+  cursor: pointer;
+  transition: background-color 150ms, border-color 150ms;
+  position: relative;
+}
+
+input[type="checkbox"]:checked {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-surface-0), 0 0 0 4px var(--color-accent);
+}
