@@ -378,7 +378,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
       )}
 
       {conflicts && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true">
           <div className="w-full max-w-lg rounded-xl border border-border bg-surface-1 p-6">
             <div className="mb-4 flex items-center gap-2 text-warning">
               <AlertTriangle size={20} />

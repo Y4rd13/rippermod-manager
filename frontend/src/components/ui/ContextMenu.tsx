@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export interface ContextMenuItem {
   key: string;
@@ -18,8 +18,12 @@ interface ContextMenuProps {
 
 export function ContextMenu({ items, position, onSelect, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [adjusted, setAdjusted] = useState(position);
   const [ready, setReady] = useState(false);
+  const focusIndexRef = useRef(-1);
+
+  const actionableItems = items.filter((i) => !i.separator);
 
   useLayoutEffect(() => {
     const el = menuRef.current;
@@ -33,12 +37,53 @@ export function ContextMenu({ items, position, onSelect, onClose }: ContextMenuP
   }, [position]);
 
   useEffect(() => {
+    if (ready && itemRefs.current[0]) {
+      itemRefs.current[0]?.focus();
+      focusIndexRef.current = 0;
+    }
+  }, [ready]);
+
+  const moveFocus = useCallback(
+    (delta: number) => {
+      const prev = focusIndexRef.current;
+      const next = (prev + delta + actionableItems.length) % actionableItems.length;
+      itemRefs.current[next]?.focus();
+      focusIndexRef.current = next;
+    },
+    [actionableItems.length],
+  );
+
+  useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => {
       if (menuRef.current?.contains(e.target as Node)) return;
       onClose();
     };
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      switch (e.key) {
+        case "Escape":
+        case "Tab":
+          e.preventDefault();
+          onClose();
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          moveFocus(1);
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          moveFocus(-1);
+          break;
+        case "Home":
+          e.preventDefault();
+          focusIndexRef.current = 0;
+          itemRefs.current[0]?.focus();
+          break;
+        case "End":
+          e.preventDefault();
+          focusIndexRef.current = actionableItems.length - 1;
+          itemRefs.current[actionableItems.length - 1]?.focus();
+          break;
+      }
     };
     document.addEventListener("mousedown", handleMouseDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -46,21 +91,29 @@ export function ContextMenu({ items, position, onSelect, onClose }: ContextMenuP
       document.removeEventListener("mousedown", handleMouseDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [onClose]);
+  }, [onClose, moveFocus, actionableItems.length]);
+
+  let actionIndex = 0;
 
   return (
     <div
       ref={menuRef}
+      role="menu"
       className="fixed z-50 min-w-[160px] rounded-lg border border-border bg-surface-1 py-1 shadow-lg animate-fade-in"
       style={{ top: adjusted.y, left: adjusted.x, visibility: ready ? "visible" : "hidden" }}
     >
-      {items.map((item) =>
-        item.separator ? (
-          <div key={item.key} className="border-t border-border my-1" />
-        ) : (
+      {items.map((item) => {
+        if (item.separator) {
+          return <div key={item.key} role="separator" className="border-t border-border my-1" />;
+        }
+        const idx = actionIndex++;
+        return (
           <button
             key={item.key}
-            className={`w-full px-3 py-1.5 text-sm text-left flex items-center gap-2 transition-colors ${
+            ref={(el) => { itemRefs.current[idx] = el; }}
+            role="menuitem"
+            tabIndex={-1}
+            className={`w-full px-3 py-1.5 text-sm text-left flex items-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${
               item.variant === "danger"
                 ? "text-danger hover:bg-danger/10"
                 : "text-text-primary hover:bg-surface-2"
@@ -73,8 +126,8 @@ export function ContextMenu({ items, position, onSelect, onClose }: ContextMenuP
             {item.icon && <item.icon size={14} />}
             {item.label}
           </button>
-        ),
-      )}
+        );
+      })}
     </div>
   );
 }
