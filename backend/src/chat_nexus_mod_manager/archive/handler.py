@@ -6,7 +6,6 @@ mod archives regardless of format.
 
 from __future__ import annotations
 
-import io
 import shutil
 import subprocess
 import tempfile
@@ -77,7 +76,12 @@ class ZipHandler(ArchiveHandler):
 
 
 class SevenZipHandler(ArchiveHandler):
-    """Handler for .7z archives using py7zr."""
+    """Handler for .7z archives using py7zr.
+
+    py7zr >= 1.0 removed the ``read()`` method.  All extraction now goes
+    through ``extract(path, targets)`` which writes to disk, so we use a
+    temporary directory for in-memory reads.
+    """
 
     def __init__(self, path: str | Path) -> None:
         try:
@@ -100,29 +104,29 @@ class SevenZipHandler(ArchiveHandler):
             )
         return entries
 
+    def _extract_to_bytes(self, targets: list[str]) -> dict[str, bytes]:
+        """Extract *targets* to a temp dir and return their contents as bytes."""
+        self._archive.reset()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir).resolve()
+            self._archive.extract(path=tmpdir, targets=targets)
+            result: dict[str, bytes] = {}
+            for name in targets:
+                extracted = (tmpdir_path / name).resolve()
+                if extracted.is_file() and tmpdir_path in extracted.parents:
+                    result[name] = extracted.read_bytes()
+        return result
+
     def read_file(self, entry: ArchiveEntry) -> bytes:
         if self._cache is not None and entry.filename in self._cache:
             return self._cache[entry.filename]
-        self._archive.reset()
-        result = self._archive.read(targets=[entry.filename])
-        if result and entry.filename in result:
-            bio = result[entry.filename]
-            if isinstance(bio, io.BytesIO):
-                return bio.read()
-            return bytes(bio)
-        return b""
+        data = self._extract_to_bytes([entry.filename])
+        return data.get(entry.filename, b"")
 
     def read_all_files(self, entries: list[ArchiveEntry]) -> dict[str, bytes]:
-        """Read all files in a single pass using readall(), avoiding O(N²) reset."""
-        self._archive.reset()
+        """Read all files in a single pass, avoiding O(N²) resets."""
         targets = [e.filename for e in entries if not e.is_dir]
-        raw = self._archive.read(targets=targets) or {}
-        result: dict[str, bytes] = {}
-        for name, bio in raw.items():
-            if isinstance(bio, io.BytesIO):
-                result[name] = bio.read()
-            else:
-                result[name] = bytes(bio)
+        result = self._extract_to_bytes(targets)
         self._cache = result
         return result
 
