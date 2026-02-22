@@ -8,6 +8,7 @@ import type {
   ArchiveDeleteResult,
   ConflictCheckResult,
   CorrelateResult,
+  CorrelationBrief,
   DownloadJobOut,
   DownloadRequest,
   DownloadStartResult,
@@ -424,5 +425,50 @@ export function useRefreshTrending() {
       toast.success("Trending mods refreshed");
     },
     onError: () => toast.error("Failed to refresh trending mods"),
+  });
+}
+
+export function useConfirmCorrelation() {
+  const qc = useQueryClient();
+  return useMutation<CorrelationBrief, Error, { gameName: string; modGroupId: number }>({
+    mutationFn: ({ gameName, modGroupId }) =>
+      api.patch(`/api/v1/games/${gameName}/mods/${modGroupId}/correlation/confirm`),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["mods", gameName] });
+      toast.success("Match confirmed");
+    },
+    onError: () => toast.error("Failed to confirm match"),
+  });
+}
+
+export function useRejectCorrelation() {
+  const qc = useQueryClient();
+  return useMutation<{ deleted: boolean }, Error, { gameName: string; modGroupId: number }>({
+    mutationFn: ({ gameName, modGroupId }) =>
+      api.delete(`/api/v1/games/${gameName}/mods/${modGroupId}/correlation`),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["mods", gameName] });
+      toast.success("Match rejected");
+    },
+    onError: () => toast.error("Failed to reject match"),
+  });
+}
+
+export function useReassignCorrelation() {
+  const qc = useQueryClient();
+  return useMutation<
+    CorrelationBrief,
+    Error,
+    { gameName: string; modGroupId: number; nexusModId: number }
+  >({
+    mutationFn: ({ gameName, modGroupId, nexusModId }) =>
+      api.put(`/api/v1/games/${gameName}/mods/${modGroupId}/correlation`, {
+        nexus_mod_id: nexusModId,
+      }),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["mods", gameName] });
+      toast.success("Match reassigned");
+    },
+    onError: () => toast.error("Failed to reassign match"),
   });
 }

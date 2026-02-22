@@ -16,6 +16,7 @@ from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
 from chat_nexus_mod_manager.schemas.mod import (
     CorrelateResult,
     CorrelationBrief,
+    CorrelationReassign,
     ModGroupOut,
     ScanResult,
     ScanStreamRequest,
@@ -260,6 +261,138 @@ def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> S
         event_stream(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
+
+
+@router.patch("/{mod_group_id}/correlation/confirm", response_model=CorrelationBrief)
+def confirm_correlation(
+    game_name: str, mod_group_id: int, session: Session = Depends(get_session)
+) -> CorrelationBrief:
+    _get_game(game_name, session)
+    corr = session.exec(
+        select(ModNexusCorrelation)
+        .where(ModNexusCorrelation.mod_group_id == mod_group_id)
+        .order_by(ModNexusCorrelation.score.desc())  # type: ignore[union-attr]
+    ).first()
+    if not corr:
+        raise HTTPException(404, "No correlation found for this mod group")
+    corr.confirmed_by_user = True
+    session.add(corr)
+    session.commit()
+    session.refresh(corr)
+    dl = session.get(NexusDownload, corr.nexus_download_id)
+    if not dl:
+        raise HTTPException(404, "NexusDownload not found")
+    meta = session.exec(
+        select(NexusModMeta).where(NexusModMeta.nexus_mod_id == dl.nexus_mod_id)
+    ).first()
+    return CorrelationBrief(
+        nexus_mod_id=dl.nexus_mod_id,
+        mod_name=dl.mod_name,
+        score=corr.score,
+        method=corr.method,
+        confirmed=corr.confirmed_by_user,
+        author=meta.author if meta else "",
+        summary=meta.summary if meta else "",
+        version=meta.version if meta else dl.version,
+        endorsement_count=meta.endorsement_count if meta else 0,
+        category=meta.category if meta else "",
+        picture_url=meta.picture_url if meta else "",
+        nexus_url=dl.nexus_url,
+        updated_at=meta.updated_at if meta else None,
+    )
+
+
+@router.delete("/{mod_group_id}/correlation")
+def reject_correlation(
+    game_name: str, mod_group_id: int, session: Session = Depends(get_session)
+) -> dict[str, bool]:
+    _get_game(game_name, session)
+    corrs = session.exec(
+        select(ModNexusCorrelation).where(ModNexusCorrelation.mod_group_id == mod_group_id)
+    ).all()
+    if not corrs:
+        raise HTTPException(404, "No correlations found for this mod group")
+    for c in corrs:
+        session.delete(c)
+    session.commit()
+    return {"deleted": True}
+
+
+@router.put("/{mod_group_id}/correlation", response_model=CorrelationBrief)
+async def reassign_correlation(
+    game_name: str,
+    mod_group_id: int,
+    body: CorrelationReassign,
+    session: Session = Depends(get_session),
+) -> CorrelationBrief:
+    game = _get_game(game_name, session)
+
+    # Delete existing correlations
+    existing = session.exec(
+        select(ModNexusCorrelation).where(ModNexusCorrelation.mod_group_id == mod_group_id)
+    ).all()
+    for c in existing:
+        session.delete(c)
+    session.flush()
+
+    # Find or create NexusDownload
+    dl = session.exec(
+        select(NexusDownload).where(
+            NexusDownload.game_id == game.id,
+            NexusDownload.nexus_mod_id == body.nexus_mod_id,
+        )
+    ).first()
+
+    if not dl:
+        from chat_nexus_mod_manager.nexus.client import NexusClient
+        from chat_nexus_mod_manager.services.nexus_helpers import upsert_nexus_mod
+        from chat_nexus_mod_manager.services.settings_helpers import get_setting
+
+        api_key = get_setting(session, "nexus_api_key")
+        if not api_key:
+            raise HTTPException(400, "Nexus API key not configured")
+
+        async with NexusClient(api_key) as client:
+            info = await client.get_mod_info(game.domain_name, body.nexus_mod_id)
+
+        dl = upsert_nexus_mod(
+            session,
+            game.id,
+            game.domain_name,
+            body.nexus_mod_id,
+            info,  # type: ignore[arg-type]
+        )
+        session.flush()
+
+    corr = ModNexusCorrelation(
+        mod_group_id=mod_group_id,
+        nexus_download_id=dl.id,  # type: ignore[arg-type]
+        score=1.0,
+        method="manual",
+        reasoning=f"Manually assigned to nexus_mod_id={body.nexus_mod_id}",
+        confirmed_by_user=True,
+    )
+    session.add(corr)
+    session.commit()
+
+    meta = session.exec(
+        select(NexusModMeta).where(NexusModMeta.nexus_mod_id == dl.nexus_mod_id)
+    ).first()
+    return CorrelationBrief(
+        nexus_mod_id=dl.nexus_mod_id,
+        mod_name=dl.mod_name,
+        score=corr.score,
+        method=corr.method,
+        confirmed=corr.confirmed_by_user,
+        author=meta.author if meta else "",
+        summary=meta.summary if meta else "",
+        version=meta.version if meta else dl.version,
+        endorsement_count=meta.endorsement_count if meta else 0,
+        category=meta.category if meta else "",
+        picture_url=meta.picture_url if meta else "",
+        nexus_url=dl.nexus_url,
+        updated_at=meta.updated_at if meta else None,
     )
 
 

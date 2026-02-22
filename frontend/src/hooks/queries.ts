@@ -10,6 +10,7 @@ import type {
   ModDetail,
   ModGroup,
   NexusDownload,
+  NexusDownloadBrief,
   OnboardingStatus,
   ProfileOut,
   Setting,
@@ -145,5 +146,14 @@ export function useTrendingMods(gameName: string) {
     queryFn: () => api.get(`/api/v1/games/${gameName}/trending/`),
     enabled: !!gameName,
     staleTime: 15 * 60 * 1000,
+  });
+}
+
+export function useSearchNexusDownloads(gameName: string, query: string) {
+  return useQuery<NexusDownloadBrief[]>({
+    queryKey: ["nexus-search", gameName, query],
+    queryFn: () =>
+      api.get(`/api/v1/nexus/downloads/${gameName}/search?q=${encodeURIComponent(query)}`),
+    enabled: !!gameName && query.length >= 2,
   });
 }

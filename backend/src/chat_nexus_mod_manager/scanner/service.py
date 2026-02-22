@@ -6,6 +6,7 @@ from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.matching.grouper import group_mod_files
 from chat_nexus_mod_manager.models.game import Game
+from chat_nexus_mod_manager.models.install import InstalledMod, InstalledModFile
 from chat_nexus_mod_manager.models.mod import ModFile, ModGroup
 from chat_nexus_mod_manager.schemas.mod import ScanResult
 from chat_nexus_mod_manager.services.progress import ProgressCallback, noop_progress
@@ -124,6 +125,25 @@ def scan_game_mods(
             session.add(f)
         groups_created += 1
         on_progress("group", f"Created group: {group_name}", -1)
+
+        # Link to installed mod by file overlap
+        group_paths = {f.file_path for f in files}
+        if group_paths:
+            overlap_rows = session.exec(
+                select(InstalledModFile.installed_mod_id).where(
+                    InstalledModFile.relative_path.in_(group_paths)
+                )  # type: ignore[union-attr]
+            ).all()
+            if overlap_rows:
+                from collections import Counter
+
+                counts = Counter(overlap_rows)
+                best_im_id, best_count = counts.most_common(1)[0]
+                if best_count > len(group_paths) * 0.5:
+                    im = session.get(InstalledMod, best_im_id)
+                    if im and im.mod_group_id is None:
+                        im.mod_group_id = mod_group.id
+                        session.add(im)
 
     session.commit()
     on_progress("index", "Indexing into vector store...", 78)

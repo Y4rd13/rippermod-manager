@@ -12,6 +12,7 @@ from chat_nexus_mod_manager.matching.normalization import (
 )
 from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
 from chat_nexus_mod_manager.models.game import Game
+from chat_nexus_mod_manager.models.install import InstalledMod
 from chat_nexus_mod_manager.models.mod import ModGroup
 from chat_nexus_mod_manager.models.nexus import NexusDownload
 from chat_nexus_mod_manager.schemas.mod import CorrelateResult
@@ -172,6 +173,38 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
     for dl in downloads:
         if dl.nexus_mod_id:
             nexus_id_map.setdefault(dl.nexus_mod_id, dl)
+
+    # Auto-correlate from installed mods (source of truth)
+    installed_mods = session.exec(
+        select(InstalledMod).where(
+            InstalledMod.game_id == game.id,
+            InstalledMod.nexus_mod_id.is_not(None),  # type: ignore[union-attr]
+            InstalledMod.mod_group_id.is_not(None),  # type: ignore[union-attr]
+        )
+    ).all()
+    for im in installed_mods:
+        if im.mod_group_id in already_matched:
+            continue
+        dl = nexus_id_map.get(im.nexus_mod_id)  # type: ignore[arg-type]
+        if not dl:
+            continue
+        corr = ModNexusCorrelation(
+            mod_group_id=im.mod_group_id,  # type: ignore[arg-type]
+            nexus_download_id=dl.id,  # type: ignore[arg-type]
+            score=1.0,
+            method="installed",
+            reasoning=f"Auto-correlated from installed mod '{im.name}'",
+            confirmed_by_user=True,
+        )
+        session.add(corr)
+        already_matched.add(im.mod_group_id)  # type: ignore[arg-type]
+        already_matched_nexus_ids.add(dl.nexus_mod_id)
+        logger.info(
+            "Auto-correlated group %d -> nexus %d from installed mod '%s'",
+            im.mod_group_id,
+            dl.nexus_mod_id,
+            im.name,
+        )
 
     matched = 0
     for group in groups:

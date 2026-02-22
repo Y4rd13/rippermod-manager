@@ -25,6 +25,13 @@ class NexusDownloadOut(BaseModel):
     nexus_url: str
 
 
+class NexusDownloadBrief(BaseModel):
+    nexus_mod_id: int
+    mod_name: str
+    version: str
+    nexus_url: str
+
+
 class NexusSyncResult(BaseModel):
     tracked_mods: int
     endorsed_mods: int
