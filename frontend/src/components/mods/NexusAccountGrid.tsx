@@ -1,10 +1,15 @@
-import { Check, Search } from "lucide-react";
+import { Check, Eye, Heart, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge } from "@/components/ui/Badge";
+import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { FilterChips } from "@/components/ui/FilterChips";
+import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
+import { useContextMenu } from "@/hooks/use-context-menu";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { isoToEpoch, timeAgo } from "@/lib/format";
 import type {
@@ -13,6 +18,7 @@ import type {
   InstalledModOut,
   NexusDownload,
 } from "@/types/api";
+
 
 type SortKey = "name" | "endorsements" | "author" | "updated";
 
@@ -23,6 +29,12 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "author", label: "Author" },
 ];
 
+const CONTEXT_MENU_ITEMS: ContextMenuItem[] = [
+  { key: "details", label: "View Details" },
+  { key: "nexus", label: "Open on Nexus" },
+  { key: "copy-name", label: "Copy Name" },
+];
+
 interface Props {
   mods: NexusDownload[];
   archives: AvailableArchive[];
@@ -31,6 +43,9 @@ interface Props {
   emptyMessage: string;
   downloadJobs?: DownloadJobOut[];
   onModClick?: (nexusModId: number) => void;
+  isLoading?: boolean;
+  emptyIcon?: "heart" | "eye";
+  emptyTitle?: string;
 }
 
 export function NexusAccountGrid({
@@ -41,11 +56,16 @@ export function NexusAccountGrid({
   emptyMessage,
   downloadJobs = [],
   onModClick,
+  isLoading = false,
+  emptyIcon = "heart",
+  emptyTitle = "No mods found",
 }: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("updated");
+  const [chip, setChip] = useState("all");
 
   const flow = useInstallFlow(gameName, archives, downloadJobs);
+  const { menuState, openMenu, closeMenu } = useContextMenu<NexusDownload>();
 
   const installedModIds = useMemo(
     () => new Set(installedMods.filter((m) => m.nexus_mod_id != null).map((m) => m.nexus_mod_id!)),
@@ -54,13 +74,13 @@ export function NexusAccountGrid({
 
   const filtered = useMemo(() => {
     const q = filter.toLowerCase();
-    const items = mods.filter((m) => {
+    let items = mods.filter((m) => {
       if (!q) return true;
-      return (
-        m.mod_name.toLowerCase().includes(q) ||
-        m.author.toLowerCase().includes(q)
-      );
+      return m.mod_name.toLowerCase().includes(q) || m.author.toLowerCase().includes(q);
     });
+
+    if (chip === "installed") items = items.filter((m) => installedModIds.has(m.nexus_mod_id));
+    else if (chip === "not-installed") items = items.filter((m) => !installedModIds.has(m.nexus_mod_id));
 
     items.sort((a, b) => {
       switch (sortKey) {
@@ -76,17 +96,41 @@ export function NexusAccountGrid({
     });
 
     return items;
-  }, [mods, filter, sortKey]);
+  }, [mods, filter, sortKey, chip, installedModIds]);
+
+  const chipCounts = useMemo(() => ({
+    all: mods.length,
+    installed: mods.filter((m) => installedModIds.has(m.nexus_mod_id)).length,
+    "not-installed": mods.filter((m) => !installedModIds.has(m.nexus_mod_id)).length,
+  }), [mods, installedModIds]);
+
+  function handleContextMenuSelect(key: string) {
+    const mod = menuState.data;
+    if (!mod) return;
+    if (key === "details") onModClick?.(mod.nexus_mod_id);
+    else if (key === "nexus") window.open(mod.nexus_url, "_blank");
+    else if (key === "copy-name") navigator.clipboard.writeText(mod.mod_name);
+  }
+
+  if (isLoading) {
+    return <SkeletonCardGrid />;
+  }
+
+  const EmptyIcon = emptyIcon === "eye" ? Eye : Heart;
 
   if (mods.length === 0) {
     return (
-      <p className="text-text-muted text-sm py-4">{emptyMessage}</p>
+      <EmptyState
+        icon={EmptyIcon}
+        title={emptyTitle}
+        description={emptyMessage}
+      />
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-xs">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
           <input
@@ -113,6 +157,16 @@ export function NexusAccountGrid({
         </span>
       </div>
 
+      <FilterChips
+        chips={[
+          { key: "all", label: "All", count: chipCounts.all },
+          { key: "installed", label: "Installed", count: chipCounts.installed },
+          { key: "not-installed", label: "Not Installed", count: chipCounts["not-installed"] },
+        ]}
+        active={chip}
+        onChange={setChip}
+      />
+
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map((mod) => {
           const nexusModId = mod.nexus_mod_id;
@@ -128,21 +182,22 @@ export function NexusAccountGrid({
               endorsementCount={mod.endorsement_count}
               pictureUrl={mod.picture_url}
               onClick={() => onModClick?.(nexusModId)}
+              onContextMenu={(e) => openMenu(e, mod)}
               badge={
-                installedModIds.has(nexusModId)
-                  ? <Badge variant="success"><Check size={10} className="mr-0.5" />Installed</Badge>
-                  : undefined
+                installedModIds.has(nexusModId) ? (
+                  <Badge variant="success">
+                    <Check size={10} className="mr-0.5" />
+                    Installed
+                  </Badge>
+                ) : undefined
               }
               footer={
                 mod.updated_at ? (
-                  <span className="text-xs text-text-muted">
-                    {timeAgo(isoToEpoch(mod.updated_at))}
-                  </span>
+                  <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(mod.updated_at))}</span>
                 ) : undefined
               }
               action={
                 <ModCardAction
-
                   isInstalled={installedModIds.has(nexusModId)}
                   isInstalling={flow.installingModIds.has(nexusModId)}
                   activeDownload={flow.activeDownloadByModId.get(nexusModId)}
@@ -174,6 +229,15 @@ export function NexusAccountGrid({
           onCancel={flow.dismissConflicts}
           onSkip={flow.handleInstallWithSkip}
           onOverwrite={flow.handleInstallOverwrite}
+        />
+      )}
+
+      {menuState.visible && (
+        <ContextMenu
+          items={CONTEXT_MENU_ITEMS}
+          position={menuState.position}
+          onSelect={handleContextMenuSelect}
+          onClose={closeMenu}
         />
       )}
     </div>

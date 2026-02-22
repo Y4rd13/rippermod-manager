@@ -1,31 +1,50 @@
-import { ChevronDown, ChevronUp, ExternalLink, FileText, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, ExternalLink, FileText, Search } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
 
+import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { FilterChips } from "@/components/ui/FilterChips";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { ConfidenceBadge } from "@/components/ui/Badge";
 import { formatBytes } from "@/lib/format";
 import type { ModGroup } from "@/types/api";
+import { useContextMenu } from "@/hooks/use-context-menu";
 
 type SortKey = "name" | "files" | "confidence" | "match";
 type SortDir = "asc" | "desc";
+type MatchFilter = "all" | "matched" | "unmatched";
 
 function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
   if (sortKey !== col) return null;
-  return sortDir === "asc" ? (
-    <ChevronUp size={14} />
-  ) : (
-    <ChevronDown size={14} />
-  );
+  return sortDir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />;
 }
 
-export function ModsTable({ mods }: { mods: ModGroup[] }) {
+export function ModsTable({ mods, isLoading }: { mods: ModGroup[]; isLoading?: boolean }) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [filter, setFilter] = useState("");
+  const [matchFilter, setMatchFilter] = useState<MatchFilter>("all");
+
+  const { menuState, openMenu, closeMenu } = useContextMenu<ModGroup>();
+
+  const matchedCount = useMemo(() => mods.filter((m) => m.nexus_match != null).length, [mods]);
+  const unmatchedCount = mods.length - matchedCount;
+
+  const filterChips = [
+    { key: "all", label: "All", count: mods.length },
+    { key: "matched", label: "Matched", count: matchedCount },
+    { key: "unmatched", label: "Unmatched", count: unmatchedCount },
+  ];
 
   const filtered = useMemo(() => {
     const q = filter.toLowerCase();
     const items = mods.filter((m) => {
+      // Apply match filter chip.
+      if (matchFilter === "matched" && m.nexus_match == null) return false;
+      if (matchFilter === "unmatched" && m.nexus_match != null) return false;
+
+      // Apply text search filter.
       if (!q) return true;
       return (
         m.display_name.toLowerCase().includes(q) ||
@@ -53,7 +72,7 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
     });
 
     return items;
-  }, [mods, filter, sortKey, sortDir]);
+  }, [mods, filter, matchFilter, sortKey, sortDir]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -73,18 +92,66 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
     });
   };
 
+  const buildContextMenuItems = (mod: ModGroup): ContextMenuItem[] => [
+    {
+      key: "copy-name",
+      label: "Copy Name",
+      icon: Copy,
+    },
+    {
+      key: "separator",
+      label: "",
+      separator: true,
+    },
+    {
+      key: "expand",
+      label: expanded.has(mod.id) ? "Collapse" : "Expand",
+      icon: expanded.has(mod.id) ? ChevronUp : ChevronDown,
+    },
+  ];
+
+  const handleContextMenuSelect = (key: string) => {
+    const mod = menuState.data;
+    if (!mod) return;
+
+    switch (key) {
+      case "copy-name":
+        navigator.clipboard.writeText(mod.display_name);
+        break;
+      case "expand":
+        toggleExpand(mod.id);
+        break;
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <SkeletonTable columns={5} rows={6} />
+      </div>
+    );
+  }
+
   if (mods.length === 0) {
     return (
-      <p className="text-text-muted text-sm py-4">
-        No mods found. Run a scan to discover local mods.
-      </p>
+      <EmptyState
+        icon={Search}
+        title="No Scanned Mods"
+        description="Run a scan to discover local mods in your game directory."
+      />
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
+      <div className="flex items-center gap-3 flex-wrap">
+        <FilterChips
+          chips={filterChips}
+          active={matchFilter}
+          onChange={(key) => setMatchFilter(key as MatchFilter)}
+        />
+
+        <div className="relative flex-1 max-w-xs ml-auto">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
           <input
             type="text"
@@ -94,6 +161,7 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
             className="w-full rounded-lg border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
           />
         </div>
+
         <span className="text-xs text-text-muted">
           {filtered.length} mod{filtered.length !== 1 ? "s" : ""}
         </span>
@@ -102,10 +170,10 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border text-left">
-              <th className="pb-2 pr-4 w-6" />
+            <tr className="sticky top-0 z-10 bg-surface-0 border-b border-border text-left">
+              <th className="py-2 pr-4 w-6" />
               <th
-                className="pb-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
+                className="py-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
                 onClick={() => toggleSort("name")}
               >
                 <span className="flex items-center gap-1">
@@ -113,7 +181,7 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
                 </span>
               </th>
               <th
-                className="pb-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
+                className="py-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
                 onClick={() => toggleSort("files")}
               >
                 <span className="flex items-center gap-1">
@@ -121,7 +189,7 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
                 </span>
               </th>
               <th
-                className="pb-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
+                className="py-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
                 onClick={() => toggleSort("match")}
               >
                 <span className="flex items-center gap-1">
@@ -129,7 +197,7 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
                 </span>
               </th>
               <th
-                className="pb-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
+                className="py-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
                 onClick={() => toggleSort("confidence")}
               >
                 <span className="flex items-center gap-1">
@@ -144,6 +212,7 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
                 <tr
                   className="border-b border-border/50 hover:bg-surface-1/50 cursor-pointer"
                   onClick={() => toggleExpand(mod.id)}
+                  onContextMenu={(e) => openMenu(e, mod)}
                 >
                   <td className="py-2 pr-2">
                     {expanded.has(mod.id) ? (
@@ -152,12 +221,8 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
                       <FileText size={14} className="text-text-muted" />
                     )}
                   </td>
-                  <td className="py-2 pr-4 text-text-primary font-medium">
-                    {mod.display_name}
-                  </td>
-                  <td className="py-2 pr-4 text-text-muted">
-                    {mod.files.length}
-                  </td>
+                  <td className="py-2 pr-4 text-text-primary font-medium">{mod.display_name}</td>
+                  <td className="py-2 pr-4 text-text-muted">{mod.files.length}</td>
                   <td className="py-2 pr-4">
                     {mod.nexus_match ? (
                       <div className="flex items-center gap-2">
@@ -179,23 +244,19 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
                     <td colSpan={5} className="pb-3 pt-1 px-8">
                       <div className="rounded-lg bg-surface-2 p-3 space-y-1">
                         {mod.files.map((f) => (
-                          <div
-                            key={f.id}
-                            className="flex items-center justify-between text-xs"
-                          >
+                          <div key={f.id} className="flex items-center justify-between text-xs">
                             <span className="text-text-secondary font-mono truncate max-w-[400px]">
                               {f.file_path}
                             </span>
-                            <span className="text-text-muted">
-                              {formatBytes(f.file_size)}
-                            </span>
+                            <span className="text-text-muted">{formatBytes(f.file_size)}</span>
                           </div>
                         ))}
                         {mod.nexus_match && (
                           <div className="mt-2 pt-2 border-t border-border flex items-center gap-2 text-xs">
                             <ExternalLink size={12} className="text-accent" />
                             <span className="text-text-muted">
-                              Matched via {mod.nexus_match.method} — Nexus Mod #{mod.nexus_match.nexus_mod_id}
+                              Matched via {mod.nexus_match.method} — Nexus Mod #
+                              {mod.nexus_match.nexus_mod_id}
                             </span>
                           </div>
                         )}
@@ -209,10 +270,20 @@ export function ModsTable({ mods }: { mods: ModGroup[] }) {
         </table>
       </div>
 
-      {filtered.length === 0 && filter && (
+      {filtered.length === 0 && (filter || matchFilter !== "all") && (
         <p className="py-4 text-sm text-text-muted">
-          No mods matching &quot;{filter}&quot;.
+          No mods matching the current filter
+          {filter ? ` "${filter}"` : ""}.
         </p>
+      )}
+
+      {menuState.visible && menuState.data && (
+        <ContextMenu
+          items={buildContextMenuItems(menuState.data)}
+          position={menuState.position}
+          onSelect={handleContextMenuSelect}
+          onClose={closeMenu}
+        />
       )}
     </div>
   );

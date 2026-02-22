@@ -1,4 +1,4 @@
-import { Calendar, Check, Clock, Download, Eye, Heart, RefreshCw, Search, TrendingUp, Users } from "lucide-react";
+import { Calendar, Check, Clock, Copy, Download, ExternalLink, Eye, Heart, Info, RefreshCw, Search, TrendingUp, Users } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -6,23 +6,36 @@ import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { FilterChips } from "@/components/ui/FilterChips";
+import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { useRefreshTrending } from "@/hooks/mutations";
+import { useContextMenu } from "@/hooks/use-context-menu";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { formatCount, timeAgo } from "@/lib/format";
-import type {
-  AvailableArchive,
-  DownloadJobOut,
-  InstalledModOut,
-  TrendingMod,
-} from "@/types/api";
+import type { AvailableArchive, DownloadJobOut, InstalledModOut, TrendingMod } from "@/types/api";
 
 type SortKey = "updated" | "downloads" | "endorsements" | "name";
+type ChipKey = "all" | "installed" | "not-installed";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "updated", label: "Recently Updated" },
   { value: "downloads", label: "Downloads" },
   { value: "endorsements", label: "Endorsements" },
   { value: "name", label: "Name" },
+];
+
+const FILTER_CHIPS: { key: ChipKey; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "installed", label: "Installed" },
+  { key: "not-installed", label: "Not Installed" },
+];
+
+const CONTEXT_MENU_ITEMS: ContextMenuItem[] = [
+  { key: "view", label: "View Details", icon: Info },
+  { key: "nexus", label: "Open on Nexus", icon: ExternalLink },
+  { key: "copy", label: "Copy Name", icon: Copy },
 ];
 
 interface Props {
@@ -32,6 +45,7 @@ interface Props {
   installedMods: InstalledModOut[];
   gameName: string;
   downloadJobs?: DownloadJobOut[];
+  isLoading?: boolean;
   onModClick?: (nexusModId: number) => void;
 }
 
@@ -42,13 +56,16 @@ export function TrendingGrid({
   installedMods,
   gameName,
   downloadJobs = [],
+  isLoading = false,
   onModClick,
 }: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("updated");
+  const [chip, setChip] = useState<ChipKey>("all");
 
   const flow = useInstallFlow(gameName, archives, downloadJobs);
   const refreshTrending = useRefreshTrending();
+  const { menuState, openMenu, closeMenu } = useContextMenu<TrendingMod>();
 
   const installedModIds = useMemo(
     () =>
@@ -63,13 +80,16 @@ export function TrendingGrid({
   const filterAndSort = useCallback(
     (mods: TrendingMod[]) => {
       const q = filter.toLowerCase();
-      const items = mods.filter((m) => {
+      let items = mods.filter((m) => {
         if (!q) return true;
-        return (
-          m.name.toLowerCase().includes(q) ||
-          m.author.toLowerCase().includes(q)
-        );
+        return m.name.toLowerCase().includes(q) || m.author.toLowerCase().includes(q);
       });
+
+      if (chip === "installed") {
+        items = items.filter((m) => m.is_installed || installedModIds.has(m.mod_id));
+      } else if (chip === "not-installed") {
+        items = items.filter((m) => !m.is_installed && !installedModIds.has(m.mod_id));
+      }
 
       items.sort((a, b) => {
         switch (sortKey) {
@@ -86,7 +106,7 @@ export function TrendingGrid({
 
       return items;
     },
-    [filter, sortKey],
+    [filter, sortKey, chip, installedModIds],
   );
 
   const filteredTrending = useMemo(
@@ -100,11 +120,21 @@ export function TrendingGrid({
 
   const totalCount = filteredTrending.length + filteredLatest.length;
 
+  const handleContextMenuSelect = useCallback(
+    (key: string) => {
+      const mod = menuState.data;
+      if (!mod) return;
+      if (key === "view") onModClick?.(mod.mod_id);
+      else if (key === "nexus") window.open(mod.nexus_url, "_blank");
+      else if (key === "copy") navigator.clipboard.writeText(mod.name);
+    },
+    [menuState.data, onModClick],
+  );
+
   const renderModCard = (mod: TrendingMod) => {
     const nexusModId = mod.mod_id;
     const archive = flow.archiveByModId.get(nexusModId);
-    const isInstalled =
-      mod.is_installed || installedModIds.has(nexusModId);
+    const isInstalled = mod.is_installed || installedModIds.has(nexusModId);
 
     return (
       <NexusModCard
@@ -116,10 +146,14 @@ export function TrendingGrid({
         endorsementCount={mod.endorsement_count}
         pictureUrl={mod.picture_url}
         onClick={() => onModClick?.(nexusModId)}
+        onContextMenu={(e) => openMenu(e, mod)}
         badge={
-          isInstalled
-            ? <Badge variant="success"><Check size={10} className="mr-0.5" />Installed</Badge>
-            : undefined
+          isInstalled ? (
+            <Badge variant="success">
+              <Check size={10} className="mr-0.5" />
+              Installed
+            </Badge>
+          ) : undefined
         }
         footer={
           <div className="flex items-center gap-2 flex-wrap">
@@ -128,15 +162,16 @@ export function TrendingGrid({
               {formatCount(mod.mod_downloads)}
             </span>
             {mod.mod_unique_downloads > 0 && (
-              <span className="inline-flex items-center gap-1 text-xs text-text-muted" title="Unique downloads">
+              <span
+                className="inline-flex items-center gap-1 text-xs text-text-muted"
+                title="Unique downloads"
+              >
                 <Users size={11} />
                 {formatCount(mod.mod_unique_downloads)}
               </span>
             )}
             {mod.updated_timestamp > 0 && (
-              <span className="text-xs text-text-muted">
-                {timeAgo(mod.updated_timestamp)}
-              </span>
+              <span className="text-xs text-text-muted">{timeAgo(mod.updated_timestamp)}</span>
             )}
             {mod.created_timestamp > 0 && (
               <span className="inline-flex items-center gap-0.5 text-xs text-text-muted">
@@ -161,21 +196,15 @@ export function TrendingGrid({
             isInstalled={isInstalled}
             isInstalling={flow.installingModIds.has(nexusModId)}
             activeDownload={flow.activeDownloadByModId.get(nexusModId)}
-            completedDownload={flow.completedDownloadByModId.get(
-              nexusModId,
-            )}
+            completedDownload={flow.completedDownloadByModId.get(nexusModId)}
             archive={archive}
             nexusUrl={mod.nexus_url}
             hasConflicts={flow.conflicts != null}
             isDownloading={flow.downloadingModId === nexusModId}
-            onInstall={() =>
-              archive && flow.handleInstall(nexusModId, archive)
-            }
+            onInstall={() => archive && flow.handleInstall(nexusModId, archive)}
             onInstallByFilename={() => {
-              const dl =
-                flow.completedDownloadByModId.get(nexusModId);
-              if (dl)
-                flow.handleInstallByFilename(nexusModId, dl.file_name);
+              const dl = flow.completedDownloadByModId.get(nexusModId);
+              if (dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
             }}
             onDownload={() => flow.handleDownload(nexusModId)}
             onCancelDownload={() => {
@@ -188,53 +217,78 @@ export function TrendingGrid({
     );
   };
 
+  // Show skeleton grid while initial data is being fetched.
+  if (isLoading) {
+    return <SkeletonCardGrid count={6} />;
+  }
+
+  // Show empty state when there is no data and no active filter hiding results.
   if (trendingMods.length === 0 && latestUpdatedMods.length === 0) {
     return (
-      <p className="text-text-muted text-sm py-4">
-        No trending mods available. Try refreshing.
-      </p>
+      <EmptyState
+        icon={TrendingUp}
+        title="No Trending Data"
+        description="Refresh to fetch the latest trending mods from Nexus."
+        actions={
+          <Button
+            size="sm"
+            onClick={() => refreshTrending.mutate(gameName)}
+            loading={refreshTrending.isPending}
+          >
+            Refresh
+          </Button>
+        }
+      />
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
-          <Search
-            size={14}
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
-          />
-          <input
-            type="text"
-            placeholder="Filter by name or author..."
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="w-full rounded-lg border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-          />
+      {/* Toolbar: search, sort, filter chips, refresh, and count */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-xs">
+            <Search
+              size={14}
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
+            />
+            <input
+              type="text"
+              placeholder="Filter by name or author..."
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              className="w-full rounded-lg border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+            />
+          </div>
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as SortKey)}
+            className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
+          >
+            {SORT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => refreshTrending.mutate(gameName)}
+            loading={refreshTrending.isPending}
+          >
+            <RefreshCw className="h-3.5 w-3.5 mr-1" />
+            Refresh
+          </Button>
+          <span className="text-xs text-text-muted">
+            {totalCount} mod{totalCount !== 1 ? "s" : ""}
+          </span>
         </div>
-        <select
-          value={sortKey}
-          onChange={(e) => setSortKey(e.target.value as SortKey)}
-          className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
-        >
-          {SORT_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => refreshTrending.mutate(gameName)}
-          loading={refreshTrending.isPending}
-        >
-          <RefreshCw className="h-3.5 w-3.5 mr-1" />
-          Refresh
-        </Button>
-        <span className="text-xs text-text-muted">
-          {totalCount} mod{totalCount !== 1 ? "s" : ""}
-        </span>
+        <FilterChips
+          chips={FILTER_CHIPS}
+          active={chip}
+          onChange={(key) => setChip(key as ChipKey)}
+        />
       </div>
 
       {filteredTrending.length > 0 && (
@@ -267,12 +321,31 @@ export function TrendingGrid({
         </div>
       )}
 
+      {/* Filtered empty state shown when data exists but active filters match nothing. */}
+      {filteredTrending.length === 0 && filteredLatest.length === 0 && (
+        <EmptyState
+          icon={TrendingUp}
+          title="No Trending Data"
+          description="No mods match the current filter. Try changing the filter or search term."
+        />
+      )}
+
       {flow.conflicts && (
         <ConflictDialog
           conflicts={flow.conflicts}
           onCancel={flow.dismissConflicts}
           onSkip={flow.handleInstallWithSkip}
           onOverwrite={flow.handleInstallOverwrite}
+        />
+      )}
+
+      {/* Context menu rendered at document level to avoid clipping. */}
+      {menuState.visible && (
+        <ContextMenu
+          items={CONTEXT_MENU_ITEMS}
+          position={menuState.position}
+          onSelect={handleContextMenuSelect}
+          onClose={closeMenu}
         />
       )}
     </div>

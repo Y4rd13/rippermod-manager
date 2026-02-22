@@ -32,7 +32,10 @@ import { SourceBadge } from "@/components/mods/SourceBadge";
 import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { FilterChips } from "@/components/ui/FilterChips";
 import { ScanProgress, type ScanLog } from "@/components/ui/ScanProgress";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Switch } from "@/components/ui/Switch";
 import { useCheckUpdates, useStartDownload } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
@@ -80,21 +83,20 @@ const UPDATE_SORT_OPTIONS: { value: UpdateSortKey; label: string }[] = [
   { value: "updated", label: "Last Updated" },
 ];
 
-function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdate[] }) {
+function UpdatesTab({ gameName, updates, isLoading }: { gameName: string; updates: ModUpdate[]; isLoading?: boolean }) {
   const { data: downloadJobs = [] } = useDownloadJobs(gameName);
   const checkUpdates = useCheckUpdates();
   const startDownload = useStartDownload();
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<UpdateSortKey>("name");
+  const [chip, setChip] = useState("all");
 
   const filteredUpdates = useMemo(() => {
     const q = filter.toLowerCase();
     const items = updates.filter((u) => {
-      if (!q) return true;
-      return (
-        u.display_name.toLowerCase().includes(q) ||
-        u.author.toLowerCase().includes(q)
-      );
+      if (q && !u.display_name.toLowerCase().includes(q) && !u.author.toLowerCase().includes(q)) return false;
+      if (chip !== "all" && u.source !== chip) return false;
+      return true;
     });
 
     items.sort((a, b) => {
@@ -111,7 +113,7 @@ function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdat
     });
 
     return items;
-  }, [updates, filter, sortKey]);
+  }, [updates, filter, sortKey, chip]);
 
   const downloadableUpdates = filteredUpdates.filter((u) => u.nexus_file_id != null);
 
@@ -132,6 +134,18 @@ function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdat
       }
     }
   };
+
+  const updateChips = useMemo(() => {
+    const sources = new Set(updates.map((u) => u.source));
+    const chips = [{ key: "all", label: "All" }];
+    if (sources.has("installed")) chips.push({ key: "installed", label: "Installed" });
+    if (sources.has("correlation")) chips.push({ key: "correlation", label: "Matched" });
+    if (sources.has("endorsed")) chips.push({ key: "endorsed", label: "Endorsed" });
+    if (sources.has("tracked")) chips.push({ key: "tracked", label: "Tracked" });
+    return chips;
+  }, [updates]);
+
+  if (isLoading) return <SkeletonTable columns={7} rows={5} />;
 
   return (
     <div className="space-y-3">
@@ -184,20 +198,37 @@ function UpdatesTab({ gameName, updates }: { gameName: string; updates: ModUpdat
         </div>
       </div>
 
+      {updateChips.length > 2 && (
+        <FilterChips chips={updateChips} active={chip} onChange={setChip} />
+      )}
+
       {!updates.length ? (
-        <p className="text-text-muted text-sm py-4">No updates detected. Run a scan first.</p>
+        <EmptyState
+          icon={RefreshCw}
+          title="No Updates Found"
+          description="Run a scan first, then check for updates to find newer versions of your mods."
+          actions={
+            <Button
+              size="sm"
+              onClick={() => checkUpdates.mutate(gameName)}
+              loading={checkUpdates.isPending}
+            >
+              Check Now
+            </Button>
+          }
+        />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-text-muted">
-                <th className="pb-2 pr-4">Mod</th>
-                <th className="pb-2 pr-4">Local Version</th>
-                <th className="pb-2 pr-4">Nexus Version</th>
-                <th className="pb-2 pr-4">Source</th>
-                <th className="pb-2 pr-4">Author</th>
-                <th className="pb-2 pr-4">Updated</th>
-                <th className="pb-2" />
+              <tr className="border-b border-border text-left text-text-muted sticky top-0 z-10 bg-surface-0">
+                <th className="py-2 pr-4">Mod</th>
+                <th className="py-2 pr-4">Local Version</th>
+                <th className="py-2 pr-4">Nexus Version</th>
+                <th className="py-2 pr-4">Source</th>
+                <th className="py-2 pr-4">Author</th>
+                <th className="py-2 pr-4">Updated</th>
+                <th className="py-2" />
               </tr>
             </thead>
             <tbody>
@@ -237,14 +268,14 @@ export function GameDetailPage() {
   const { name = "" } = useParams();
   const { data: game } = useGame(name);
   const { data: gameVersion } = useGameVersion(name);
-  const { data: mods = [] } = useMods(name);
-  const { data: installedMods = [] } = useInstalledMods(name);
-  const { data: archives = [] } = useAvailableArchives(name);
-  const { data: profiles = [] } = useProfiles(name);
-  const { data: endorsedMods = [] } = useEndorsedMods(name);
-  const { data: trackedMods = [] } = useTrackedMods(name);
-  const { data: trendingResult } = useTrendingMods(name);
-  const { data: updates } = useUpdates(name);
+  const { data: mods = [], isLoading: modsLoading } = useMods(name);
+  const { data: installedMods = [], isLoading: installedLoading } = useInstalledMods(name);
+  const { data: archives = [], isLoading: archivesLoading } = useAvailableArchives(name);
+  const { data: profiles = [], isLoading: profilesLoading } = useProfiles(name);
+  const { data: endorsedMods = [], isLoading: endorsedLoading } = useEndorsedMods(name);
+  const { data: trackedMods = [], isLoading: trackedLoading } = useTrackedMods(name);
+  const { data: trendingResult, isLoading: trendingLoading } = useTrendingMods(name);
+  const { data: updates, isLoading: updatesLoading } = useUpdates(name);
   const { data: downloadJobs = [] } = useDownloadJobs(name);
   const { data: settings = [] } = useSettings();
   const queryClient = useQueryClient();
@@ -396,6 +427,28 @@ export function GameDetailPage() {
   const nexusMatched = useMemo(() => mods.filter((m) => m.nexus_match), [mods]);
   const enabledCount = installedMods.filter((m) => !m.disabled).length;
 
+  const tabCounts = useMemo<Partial<Record<Tab, number>>>(() => ({
+    installed: installedLoading ? undefined : installedMods.length,
+    updates: updatesLoading ? undefined : updates?.updates_available,
+    trending: trendingLoading ? undefined : (trendingResult?.trending.length ?? 0) + (trendingResult?.latest_updated.length ?? 0),
+    endorsed: endorsedLoading ? undefined : endorsedMods.length,
+    tracked: trackedLoading ? undefined : trackedMods.length,
+    mods: modsLoading ? undefined : mods.length,
+    matched: modsLoading ? undefined : nexusMatched.length,
+    archives: archivesLoading ? undefined : archives.length,
+    profiles: profilesLoading ? undefined : profiles.length,
+  }), [
+    installedMods.length, installedLoading,
+    updates?.updates_available, updatesLoading,
+    trendingResult, trendingLoading,
+    endorsedMods.length, endorsedLoading,
+    trackedMods.length, trackedLoading,
+    mods.length, modsLoading,
+    nexusMatched.length,
+    archives.length, archivesLoading,
+    profiles.length, profilesLoading,
+  ]);
+
   if (!game) {
     return <p className="text-text-muted">Loading game...</p>;
   }
@@ -477,24 +530,33 @@ export function GameDetailPage() {
         </Card>
       </div>
 
-      <div className="flex gap-1 border-b border-border">
+      <div className="flex gap-1 border-b border-border overflow-x-auto">
         {TABS.map(({ key, label }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
             className={cn(
-              "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px",
+              "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap flex items-center gap-1",
               tab === key
                 ? "border-accent text-accent"
                 : "border-transparent text-text-muted hover:text-text-secondary",
             )}
           >
             {label}
+            {tabCounts[key] != null && (
+              <span className="text-xs tabular-nums opacity-60">
+                {tabCounts[key]}
+              </span>
+            )}
+            {key === "updates" && (updates?.updates_available ?? 0) > 0 && (
+              <span className="h-1.5 w-1.5 rounded-full bg-warning inline-block" />
+            )}
           </button>
         ))}
       </div>
 
-      {tab === "mods" && <ModsTable mods={mods} />}
+      <div key={tab} className="animate-fade-in">
+      {tab === "mods" && <ModsTable mods={mods} isLoading={modsLoading} />}
       {tab === "matched" && (
         <NexusMatchedGrid
           mods={nexusMatched}
@@ -502,6 +564,7 @@ export function GameDetailPage() {
           installedMods={installedMods}
           gameName={name}
           downloadJobs={downloadJobs}
+          isLoading={modsLoading}
           onModClick={setSelectedModId}
         />
       )}
@@ -511,8 +574,11 @@ export function GameDetailPage() {
           archives={archives}
           installedMods={installedMods}
           gameName={name}
-          emptyMessage="No endorsed mods. Sync your Nexus account to see mods you've endorsed."
+          emptyIcon="heart"
+          emptyTitle="No Endorsed Mods"
+          emptyMessage="Sync your Nexus account to see mods you've endorsed."
           downloadJobs={downloadJobs}
+          isLoading={endorsedLoading}
           onModClick={setSelectedModId}
         />
       )}
@@ -522,8 +588,11 @@ export function GameDetailPage() {
           archives={archives}
           installedMods={installedMods}
           gameName={name}
-          emptyMessage="No tracked mods. Sync your Nexus account to see mods you're tracking."
+          emptyIcon="eye"
+          emptyTitle="No Tracked Mods"
+          emptyMessage="Sync your Nexus account to see mods you're tracking."
           downloadJobs={downloadJobs}
+          isLoading={trackedLoading}
           onModClick={setSelectedModId}
         />
       )}
@@ -535,6 +604,7 @@ export function GameDetailPage() {
           installedMods={installedMods}
           gameName={name}
           downloadJobs={downloadJobs}
+          isLoading={trendingLoading}
           onModClick={setSelectedModId}
         />
       )}
@@ -546,18 +616,21 @@ export function GameDetailPage() {
           archives={archives}
           downloadJobs={downloadJobs}
           updates={updates?.updates ?? []}
+          isLoading={installedLoading}
           onModClick={setSelectedModId}
+          onTabChange={(t) => setTab(t as Tab)}
         />
       )}
       {tab === "archives" && (
-        <ArchivesList archives={archives} gameName={name} />
+        <ArchivesList archives={archives} gameName={name} isLoading={archivesLoading} />
       )}
       {tab === "profiles" && (
-        <ProfileManager profiles={profiles} gameName={name} />
+        <ProfileManager profiles={profiles} gameName={name} isLoading={profilesLoading} />
       )}
       {tab === "updates" && (
-        <UpdatesTab gameName={name} updates={updates?.updates ?? []} />
+        <UpdatesTab gameName={name} updates={updates?.updates ?? []} isLoading={updatesLoading} />
       )}
+      </div>
 
       {selectedModId != null && (() => {
         const modUpdate = updateByNexusId.get(selectedModId);
