@@ -1,4 +1,4 @@
-import { CheckCircle, Link2, Pencil, Search, XCircle } from "lucide-react";
+import { CheckCircle, ChevronDown, ChevronUp, Link2, Pencil, Search, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -14,7 +14,7 @@ import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useConfirmCorrelation, useRejectCorrelation } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
-import { isoToEpoch, timeAgo } from "@/lib/format";
+import { formatBytes, isoToEpoch, timeAgo } from "@/lib/format";
 import type {
   AvailableArchive,
   DownloadJobOut,
@@ -114,6 +114,7 @@ export function NexusMatchedGrid({
   const confirmCorrelation = useConfirmCorrelation();
   const rejectCorrelation = useRejectCorrelation();
   const [reassignGroupId, setReassignGroupId] = useState<number | null>(null);
+  const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
 
   const contextMenuItems: ContextMenuItem[] = [
     { key: "view", label: "View Details" },
@@ -199,54 +200,85 @@ export function NexusMatchedGrid({
           const nexusModId = match.nexus_mod_id;
           const archive = nexusModId != null ? flow.archiveByModId.get(nexusModId) : undefined;
 
+          const isExpanded = expandedCards.has(mod.id);
+          const toggleExpand = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            setExpandedCards((prev) => {
+              const next = new Set(prev);
+              if (next.has(mod.id)) next.delete(mod.id);
+              else next.add(mod.id);
+              return next;
+            });
+          };
+
           return (
-            <NexusModCard
-              key={mod.id}
-              modName={match.mod_name}
-              summary={match.summary}
-              author={match.author}
-              version={match.version}
-              endorsementCount={match.endorsement_count}
-              pictureUrl={match.picture_url}
-              onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
-              onContextMenu={(e) => openMenu(e, mod)}
-              action={
-                <ModCardAction
-                  isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
-                  isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
-                  activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
-                  completedDownload={nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined}
-                  archive={archive}
-                  nexusUrl={match.nexus_url}
-                  hasConflicts={flow.conflicts != null}
-                  isDownloading={flow.downloadingModId === nexusModId}
-                  onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
-                  onInstallByFilename={() => {
-                    const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
-                    if (nexusModId != null && dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
-                  }}
-                  onDownload={() => nexusModId != null && flow.handleDownload(nexusModId)}
-                  onCancelDownload={() => {
-                    const dl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
-                    if (dl) flow.handleCancelDownload(dl.id);
-                  }}
-                />
-              }
-              footer={
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <ConfidenceBadge score={match.score} />
-                  <Badge variant="neutral">{match.method}</Badge>
-                  <CorrelationActions
-                    gameName={gameName}
-                    modGroupId={mod.id}
-                    confirmed={match.confirmed}
+            <div key={mod.id}>
+              <NexusModCard
+                modName={match.mod_name}
+                summary={match.summary}
+                author={match.author}
+                version={match.version}
+                endorsementCount={match.endorsement_count}
+                pictureUrl={match.picture_url}
+                onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
+                onContextMenu={(e) => openMenu(e, mod)}
+                action={
+                  <ModCardAction
+                    isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
+                    isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
+                    activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
+                    completedDownload={nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined}
+                    archive={archive}
+                    nexusUrl={match.nexus_url}
+                    hasConflicts={flow.conflicts != null}
+                    isDownloading={flow.downloadingModId === nexusModId}
+                    onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
+                    onInstallByFilename={() => {
+                      const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
+                      if (nexusModId != null && dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
+                    }}
+                    onDownload={() => nexusModId != null && flow.handleDownload(nexusModId)}
+                    onCancelDownload={() => {
+                      const dl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
+                      if (dl) flow.handleCancelDownload(dl.id);
+                    }}
                   />
-                  {match.updated_at && (
-                    <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
-                  )}
+                }
+                footer={
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <ConfidenceBadge score={match.score} />
+                    <Badge variant="neutral">{match.method}</Badge>
+                    <CorrelationActions
+                      gameName={gameName}
+                      modGroupId={mod.id}
+                      confirmed={match.confirmed}
+                    />
+                    {match.updated_at && (
+                      <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
+                    )}
+                    {mod.files.length > 0 && (
+                      <button
+                        onClick={toggleExpand}
+                        className="ml-auto flex items-center gap-0.5 text-xs text-accent hover:underline"
+                      >
+                        {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                        {mod.files.length} file{mod.files.length !== 1 ? "s" : ""}
+                      </button>
+                    )}
+                  </div>
+                }
+              />
+              {isExpanded && mod.files.length > 0 && (
+                <div className="rounded-b-xl border border-t-0 border-border bg-surface-2 px-4 py-2 -mt-1 space-y-0.5">
+                  {mod.files.map((f) => (
+                    <div key={f.id} className="flex justify-between text-xs gap-2">
+                      <span className="font-mono truncate text-text-secondary">{f.file_path}</span>
+                      <span className="text-text-muted shrink-0">{formatBytes(f.file_size)}</span>
+                    </div>
+                  ))}
                 </div>
-              }
-            />
+              )}
+            </div>
           );
         })}
       </div>

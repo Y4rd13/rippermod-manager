@@ -202,7 +202,11 @@ def collect_tracked_mods(
             mod_group_id=mod.mod_group_id,
             upload_timestamp=mod.upload_timestamp,
             nexus_url=nexus_url,
-            local_file_mtime=mtime_map.get(mod.mod_group_id) if mod.mod_group_id else None,
+            local_file_mtime=(
+                mtime_map[mod.mod_group_id]
+                if mod.mod_group_id and mod.mod_group_id in mtime_map
+                else mod.upload_timestamp
+            ),
             source_archive=mod.source_archive,
         )
 
@@ -646,6 +650,13 @@ async def check_all_updates(
                 nexus_update_ts,
                 detection,
             )
+            if detection == "version":
+                reason = f"Newer version available: v{meta.version}"
+            elif detection == "timestamp":
+                reason = "Newer file uploaded on Nexus"
+            else:  # "both"
+                reason = f"Newer version v{meta.version} + newer file on Nexus"
+
             updates.append(
                 {
                     "installed_mod_id": mod.installed_mod_id,
@@ -653,6 +664,7 @@ async def check_all_updates(
                     "display_name": mod.display_name,
                     "local_version": mod.local_version,
                     "nexus_version": meta.version,
+                    "_initial_nexus_version": meta.version,
                     "nexus_mod_id": mid,
                     "nexus_file_id": None,
                     "nexus_file_name": "",
@@ -664,6 +676,7 @@ async def check_all_updates(
                     "nexus_timestamp": None,
                     "detection_method": detection,
                     "source_archive": mod.source_archive,
+                    "reason": reason,
                 }
             )
         else:
@@ -688,10 +701,32 @@ async def check_all_updates(
         # mods that turn out to be false positives (useful for future checks).
         _persist_resolved_file_ids(updates, session, game_id)
 
-        # Filter false positives: timestamp-only detections where the resolved
-        # file's uploaded_timestamp is actually <= local_file_mtime
+        # Update reason if resolved version differs from initial detection
+        for u in updates:
+            resolved_v = u.get("nexus_version", "")
+            initial_v = u.get("_initial_nexus_version", resolved_v)
+            if resolved_v and resolved_v != initial_v:
+                u["reason"] = f"Newer version available: v{resolved_v}"
+
+        # Filter false positives
         filtered: list[dict[str, Any]] = []
         for u in updates:
+            # Post-resolution version re-check: file-level version is ground truth.
+            # Only filter when version comparison was part of the detection —
+            # pure timestamp detections should survive (same-version hotfixes).
+            if u["detection_method"] in ("version", "both"):
+                resolved_nexus_v = u.get("nexus_version", "")
+                local_v = u.get("local_version", "")
+                if resolved_nexus_v and local_v and not is_newer_version(resolved_nexus_v, local_v):
+                    logger.debug(
+                        "Filtered (resolved version not newer): %s — nexus=%s, local=%s",
+                        u["display_name"],
+                        resolved_nexus_v,
+                        local_v,
+                    )
+                    continue
+
+            # Timestamp-only: resolved file's timestamp <= local mtime
             if u["detection_method"] == "timestamp":
                 nexus_file_ts = u.get("nexus_timestamp")
                 mid = u["nexus_mod_id"]
@@ -717,7 +752,10 @@ async def check_all_updates(
         len(tracked),
     )
 
-    result = UpdateResult(total_checked=len(tracked), updates=updates)
+    # Strip internal fields (prefixed with _) before caching/returning
+    clean_updates = [{k: v for k, v in u.items() if not k.startswith("_")} for u in updates]
+
+    result = UpdateResult(total_checked=len(tracked), updates=clean_updates)
     _cache_update_result(game_id, result, session)
     return result
 
@@ -774,6 +812,7 @@ def check_cached_updates(
                     "nexus_timestamp": None,
                     "detection_method": "version",
                     "source_archive": mod.source_archive,
+                    "reason": f"Newer version available: v{meta.version}",
                 }
             )
 

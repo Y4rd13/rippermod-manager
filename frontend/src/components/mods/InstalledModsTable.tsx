@@ -47,7 +47,15 @@ type SortKey = "name" | "version" | "files" | "disabled" | "updated";
 
 type RecognizedSortKey = "name" | "endorsements" | "updated" | "confidence";
 
+type ScopeKey = "all" | "installed" | "detected";
+
 type ChipKey = "all" | "enabled" | "disabled" | "has-update";
+
+const SCOPE_OPTIONS: { key: ScopeKey; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "installed", label: "Installed" },
+  { key: "detected", label: "Detected on Disk" },
+];
 
 const CHIP_OPTIONS: { key: ChipKey; label: string }[] = [
   { key: "all", label: "All" },
@@ -245,10 +253,12 @@ function ManagedModsGrid({
                 pictureUrl={mod.picture_url ?? undefined}
                 badge={
                   update ? (
-                    <Badge variant="warning" prominent>
-                      <ArrowUp size={10} className="mr-0.5" />
-                      v{update.nexus_version}
-                    </Badge>
+                    <span title={update.reason || `Update: v${update.local_version} → v${update.nexus_version}`}>
+                      <Badge variant="warning" prominent>
+                        <ArrowUp size={10} className="mr-0.5" />
+                        v{update.nexus_version}
+                      </Badge>
+                    </span>
                   ) : undefined
                 }
                 footer={
@@ -259,6 +269,11 @@ function ManagedModsGrid({
                     {mod.nexus_updated_at && (
                       <span className="text-xs text-text-muted">
                         {timeAgo(isoToEpoch(mod.nexus_updated_at))}
+                      </span>
+                    )}
+                    {mod.last_downloaded_at && (
+                      <span className="text-xs text-text-muted" title="Last downloaded">
+                        DL: {timeAgo(isoToEpoch(mod.last_downloaded_at))}
                       </span>
                     )}
                   </div>
@@ -442,6 +457,7 @@ export function InstalledModsTable({
 }: Props) {
   const [filter, setFilter] = useState("");
   const [chip, setChip] = useState<ChipKey>("all");
+  const [scope, setScope] = useState<ScopeKey>("all");
   const [recognizedSort, setRecognizedSort] = useState<RecognizedSortKey>("updated");
 
   const updateByNexusId = useMemo(() => {
@@ -525,7 +541,9 @@ export function InstalledModsTable({
     return items;
   }, [recognized, q, recognizedSort]);
 
-  const totalCount = filteredMods.length + filteredRecognized.length;
+  const totalCount =
+    (scope !== "detected" ? filteredMods.length : 0) +
+    (scope !== "installed" ? filteredRecognized.length : 0);
 
   if (isLoading) {
     return <SkeletonCardGrid count={6} />;
@@ -568,12 +586,19 @@ export function InstalledModsTable({
             options={RECOGNIZED_SORT_OPTIONS}
           />
         )}
+        {mods.length > 0 && recognized.length > 0 && (
+          <FilterChips
+            chips={SCOPE_OPTIONS}
+            active={scope}
+            onChange={(v) => setScope(v as ScopeKey)}
+          />
+        )}
         <span className="text-xs text-text-muted">
           {totalCount} mod{totalCount !== 1 ? "s" : ""}
         </span>
       </div>
 
-      {filteredMods.length > 0 && (
+      {mods.length > 0 && scope !== "detected" && (
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-text-primary" title="Mods installed and managed through this app — you can enable, disable, or uninstall them">
@@ -585,17 +610,23 @@ export function InstalledModsTable({
               onChange={(v) => setChip(v as ChipKey)}
             />
           </div>
-          <ManagedModsGrid
-            mods={filteredMods}
-            gameName={gameName}
-            updateByInstalledId={updateByInstalledId}
-            updateByNexusId={updateByNexusId}
-            onModClick={onModClick}
-          />
+          {filteredMods.length > 0 ? (
+            <ManagedModsGrid
+              mods={filteredMods}
+              gameName={gameName}
+              updateByInstalledId={updateByInstalledId}
+              updateByNexusId={updateByNexusId}
+              onModClick={onModClick}
+            />
+          ) : (
+            <p className="py-4 text-sm text-text-muted text-center">
+              No {chip === "disabled" ? "disabled" : chip === "enabled" ? "enabled" : "updatable"} mods.
+            </p>
+          )}
         </div>
       )}
 
-      {filteredRecognized.length > 0 && (
+      {filteredRecognized.length > 0 && scope !== "installed" && (
         <div>
           <h3 className="text-sm font-semibold text-text-primary mb-3" title="Mods found on disk and matched to Nexus — click Install to manage them">
             Detected on Disk ({filteredRecognized.length})
@@ -616,9 +647,9 @@ export function InstalledModsTable({
         </div>
       )}
 
-      {totalCount === 0 && (mods.length > 0 || recognized.length > 0) && (
-        <p className="py-4 text-sm text-text-muted">
-          No mods matching &quot;{filter}&quot;.
+      {totalCount === 0 && (filter || scope !== "all") && (mods.length > 0 || recognized.length > 0) && (
+        <p className="py-4 text-sm text-text-muted text-center">
+          {filter ? <>No mods matching &quot;{filter}&quot;.</> : "No mods in this view."}
         </p>
       )}
     </div>
