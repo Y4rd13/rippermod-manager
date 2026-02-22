@@ -8,8 +8,8 @@ interface Props {
   disabled: boolean;
   isToggling: boolean;
   isUninstalling: boolean;
-  onToggle: () => void;
-  onUninstall: () => void;
+  onToggle: () => Promise<unknown>;
+  onUninstall: () => Promise<unknown>;
 }
 
 type ConfirmAction = "disable" | "enable" | "uninstall" | null;
@@ -49,32 +49,20 @@ export function InstalledModCardAction({
         <Trash2 size={14} className="text-danger" />
       </Button>
 
-      {confirmAction === "disable" && (
+      {(confirmAction === "disable" || confirmAction === "enable") && (
         <ConfirmDialog
-          title="Disable Mod?"
-          message="This mod's files will be renamed and it won't load in-game."
-          confirmLabel="Disable"
+          title={confirmAction === "disable" ? "Disable Mod?" : "Enable Mod?"}
+          message={
+            confirmAction === "disable"
+              ? "This mod's files will be renamed and it won't load in-game."
+              : "This mod's files will be restored and it will load in-game."
+          }
+          confirmLabel={confirmAction === "disable" ? "Disable" : "Enable"}
           variant="warning"
-          icon={PowerOff}
+          icon={confirmAction === "disable" ? PowerOff : Power}
           loading={isToggling}
-          onConfirm={() => {
-            onToggle();
-            setConfirmAction(null);
-          }}
-          onCancel={() => setConfirmAction(null)}
-        />
-      )}
-
-      {confirmAction === "enable" && (
-        <ConfirmDialog
-          title="Enable Mod?"
-          message="This mod's files will be restored and it will load in-game."
-          confirmLabel="Enable"
-          variant="warning"
-          icon={Power}
-          loading={isToggling}
-          onConfirm={() => {
-            onToggle();
+          onConfirm={async () => {
+            await onToggle();
             setConfirmAction(null);
           }}
           onCancel={() => setConfirmAction(null)}
@@ -89,8 +77,8 @@ export function InstalledModCardAction({
           variant="danger"
           icon={Trash2}
           loading={isUninstalling}
-          onConfirm={() => {
-            onUninstall();
+          onConfirm={async () => {
+            await onUninstall();
             setConfirmAction(null);
           }}
           onCancel={() => setConfirmAction(null)}

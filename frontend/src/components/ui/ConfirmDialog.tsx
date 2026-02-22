@@ -1,5 +1,5 @@
 import { AlertTriangle, type LucideIcon } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
 
 import { Button } from "@/components/ui/Button";
 
@@ -24,23 +24,29 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: Props) {
+  const dialogId = useId();
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
+      if (e.key === "Escape" && !loading) onCancel();
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel]);
+  }, [onCancel, loading]);
+
+  const handleBackdropClick = () => {
+    if (!loading) onCancel();
+  };
 
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
-      onClick={onCancel}
+      onClick={handleBackdropClick}
     >
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="confirm-dialog-title"
+        aria-labelledby={`confirm-dialog-title-${dialogId}`}
         className="w-full max-w-sm rounded-xl border border-border bg-surface-1 p-6"
         onClick={(e) => e.stopPropagation()}
       >
@@ -49,7 +55,7 @@ export function ConfirmDialog({
         >
           <Icon size={20} />
           <h3
-            id="confirm-dialog-title"
+            id={`confirm-dialog-title-${dialogId}`}
             className="text-lg font-semibold text-text-primary"
           >
             {title}
@@ -57,9 +63,10 @@ export function ConfirmDialog({
         </div>
         <p className="mb-6 text-sm text-text-secondary">{message}</p>
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" size="sm" onClick={onCancel}>
+          <Button variant="secondary" size="sm" disabled={loading} onClick={onCancel}>
             Cancel
           </Button>
+          {/* Always danger-styled: both warning and danger dialogs guard destructive/state-changing actions */}
           <Button variant="danger" size="sm" loading={loading} onClick={onConfirm}>
             {confirmLabel}
           </Button>

@@ -277,8 +277,9 @@ export function GamesPage() {
           icon={Trash2}
           loading={deleteGame.isPending}
           onConfirm={() => {
-            deleteGame.mutate(confirmDelete);
-            setConfirmDelete(null);
+            deleteGame.mutate(confirmDelete, {
+              onSuccess: () => setConfirmDelete(null),
+            });
           }}
           onCancel={() => setConfirmDelete(null)}
         />
