@@ -365,7 +365,7 @@ async def _resolve_file_ids(
                 nexus_files = files_resp.get("files", [])
                 file_updates = files_resp.get("file_updates", [])
 
-                local_fn = update.get("local_filename", "")
+                local_fn = update.get("source_archive", "")
                 best: dict[str, Any] | None = None
 
                 if local_fn:
@@ -663,7 +663,7 @@ async def check_all_updates(
                     "local_timestamp": mod.upload_timestamp,
                     "nexus_timestamp": None,
                     "detection_method": detection,
-                    "local_filename": mod.source_archive,
+                    "source_archive": mod.source_archive,
                 }
             )
         else:
@@ -773,6 +773,7 @@ def check_cached_updates(
                     "local_timestamp": mod.upload_timestamp,
                     "nexus_timestamp": None,
                     "detection_method": "version",
+                    "source_archive": mod.source_archive,
                 }
             )
 

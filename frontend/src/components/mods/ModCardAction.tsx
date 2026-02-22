@@ -1,4 +1,5 @@
 import {
+  ArrowUpCircle,
   Check,
   Download,
   ExternalLink,
@@ -20,6 +21,8 @@ interface Props {
   nexusUrl?: string;
   hasConflicts: boolean;
   isDownloading: boolean;
+  isUpdate?: boolean;
+  updateVersion?: string;
   onInstall: () => void;
   onInstallByFilename: () => void;
   onDownload: () => void;
@@ -35,6 +38,8 @@ export function ModCardAction({
   nexusUrl,
   hasConflicts,
   isDownloading,
+  isUpdate,
+  updateVersion,
   onInstall,
   onInstallByFilename,
   onDownload,
@@ -72,10 +77,11 @@ export function ModCardAction({
     return (
       <button
         onClick={(e) => { e.stopPropagation(); onInstallByFilename(); }}
-        className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent/80"
+        title={isUpdate ? `Install update${updateVersion ? ` v${updateVersion}` : ""} from: ${completedDownload.file_name}` : `Install from downloaded file: ${completedDownload.file_name}`}
+        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-white hover:opacity-80 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
       >
-        <Package size={12} />
-        Install
+        {isUpdate ? <ArrowUpCircle size={12} /> : <Package size={12} />}
+        {isUpdate ? "Install Update" : "Install"}
       </button>
     );
   }
@@ -85,11 +91,11 @@ export function ModCardAction({
       <button
         onClick={(e) => { e.stopPropagation(); onInstall(); }}
         disabled={hasConflicts}
-        className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent/80 disabled:opacity-50"
-        title={`Install from ${archive.filename}`}
+        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
+        title={isUpdate ? `Install update${updateVersion ? ` v${updateVersion}` : ""} from ${archive.filename}` : `Install from ${archive.filename}`}
       >
-        <Download size={12} />
-        Install
+        {isUpdate ? <ArrowUpCircle size={12} /> : <Download size={12} />}
+        {isUpdate ? "Install Update" : "Install"}
       </button>
     );
   }
@@ -99,14 +105,22 @@ export function ModCardAction({
       <button
         onClick={onDownload}
         disabled={isDownloading}
-        className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent/80 disabled:opacity-50"
+        title={isUpdate ? `Download update${updateVersion ? ` v${updateVersion}` : ""} from Nexus` : "Download this mod from Nexus"}
+        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
       >
-        {isDownloading ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
-        Download
+        {isDownloading ? (
+          <Loader2 size={12} className="animate-spin" />
+        ) : isUpdate ? (
+          <ArrowUpCircle size={12} />
+        ) : (
+          <Download size={12} />
+        )}
+        {isUpdate ? "Update" : "Download"}
       </button>
       {nexusUrl && (
         <button
           onClick={() => openUrl(nexusUrl).catch(() => {})}
+          title="Open mod page on Nexus Mods"
           className="inline-flex items-center gap-1 rounded-md bg-surface-2 px-2 py-1 text-xs font-medium text-text-secondary hover:bg-surface-2/80 border border-border"
         >
           <ExternalLink size={12} />

@@ -35,6 +35,7 @@ class ModUpdate(BaseModel):
     local_timestamp: int | None = None
     nexus_timestamp: int | None = None
     detection_method: Literal["timestamp", "version", "both"] = "version"
+    source_archive: str | None = None
 
 
 class UpdateCheckResult(BaseModel):

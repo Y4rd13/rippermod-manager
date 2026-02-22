@@ -76,7 +76,7 @@ export function NexusModCard({
           )}
           {version && <span className="truncate">v{version}</span>}
           {endorsementCount != null && endorsementCount > 0 && (
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-1" title={`${endorsementCount.toLocaleString()} endorsements on Nexus`}>
               <Heart size={12} />
               {endorsementCount.toLocaleString()}
             </span>
