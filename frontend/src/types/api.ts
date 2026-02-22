@@ -238,6 +238,7 @@ export interface InstalledModOut {
   picture_url: string | null;
   category: string | null;
   last_downloaded_at: string | null;
+  nexus_url: string | null;
 }
 
 export interface InstallRequest {
