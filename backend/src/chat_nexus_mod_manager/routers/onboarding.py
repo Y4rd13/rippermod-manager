@@ -71,3 +71,20 @@ def complete_onboarding(
 
     session.commit()
     return get_onboarding_status(session)
+
+
+@router.post("/reset", response_model=OnboardingStatus)
+def reset_onboarding(session: Session = Depends(get_session)) -> OnboardingStatus:
+    """Clear Nexus API key and reset onboarding so the user can reconnect."""
+    nexus_key = session.exec(select(AppSetting).where(AppSetting.key == "nexus_api_key")).first()
+    if nexus_key:
+        session.delete(nexus_key)
+
+    completed = session.exec(
+        select(AppSetting).where(AppSetting.key == "onboarding_completed")
+    ).first()
+    if completed:
+        completed.value = "false"
+
+    session.commit()
+    return get_onboarding_status(session)

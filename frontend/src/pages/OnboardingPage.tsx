@@ -573,7 +573,9 @@ function AddGameStep({ onFinish, onBack }: { onFinish: () => void; onBack: () =>
 export function OnboardingPage() {
   const navigate = useNavigate();
   const { data: onboardingStatus } = useOnboardingStatus();
+  const completeOnboarding = useCompleteOnboarding();
   const store = useOnboardingStore();
+  const initializedRef = useRef(false);
 
   useEffect(() => {
     if (onboardingStatus?.completed) {
@@ -581,7 +583,30 @@ export function OnboardingPage() {
     }
   }, [onboardingStatus?.completed, navigate]);
 
-  const handleNext = () => store.setStep(store.currentStep + 1);
+  // Skip completed steps when returning from logout
+  useEffect(() => {
+    if (!onboardingStatus || initializedRef.current) return;
+    initializedRef.current = true;
+    if (onboardingStatus.has_openai_key && !onboardingStatus.has_nexus_key) {
+      store.setStep(2);
+    }
+  }, [onboardingStatus, store.setStep]);
+
+  const handleNext = () => {
+    const nextStep = store.currentStep + 1;
+    // After Nexus auth (step 2 → 3): if user already has a game, auto-complete
+    if (nextStep === 3 && onboardingStatus?.has_game) {
+      completeOnboarding.mutate(
+        {},
+        {
+          onSuccess: () => navigate("/dashboard", { replace: true }),
+          onError: () => store.setStep(nextStep),
+        },
+      );
+      return;
+    }
+    store.setStep(nextStep);
+  };
   const handleBack = () => store.setStep(Math.max(0, store.currentStep - 1));
   const handleFinish = () => navigate("/dashboard", { replace: true });
 
