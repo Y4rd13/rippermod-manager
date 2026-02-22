@@ -277,11 +277,11 @@ function ManagedModsGrid({
                         DL: {timeAgo(isoToEpoch(mod.last_downloaded_at))}
                       </span>
                     )}
-                    {mod.nexus_mod_id != null && (
+                    {mod.nexus_url && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          openUrl(`https://www.nexusmods.com/${gameName}/mods/${mod.nexus_mod_id}`).catch(() => {});
+                          openUrl(mod.nexus_url!).catch(() => {});
                         }}
                         title="Open mod page on Nexus Mods"
                         className="ml-auto text-text-muted hover:text-accent shrink-0"

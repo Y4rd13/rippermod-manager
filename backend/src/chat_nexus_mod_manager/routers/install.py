@@ -134,6 +134,11 @@ async def list_installed(
                 picture_url=meta.picture_url if meta else None,
                 category=meta.category if meta else None,
                 last_downloaded_at=dl_date,
+                nexus_url=(
+                    f"https://www.nexusmods.com/{game.domain_name}/mods/{mod.nexus_mod_id}"
+                    if mod.nexus_mod_id
+                    else None
+                ),
             )
         )
     return result
