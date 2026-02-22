@@ -1,10 +1,17 @@
 import { Download, Gamepad2, Heart, Link2, Package, RefreshCw, TrendingUp } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { Card } from "@/components/ui/Card";
-import { useGames, useTrendingMods } from "@/hooks/queries";
+import { useGames, useInstalledMods, useMods, useTrendingMods, useUpdates } from "@/hooks/queries";
 import { formatCount } from "@/lib/format";
 import type { TrendingMod } from "@/types/api";
+
+interface GameStatsData {
+  totalInstalled: number;
+  nexusMatched: number;
+  updatesAvailable: number;
+}
 
 function StatCard({
   icon: Icon,
@@ -30,6 +37,30 @@ function StatCard({
       </div>
     </Card>
   );
+}
+
+function GameStatsReporter({ gameName, onReport }: { gameName: string; onReport: (name: string, stats: GameStatsData) => void }) {
+  const { data: mods = [] } = useMods(gameName);
+  const { data: installed = [] } = useInstalledMods(gameName);
+  const { data: updates } = useUpdates(gameName);
+
+  const stats = useMemo(() => ({
+    totalInstalled: installed.length,
+    nexusMatched: mods.filter((m) => m.nexus_match).length,
+    updatesAvailable: updates?.updates_available ?? 0,
+  }), [installed.length, mods, updates?.updates_available]);
+
+  const serialized = `${stats.totalInstalled}-${stats.nexusMatched}-${stats.updatesAvailable}`;
+  const lastRef = useRef("");
+
+  useEffect(() => {
+    if (lastRef.current !== serialized) {
+      lastRef.current = serialized;
+      onReport(gameName, stats);
+    }
+  }, [serialized, gameName, stats, onReport]);
+
+  return null;
 }
 
 const PLACEHOLDER_IMG =
@@ -95,10 +126,31 @@ function CommunityActivity({ gameName }: { gameName: string }) {
 
 export function DashboardPage() {
   const { data: games = [] } = useGames();
+  const [gameStats, setGameStats] = useState<Record<string, GameStatsData>>({});
+
+  const handleReport = useCallback((name: string, stats: GameStatsData) => {
+    setGameStats((prev) => ({ ...prev, [name]: stats }));
+  }, []);
+
+  const totals = useMemo(() => {
+    let totalInstalled = 0;
+    let nexusMatched = 0;
+    let updatesAvailable = 0;
+    for (const s of Object.values(gameStats)) {
+      totalInstalled += s.totalInstalled;
+      nexusMatched += s.nexusMatched;
+      updatesAvailable += s.updatesAvailable;
+    }
+    return { totalInstalled, nexusMatched, updatesAvailable };
+  }, [gameStats]);
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-text-primary">Dashboard</h1>
+
+      {games.map((game) => (
+        <GameStatsReporter key={game.id} gameName={game.name} onReport={handleReport} />
+      ))}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
@@ -110,19 +162,19 @@ export function DashboardPage() {
         <StatCard
           icon={Package}
           label="Total Mods"
-          value="--"
+          value={games.length > 0 ? totals.totalInstalled : "--"}
           color="bg-success/10 text-success"
         />
         <StatCard
           icon={Link2}
           label="Nexus Matched"
-          value="--"
+          value={games.length > 0 ? totals.nexusMatched : "--"}
           color="bg-warning/10 text-warning"
         />
         <StatCard
           icon={RefreshCw}
           label="Updates Available"
-          value="--"
+          value={games.length > 0 ? totals.updatesAvailable : "--"}
           color="bg-danger/10 text-danger"
         />
       </div>

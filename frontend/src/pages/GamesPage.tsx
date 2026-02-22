@@ -1,5 +1,6 @@
 import { CheckCircle, FolderOpen, Gamepad2, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "@/stores/toast-store";
 import { Link } from "react-router";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
@@ -106,7 +107,7 @@ function AddGameDialog({
           setDetectedPaths([]);
           setError("");
         },
-        onError: (e) => setError(e.message),
+        onError: (e) => toast.error("Failed to add game", e.message),
       },
     );
   };

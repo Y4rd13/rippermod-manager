@@ -52,6 +52,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
   const cleanupOrphans = useCleanupOrphans();
   const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
   const [selectedArchive, setSelectedArchive] = useState<string | null>(null);
+  const [confirmCleanup, setConfirmCleanup] = useState(false);
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<ArchiveSortKey>("name");
   const [linkChip, setLinkChip] = useState<LinkChip>("all");
@@ -233,16 +234,31 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
           <span className="text-xs text-text-muted">
             {filtered.length} archive{filtered.length !== 1 ? "s" : ""}
           </span>
-          {orphanCount > 0 && (
+          {orphanCount > 0 && !confirmCleanup && (
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => cleanupOrphans.mutate(gameName)}
-              loading={cleanupOrphans.isPending}
+              onClick={() => setConfirmCleanup(true)}
               title={`Delete ${orphanCount} archive${orphanCount !== 1 ? "s" : ""} not linked to any installed mod`}
             >
               <Trash2 size={14} /> Clean {orphanCount} Orphan{orphanCount !== 1 ? "s" : ""}
             </Button>
+          )}
+          {confirmCleanup && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-danger">Delete {orphanCount} archive{orphanCount !== 1 ? "s" : ""}?</span>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => { cleanupOrphans.mutate(gameName); setConfirmCleanup(false); }}
+                loading={cleanupOrphans.isPending}
+              >
+                Confirm
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setConfirmCleanup(false)}>
+                Cancel
+              </Button>
+            </div>
           )}
         </div>
 
