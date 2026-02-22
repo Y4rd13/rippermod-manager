@@ -203,9 +203,11 @@ def collect_tracked_mods(
             upload_timestamp=mod.upload_timestamp,
             nexus_url=nexus_url,
             local_file_mtime=(
-                mtime_map[mod.mod_group_id]
-                if mod.mod_group_id and mod.mod_group_id in mtime_map
-                else mod.upload_timestamp
+                mod.upload_timestamp
+                if mod.upload_timestamp
+                else mtime_map.get(mod.mod_group_id)
+                if mod.mod_group_id
+                else None
             ),
             source_archive=mod.source_archive,
         )
@@ -747,7 +749,7 @@ async def check_all_updates(
                     and nexus_file_ts <= local_mtime
                 ):
                     logger.debug(
-                        "False positive filtered: %s (file_ts=%d <= mtime=%d)",
+                        "False positive filtered: %s (file_ts=%d <= local_ts=%d)",
                         u["display_name"],
                         nexus_file_ts,
                         local_mtime,
