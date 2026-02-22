@@ -12,6 +12,7 @@ import { FilterChips } from "@/components/ui/FilterChips";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { useRefreshTrending } from "@/hooks/mutations";
+import { toast } from "@/stores/toast-store";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { formatCount, timeAgo } from "@/lib/format";
@@ -137,7 +138,10 @@ export function TrendingGrid({
     if (!mod) return;
     if (key === "view") onModClick?.(mod.mod_id);
     else if (key === "nexus") window.open(mod.nexus_url, "_blank", "noopener,noreferrer");
-    else if (key === "copy") navigator.clipboard.writeText(mod.name);
+    else if (key === "copy") void navigator.clipboard.writeText(mod.name).then(
+      () => toast.success("Copied to clipboard"),
+      () => toast.error("Failed to copy"),
+    );
   };
 
   const renderModCard = (mod: TrendingMod) => {

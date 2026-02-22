@@ -59,22 +59,22 @@ export function NexusModCard({
       </div>
 
       <div className="p-4 flex flex-col flex-1 gap-2">
-        <h3 className="text-sm font-semibold text-text-primary leading-tight line-clamp-2">
+        <h3 className="text-sm font-semibold text-text-primary leading-tight line-clamp-2" title={modName}>
           {modName}
         </h3>
 
         {summary && (
-          <p className="text-xs text-text-muted line-clamp-2">{summary}</p>
+          <p className="text-xs text-text-muted line-clamp-2" title={summary}>{summary}</p>
         )}
 
         <div className="flex items-center gap-3 text-xs text-text-muted mt-auto pt-1">
           {author && (
-            <span className="flex items-center gap-1 truncate">
+            <span className="flex items-center gap-1 truncate" title={author}>
               <User size={12} />
               {author}
             </span>
           )}
-          {version && <span className="truncate">v{version}</span>}
+          {version && <span className="truncate" title={`v${version}`}>v{version}</span>}
           {endorsementCount != null && endorsementCount > 0 && (
             <span className="flex items-center gap-1" title={`${endorsementCount.toLocaleString()} endorsements on Nexus`}>
               <Heart size={12} />

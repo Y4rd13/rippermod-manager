@@ -1,15 +1,17 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Outlet } from "react-router";
 
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Titlebar } from "@/components/layout/Titlebar";
+import { KeyboardShortcutsModal } from "@/components/ui/KeyboardShortcutsModal";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useUIStore } from "@/stores/ui-store";
 
 export function RootLayout() {
   const toggleChatPanel = useUIStore((s) => s.toggleChatPanel);
   const setChatPanelOpen = useUIStore((s) => s.setChatPanelOpen);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -22,6 +24,13 @@ export function RootLayout() {
         if (activeEl === "INPUT" || activeEl === "TEXTAREA" || activeEl === "SELECT") return;
         if (document.querySelector("[role='dialog']") || document.querySelector("[role='menu']")) return;
         setChatPanelOpen(false);
+      }
+      if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const tag = document.activeElement?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        const openDialog = document.querySelector("[role='dialog']");
+        if (openDialog && !openDialog.querySelector("#shortcuts-title")) return;
+        setShowShortcuts((prev) => !prev);
       }
     };
     document.addEventListener("keydown", handleKeyDown);
@@ -39,6 +48,7 @@ export function RootLayout() {
         <ChatPanel />
       </div>
       <ToastContainer />
+      {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
     </div>
   );
 }

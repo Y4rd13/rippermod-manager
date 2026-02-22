@@ -16,6 +16,7 @@ import {
   useDeleteArchive,
   useInstallMod,
 } from "@/hooks/mutations";
+import { toast } from "@/stores/toast-store";
 import { useBulkSelect } from "@/hooks/use-bulk-select";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { formatBytes, isoToEpoch, timeAgo } from "@/lib/format";
@@ -56,6 +57,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
   const [confirmCleanup, setConfirmCleanup] = useState(false);
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<ArchiveSortKey>("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [linkChip, setLinkChip] = useState<LinkChip>("all");
 
   const { menuState, openMenu, closeMenu } = useContextMenu<AvailableArchive>();
@@ -75,18 +77,23 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
     });
 
     items.sort((a, b) => {
+      let cmp = 0;
       switch (sortKey) {
         case "name":
-          return a.parsed_name.localeCompare(b.parsed_name);
+          cmp = a.parsed_name.localeCompare(b.parsed_name);
+          break;
         case "size":
-          return b.size - a.size;
+          cmp = a.size - b.size;
+          break;
         case "version":
-          return (a.parsed_version ?? "").localeCompare(b.parsed_version ?? "", undefined, { numeric: true });
+          cmp = (a.parsed_version ?? "").localeCompare(b.parsed_version ?? "", undefined, { numeric: true });
+          break;
       }
+      return sortDir === "asc" ? cmp : -cmp;
     });
 
     return items;
-  }, [archives, filter, sortKey, linkChip]);
+  }, [archives, filter, sortKey, sortDir, linkChip]);
 
   const bulk = useBulkSelect(filtered.map((a) => a.filename));
 
@@ -175,7 +182,10 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
     if (key === "install") {
       handleCheckConflicts(archive.filename);
     } else if (key === "copy") {
-      navigator.clipboard.writeText(archive.filename);
+      void navigator.clipboard.writeText(archive.filename).then(
+        () => toast.success("Copied to clipboard"),
+        () => toast.error("Failed to copy"),
+      );
     } else if (key === "delete") {
       deleteArchive.mutate({ gameName, filename: archive.filename });
     }
@@ -230,8 +240,14 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
           </div>
           <SortSelect
             value={sortKey}
-            onChange={(v) => setSortKey(v as ArchiveSortKey)}
+            onChange={(v) => {
+              const key = v as ArchiveSortKey;
+              setSortKey(key);
+              setSortDir(key === "size" ? "desc" : "asc");
+            }}
             options={ARCHIVE_SORT_OPTIONS}
+            sortDir={sortDir}
+            onSortDirChange={setSortDir}
           />
           <span className="text-xs text-text-muted">
             {filtered.length} archive{filtered.length !== 1 ? "s" : ""}
@@ -290,7 +306,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
               {filtered.map((a) => (
                 <tr
                   key={a.filename}
-                  className="border-b border-border/50"
+                  className="border-b border-border/50 hover:bg-surface-1/50 transition-colors"
                   onContextMenu={(e) => openMenu(e, a)}
                 >
                   <td className="py-2 pr-4">
@@ -301,7 +317,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                       className="rounded border-border accent-accent"
                     />
                   </td>
-                  <td className="py-2 pr-4 font-mono text-xs text-text-primary max-w-[200px] truncate">
+                  <td className="py-2 pr-4 font-mono text-xs text-text-primary max-w-[200px] truncate" title={a.filename}>
                     {a.filename}
                   </td>
                   <td className="py-2 pr-4 text-text-secondary">
@@ -355,9 +371,15 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
         </div>
 
         {filtered.length === 0 && (filter || linkChip !== "all") && (
-          <p className="py-4 text-sm text-text-muted">
-            No archives matching the current filters.
-          </p>
+          <div className="py-4 text-sm text-text-muted text-center space-y-2">
+            <p>No archives matching the current filters.</p>
+            <button
+              className="text-accent hover:text-accent-hover text-xs transition-colors"
+              onClick={() => { setFilter(""); setLinkChip("all"); }}
+            >
+              Clear filters
+            </button>
+          </div>
         )}
       </div>
 
@@ -392,8 +414,21 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
       </BulkActionBar>
 
       {queueProgress && (
-        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-40 rounded-lg border border-border bg-surface-1 px-4 py-2 shadow-lg text-sm text-text-primary">
-          Installing {queueProgress.current} of {queueProgress.total}...
+        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-40 rounded-lg border border-border bg-surface-1 px-4 py-3 shadow-lg min-w-[240px]">
+          <div className="flex items-center justify-between text-sm text-text-primary mb-2">
+            <span>Installing {queueProgress.current} of {queueProgress.total}...</span>
+            <span className="text-xs text-text-muted tabular-nums">
+              {queueProgress.total > 0
+                ? Math.round((queueProgress.current / queueProgress.total) * 100)
+                : 0}%
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-accent transition-all duration-300"
+              style={{ width: `${queueProgress.total > 0 ? (queueProgress.current / queueProgress.total) * 100 : 0}%` }}
+            />
+          </div>
         </div>
       )}
 
