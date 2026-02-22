@@ -129,6 +129,19 @@ export function useCompleteOnboarding() {
   });
 }
 
+export function useDisconnectNexus() {
+  const qc = useQueryClient();
+  return useMutation<OnboardingStatus, Error, void>({
+    mutationFn: () => api.post("/api/v1/onboarding/reset"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["onboarding"] });
+      qc.invalidateQueries({ queryKey: ["settings"] });
+      toast.success("Nexus account disconnected");
+    },
+    onError: () => toast.error("Failed to disconnect"),
+  });
+}
+
 export function useInstallMod() {
   const qc = useQueryClient();
   return useMutation<InstallResult, Error, { gameName: string; data: InstallRequest }>({
