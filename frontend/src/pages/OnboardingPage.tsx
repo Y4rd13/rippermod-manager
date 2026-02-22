@@ -82,7 +82,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
   );
 }
 
-function AISetupStep({ onNext }: { onNext: () => void }) {
+function AISetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
   const store = useOnboardingStore();
   const saveSettings = useSaveSettings();
   const [error, setError] = useState("");
@@ -124,6 +124,7 @@ function AISetupStep({ onNext }: { onNext: () => void }) {
         error={error}
       />
       <div className="flex justify-end gap-3">
+        <Button variant="ghost" onClick={onBack}>Back</Button>
         <Button onClick={handleSave} loading={saveSettings.isPending}>
           Continue
         </Button>
@@ -132,13 +133,25 @@ function AISetupStep({ onNext }: { onNext: () => void }) {
   );
 }
 
-function NexusSetupStep({ onNext }: { onNext: () => void }) {
+function NexusSetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
   const store = useOnboardingStore();
   const connectNexus = useConnectNexus();
   const sso = useNexusSSO();
   const [error, setError] = useState("");
   const [manualValidated, setManualValidated] = useState(false);
   const [showManual, setShowManual] = useState(false);
+
+  const ssoStartRef = useRef(0);
+  const [ssoElapsed, setSsoElapsed] = useState(0);
+
+  useEffect(() => {
+    if (sso.state !== "waiting") return;
+    ssoStartRef.current = Date.now();
+    const timer = setInterval(() => {
+      setSsoElapsed(Math.floor((Date.now() - ssoStartRef.current) / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [sso.state]);
 
   const ssoSuccess = sso.state === "success" && sso.result !== null;
   const validated = manualValidated || ssoSuccess;
@@ -191,7 +204,8 @@ function NexusSetupStep({ onNext }: { onNext: () => void }) {
           <p className="text-success text-sm">
             Connected as {displayUsername}
           </p>
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-3">
+            <Button variant="ghost" onClick={onBack}>Back</Button>
             <Button onClick={onNext}>Continue</Button>
           </div>
         </>
@@ -211,16 +225,23 @@ function NexusSetupStep({ onNext }: { onNext: () => void }) {
           </Button>
 
           {sso.state === "waiting" && (
-            <p className="text-text-muted text-xs text-center">
-              Complete the authorization in your browser, then return here.
-              <button
-                type="button"
-                onClick={() => sso.cancel()}
-                className="ml-2 text-accent underline"
-              >
-                Cancel
-              </button>
-            </p>
+            <div className="text-center space-y-1">
+              <p className="text-text-muted text-xs">
+                Waiting... ({ssoElapsed}s) — Complete authorization in your browser.
+                <button
+                  type="button"
+                  onClick={() => sso.cancel()}
+                  className="ml-2 text-accent underline"
+                >
+                  Cancel
+                </button>
+              </p>
+              {ssoElapsed > 120 && (
+                <p className="text-warning text-xs">
+                  Taking longer than expected — try again or use manual entry below.
+                </p>
+              )}
+            </div>
           )}
 
           {sso.error && <p className="text-danger text-sm">{sso.error}</p>}
@@ -273,7 +294,7 @@ function NexusSetupStep({ onNext }: { onNext: () => void }) {
   );
 }
 
-function AddGameStep({ onFinish }: { onFinish: () => void }) {
+function AddGameStep({ onFinish, onBack }: { onFinish: () => void; onBack: () => void }) {
   const store = useOnboardingStore();
   const createGame = useCreateGame();
   const syncNexus = useSyncNexus();
@@ -540,6 +561,7 @@ function AddGameStep({ onFinish }: { onFinish: () => void }) {
       )}
 
       <div className="flex justify-end gap-3">
+        <Button variant="ghost" onClick={onBack} disabled={isLoading}>Back</Button>
         <Button onClick={handleFinish} loading={isLoading}>
           Finish Setup
         </Button>
@@ -560,6 +582,7 @@ export function OnboardingPage() {
   }, [onboardingStatus?.completed, navigate]);
 
   const handleNext = () => store.setStep(store.currentStep + 1);
+  const handleBack = () => store.setStep(Math.max(0, store.currentStep - 1));
   const handleFinish = () => navigate("/dashboard", { replace: true });
 
   return (
@@ -567,9 +590,9 @@ export function OnboardingPage() {
       <div className="w-full max-w-2xl">
         <StepIndicator current={store.currentStep} />
         {store.currentStep === 0 && <WelcomeStep onNext={handleNext} />}
-        {store.currentStep === 1 && <AISetupStep onNext={handleNext} />}
-        {store.currentStep === 2 && <NexusSetupStep onNext={handleNext} />}
-        {store.currentStep === 3 && <AddGameStep onFinish={handleFinish} />}
+        {store.currentStep === 1 && <AISetupStep onNext={handleNext} onBack={handleBack} />}
+        {store.currentStep === 2 && <NexusSetupStep onNext={handleNext} onBack={handleBack} />}
+        {store.currentStep === 3 && <AddGameStep onFinish={handleFinish} onBack={handleBack} />}
       </div>
     </div>
   );

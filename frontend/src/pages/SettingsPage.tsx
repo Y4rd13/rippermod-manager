@@ -78,7 +78,7 @@ export function SettingsPage() {
   const currentNexus = settings.find((s) => s.key === "nexus_api_key")?.value;
 
   return (
-    <div className="space-y-6 max-w-xl">
+    <div className="space-y-6 max-w-2xl">
       <h1 className="text-2xl font-bold text-text-primary">Settings</h1>
 
       <Card>
@@ -137,6 +137,16 @@ export function SettingsPage() {
           <Button onClick={handleSave} loading={saveSettings.isPending}>
             Save Changes
           </Button>
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="text-lg font-semibold text-text-primary mb-4">
+          About
+        </h2>
+        <div className="space-y-2 text-sm text-text-secondary">
+          <p>Chat Nexus Mod Manager v0.1.0</p>
+          <p>AI-powered mod manager for PC games.</p>
         </div>
       </Card>
     </div>
