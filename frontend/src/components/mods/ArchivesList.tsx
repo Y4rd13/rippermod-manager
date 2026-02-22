@@ -1,5 +1,5 @@
 import { AlertTriangle, Archive, Copy, Download, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { BulkActionBar } from "@/components/ui/BulkActionBar";
@@ -95,6 +95,14 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
     { key: "unlinked", label: "Unlinked", count: unlinkedCount },
   ];
 
+  const installQueueRef = useRef<string[]>([]);
+
+  const processNextInQueue = () => {
+    if (installQueueRef.current.length === 0) return;
+    const next = installQueueRef.current.shift()!;
+    handleCheckConflicts(next);
+  };
+
   const handleCheckConflicts = async (filename: string) => {
     setSelectedArchive(filename);
     const result = await checkConflicts.mutateAsync({ gameName, archiveFilename: filename });
@@ -102,6 +110,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
       setConflicts(result);
     } else {
       installMod.mutate({ gameName, data: { archive_filename: filename, skip_conflicts: [] } });
+      processNextInQueue();
     }
   };
 
@@ -113,6 +122,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
     });
     setConflicts(null);
     setSelectedArchive(null);
+    processNextInQueue();
   };
 
   const handleInstallOverwrite = () => {
@@ -120,13 +130,13 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
     installMod.mutate({ gameName, data: { archive_filename: conflicts.archive_filename, skip_conflicts: [] } });
     setConflicts(null);
     setSelectedArchive(null);
+    processNextInQueue();
   };
 
-  const handleBulkInstall = async () => {
-    for (const filename of bulk.selectedIds) {
-      await handleCheckConflicts(filename);
-    }
+  const handleBulkInstall = () => {
+    installQueueRef.current = [...bulk.selectedIds];
     bulk.deselectAll();
+    processNextInQueue();
   };
 
   const handleContextMenuSelect = (key: string) => {

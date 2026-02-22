@@ -88,25 +88,30 @@ function ManagedModsTable({
     }
   };
 
-  const sorted = [...mods].sort((a, b) => {
-    const dir = sortDir === "asc" ? 1 : -1;
-    switch (sortKey) {
-      case "name":
-        return a.name.localeCompare(b.name) * dir;
-      case "version":
-        return a.installed_version.localeCompare(b.installed_version) * dir;
-      case "files":
-        return (a.file_count - b.file_count) * dir;
-      case "disabled":
-        return (Number(a.disabled) - Number(b.disabled)) * dir;
-      case "updated":
-        return (isoToEpoch(a.nexus_updated_at) - isoToEpoch(b.nexus_updated_at)) * dir;
-      default:
-        return 0;
-    }
-  });
+  const sorted = useMemo(
+    () =>
+      [...mods].sort((a, b) => {
+        const dir = sortDir === "asc" ? 1 : -1;
+        switch (sortKey) {
+          case "name":
+            return a.name.localeCompare(b.name) * dir;
+          case "version":
+            return a.installed_version.localeCompare(b.installed_version) * dir;
+          case "files":
+            return (a.file_count - b.file_count) * dir;
+          case "disabled":
+            return (Number(a.disabled) - Number(b.disabled)) * dir;
+          case "updated":
+            return (isoToEpoch(a.nexus_updated_at) - isoToEpoch(b.nexus_updated_at)) * dir;
+          default:
+            return 0;
+        }
+      }),
+    [mods, sortKey, sortDir],
+  );
 
-  const bulk = useBulkSelect(sorted.map((m) => m.id));
+  const sortedIds = useMemo(() => sorted.map((m) => m.id), [sorted]);
+  const bulk = useBulkSelect(sortedIds);
 
   const { menuState, openMenu, closeMenu } = useContextMenu<InstalledModOut>();
 
@@ -149,26 +154,35 @@ function ManagedModsTable({
 
   const handleBulkEnable = async () => {
     const targets = sorted.filter((m) => bulk.selectedIds.has(m.id) && m.disabled);
-    for (const mod of targets) {
-      await toggleMod.mutateAsync({ gameName, modId: mod.id });
+    try {
+      for (const mod of targets) {
+        await toggleMod.mutateAsync({ gameName, modId: mod.id });
+      }
+    } finally {
+      bulk.deselectAll();
     }
-    bulk.deselectAll();
   };
 
   const handleBulkDisable = async () => {
     const targets = sorted.filter((m) => bulk.selectedIds.has(m.id) && !m.disabled);
-    for (const mod of targets) {
-      await toggleMod.mutateAsync({ gameName, modId: mod.id });
+    try {
+      for (const mod of targets) {
+        await toggleMod.mutateAsync({ gameName, modId: mod.id });
+      }
+    } finally {
+      bulk.deselectAll();
     }
-    bulk.deselectAll();
   };
 
   const handleBulkDelete = async () => {
     const targets = sorted.filter((m) => bulk.selectedIds.has(m.id));
-    for (const mod of targets) {
-      await uninstallMod.mutateAsync({ gameName, modId: mod.id });
+    try {
+      for (const mod of targets) {
+        await uninstallMod.mutateAsync({ gameName, modId: mod.id });
+      }
+    } finally {
+      bulk.deselectAll();
     }
-    bulk.deselectAll();
   };
 
   const selectedMods = sorted.filter((m) => bulk.selectedIds.has(m.id));

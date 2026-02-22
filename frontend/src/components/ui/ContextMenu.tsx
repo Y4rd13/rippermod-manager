@@ -19,6 +19,7 @@ interface ContextMenuProps {
 export function ContextMenu({ items, position, onSelect, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [adjusted, setAdjusted] = useState(position);
+  const [ready, setReady] = useState(false);
 
   useLayoutEffect(() => {
     const el = menuRef.current;
@@ -28,18 +29,22 @@ export function ContextMenu({ items, position, onSelect, onClose }: ContextMenuP
       x: Math.min(position.x, window.innerWidth - rect.width - 8),
       y: Math.min(position.y, window.innerHeight - rect.height - 8),
     });
+    setReady(true);
   }, [position]);
 
   useEffect(() => {
-    const handleClose = (e: MouseEvent | KeyboardEvent) => {
-      if (e instanceof KeyboardEvent && e.key !== "Escape") return;
+    const handleMouseDown = (e: MouseEvent) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
       onClose();
     };
-    document.addEventListener("mousedown", handleClose);
-    document.addEventListener("keydown", handleClose);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener("mousedown", handleClose);
-      document.removeEventListener("keydown", handleClose);
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [onClose]);
 
@@ -47,8 +52,7 @@ export function ContextMenu({ items, position, onSelect, onClose }: ContextMenuP
     <div
       ref={menuRef}
       className="fixed z-50 min-w-[160px] rounded-lg border border-border bg-surface-1 py-1 shadow-lg animate-fade-in"
-      style={{ top: adjusted.y, left: adjusted.x }}
-      onMouseDown={(e) => e.stopPropagation()}
+      style={{ top: adjusted.y, left: adjusted.x, visibility: ready ? "visible" : "hidden" }}
     >
       {items.map((item) =>
         item.separator ? (

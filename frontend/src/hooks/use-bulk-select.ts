@@ -4,12 +4,18 @@ export function useBulkSelect<K extends string | number>(allIds: K[]) {
   const [selectedIds, setSelectedIds] = useState<Set<K>>(new Set());
 
   const validSelected = useMemo(() => {
+    if (selectedIds.size === 0) return selectedIds;
     const idSet = new Set(allIds);
+    let needsPruning = false;
+    for (const id of selectedIds) {
+      if (!idSet.has(id)) { needsPruning = true; break; }
+    }
+    if (!needsPruning) return selectedIds;
     const pruned = new Set<K>();
     for (const id of selectedIds) {
       if (idSet.has(id)) pruned.add(id);
     }
-    return pruned.size !== selectedIds.size ? pruned : selectedIds;
+    return pruned;
   }, [allIds, selectedIds]);
 
   const isSelected = useMemo(() => {

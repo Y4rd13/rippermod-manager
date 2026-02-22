@@ -121,7 +121,7 @@ export function NexusMatchedGrid({
     if (key === "view" && match?.nexus_mod_id != null) {
       onModClick?.(match.nexus_mod_id);
     } else if (key === "open-nexus" && match?.nexus_url) {
-      window.open(match.nexus_url, "_blank");
+      window.open(match.nexus_url, "_blank", "noopener,noreferrer");
     } else if (key === "copy-name" && match?.mod_name) {
       navigator.clipboard.writeText(match.mod_name);
     }

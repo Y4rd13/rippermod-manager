@@ -120,16 +120,13 @@ export function TrendingGrid({
 
   const totalCount = filteredTrending.length + filteredLatest.length;
 
-  const handleContextMenuSelect = useCallback(
-    (key: string) => {
-      const mod = menuState.data;
-      if (!mod) return;
-      if (key === "view") onModClick?.(mod.mod_id);
-      else if (key === "nexus") window.open(mod.nexus_url, "_blank");
-      else if (key === "copy") navigator.clipboard.writeText(mod.name);
-    },
-    [menuState.data, onModClick],
-  );
+  const handleContextMenuSelect = (key: string) => {
+    const mod = menuState.data;
+    if (!mod) return;
+    if (key === "view") onModClick?.(mod.mod_id);
+    else if (key === "nexus") window.open(mod.nexus_url, "_blank", "noopener,noreferrer");
+    else if (key === "copy") navigator.clipboard.writeText(mod.name);
+  };
 
   const renderModCard = (mod: TrendingMod) => {
     const nexusModId = mod.mod_id;

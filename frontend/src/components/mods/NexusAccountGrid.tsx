@@ -108,7 +108,7 @@ export function NexusAccountGrid({
     const mod = menuState.data;
     if (!mod) return;
     if (key === "details") onModClick?.(mod.nexus_mod_id);
-    else if (key === "nexus") window.open(mod.nexus_url, "_blank");
+    else if (key === "nexus") window.open(mod.nexus_url, "_blank", "noopener,noreferrer");
     else if (key === "copy-name") navigator.clipboard.writeText(mod.mod_name);
   }
 
