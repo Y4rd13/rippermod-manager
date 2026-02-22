@@ -40,6 +40,7 @@ export function Sidebar() {
         </div>
         <button
           onClick={toggleSidebar}
+          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           className="rounded-md p-1.5 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
@@ -69,6 +70,7 @@ export function Sidebar() {
       <div className="border-t border-border p-2">
         <button
           onClick={toggleChatPanel}
+          aria-label="Toggle chat panel"
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-text-secondary hover:bg-surface-2 hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           <MessageSquare size={18} />

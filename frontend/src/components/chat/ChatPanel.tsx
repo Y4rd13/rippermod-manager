@@ -227,6 +227,7 @@ export function ChatPanel() {
         </div>
         <button
           onClick={() => setChatPanelOpen(false)}
+          aria-label="Close chat"
           className="rounded-md p-1 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"
         >
           <X size={16} />
@@ -302,6 +303,7 @@ export function ChatPanel() {
             type="submit"
             size="sm"
             disabled={!input.trim() || isStreaming}
+            aria-label="Send message"
           >
             <Send size={14} />
           </Button>

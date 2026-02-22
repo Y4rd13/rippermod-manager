@@ -19,18 +19,21 @@ export function Titlebar() {
       <div className="flex items-center">
         <button
           onClick={() => appWindow.minimize()}
+          aria-label="Minimize window"
           className="flex h-9 w-10 items-center justify-center text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"
         >
           <Minus size={14} />
         </button>
         <button
           onClick={() => appWindow.toggleMaximize()}
+          aria-label="Toggle maximize"
           className="flex h-9 w-10 items-center justify-center text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"
         >
           <Square size={12} />
         </button>
         <button
           onClick={() => appWindow.close()}
+          aria-label="Close window"
           className="flex h-9 w-10 items-center justify-center text-text-muted hover:bg-danger hover:text-white transition-colors"
         >
           <X size={14} />

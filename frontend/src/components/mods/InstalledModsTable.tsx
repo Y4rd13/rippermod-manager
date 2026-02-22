@@ -249,7 +249,7 @@ function ManagedModsGrid({
                   checked={bulk.isSelected(mod.id)}
                   onChange={() => bulk.toggle(mod.id)}
                   onClick={(e) => e.stopPropagation()}
-                  className="rounded border-border accent-accent"
+                  className="shrink-0"
                 />
               </div>
               <NexusModCard
@@ -291,6 +291,7 @@ function ManagedModsGrid({
                           openUrl(mod.nexus_url!).catch(() => {});
                         }}
                         title="Open mod page on Nexus Mods"
+                        aria-label="Open on Nexus Mods"
                         className="ml-auto text-text-muted hover:text-accent shrink-0"
                       >
                         <ExternalLink size={12} />
@@ -396,7 +397,7 @@ function RecognizedModsGrid({
                   type="checkbox"
                   checked={bulk.isSelected(String(mod.id))}
                   onChange={() => bulk.toggle(String(mod.id))}
-                  className="rounded border-border accent-accent"
+                  className="shrink-0"
                 />
               </div>
               <NexusModCard
