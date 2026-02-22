@@ -268,8 +268,8 @@ function ManagedModsGrid({
                     disabled={mod.disabled}
                     isToggling={toggleMod.isPending && toggleMod.variables?.modId === mod.id}
                     isUninstalling={uninstallMod.isPending && uninstallMod.variables?.modId === mod.id}
-                    onToggle={() => toggleMod.mutate({ gameName, modId: mod.id })}
-                    onUninstall={() => uninstallMod.mutate({ gameName, modId: mod.id })}
+                    onToggle={() => toggleMod.mutateAsync({ gameName, modId: mod.id })}
+                    onUninstall={() => uninstallMod.mutateAsync({ gameName, modId: mod.id })}
                   />
                 }
                 onClick={mod.nexus_mod_id ? () => onModClick?.(mod.nexus_mod_id!) : undefined}
