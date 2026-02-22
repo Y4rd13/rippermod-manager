@@ -1,11 +1,13 @@
-import { CheckCircle, ExternalLink } from "lucide-react";
+import { CheckCircle, ExternalLink, LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
-import { useSaveSettings } from "@/hooks/mutations";
+import { useLogout, useSaveSettings } from "@/hooks/mutations";
 import { useNexusSSO } from "@/hooks/use-nexus-sso";
 import { useSettings } from "@/hooks/queries";
 
@@ -49,10 +51,13 @@ function ApiKeyField({
 export function SettingsPage() {
   const { data: settings = [] } = useSettings();
   const saveSettings = useSaveSettings();
+  const logout = useLogout();
   const sso = useNexusSSO();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [openaiKey, setOpenaiKey] = useState("");
   const [nexusKey, setNexusKey] = useState("");
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     if (sso.state === "success") {
@@ -139,6 +144,44 @@ export function SettingsPage() {
           </Button>
         </div>
       </Card>
+
+      {currentNexus && (
+        <Card>
+          <h2 className="text-lg font-semibold text-text-primary mb-4">
+            Nexus Account
+          </h2>
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-sm text-text-secondary">
+                Connected with key <span className="font-mono text-xs">{currentNexus}</span>
+              </p>
+            </div>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => setShowLogoutConfirm(true)}
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Disconnect
+            </Button>
+          </div>
+          {showLogoutConfirm && (
+            <ConfirmDialog
+              title="Disconnect Nexus Account"
+              message="This will remove your Nexus API key and return you to the onboarding screen to reconnect. Your games and mods will be preserved."
+              confirmLabel="Disconnect"
+              icon={LogOut}
+              loading={logout.isPending}
+              onConfirm={() =>
+                logout.mutate(undefined, {
+                  onSuccess: () => navigate("/onboarding", { replace: true }),
+                })
+              }
+              onCancel={() => setShowLogoutConfirm(false)}
+            />
+          )}
+        </Card>
+      )}
 
       <Card>
         <h2 className="text-lg font-semibold text-text-primary mb-4">
