@@ -82,6 +82,13 @@ body {
   animation: fade-in 150ms ease-out;
 }
 
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 input[type="checkbox"] {
   appearance: none;
   width: 16px;

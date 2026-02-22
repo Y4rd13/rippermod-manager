@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { Link, useParams } from "react-router";
 
 import { ArchivesList } from "@/components/mods/ArchivesList";
@@ -258,6 +258,32 @@ export function GameDetailPage() {
     profiles.length, profilesLoading,
   ]);
 
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollIndicators = useCallback(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 0);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    updateScrollIndicators();
+    const el = tabsRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(updateScrollIndicators);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [updateScrollIndicators]);
+
+  const handleTabScroll = (e: UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    setCanScrollLeft(el.scrollLeft > 0);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  };
+
   if (!game) {
     return (
       <div className="space-y-6 animate-pulse">
@@ -394,30 +420,42 @@ export function GameDetailPage() {
         </Card>
       </div>
 
-      <div className="flex gap-1 border-b border-border overflow-x-auto">
-        {TABS.map(({ key, label, tooltip }) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            title={tooltip}
-            className={cn(
-              "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap flex items-center gap-1",
-              tab === key
-                ? "border-accent text-accent"
-                : "border-transparent text-text-muted hover:text-text-secondary",
-            )}
-          >
-            {label}
-            {tabCounts[key] != null && (
-              <span className="text-xs tabular-nums opacity-60">
-                {tabCounts[key]}
-              </span>
-            )}
-            {key === "updates" && (updates?.updates_available ?? 0) > 0 && (
-              <span className="h-1.5 w-1.5 rounded-full bg-warning inline-block" />
-            )}
-          </button>
-        ))}
+      <div className="relative">
+        {canScrollLeft && (
+          <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 z-10 bg-gradient-to-r from-surface-0 to-transparent" />
+        )}
+        <div
+          ref={tabsRef}
+          onScroll={handleTabScroll}
+          className="flex gap-1 border-b border-border overflow-x-auto scrollbar-none"
+        >
+          {TABS.map(({ key, label, tooltip }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              title={tooltip}
+              className={cn(
+                "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap flex items-center gap-1",
+                tab === key
+                  ? "border-accent text-accent"
+                  : "border-transparent text-text-muted hover:text-text-secondary",
+              )}
+            >
+              {label}
+              {tabCounts[key] != null && (
+                <span className="text-xs tabular-nums opacity-60">
+                  {tabCounts[key]}
+                </span>
+              )}
+              {key === "updates" && (updates?.updates_available ?? 0) > 0 && (
+                <span className="h-1.5 w-1.5 rounded-full bg-warning inline-block" />
+              )}
+            </button>
+          ))}
+        </div>
+        {canScrollRight && (
+          <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 z-10 bg-gradient-to-l from-surface-0 to-transparent" />
+        )}
       </div>
 
       <div key={tab} className="animate-fade-in">
