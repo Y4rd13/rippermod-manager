@@ -11,7 +11,7 @@ interface CardProps {
 export function Card({ children, className, title, onClick, onContextMenu }: CardProps) {
   return (
     <div
-      className={cn("rounded-xl border border-border bg-surface-1 p-5", onClick && "cursor-pointer", className)}
+      className={cn("rounded-xl border border-border bg-surface-1 p-5", onClick && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-surface-0", className)}
       title={title}
       onClick={onClick}
       onContextMenu={onContextMenu}

@@ -1,6 +1,7 @@
-import { AlertTriangle, Archive, Check, Copy, Download, Search, Trash2 } from "lucide-react";
+import { Archive, Check, Copy, Download, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { BulkActionBar } from "@/components/ui/BulkActionBar";
@@ -8,6 +9,7 @@ import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
+import { SortSelect } from "@/components/ui/SortSelect";
 import {
   useCheckConflicts,
   useCleanupOrphans,
@@ -51,6 +53,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
   const cleanupOrphans = useCleanupOrphans();
   const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
   const [selectedArchive, setSelectedArchive] = useState<string | null>(null);
+  const [confirmCleanup, setConfirmCleanup] = useState(false);
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<ArchiveSortKey>("name");
   const [linkChip, setLinkChip] = useState<LinkChip>("all");
@@ -116,11 +119,16 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
   ];
 
   const installQueueRef = useRef<string[]>([]);
+  const [queueProgress, setQueueProgress] = useState<{ current: number; total: number } | null>(null);
 
   const processNextInQueue = () => {
-    if (installQueueRef.current.length === 0) return;
+    if (installQueueRef.current.length === 0) {
+      setQueueProgress(null);
+      return;
+    }
+    setQueueProgress((prev) => prev ? { ...prev, current: prev.current + 1 } : null);
     const next = installQueueRef.current.shift()!;
-    handleCheckConflicts(next);
+    handleCheckConflicts(next).catch(() => processNextInQueue());
   };
 
   const handleCheckConflicts = async (filename: string) => {
@@ -154,7 +162,9 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
   };
 
   const handleBulkInstall = () => {
-    installQueueRef.current = [...bulk.selectedIds];
+    const items = [...bulk.selectedIds];
+    installQueueRef.current = items;
+    setQueueProgress({ current: 0, total: items.length });
     bulk.deselectAll();
     processNextInQueue();
   };
@@ -218,30 +228,39 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
               className="w-full rounded-lg border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
             />
           </div>
-          <select
+          <SortSelect
             value={sortKey}
-            onChange={(e) => setSortKey(e.target.value as ArchiveSortKey)}
-            className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
-          >
-            {ARCHIVE_SORT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => setSortKey(v as ArchiveSortKey)}
+            options={ARCHIVE_SORT_OPTIONS}
+          />
           <span className="text-xs text-text-muted">
             {filtered.length} archive{filtered.length !== 1 ? "s" : ""}
           </span>
-          {orphanCount > 0 && (
+          {orphanCount > 0 && !confirmCleanup && (
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => cleanupOrphans.mutate(gameName)}
-              loading={cleanupOrphans.isPending}
+              onClick={() => setConfirmCleanup(true)}
               title={`Delete ${orphanCount} archive${orphanCount !== 1 ? "s" : ""} not linked to any installed mod`}
             >
               <Trash2 size={14} /> Clean {orphanCount} Orphan{orphanCount !== 1 ? "s" : ""}
             </Button>
+          )}
+          {confirmCleanup && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-danger">Delete {orphanCount} archive{orphanCount !== 1 ? "s" : ""}?</span>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => { cleanupOrphans.mutate(gameName); setConfirmCleanup(false); }}
+                loading={cleanupOrphans.isPending}
+              >
+                Confirm
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setConfirmCleanup(false)}>
+                Cancel
+              </Button>
+            </div>
           )}
         </div>
 
@@ -368,6 +387,12 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
         </Button>
       </BulkActionBar>
 
+      {queueProgress && (
+        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-40 rounded-lg border border-border bg-surface-1 px-4 py-2 shadow-lg text-sm text-text-primary">
+          Installing {queueProgress.current} of {queueProgress.total}...
+        </div>
+      )}
+
       {menuState.visible && menuState.data && (
         <ContextMenu
           items={ROW_CONTEXT_ITEMS}
@@ -378,54 +403,16 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
       )}
 
       {conflicts && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-lg rounded-xl border border-border bg-surface-1 p-6">
-            <div className="mb-4 flex items-center gap-2 text-warning">
-              <AlertTriangle size={20} />
-              <h3 className="text-lg font-semibold text-text-primary">
-                File Conflicts Detected
-              </h3>
-            </div>
-            <p className="mb-3 text-sm text-text-secondary">
-              {conflicts.conflicts.length} file(s) conflict with installed mods:
-            </p>
-            <div className="mb-4 max-h-48 overflow-y-auto rounded border border-border bg-surface-0 p-3">
-              {conflicts.conflicts.map((c) => (
-                <div key={c.file_path} className="py-1 text-xs">
-                  <span className="font-mono text-text-primary">
-                    {c.file_path}
-                  </span>
-                  <span className="ml-2 text-text-muted">
-                    (owned by {c.owning_mod_name})
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  setConflicts(null);
-                  setSelectedArchive(null);
-                  processNextInQueue();
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleInstallWithSkip}
-              >
-                Skip Conflicts
-              </Button>
-              <Button size="sm" onClick={handleInstallOverwrite}>
-                Overwrite
-              </Button>
-            </div>
-          </div>
-        </div>
+        <ConflictDialog
+          conflicts={conflicts}
+          onCancel={() => {
+            setConflicts(null);
+            setSelectedArchive(null);
+            processNextInQueue();
+          }}
+          onSkip={handleInstallWithSkip}
+          onOverwrite={handleInstallOverwrite}
+        />
       )}
     </>
   );

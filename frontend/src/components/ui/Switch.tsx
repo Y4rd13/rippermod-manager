@@ -29,7 +29,7 @@ export function Switch({ checked, onChange, label, disabled }: SwitchProps) {
       >
         <span
           className={cn(
-            "inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200",
+            "inline-block h-3.5 w-3.5 rounded-full bg-text-primary shadow-sm transition-transform duration-200",
             checked ? "translate-x-[18px]" : "translate-x-[3px]",
           )}
         />
