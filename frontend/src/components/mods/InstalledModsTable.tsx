@@ -20,6 +20,7 @@ import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
+import { SortSelect } from "@/components/ui/SortSelect";
 import { useBulkSelect } from "@/hooks/use-bulk-select";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useToggleMod, useUninstallMod } from "@/hooks/mutations";
@@ -382,6 +383,26 @@ function RecognizedModsGrid({
 }) {
   const flow = useInstallFlow(gameName, archives, downloadJobs);
 
+  const modIds = useMemo(() => mods.map((m) => String(m.id)), [mods]);
+  const bulk = useBulkSelect(modIds);
+
+  const handleBulkInstall = async () => {
+    for (const modIdStr of bulk.selectedIds) {
+      const mod = mods.find((m) => String(m.id) === modIdStr);
+      const nexusModId = mod?.nexus_match?.nexus_mod_id;
+      if (nexusModId == null) continue;
+      const archive = flow.archiveByModId.get(nexusModId);
+      if (archive) {
+        try {
+          await flow.handleInstall(nexusModId, archive);
+        } catch {
+          // Continue with remaining mods on individual failure
+        }
+      }
+    }
+    bulk.deselectAll();
+  };
+
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -394,53 +415,74 @@ function RecognizedModsGrid({
           const update = nexusModId != null ? updateByNexusId.get(nexusModId) : undefined;
 
           return (
-            <NexusModCard
-              key={mod.id}
-              modName={match.mod_name}
-              summary={match.summary}
-              author={match.author}
-              version={match.version}
-              endorsementCount={match.endorsement_count}
-              pictureUrl={match.picture_url}
-              badge={update ? <Badge variant="warning" prominent>v{update.nexus_version} available</Badge> : undefined}
-              onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
-              action={
-                <ModCardAction
-                  isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
-                  isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
-                  activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
-                  completedDownload={nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined}
-                  archive={archive}
-                  nexusUrl={match.nexus_url}
-                  hasConflicts={flow.conflicts != null}
-                  isDownloading={flow.downloadingModId === nexusModId}
-                  isUpdate={!!update}
-                  updateVersion={update?.nexus_version}
-                  onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
-                  onInstallByFilename={() => {
-                    const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
-                    if (nexusModId != null && dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
-                  }}
-                  onDownload={() => nexusModId != null && flow.handleDownload(nexusModId)}
-                  onCancelDownload={() => {
-                    const dl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
-                    if (dl) flow.handleCancelDownload(dl.id);
-                  }}
+            <div key={mod.id} className="relative">
+              <div className="absolute top-2 left-2 z-10">
+                <input
+                  type="checkbox"
+                  checked={bulk.isSelected(String(mod.id))}
+                  onChange={() => bulk.toggle(String(mod.id))}
+                  className="rounded border-border accent-accent"
                 />
-              }
-              footer={
-                <div className="flex items-center gap-1.5">
-                  <ConfidenceBadge score={match.score} />
-                  <Badge variant="neutral">{match.method}</Badge>
-                  {match.updated_at && (
-                    <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
-                  )}
-                </div>
-              }
-            />
+              </div>
+              <NexusModCard
+                modName={match.mod_name}
+                summary={match.summary}
+                author={match.author}
+                version={match.version}
+                endorsementCount={match.endorsement_count}
+                pictureUrl={match.picture_url}
+                badge={update ? <Badge variant="warning" prominent>v{update.nexus_version} available</Badge> : undefined}
+                onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
+                action={
+                  <ModCardAction
+                    isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
+                    isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
+                    activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
+                    completedDownload={nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined}
+                    archive={archive}
+                    nexusUrl={match.nexus_url}
+                    hasConflicts={flow.conflicts != null}
+                    isDownloading={flow.downloadingModId === nexusModId}
+                    isUpdate={!!update}
+                    updateVersion={update?.nexus_version}
+                    onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
+                    onInstallByFilename={() => {
+                      const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
+                      if (nexusModId != null && dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
+                    }}
+                    onDownload={() => nexusModId != null && flow.handleDownload(nexusModId)}
+                    onCancelDownload={() => {
+                      const dl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
+                      if (dl) flow.handleCancelDownload(dl.id);
+                    }}
+                  />
+                }
+                footer={
+                  <div className="flex items-center gap-1.5">
+                    <ConfidenceBadge score={match.score} />
+                    <Badge variant="neutral">{match.method}</Badge>
+                    {match.updated_at && (
+                      <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
+                    )}
+                  </div>
+                }
+              />
+            </div>
           );
         })}
       </div>
+
+      <BulkActionBar
+        selectedCount={bulk.selectedCount}
+        totalCount={mods.length}
+        onSelectAll={bulk.selectAll}
+        onDeselectAll={bulk.deselectAll}
+        isAllSelected={bulk.isAllSelected}
+      >
+        <Button size="sm" onClick={handleBulkInstall}>
+          Install {bulk.selectedCount} Selected
+        </Button>
+      </BulkActionBar>
 
       {flow.conflicts && (
         <ConflictDialog
@@ -581,17 +623,11 @@ export function InstalledModsTable({
           />
         </div>
         {recognized.length > 0 && (
-          <select
+          <SortSelect
             value={recognizedSort}
-            onChange={(e) => setRecognizedSort(e.target.value as RecognizedSortKey)}
-            className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
-          >
-            {RECOGNIZED_SORT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => setRecognizedSort(v as RecognizedSortKey)}
+            options={RECOGNIZED_SORT_OPTIONS}
+          />
         )}
         <span className="text-xs text-text-muted">
           {totalCount} mod{totalCount !== 1 ? "s" : ""}
@@ -602,7 +638,7 @@ export function InstalledModsTable({
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-text-primary" title="Mods installed and managed through this app — you can enable, disable, or uninstall them">
-              Managed Mods ({filteredMods.length})
+              Installed Mods ({filteredMods.length})
             </h3>
             <FilterChips
               chips={CHIP_OPTIONS}
@@ -623,7 +659,7 @@ export function InstalledModsTable({
       {filteredRecognized.length > 0 && (
         <div>
           <h3 className="text-sm font-semibold text-text-primary mb-3" title="Mods found on disk and matched to Nexus — click Install to manage them">
-            Recognized Mods ({filteredRecognized.length})
+            Detected on Disk ({filteredRecognized.length})
           </h3>
           <p className="text-xs text-text-muted mb-3">
             These mods were detected during scanning and matched to Nexus, but haven&apos;t been
