@@ -57,7 +57,7 @@ export function SettingsPage() {
   const navigate = useNavigate();
   const [openaiKey, setOpenaiKey] = useState("");
   const [nexusKey, setNexusKey] = useState("");
-  const [showDisconnectConfirm, setShowLogoutConfirm] = useState(false);
+  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
 
   useEffect(() => {
     if (sso.state === "success") {
@@ -159,7 +159,7 @@ export function SettingsPage() {
             <Button
               variant="danger"
               size="sm"
-              onClick={() => setShowLogoutConfirm(true)}
+              onClick={() => setShowDisconnectConfirm(true)}
             >
               <LogOut className="h-3.5 w-3.5" />
               Disconnect
@@ -177,7 +177,7 @@ export function SettingsPage() {
                   onSuccess: () => navigate("/onboarding", { replace: true }),
                 })
               }
-              onCancel={() => setShowLogoutConfirm(false)}
+              onCancel={() => setShowDisconnectConfirm(false)}
             />
           )}
         </Card>
