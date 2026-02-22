@@ -358,10 +358,10 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
           loading={deleteArchive.isPending}
           onClick={async () => {
             const filenames = [...bulk.selectedIds];
-            bulk.deselectAll();
             for (const filename of filenames) {
               await deleteArchive.mutateAsync({ gameName, filename });
             }
+            bulk.deselectAll();
           }}
         >
           <Trash2 size={14} /> Delete {bulk.selectedCount}

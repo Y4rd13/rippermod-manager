@@ -773,6 +773,7 @@ def check_cached_updates(
                     "local_timestamp": mod.upload_timestamp,
                     "nexus_timestamp": None,
                     "detection_method": "version",
+                    "source_archive": mod.source_archive,
                 }
             )
 
