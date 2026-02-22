@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { ArchivesList } from "@/components/mods/ArchivesList";
@@ -262,6 +262,8 @@ export function GameDetailPage() {
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
+  const rafRef = useRef(0);
+
   const updateScrollIndicators = useCallback(() => {
     const el = tabsRef.current;
     if (!el) return;
@@ -278,11 +280,10 @@ export function GameDetailPage() {
     return () => observer.disconnect();
   }, [updateScrollIndicators]);
 
-  const handleTabScroll = (e: UIEvent<HTMLDivElement>) => {
-    const el = e.currentTarget;
-    setCanScrollLeft(el.scrollLeft > 0);
-    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
-  };
+  const handleTabScroll = useCallback(() => {
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(updateScrollIndicators);
+  }, [updateScrollIndicators]);
 
   if (!game) {
     return (

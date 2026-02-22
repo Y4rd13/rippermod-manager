@@ -214,16 +214,16 @@ export function DashboardPage() {
         <div className="flex items-center gap-3 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3">
           <AlertTriangle size={18} className="text-warning shrink-0" />
           <p className="text-sm text-text-secondary flex-1">
+            Updates available:{" "}
             {gamesWithUpdates.map((g, i) => (
               <span key={g.name}>
                 {i > 0 && ", "}
                 <Link to={`/games/${g.name}`} className="font-medium text-warning hover:underline">
                   {g.name}
                 </Link>
-                {" "}has {g.count} update{g.count !== 1 && "s"}
+                {" "}({g.count})
               </span>
             ))}
-            {" "}available
           </p>
         </div>
       )}
@@ -236,7 +236,7 @@ export function DashboardPage() {
             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-1 px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2 hover:text-text-primary transition-colors"
           >
             <Scan size={14} />
-            Scan & Correlate
+            Go to Scan & Correlate
           </Link>
           {totals.updatesAvailable > 0 && (
             <Link
@@ -244,7 +244,7 @@ export function DashboardPage() {
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-1 px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2 hover:text-text-primary transition-colors"
             >
               <RefreshCw size={14} />
-              Review Updates
+              Go to Updates
             </Link>
           )}
         </div>
