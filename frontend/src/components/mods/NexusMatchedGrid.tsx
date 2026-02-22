@@ -1,5 +1,6 @@
 import { CheckCircle, ChevronDown, ChevronUp, Link2, Pencil, Search, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
+import { toast } from "@/stores/toast-store";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { CorrelationActions } from "@/components/mods/CorrelationActions";
@@ -135,7 +136,10 @@ export function NexusMatchedGrid({
     } else if (key === "open-nexus" && match?.nexus_url) {
       window.open(match.nexus_url, "_blank", "noopener,noreferrer");
     } else if (key === "copy-name" && match?.mod_name) {
-      navigator.clipboard.writeText(match.mod_name);
+      void navigator.clipboard.writeText(match.mod_name).then(
+        () => toast.success("Copied to clipboard"),
+        () => toast.error("Failed to copy"),
+      );
     } else if (key === "accept-match") {
       confirmCorrelation.mutate({ gameName, modGroupId: mod.id });
     } else if (key === "reject-match") {
