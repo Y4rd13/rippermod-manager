@@ -13,7 +13,9 @@ class Profile(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     game_id: int = Field(foreign_key="games.id", index=True)
     name: str = Field(index=True)
+    description: str = Field(default="")
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    last_loaded_at: datetime | None = Field(default=None)
 
     entries: list["ProfileEntry"] = Relationship(
         back_populates="profile",

@@ -17,8 +17,14 @@ import type {
   NexusSyncResult,
   OnboardingStatus,
   PathValidation,
+  ProfileCompareOut,
+  ProfileCompareRequest,
+  ProfileDiffOut,
   ProfileExport,
+  ProfileImportResult,
+  ProfileLoadResult,
   ProfileOut,
+  ProfileUpdate,
   ScanResult,
   Setting,
   ToggleResult,
@@ -175,9 +181,13 @@ export function useCheckConflicts() {
 
 export function useSaveProfile() {
   const qc = useQueryClient();
-  return useMutation<ProfileOut, Error, { gameName: string; name: string }>({
-    mutationFn: ({ gameName, name }) =>
-      api.post(`/api/v1/games/${gameName}/profiles/`, { name }),
+  return useMutation<
+    ProfileOut,
+    Error,
+    { gameName: string; name: string; description?: string }
+  >({
+    mutationFn: ({ gameName, name, description }) =>
+      api.post(`/api/v1/games/${gameName}/profiles/`, { name, description }),
     onSuccess: (_, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["profiles", gameName] });
       toast.success("Profile created");
@@ -188,13 +198,22 @@ export function useSaveProfile() {
 
 export function useLoadProfile() {
   const qc = useQueryClient();
-  return useMutation<ProfileOut, Error, { gameName: string; profileId: number }>({
+  return useMutation<ProfileLoadResult, Error, { gameName: string; profileId: number }>({
     mutationFn: ({ gameName, profileId }) =>
       api.post(`/api/v1/games/${gameName}/profiles/${profileId}/load`),
-    onSuccess: (_, { gameName }) => {
+    onSuccess: (result, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["profiles", gameName] });
+      if (result.skipped_count > 0) {
+        toast.warning(
+          "Some mods were skipped",
+          `${result.skipped_count} mod${result.skipped_count === 1 ? " is" : "s are"} no longer installed`,
+        );
+      } else {
+        toast.success("Profile loaded");
+      }
     },
+    onError: () => toast.error("Failed to load profile"),
   });
 }
 
@@ -220,12 +239,61 @@ export function useExportProfile() {
 
 export function useImportProfile() {
   const qc = useQueryClient();
-  return useMutation<ProfileOut, Error, { gameName: string; data: ProfileExport }>({
+  return useMutation<ProfileImportResult, Error, { gameName: string; data: ProfileExport }>({
     mutationFn: ({ gameName, data }) =>
       api.post(`/api/v1/games/${gameName}/profiles/import`, data),
+    onSuccess: (result, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["profiles", gameName] });
+      if (result.skipped_count > 0) {
+        toast.warning(
+          "Profile imported",
+          `${result.matched_count} matched, ${result.skipped_count} skipped`,
+        );
+      } else {
+        toast.success("Profile imported", `${result.matched_count} mods matched`);
+      }
+    },
+    onError: () => toast.error("Failed to import profile"),
+  });
+}
+
+export function usePreviewProfile() {
+  return useMutation<ProfileDiffOut, Error, { gameName: string; profileId: number }>({
+    mutationFn: ({ gameName, profileId }) =>
+      api.post(`/api/v1/games/${gameName}/profiles/${profileId}/preview`),
+  });
+}
+
+export function useUpdateProfile() {
+  const qc = useQueryClient();
+  return useMutation<ProfileOut, Error, { gameName: string; profileId: number; data: ProfileUpdate }>({
+    mutationFn: ({ gameName, profileId, data }) =>
+      api.patch(`/api/v1/games/${gameName}/profiles/${profileId}`, data),
     onSuccess: (_, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["profiles", gameName] });
+      toast.success("Profile updated");
     },
+    onError: () => toast.error("Failed to update profile"),
+  });
+}
+
+export function useDuplicateProfile() {
+  const qc = useQueryClient();
+  return useMutation<ProfileOut, Error, { gameName: string; profileId: number; name: string }>({
+    mutationFn: ({ gameName, profileId, name }) =>
+      api.post(`/api/v1/games/${gameName}/profiles/${profileId}/duplicate`, { name }),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["profiles", gameName] });
+      toast.success("Profile duplicated");
+    },
+    onError: () => toast.error("Failed to duplicate profile"),
+  });
+}
+
+export function useCompareProfiles() {
+  return useMutation<ProfileCompareOut, Error, { gameName: string; data: ProfileCompareRequest }>({
+    mutationFn: ({ gameName, data }) =>
+      api.post(`/api/v1/games/${gameName}/profiles/compare`, data),
   });
 }
 
