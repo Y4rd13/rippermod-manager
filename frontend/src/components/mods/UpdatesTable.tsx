@@ -90,7 +90,7 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
     return chips;
   }, [updates]);
 
-  if (isLoading) return <SkeletonTable columns={7} rows={5} />;
+  if (isLoading) return <SkeletonTable columns={8} rows={5} />;
 
   return (
     <div className="space-y-3">
