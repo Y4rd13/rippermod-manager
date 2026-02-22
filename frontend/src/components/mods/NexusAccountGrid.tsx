@@ -1,10 +1,12 @@
-import { Check, Eye, Heart, Search } from "lucide-react";
+import { Check, Eye, Heart, Search, Settings } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
@@ -60,6 +62,7 @@ export function NexusAccountGrid({
   emptyIcon = "heart",
   emptyTitle = "No mods found",
 }: Props) {
+  const navigate = useNavigate();
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("updated");
   const [chip, setChip] = useState("all");
@@ -124,6 +127,11 @@ export function NexusAccountGrid({
         icon={EmptyIcon}
         title={emptyTitle}
         description={emptyMessage}
+        actions={
+          <Button size="sm" variant="secondary" onClick={() => navigate("/settings")}>
+            <Settings size={14} /> Nexus Settings
+          </Button>
+        }
       />
     );
   }
