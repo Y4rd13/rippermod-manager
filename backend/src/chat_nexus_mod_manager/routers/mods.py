@@ -13,7 +13,6 @@ from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
 from chat_nexus_mod_manager.models.game import Game
 from chat_nexus_mod_manager.models.mod import ModGroup
 from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
-from chat_nexus_mod_manager.services.update_service import batch_group_file_mtimes
 from chat_nexus_mod_manager.schemas.mod import (
     CorrelateResult,
     CorrelationBrief,
@@ -22,6 +21,7 @@ from chat_nexus_mod_manager.schemas.mod import (
     ScanResult,
     ScanStreamRequest,
 )
+from chat_nexus_mod_manager.services.update_service import batch_group_file_mtimes
 
 logger = logging.getLogger(__name__)
 
