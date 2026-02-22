@@ -26,7 +26,7 @@ export function Titlebar() {
         </button>
         <button
           onClick={() => appWindow.toggleMaximize()}
-          aria-label="Maximize window"
+          aria-label="Toggle maximize"
           className="flex h-9 w-10 items-center justify-center text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"
         >
           <Square size={12} />
