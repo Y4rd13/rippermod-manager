@@ -19,6 +19,7 @@ import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
 import { BulkActionBar } from "@/components/ui/BulkActionBar";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
@@ -30,6 +31,7 @@ import { useToggleMod, useUninstallMod } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { isoToEpoch, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { toast } from "@/stores/toast-store";
 import type { AvailableArchive, DownloadJobOut, InstalledModOut, ModGroup, ModUpdate } from "@/types/api";
 
 interface Props {
@@ -94,6 +96,7 @@ function ManagedModsGrid({
   onModClick?: (nexusModId: number) => void;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("updated");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const toggleMod = useToggleMod();
   const uninstallMod = useUninstallMod();
 
@@ -152,7 +155,10 @@ function ManagedModsGrid({
         if (mod.nexus_mod_id) onModClick?.(mod.nexus_mod_id);
         break;
       case "copy":
-        void navigator.clipboard.writeText(mod.nexus_name || mod.name);
+        void navigator.clipboard.writeText(mod.nexus_name || mod.name).then(
+          () => toast.success("Copied to clipboard"),
+          () => toast.error("Failed to copy"),
+        );
         break;
       case "delete":
         uninstallMod.mutate({ gameName, modId: mod.id });
@@ -183,6 +189,7 @@ function ManagedModsGrid({
   };
 
   const handleBulkDelete = async () => {
+    setConfirmDelete(false);
     const targets = sorted.filter((m) => bulk.selectedIds.has(m.id));
     try {
       for (const mod of targets) {
@@ -224,7 +231,7 @@ function ManagedModsGrid({
             <PowerOff size={12} className="mr-1" /> Disable
           </Button>
         )}
-        <Button size="sm" variant="danger" onClick={handleBulkDelete}>
+        <Button size="sm" variant="danger" onClick={() => setConfirmDelete(true)}>
           <Trash2 size={12} className="mr-1" /> Delete
         </Button>
       </BulkActionBar>
@@ -314,6 +321,18 @@ function ManagedModsGrid({
           position={menuState.position}
           onSelect={handleContextMenuSelect}
           onClose={closeMenu}
+        />
+      )}
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete Selected Mods"
+          message={`This will permanently delete ${bulk.selectedCount} mod${bulk.selectedCount !== 1 ? "s" : ""} and their files. This action cannot be undone.`}
+          confirmLabel="Delete"
+          variant="danger"
+          icon={Trash2}
+          onConfirm={handleBulkDelete}
+          onCancel={() => setConfirmDelete(false)}
         />
       )}
     </>

@@ -1,5 +1,6 @@
 import {
   Archive,
+  ChevronRight,
   Eye,
   FolderOpen,
   Heart,
@@ -14,7 +15,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 
 import { ArchivesList } from "@/components/mods/ArchivesList";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -263,6 +264,14 @@ export function GameDetailPage() {
 
   return (
     <div className="space-y-6">
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-text-muted">
+        <Link to="/games" className="hover:text-text-primary transition-colors">
+          Games
+        </Link>
+        <ChevronRight size={14} />
+        <span className="text-text-primary font-medium">{game.name}</span>
+      </nav>
+
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
@@ -295,7 +304,11 @@ export function GameDetailPage() {
       )}
 
       <div className="grid grid-cols-4 gap-4">
-        <Card title="Total mod groups found by scanning your game folder">
+        <Card
+          className="hover:border-success/40 transition-colors"
+          onClick={() => setTab("mods")}
+          title="Total mod groups found by scanning your game folder"
+        >
           <div className="flex items-center gap-3">
             <Package size={18} className="text-success" />
             <div>
@@ -304,7 +317,11 @@ export function GameDetailPage() {
             </div>
           </div>
         </Card>
-        <Card title="Mods managed through this app (enabled / total)">
+        <Card
+          className="hover:border-accent/40 transition-colors"
+          onClick={() => setTab("installed")}
+          title="Mods managed through this app (enabled / total)"
+        >
           <div className="flex items-center gap-3">
             <UserCheck size={18} className="text-accent" />
             <div>
@@ -328,7 +345,11 @@ export function GameDetailPage() {
             </div>
           </div>
         </Card>
-        <Card title="Newer versions available on Nexus for your mods">
+        <Card
+          className="hover:border-danger/40 transition-colors"
+          onClick={() => setTab("updates")}
+          title="Newer versions available on Nexus for your mods"
+        >
           <div className="flex items-center gap-3">
             <RefreshCw size={18} className="text-danger" />
             <div>
