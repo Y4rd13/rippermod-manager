@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import logging
+import os
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends
@@ -8,6 +11,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.database import get_session
+from chat_nexus_mod_manager.models.download import DownloadJob
 from chat_nexus_mod_manager.models.settings import AppSetting
 from chat_nexus_mod_manager.routers.deps import get_game_or_404
 from chat_nexus_mod_manager.services.update_service import (
@@ -37,6 +41,7 @@ class ModUpdate(BaseModel):
     detection_method: Literal["timestamp", "version", "both"] = "version"
     source_archive: str | None = None
     reason: str = ""
+    local_download_date: int | None = None
 
 
 class UpdateCheckResult(BaseModel):
@@ -45,12 +50,51 @@ class UpdateCheckResult(BaseModel):
     updates: list[ModUpdate]
 
 
+def _enrich_download_dates(
+    updates: list[ModUpdate], session: Session, game_id: int, install_path: str
+) -> None:
+    """Populate local_download_date from DownloadJob or archive file mtime."""
+    archives = {u.source_archive for u in updates if u.source_archive}
+    if not archives:
+        return
+
+    # DownloadJob completed_at
+    dl_rows = session.exec(
+        select(DownloadJob.file_name, DownloadJob.completed_at).where(
+            DownloadJob.game_id == game_id,
+            DownloadJob.status == "completed",
+            DownloadJob.completed_at.is_not(None),  # type: ignore[union-attr]
+            DownloadJob.file_name.in_(archives),  # type: ignore[union-attr]
+        )
+    ).all()
+    dl_map: dict[str, int] = {}
+    for fn, completed in dl_rows:
+        if fn and completed:
+            ts = int(completed.replace(tzinfo=UTC).timestamp()) if completed.tzinfo is None else int(completed.timestamp())
+            existing = dl_map.get(fn)
+            if existing is None or ts > existing:
+                dl_map[fn] = ts
+
+    # Archive file mtime fallback
+    staging = Path(install_path) / "downloaded_mods"
+    for fn in archives - dl_map.keys():
+        try:
+            dl_map[fn] = int(os.stat(staging / fn).st_mtime)
+        except OSError:
+            continue
+
+    for u in updates:
+        if u.source_archive:
+            u.local_download_date = dl_map.get(u.source_archive)
+
+
 @router.get("/", response_model=UpdateCheckResult)
 def list_updates(game_name: str, session: Session = Depends(get_session)) -> UpdateCheckResult:
     """Return cached update info (no API calls, uses last-refreshed metadata)."""
     game = get_game_or_404(game_name, session)
     result = check_cached_updates(game.id, game.domain_name, session)  # type: ignore[arg-type]
     updates = [ModUpdate(**u) for u in result.updates]
+    _enrich_download_dates(updates, session, game.id, game.install_path)  # type: ignore[arg-type]
     return UpdateCheckResult(
         total_checked=result.total_checked,
         updates_available=len(updates),
@@ -86,6 +130,7 @@ async def check_updates(
         result = check_cached_updates(game.id, game.domain_name, session)  # type: ignore[arg-type]
 
     updates = [ModUpdate(**u) for u in result.updates]
+    _enrich_download_dates(updates, session, game.id, game.install_path)  # type: ignore[arg-type]
     return UpdateCheckResult(
         total_checked=result.total_checked,
         updates_available=len(updates),

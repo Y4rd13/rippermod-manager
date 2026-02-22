@@ -19,6 +19,7 @@ class ModGroupOut(BaseModel):
     confidence: float
     files: list[ModFileOut] = []
     nexus_match: "CorrelationBrief | None" = None
+    earliest_file_mtime: int | None = None
 
 
 class CorrelationBrief(BaseModel):

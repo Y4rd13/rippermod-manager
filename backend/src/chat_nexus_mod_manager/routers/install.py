@@ -1,6 +1,7 @@
 """Endpoints for mod installation, uninstallation, enable/disable, and conflict checking."""
 
 import logging
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -39,6 +40,18 @@ from chat_nexus_mod_manager.services.settings_helpers import get_setting
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/games/{game_name}/install", tags=["install"])
+
+
+def _archive_mtime_map(staging: Path, filenames: set[str]) -> dict[str, datetime]:
+    """Build a mapping of filename → mtime from archive files on disk."""
+    result: dict[str, datetime] = {}
+    for fn in filenames:
+        try:
+            mtime = os.stat(staging / fn).st_mtime
+            result[fn] = datetime.fromtimestamp(mtime, tz=UTC)
+        except OSError:
+            continue
+    return result
 
 
 def _download_date_map(session: Session, game_id: int, filenames: set[str]) -> dict[str, datetime]:
@@ -122,10 +135,17 @@ async def list_installed(
 
     source_archives = {mod.source_archive for mod, _ in rows if mod.source_archive}
     dl_date_map = _download_date_map(session, game.id, source_archives)
+    staging = Path(game.install_path) / "downloaded_mods"
+    mtime_map = _archive_mtime_map(staging, source_archives - dl_date_map.keys())
 
     result: list[InstalledModOut] = []
     for mod, meta in rows:
         _ = mod.files
+        dl_date = (
+            dl_date_map.get(mod.source_archive) or mtime_map.get(mod.source_archive)
+            if mod.source_archive
+            else None
+        )
         result.append(
             InstalledModOut(
                 id=mod.id,  # type: ignore[arg-type]
@@ -144,9 +164,7 @@ async def list_installed(
                 endorsement_count=meta.endorsement_count if meta else None,
                 picture_url=meta.picture_url if meta else None,
                 category=meta.category if meta else None,
-                last_downloaded_at=(
-                    dl_date_map.get(mod.source_archive) if mod.source_archive else None
-                ),
+                last_downloaded_at=dl_date,
             )
         )
     return result

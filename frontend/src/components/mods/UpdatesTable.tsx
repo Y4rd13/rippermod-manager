@@ -169,6 +169,7 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
                 <th className="py-2 pr-4">Source</th>
                 <th className="py-2 pr-4">Author</th>
                 <th className="py-2 pr-4">Updated</th>
+                <th className="py-2 pr-4">Downloaded</th>
                 <th className="py-2" />
               </tr>
             </thead>
@@ -187,6 +188,9 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
                   <td className="py-2 pr-4 text-text-muted">{u.author}</td>
                   <td className="py-2 pr-4 text-text-muted">
                     {u.nexus_timestamp ? timeAgo(u.nexus_timestamp) : "\u2014"}
+                  </td>
+                  <td className="py-2 pr-4 text-text-muted text-xs">
+                    {u.local_download_date ? timeAgo(u.local_download_date) : "\u2014"}
                   </td>
                   <td className="py-2">
                     <UpdateDownloadCell
