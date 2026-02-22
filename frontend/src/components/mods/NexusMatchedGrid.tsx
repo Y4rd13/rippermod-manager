@@ -1,10 +1,15 @@
-import { Search } from "lucide-react";
+import { Link2, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
+import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { FilterChips } from "@/components/ui/FilterChips";
+import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
+import { useContextMenu } from "@/hooks/use-context-menu";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { isoToEpoch, timeAgo } from "@/lib/format";
 import type {
@@ -24,20 +29,38 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "author", label: "Author" },
 ];
 
+const CONFIDENCE_CHIPS = [
+  { key: "all", label: "All" },
+  { key: "high", label: "High" },
+  { key: "medium", label: "Medium" },
+  { key: "low", label: "Low" },
+];
+
 interface Props {
   mods: ModGroup[];
   archives: AvailableArchive[];
   installedMods: InstalledModOut[];
   gameName: string;
   downloadJobs?: DownloadJobOut[];
+  isLoading?: boolean;
   onModClick?: (nexusModId: number) => void;
 }
 
-export function NexusMatchedGrid({ mods, archives, installedMods, gameName, downloadJobs = [], onModClick }: Props) {
+export function NexusMatchedGrid({
+  mods,
+  archives,
+  installedMods,
+  gameName,
+  downloadJobs = [],
+  isLoading,
+  onModClick,
+}: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("score");
+  const [chip, setChip] = useState("all");
 
   const flow = useInstallFlow(gameName, archives, downloadJobs);
+  const { menuState, openMenu, closeMenu } = useContextMenu<ModGroup>();
 
   const installedModIds = useMemo(
     () => new Set(installedMods.filter((m) => m.nexus_mod_id != null).map((m) => m.nexus_mod_id!)),
@@ -46,7 +69,7 @@ export function NexusMatchedGrid({ mods, archives, installedMods, gameName, down
 
   const filtered = useMemo(() => {
     const q = filter.toLowerCase();
-    const items = mods.filter((m) => {
+    let items = mods.filter((m) => {
       if (!q) return true;
       const match = m.nexus_match;
       return (
@@ -55,6 +78,14 @@ export function NexusMatchedGrid({ mods, archives, installedMods, gameName, down
         (match?.author.toLowerCase().includes(q) ?? false)
       );
     });
+
+    if (chip === "high") items = items.filter((m) => (m.nexus_match?.score ?? 0) >= 0.9);
+    else if (chip === "medium")
+      items = items.filter((m) => {
+        const s = m.nexus_match?.score ?? 0;
+        return s >= 0.75 && s < 0.9;
+      });
+    else if (chip === "low") items = items.filter((m) => (m.nexus_match?.score ?? 0) < 0.75);
 
     items.sort((a, b) => {
       const ma = a.nexus_match;
@@ -75,13 +106,38 @@ export function NexusMatchedGrid({ mods, archives, installedMods, gameName, down
     });
 
     return items;
-  }, [mods, filter, sortKey]);
+  }, [mods, filter, sortKey, chip]);
+
+  const contextMenuItems: ContextMenuItem[] = [
+    { key: "view", label: "View Details" },
+    { key: "open-nexus", label: "Open on Nexus" },
+    { key: "copy-name", label: "Copy Name" },
+  ];
+
+  function handleContextMenuSelect(key: string) {
+    const mod = menuState.data;
+    if (!mod) return;
+    const match = mod.nexus_match;
+    if (key === "view" && match?.nexus_mod_id != null) {
+      onModClick?.(match.nexus_mod_id);
+    } else if (key === "open-nexus" && match?.nexus_url) {
+      window.open(match.nexus_url, "_blank", "noopener,noreferrer");
+    } else if (key === "copy-name" && match?.mod_name) {
+      navigator.clipboard.writeText(match.mod_name);
+    }
+  }
+
+  if (isLoading) {
+    return <SkeletonCardGrid count={6} />;
+  }
 
   if (mods.length === 0) {
     return (
-      <p className="text-text-muted text-sm py-4">
-        No Nexus-matched mods yet. Run a scan to discover and correlate mods.
-      </p>
+      <EmptyState
+        icon={Link2}
+        title="No Nexus Matches"
+        description="Run a scan to discover and correlate your local mods with Nexus."
+      />
     );
   }
 
@@ -114,6 +170,8 @@ export function NexusMatchedGrid({ mods, archives, installedMods, gameName, down
         </span>
       </div>
 
+      <FilterChips chips={CONFIDENCE_CHIPS} active={chip} onChange={setChip} />
+
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map((mod) => {
           const match = mod.nexus_match;
@@ -132,9 +190,9 @@ export function NexusMatchedGrid({ mods, archives, installedMods, gameName, down
               endorsementCount={match.endorsement_count}
               pictureUrl={match.picture_url}
               onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
+              onContextMenu={(e) => openMenu(e, mod)}
               action={
                 <ModCardAction
-
                   isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
                   isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
                   activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
@@ -163,9 +221,7 @@ export function NexusMatchedGrid({ mods, archives, installedMods, gameName, down
                     {mod.display_name}
                   </span>
                   {match.updated_at && (
-                    <span className="text-xs text-text-muted">
-                      {timeAgo(isoToEpoch(match.updated_at))}
-                    </span>
+                    <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
                   )}
                 </div>
               }
@@ -180,6 +236,15 @@ export function NexusMatchedGrid({ mods, archives, installedMods, gameName, down
           onCancel={flow.dismissConflicts}
           onSkip={flow.handleInstallWithSkip}
           onOverwrite={flow.handleInstallOverwrite}
+        />
+      )}
+
+      {menuState.visible && (
+        <ContextMenu
+          items={contextMenuItems}
+          position={menuState.position}
+          onSelect={handleContextMenuSelect}
+          onClose={closeMenu}
         />
       )}
     </div>

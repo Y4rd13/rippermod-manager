@@ -4,13 +4,15 @@ interface CardProps {
   children: React.ReactNode;
   className?: string;
   onClick?: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
-export function Card({ children, className, onClick }: CardProps) {
+export function Card({ children, className, onClick, onContextMenu }: CardProps) {
   return (
     <div
       className={cn("rounded-xl border border-border bg-surface-1 p-5", onClick && "cursor-pointer", className)}
       onClick={onClick}
+      onContextMenu={onContextMenu}
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={

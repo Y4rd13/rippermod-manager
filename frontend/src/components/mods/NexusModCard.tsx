@@ -17,6 +17,7 @@ interface Props {
   footer?: ReactNode;
   badge?: ReactNode;
   onClick?: () => void;
+  onContextMenu?: React.MouseEventHandler;
 }
 
 export function NexusModCard({
@@ -30,6 +31,7 @@ export function NexusModCard({
   footer,
   badge,
   onClick,
+  onContextMenu,
 }: Props) {
   return (
     <div
@@ -39,6 +41,7 @@ export function NexusModCard({
         onClick && "cursor-pointer hover:border-accent/40 transition-colors",
       )}
       onClick={onClick}
+      onContextMenu={onContextMenu}
     >
       <div className="relative">
         <img
