@@ -1,6 +1,7 @@
 """Endpoints for mod installation, uninstallation, enable/disable, and conflict checking."""
 
 import logging
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -8,6 +9,7 @@ from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.database import get_session
 from chat_nexus_mod_manager.matching.filename_parser import parse_mod_filename
+from chat_nexus_mod_manager.models.download import DownloadJob
 from chat_nexus_mod_manager.models.install import InstalledMod
 from chat_nexus_mod_manager.models.nexus import NexusModMeta
 from chat_nexus_mod_manager.routers.deps import get_game_or_404
@@ -58,6 +60,21 @@ async def list_archives(
     for sa in rows:
         installed_archives.add(sa)
 
+    # Build download-date lookup from completed DownloadJobs
+    dl_rows = session.exec(
+        select(DownloadJob.file_name, DownloadJob.completed_at).where(
+            DownloadJob.game_id == game.id,
+            DownloadJob.status == "completed",
+            DownloadJob.completed_at.is_not(None),  # type: ignore[union-attr]
+        )
+    ).all()
+    dl_date_map: dict[str, datetime] = {}
+    for fn, completed in dl_rows:
+        if fn and completed:
+            existing = dl_date_map.get(fn)
+            if existing is None or completed > existing:
+                dl_date_map[fn] = completed
+
     result: list[AvailableArchive] = []
     for path in archives:
         parsed = parse_mod_filename(path.name)
@@ -69,6 +86,7 @@ async def list_archives(
                 parsed_name=parsed.name,
                 parsed_version=parsed.version,
                 is_installed=path.name in installed_archives,
+                last_downloaded_at=dl_date_map.get(path.name),
             )
         )
     return result
@@ -91,6 +109,24 @@ async def list_installed(
         .where(InstalledMod.game_id == game.id)
     ).all()
 
+    # Build download-date lookup for installed mods' source archives
+    source_archives = {mod.source_archive for mod, _ in rows if mod.source_archive}
+    dl_date_map: dict[str, datetime] = {}
+    if source_archives:
+        dl_rows = session.exec(
+            select(DownloadJob.file_name, DownloadJob.completed_at).where(
+                DownloadJob.game_id == game.id,
+                DownloadJob.status == "completed",
+                DownloadJob.completed_at.is_not(None),  # type: ignore[union-attr]
+                DownloadJob.file_name.in_(source_archives),  # type: ignore[union-attr]
+            )
+        ).all()
+        for fn, completed in dl_rows:
+            if fn and completed:
+                existing = dl_date_map.get(fn)
+                if existing is None or completed > existing:
+                    dl_date_map[fn] = completed
+
     result: list[InstalledModOut] = []
     for mod, meta in rows:
         _ = mod.files
@@ -106,6 +142,15 @@ async def list_installed(
                 file_count=len(mod.files),
                 mod_group_id=mod.mod_group_id,
                 nexus_updated_at=meta.updated_at if meta else None,
+                nexus_name=meta.name if meta else None,
+                summary=meta.summary if meta else None,
+                author=meta.author if meta else None,
+                endorsement_count=meta.endorsement_count if meta else None,
+                picture_url=meta.picture_url if meta else None,
+                category=meta.category if meta else None,
+                last_downloaded_at=(
+                    dl_date_map.get(mod.source_archive) if mod.source_archive else None
+                ),
             )
         )
     return result

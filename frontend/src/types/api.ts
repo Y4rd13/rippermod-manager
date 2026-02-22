@@ -159,6 +159,7 @@ export interface ModUpdate {
   local_timestamp: number | null;
   nexus_timestamp: number | null;
   source_archive: string | null;
+  reason: string;
 }
 
 export interface GameVersion {
@@ -202,6 +203,7 @@ export interface AvailableArchive {
   parsed_name: string;
   parsed_version: string | null;
   is_installed: boolean;
+  last_downloaded_at: string | null;
 }
 
 export interface ArchiveDeleteResult {
@@ -233,6 +235,7 @@ export interface InstalledModOut {
   endorsement_count: number | null;
   picture_url: string | null;
   category: string | null;
+  last_downloaded_at: string | null;
 }
 
 export interface InstallRequest {
