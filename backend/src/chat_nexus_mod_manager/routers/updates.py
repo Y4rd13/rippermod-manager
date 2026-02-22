@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
-from datetime import UTC
-from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends
@@ -11,9 +8,9 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from chat_nexus_mod_manager.database import get_session
-from chat_nexus_mod_manager.models.download import DownloadJob
 from chat_nexus_mod_manager.models.settings import AppSetting
 from chat_nexus_mod_manager.routers.deps import get_game_or_404
+from chat_nexus_mod_manager.services.download_dates import archive_download_dates
 from chat_nexus_mod_manager.services.update_service import (
     check_all_updates,
     check_cached_updates,
@@ -58,37 +55,13 @@ def _enrich_download_dates(
     if not archives:
         return
 
-    # DownloadJob completed_at
-    dl_rows = session.exec(
-        select(DownloadJob.file_name, DownloadJob.completed_at).where(
-            DownloadJob.game_id == game_id,
-            DownloadJob.status == "completed",
-            DownloadJob.completed_at.is_not(None),  # type: ignore[union-attr]
-            DownloadJob.file_name.in_(archives),  # type: ignore[union-attr]
-        )
-    ).all()
-    dl_map: dict[str, int] = {}
-    for fn, completed in dl_rows:
-        if fn and completed:
-            if completed.tzinfo is None:
-                ts = int(completed.replace(tzinfo=UTC).timestamp())
-            else:
-                ts = int(completed.timestamp())
-            existing = dl_map.get(fn)
-            if existing is None or ts > existing:
-                dl_map[fn] = ts
-
-    # Archive file mtime fallback
-    staging = Path(install_path) / "downloaded_mods"
-    for fn in archives - dl_map.keys():
-        try:
-            dl_map[fn] = int(os.stat(staging / fn).st_mtime)
-        except OSError:
-            continue
+    dl_date_map = archive_download_dates(session, game_id, install_path, archives)
 
     for u in updates:
         if u.source_archive:
-            u.local_download_date = dl_map.get(u.source_archive)
+            dt = dl_date_map.get(u.source_archive)
+            if dt:
+                u.local_download_date = int(dt.timestamp())
 
 
 @router.get("/", response_model=UpdateCheckResult)
