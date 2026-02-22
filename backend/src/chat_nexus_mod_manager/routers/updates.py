@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import UTC, datetime
+from datetime import UTC
 from pathlib import Path
 from typing import Literal
 
@@ -70,7 +70,10 @@ def _enrich_download_dates(
     dl_map: dict[str, int] = {}
     for fn, completed in dl_rows:
         if fn and completed:
-            ts = int(completed.replace(tzinfo=UTC).timestamp()) if completed.tzinfo is None else int(completed.timestamp())
+            if completed.tzinfo is None:
+                ts = int(completed.replace(tzinfo=UTC).timestamp())
+            else:
+                ts = int(completed.timestamp())
             existing = dl_map.get(fn)
             if existing is None or ts > existing:
                 dl_map[fn] = ts
