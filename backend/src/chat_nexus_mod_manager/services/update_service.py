@@ -68,7 +68,7 @@ class UpdateResult:
     updates: list[dict[str, Any]] = field(default_factory=list)
 
 
-def _batch_group_file_mtimes(
+def batch_group_file_mtimes(
     group_ids: list[int],
     install_path: str,
     session: Session,
@@ -186,7 +186,7 @@ def collect_tracked_mods(
     for _corr, group, _dl in correlations:
         if group.id is not None:
             all_group_ids.append(group.id)
-    mtime_map = _batch_group_file_mtimes(all_group_ids, install_path, session)
+    mtime_map = batch_group_file_mtimes(all_group_ids, install_path, session)
 
     for mod in installed:
         mid = mod.nexus_mod_id

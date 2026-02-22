@@ -21,6 +21,7 @@ from chat_nexus_mod_manager.schemas.mod import (
     ScanResult,
     ScanStreamRequest,
 )
+from chat_nexus_mod_manager.services.update_service import batch_group_file_mtimes
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,8 @@ def list_mod_groups(game_name: str, session: Session = Depends(get_session)) -> 
     for _nid, (group_id, _score) in nexus_id_best.items():
         nexus_id_winner.add(group_id)
 
+    mtime_map = batch_group_file_mtimes(group_ids, game.install_path, session)
+
     result: list[ModGroupOut] = []
     for g in groups:
         _ = g.files
@@ -106,6 +109,7 @@ def list_mod_groups(game_name: str, session: Session = Depends(get_session)) -> 
                     for f in g.files
                 ],
                 nexus_match=nexus_match,
+                earliest_file_mtime=mtime_map.get(g.id),  # type: ignore[arg-type]
             )
         )
     return result

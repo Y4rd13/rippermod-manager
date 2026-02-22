@@ -256,6 +256,11 @@ export function NexusMatchedGrid({
                     {match.updated_at && (
                       <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
                     )}
+                    {mod.earliest_file_mtime != null && (
+                      <span className="text-xs text-text-muted" title="File date on disk">
+                        DL: {timeAgo(mod.earliest_file_mtime)}
+                      </span>
+                    )}
                     {mod.files.length > 0 && (
                       <button
                         onClick={toggleExpand}
