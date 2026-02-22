@@ -155,9 +155,10 @@ function ManagedModsGrid({
         if (mod.nexus_mod_id) onModClick?.(mod.nexus_mod_id);
         break;
       case "copy":
-        void navigator.clipboard.writeText(mod.nexus_name || mod.name).then(() => {
-          toast.success("Copied to clipboard");
-        });
+        void navigator.clipboard.writeText(mod.nexus_name || mod.name).then(
+          () => toast.success("Copied to clipboard"),
+          () => toast.error("Failed to copy"),
+        );
         break;
       case "delete":
         uninstallMod.mutate({ gameName, modId: mod.id });

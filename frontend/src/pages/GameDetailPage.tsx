@@ -264,7 +264,7 @@ export function GameDetailPage() {
 
   return (
     <div className="space-y-6">
-      <nav className="flex items-center gap-1.5 text-sm text-text-muted">
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-text-muted">
         <Link to="/games" className="hover:text-text-primary transition-colors">
           Games
         </Link>
