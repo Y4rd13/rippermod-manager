@@ -1,5 +1,8 @@
 import {
   ArrowUp,
+  Copy,
+  ExternalLink,
+  Package,
   Power,
   PowerOff,
   Search,
@@ -11,7 +14,14 @@ import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
+import { BulkActionBar } from "@/components/ui/BulkActionBar";
 import { Button } from "@/components/ui/Button";
+import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { FilterChips } from "@/components/ui/FilterChips";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
+import { useBulkSelect } from "@/hooks/use-bulk-select";
+import { useContextMenu } from "@/hooks/use-context-menu";
 import { useToggleMod, useUninstallMod } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { isoToEpoch, timeAgo } from "@/lib/format";
@@ -25,12 +35,23 @@ interface Props {
   archives?: AvailableArchive[];
   downloadJobs?: DownloadJobOut[];
   updates?: ModUpdate[];
+  isLoading?: boolean;
   onModClick?: (nexusModId: number) => void;
+  onTabChange?: (tab: string) => void;
 }
 
 type SortKey = "name" | "version" | "files" | "disabled" | "updated";
 
 type RecognizedSortKey = "name" | "endorsements" | "updated" | "confidence";
+
+type ChipKey = "all" | "enabled" | "disabled" | "has-update";
+
+const CHIP_OPTIONS: { key: ChipKey; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "enabled", label: "Enabled" },
+  { key: "disabled", label: "Disabled" },
+  { key: "has-update", label: "Has Update" },
+];
 
 const RECOGNIZED_SORT_OPTIONS: { value: RecognizedSortKey; label: string }[] = [
   { value: "confidence", label: "Match Confidence" },
@@ -67,150 +88,276 @@ function ManagedModsTable({
     }
   };
 
-  const sorted = [...mods].sort((a, b) => {
-    const dir = sortDir === "asc" ? 1 : -1;
-    switch (sortKey) {
-      case "name":
-        return a.name.localeCompare(b.name) * dir;
-      case "version":
-        return a.installed_version.localeCompare(b.installed_version) * dir;
-      case "files":
-        return (a.file_count - b.file_count) * dir;
-      case "disabled":
-        return (Number(a.disabled) - Number(b.disabled)) * dir;
-      case "updated":
-        return (isoToEpoch(a.nexus_updated_at) - isoToEpoch(b.nexus_updated_at)) * dir;
-      default:
-        return 0;
+  const sorted = useMemo(
+    () =>
+      [...mods].sort((a, b) => {
+        const dir = sortDir === "asc" ? 1 : -1;
+        switch (sortKey) {
+          case "name":
+            return a.name.localeCompare(b.name) * dir;
+          case "version":
+            return a.installed_version.localeCompare(b.installed_version) * dir;
+          case "files":
+            return (a.file_count - b.file_count) * dir;
+          case "disabled":
+            return (Number(a.disabled) - Number(b.disabled)) * dir;
+          case "updated":
+            return (isoToEpoch(a.nexus_updated_at) - isoToEpoch(b.nexus_updated_at)) * dir;
+          default:
+            return 0;
+        }
+      }),
+    [mods, sortKey, sortDir],
+  );
+
+  const sortedIds = useMemo(() => sorted.map((m) => m.id), [sorted]);
+  const bulk = useBulkSelect(sortedIds);
+
+  const { menuState, openMenu, closeMenu } = useContextMenu<InstalledModOut>();
+
+  const buildContextMenuItems = (mod: InstalledModOut): ContextMenuItem[] => {
+    const items: ContextMenuItem[] = [
+      {
+        key: mod.disabled ? "enable" : "disable",
+        label: mod.disabled ? "Enable" : "Disable",
+        icon: mod.disabled ? Power : PowerOff,
+      },
+    ];
+    if (mod.nexus_mod_id) {
+      items.push({ key: "nexus", label: "View on Nexus", icon: ExternalLink });
     }
-  });
+    items.push({ key: "copy", label: "Copy Name", icon: Copy });
+    items.push({ key: "sep", label: "", separator: true });
+    items.push({ key: "delete", label: "Delete", icon: Trash2, variant: "danger" });
+    return items;
+  };
+
+  const handleContextMenuSelect = (key: string) => {
+    const mod = menuState.data;
+    if (!mod) return;
+    switch (key) {
+      case "enable":
+      case "disable":
+        toggleMod.mutate({ gameName, modId: mod.id });
+        break;
+      case "nexus":
+        if (mod.nexus_mod_id) onModClick?.(mod.nexus_mod_id);
+        break;
+      case "copy":
+        void navigator.clipboard.writeText(mod.name);
+        break;
+      case "delete":
+        setConfirming(mod.id);
+        break;
+    }
+  };
+
+  const handleBulkEnable = async () => {
+    const targets = sorted.filter((m) => bulk.selectedIds.has(m.id) && m.disabled);
+    try {
+      for (const mod of targets) {
+        await toggleMod.mutateAsync({ gameName, modId: mod.id });
+      }
+    } finally {
+      bulk.deselectAll();
+    }
+  };
+
+  const handleBulkDisable = async () => {
+    const targets = sorted.filter((m) => bulk.selectedIds.has(m.id) && !m.disabled);
+    try {
+      for (const mod of targets) {
+        await toggleMod.mutateAsync({ gameName, modId: mod.id });
+      }
+    } finally {
+      bulk.deselectAll();
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const targets = sorted.filter((m) => bulk.selectedIds.has(m.id));
+    try {
+      for (const mod of targets) {
+        await uninstallMod.mutateAsync({ gameName, modId: mod.id });
+      }
+    } finally {
+      bulk.deselectAll();
+    }
+  };
+
+  const selectedMods = sorted.filter((m) => bulk.selectedIds.has(m.id));
+  const hasDisabledSelected = selectedMods.some((m) => m.disabled);
+  const hasEnabledSelected = selectedMods.some((m) => !m.disabled);
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border text-left text-text-muted">
-            {(
-              [
-                ["name", "Mod Name"],
-                ["version", "Version"],
-                ["files", "Files"],
-                ["disabled", "Status"],
-                ["updated", "Updated"],
-              ] as const
-            ).map(([key, label]) => (
-              <th
-                key={key}
-                className="cursor-pointer select-none pb-2 pr-4 hover:text-text-primary"
-                onClick={() => handleSort(key)}
-              >
-                {label} {sortKey === key && (sortDir === "asc" ? "^" : "v")}
+    <>
+      <BulkActionBar
+        selectedCount={bulk.selectedCount}
+        totalCount={sorted.length}
+        onSelectAll={bulk.selectAll}
+        onDeselectAll={bulk.deselectAll}
+        isAllSelected={bulk.isAllSelected}
+      >
+        {hasDisabledSelected && (
+          <Button size="sm" variant="secondary" onClick={handleBulkEnable}>
+            <Power size={12} className="mr-1" /> Enable
+          </Button>
+        )}
+        {hasEnabledSelected && (
+          <Button size="sm" variant="secondary" onClick={handleBulkDisable}>
+            <PowerOff size={12} className="mr-1" /> Disable
+          </Button>
+        )}
+        <Button size="sm" variant="danger" onClick={handleBulkDelete}>
+          <Trash2 size={12} className="mr-1" /> Delete
+        </Button>
+      </BulkActionBar>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-text-muted sticky top-0 z-10 bg-surface-0">
+              <th className="py-2 pr-4 w-8">
+                <input
+                  type="checkbox"
+                  checked={bulk.isAllSelected}
+                  onChange={bulk.isAllSelected ? bulk.deselectAll : bulk.selectAll}
+                  className="h-4 w-4 rounded accent-accent"
+                />
               </th>
-            ))}
-            <th className="pb-2 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((mod) => {
-            const update = updateByInstalledId.get(mod.id)
-              ?? (mod.nexus_mod_id ? updateByNexusId.get(mod.nexus_mod_id) : undefined);
-            return (
-            <tr
-              key={mod.id}
-              className={cn(
-                "border-b border-border/50",
-                mod.disabled && "opacity-50",
-                update && !mod.disabled && "bg-warning/5",
-              )}
-            >
-              <td className="py-2 pr-4">
-                {mod.nexus_mod_id ? (
-                  <button
-                    className="text-text-primary hover:text-accent transition-colors text-left"
-                    onClick={() => onModClick?.(mod.nexus_mod_id!)}
-                  >
-                    {mod.name}
-                  </button>
-                ) : (
-                  <span className="text-text-primary">{mod.name}</span>
-                )}
-                {mod.nexus_mod_id && (
-                  <span className="ml-2 text-xs text-text-muted">
-                    #{mod.nexus_mod_id}
-                  </span>
-                )}
-              </td>
-              <td className="py-2 pr-4 text-text-muted">
-                <span>{mod.installed_version || "--"}</span>
-                {update && (
-                  <Badge variant="warning" prominent className="ml-2">
-                    <ArrowUp size={10} className="mr-0.5" />
-                    v{update.nexus_version}
-                  </Badge>
-                )}
-              </td>
-              <td className="py-2 pr-4 text-text-muted">{mod.file_count}</td>
-              <td className="py-2 pr-4">
-                <Badge variant={mod.disabled ? "danger" : "success"}>
-                  {mod.disabled ? "Disabled" : "Enabled"}
-                </Badge>
-              </td>
-              <td className="py-2 pr-4 text-text-muted">
-                {mod.nexus_updated_at
-                  ? timeAgo(isoToEpoch(mod.nexus_updated_at))
-                  : "—"}
-              </td>
-              <td className="py-2 text-right">
-                <div className="flex items-center justify-end gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    loading={
-                      toggleMod.isPending &&
-                      toggleMod.variables?.modId === mod.id
-                    }
-                    onClick={() =>
-                      toggleMod.mutate({ gameName, modId: mod.id })
-                    }
-                  >
-                    {mod.disabled ? (
-                      <Power size={14} className="text-success" />
-                    ) : (
-                      <PowerOff size={14} className="text-warning" />
-                    )}
-                  </Button>
-                  {confirming === mod.id ? (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      loading={
-                        uninstallMod.isPending &&
-                        uninstallMod.variables?.modId === mod.id
-                      }
-                      onClick={() => {
-                        uninstallMod.mutate({ gameName, modId: mod.id });
-                        setConfirming(null);
-                      }}
-                    >
-                      Confirm
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setConfirming(mod.id)}
-                    >
-                      <Trash2 size={14} className="text-danger" />
-                    </Button>
-                  )}
-                </div>
-              </td>
+              {(
+                [
+                  ["name", "Mod Name"],
+                  ["version", "Version"],
+                  ["files", "Files"],
+                  ["disabled", "Status"],
+                  ["updated", "Updated"],
+                ] as const
+              ).map(([key, label]) => (
+                <th
+                  key={key}
+                  className="cursor-pointer select-none py-2 pr-4 hover:text-text-primary"
+                  onClick={() => handleSort(key)}
+                >
+                  {label} {sortKey === key && (sortDir === "asc" ? "^" : "v")}
+                </th>
+              ))}
+              <th className="py-2 text-right">Actions</th>
             </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {sorted.map((mod) => {
+              const update =
+                updateByInstalledId.get(mod.id) ??
+                (mod.nexus_mod_id ? updateByNexusId.get(mod.nexus_mod_id) : undefined);
+              return (
+                <tr
+                  key={mod.id}
+                  className={cn(
+                    "border-b border-border/50",
+                    mod.disabled && "opacity-50",
+                    update && !mod.disabled && "bg-warning/5",
+                    bulk.isSelected(mod.id) && "bg-accent/5",
+                  )}
+                  onContextMenu={(e) => openMenu(e, mod)}
+                >
+                  <td className="py-2 pr-4">
+                    <input
+                      type="checkbox"
+                      checked={bulk.isSelected(mod.id)}
+                      onChange={() => bulk.toggle(mod.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-4 w-4 rounded accent-accent"
+                    />
+                  </td>
+                  <td className="py-2 pr-4">
+                    {mod.nexus_mod_id ? (
+                      <button
+                        className="text-text-primary hover:text-accent transition-colors text-left"
+                        onClick={() => onModClick?.(mod.nexus_mod_id!)}
+                      >
+                        {mod.name}
+                      </button>
+                    ) : (
+                      <span className="text-text-primary">{mod.name}</span>
+                    )}
+                    {mod.nexus_mod_id && (
+                      <span className="ml-2 text-xs text-text-muted">#{mod.nexus_mod_id}</span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-4 text-text-muted">
+                    <span>{mod.installed_version || "--"}</span>
+                    {update && (
+                      <Badge variant="warning" prominent className="ml-2">
+                        <ArrowUp size={10} className="mr-0.5" />
+                        v{update.nexus_version}
+                      </Badge>
+                    )}
+                  </td>
+                  <td className="py-2 pr-4 text-text-muted">{mod.file_count}</td>
+                  <td className="py-2 pr-4">
+                    <Badge variant={mod.disabled ? "danger" : "success"}>
+                      {mod.disabled ? "Disabled" : "Enabled"}
+                    </Badge>
+                  </td>
+                  <td className="py-2 pr-4 text-text-muted">
+                    {mod.nexus_updated_at ? timeAgo(isoToEpoch(mod.nexus_updated_at)) : "—"}
+                  </td>
+                  <td className="py-2 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        loading={toggleMod.isPending && toggleMod.variables?.modId === mod.id}
+                        onClick={() => toggleMod.mutate({ gameName, modId: mod.id })}
+                      >
+                        {mod.disabled ? (
+                          <Power size={14} className="text-success" />
+                        ) : (
+                          <PowerOff size={14} className="text-warning" />
+                        )}
+                      </Button>
+                      {confirming === mod.id ? (
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          loading={
+                            uninstallMod.isPending && uninstallMod.variables?.modId === mod.id
+                          }
+                          onClick={() => {
+                            uninstallMod.mutate({ gameName, modId: mod.id });
+                            setConfirming(null);
+                          }}
+                        >
+                          Confirm
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setConfirming(mod.id)}
+                        >
+                          <Trash2 size={14} className="text-danger" />
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {menuState.visible && menuState.data && (
+        <ContextMenu
+          items={buildContextMenuItems(menuState.data)}
+          position={menuState.position}
+          onSelect={handleContextMenuSelect}
+          onClose={closeMenu}
+        />
+      )}
+    </>
   );
 }
 
@@ -257,7 +404,6 @@ function RecognizedModsGrid({
               onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
               action={
                 <ModCardAction
-
                   isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
                   isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
                   activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
@@ -308,9 +454,12 @@ export function InstalledModsTable({
   archives = [],
   downloadJobs = [],
   updates = [],
+  isLoading,
   onModClick,
+  onTabChange,
 }: Props) {
   const [filter, setFilter] = useState("");
+  const [chip, setChip] = useState<ChipKey>("all");
   const [recognizedSort, setRecognizedSort] = useState<RecognizedSortKey>("confidence");
 
   const updateByNexusId = useMemo(() => {
@@ -343,9 +492,22 @@ export function InstalledModsTable({
   const q = filter.toLowerCase();
 
   const filteredMods = useMemo(() => {
-    if (!q) return mods;
-    return mods.filter((m) => m.name.toLowerCase().includes(q));
-  }, [mods, q]);
+    let items = q ? mods.filter((m) => m.name.toLowerCase().includes(q)) : mods;
+
+    if (chip === "enabled") {
+      items = items.filter((m) => !m.disabled);
+    } else if (chip === "disabled") {
+      items = items.filter((m) => m.disabled);
+    } else if (chip === "has-update") {
+      items = items.filter(
+        (m) =>
+          updateByInstalledId.has(m.id) ||
+          (m.nexus_mod_id != null && updateByNexusId.has(m.nexus_mod_id)),
+      );
+    }
+
+    return items;
+  }, [mods, q, chip, updateByInstalledId, updateByNexusId]);
 
   const filteredRecognized = useMemo(() => {
     const items = q
@@ -377,12 +539,24 @@ export function InstalledModsTable({
 
   const totalCount = filteredMods.length + filteredRecognized.length;
 
+  if (isLoading) {
+    return <SkeletonTable columns={6} rows={5} />;
+  }
+
   if (mods.length === 0 && recognized.length === 0) {
     return (
-      <p className="py-4 text-sm text-text-muted">
-        No installed mods. Install mods from the Archives tab or run a scan to discover recognized
-        mods.
-      </p>
+      <EmptyState
+        icon={Package}
+        title="No Installed Mods"
+        description="Install mods from the Archives tab or run a scan to discover recognized mods."
+        actions={
+          onTabChange ? (
+            <Button size="sm" variant="secondary" onClick={() => onTabChange("archives")}>
+              Browse Archives
+            </Button>
+          ) : undefined
+        }
+      />
     );
   }
 
@@ -419,9 +593,16 @@ export function InstalledModsTable({
 
       {filteredMods.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-text-primary mb-3">
-            Managed Mods ({filteredMods.length})
-          </h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-text-primary">
+              Managed Mods ({filteredMods.length})
+            </h3>
+            <FilterChips
+              chips={CHIP_OPTIONS}
+              active={chip}
+              onChange={(v) => setChip(v as ChipKey)}
+            />
+          </div>
           <ManagedModsTable
             mods={filteredMods}
             gameName={gameName}
