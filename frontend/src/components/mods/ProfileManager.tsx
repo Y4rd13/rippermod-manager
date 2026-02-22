@@ -107,9 +107,13 @@ export function ProfileManager({ profiles, gameName, isLoading = false }: Props)
   };
 
   const handleLoadWithPreview = async (profileId: number) => {
-    const diff = await previewProfile.mutateAsync({ gameName, profileId });
-    setDiffPreview(diff);
-    setDiffProfileId(profileId);
+    try {
+      const diff = await previewProfile.mutateAsync({ gameName, profileId });
+      setDiffPreview(diff);
+      setDiffProfileId(profileId);
+    } catch {
+      // Error state handled by React Query
+    }
   };
 
   const handleConfirmLoad = () => {
@@ -126,16 +130,20 @@ export function ProfileManager({ profiles, gameName, isLoading = false }: Props)
   };
 
   const handleExport = async (profileId: number) => {
-    const data = await exportProfile.mutateAsync({ gameName, profileId });
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${data.profile_name}_modlist.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const data = await exportProfile.mutateAsync({ gameName, profileId });
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${data.profile_name}_modlist.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Error state handled by React Query
+    }
   };
 
   const handleImportData = useCallback(
@@ -208,14 +216,18 @@ export function ProfileManager({ profiles, gameName, isLoading = false }: Props)
 
   const handleCompare = async () => {
     if (selectedForCompare.length !== 2) return;
-    const result = await compareProfiles.mutateAsync({
-      gameName,
-      data: {
-        profile_id_a: selectedForCompare[0]!,
-        profile_id_b: selectedForCompare[1]!,
-      },
-    });
-    setCompareResult(result);
+    try {
+      const result = await compareProfiles.mutateAsync({
+        gameName,
+        data: {
+          profile_id_a: selectedForCompare[0]!,
+          profile_id_b: selectedForCompare[1]!,
+        },
+      });
+      setCompareResult(result);
+    } catch {
+      // Error state handled by React Query
+    }
   };
 
   // Drag & drop handlers
@@ -290,7 +302,7 @@ export function ProfileManager({ profiles, gameName, isLoading = false }: Props)
 
   return (
     <div
-      className={`space-y-4 ${isDragOver ? "ring-2 ring-dashed ring-accent rounded-xl" : ""}`}
+      className={`space-y-4 ${isDragOver ? "outline outline-2 outline-dashed outline-accent rounded-xl" : ""}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

@@ -334,6 +334,7 @@ export interface ProfileExportMod {
   nexus_mod_id: number | null;
   version: string;
   source_archive: string;
+  enabled: boolean;
 }
 
 export interface ProfileExport {

@@ -61,9 +61,17 @@ def _check_drift(profile: Profile, game: Game, session: Session) -> bool:
 def profile_to_out(profile: Profile, game: Game, session: Session) -> ProfileOut:
     """Convert a Profile model to a ProfileOut schema."""
     _ = profile.entries
+    mod_ids = [e.installed_mod_id for e in profile.entries]
+    installed_mods = (
+        session.exec(select(InstalledMod).where(InstalledMod.id.in_(mod_ids))).all()
+        if mod_ids
+        else []
+    )
+    installed_map = {m.id: m for m in installed_mods}
+
     mods: list[ProfileModOut] = []
     for entry in profile.entries:
-        installed = session.get(InstalledMod, entry.installed_mod_id)
+        installed = installed_map.get(entry.installed_mod_id)
         if installed:
             mods.append(
                 ProfileModOut(
@@ -102,6 +110,9 @@ def create_profile(game: Game, data: ProfileCreate, session: Session) -> Profile
         select(Profile).where(Profile.game_id == game.id, Profile.name == data.name)
     ).first()
     if existing:
+        if game.active_profile_id == existing.id:
+            game.active_profile_id = None
+            session.add(game)
         session.delete(existing)
         session.flush()
 
@@ -288,6 +299,7 @@ def export_profile(profile: Profile, game: Game, session: Session) -> ProfileExp
                     nexus_mod_id=installed.nexus_mod_id,
                     version=installed.installed_version,
                     source_archive=installed.source_archive,
+                    enabled=entry.enabled,
                 )
             )
 
@@ -310,6 +322,9 @@ def import_profile(
         select(Profile).where(Profile.game_id == game.id, Profile.name == data.profile_name)
     ).first()
     if existing:
+        if game.active_profile_id == existing.id:
+            game.active_profile_id = None
+            session.add(game)
         session.delete(existing)
         session.flush()
 
@@ -340,7 +355,7 @@ def import_profile(
             entry = ProfileEntry(
                 profile_id=profile.id,  # type: ignore[arg-type]
                 installed_mod_id=matched.id,  # type: ignore[arg-type]
-                enabled=True,
+                enabled=export_mod.enabled,
             )
             session.add(entry)
             matched_count += 1
@@ -425,9 +440,16 @@ def compare_profiles(
     a_ids = set(a_map.keys())
     b_ids = set(b_map.keys())
 
+    all_ids = list(a_ids | b_ids)
+    all_mods = (
+        session.exec(select(InstalledMod).where(InstalledMod.id.in_(all_ids))).all()
+        if all_ids
+        else []
+    )
+    name_map = {m.id: m.name for m in all_mods}
+
     def _mod_name(mod_id: int) -> str:
-        mod = session.get(InstalledMod, mod_id)
-        return mod.name if mod else f"Unknown (ID {mod_id})"
+        return name_map.get(mod_id, f"Unknown (ID {mod_id})")
 
     only_a: list[ProfileCompareEntry] = []
     for mod_id in sorted(a_ids - b_ids):

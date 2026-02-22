@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -29,6 +29,14 @@ const ACTION_LABELS: Record<string, string> = {
 export function ProfileDiffDialog({ diff, loading, onCancel, onConfirm }: Props) {
   const [showUnchanged, setShowUnchanged] = useState(false);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onCancel]);
+
   const grouped = {
     enable: diff.entries.filter((e) => e.action === "enable"),
     disable: diff.entries.filter((e) => e.action === "disable"),
@@ -40,12 +48,16 @@ export function ProfileDiffDialog({ diff, loading, onCancel, onConfirm }: Props)
     diff.enable_count > 0 || diff.disable_count > 0 || diff.missing_count > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={onCancel}
+    >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="diff-dialog-title"
         className="w-full max-w-lg rounded-xl border border-border bg-surface-1 p-6"
+        onClick={(e) => e.stopPropagation()}
       >
         <h3 id="diff-dialog-title" className="mb-4 text-lg font-semibold text-text-primary">
           Load Profile: {diff.profile_name}

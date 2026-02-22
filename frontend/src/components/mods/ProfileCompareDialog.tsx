@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import type { ProfileCompareOut } from "@/types/api";
@@ -8,13 +10,25 @@ interface Props {
 }
 
 export function ProfileCompareDialog({ compare, onClose }: Props) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={onClose}
+    >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="compare-dialog-title"
         className="w-full max-w-2xl rounded-xl border border-border bg-surface-1 p-6"
+        onClick={(e) => e.stopPropagation()}
       >
         <h3 id="compare-dialog-title" className="mb-4 text-lg font-semibold text-text-primary">
           {compare.profile_a_name} vs {compare.profile_b_name}
@@ -35,7 +49,7 @@ export function ProfileCompareDialog({ compare, onClose }: Props) {
               ) : (
                 compare.only_in_a.map((entry) => (
                   <div
-                    key={entry.installed_mod_id}
+                    key={entry.installed_mod_id ?? `a-${entry.mod_name}`}
                     className="py-0.5 text-xs text-text-primary"
                   >
                     {entry.mod_name}
@@ -57,7 +71,7 @@ export function ProfileCompareDialog({ compare, onClose }: Props) {
               ) : (
                 compare.in_both.map((entry) => (
                   <div
-                    key={entry.installed_mod_id}
+                    key={entry.installed_mod_id ?? `both-${entry.mod_name}`}
                     className={`py-0.5 text-xs ${
                       entry.enabled_in_a !== entry.enabled_in_b
                         ? "text-warning"
@@ -90,7 +104,7 @@ export function ProfileCompareDialog({ compare, onClose }: Props) {
               ) : (
                 compare.only_in_b.map((entry) => (
                   <div
-                    key={entry.installed_mod_id}
+                    key={entry.installed_mod_id ?? `b-${entry.mod_name}`}
                     className="py-0.5 text-xs text-text-primary"
                   >
                     {entry.mod_name}

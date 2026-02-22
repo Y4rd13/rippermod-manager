@@ -113,6 +113,7 @@ class ProfileExportMod(BaseModel):
     nexus_mod_id: int | None = None
     version: str = ""
     source_archive: str = ""
+    enabled: bool = True
 
 
 class ProfileExport(BaseModel):
