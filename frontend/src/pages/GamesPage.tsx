@@ -7,6 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { useCreateGame, useDeleteGame, useValidatePath } from "@/hooks/mutations";
 import { useGames } from "@/hooks/queries";
@@ -252,30 +253,13 @@ export function GamesPage() {
                     </p>
                   </div>
                 </Link>
-                {confirmDelete === game.name ? (
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    loading={
-                      deleteGame.isPending &&
-                      deleteGame.variables === game.name
-                    }
-                    onClick={() => {
-                      deleteGame.mutate(game.name);
-                      setConfirmDelete(null);
-                    }}
-                  >
-                    Confirm
-                  </Button>
-                ) : (
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => setConfirmDelete(game.name)}
-                  >
-                    <Trash2 size={14} />
-                  </Button>
-                )}
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => setConfirmDelete(game.name)}
+                >
+                  <Trash2 size={14} />
+                </Button>
               </div>
             </Card>
           ))}
@@ -283,6 +267,23 @@ export function GamesPage() {
       )}
 
       <AddGameDialog open={showAdd} onClose={() => setShowAdd(false)} />
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete Game?"
+          message={`This will remove '${confirmDelete}' from the manager. Your game files and mods won't be affected.`}
+          confirmLabel="Delete"
+          variant="danger"
+          icon={Trash2}
+          loading={deleteGame.isPending}
+          onConfirm={() => {
+            deleteGame.mutate(confirmDelete, {
+              onSuccess: () => setConfirmDelete(null),
+            });
+          }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
     </div>
   );
 }

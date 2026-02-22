@@ -2,14 +2,17 @@ import { Power, PowerOff, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 interface Props {
   disabled: boolean;
   isToggling: boolean;
   isUninstalling: boolean;
-  onToggle: () => void;
-  onUninstall: () => void;
+  onToggle: () => Promise<unknown>;
+  onUninstall: () => Promise<unknown>;
 }
+
+type ConfirmAction = "disable" | "enable" | "uninstall" | null;
 
 export function InstalledModCardAction({
   disabled,
@@ -18,7 +21,7 @@ export function InstalledModCardAction({
   onToggle,
   onUninstall,
 }: Props) {
-  const [confirming, setConfirming] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
 
   const stop = (e: React.MouseEvent) => e.stopPropagation();
 
@@ -29,7 +32,7 @@ export function InstalledModCardAction({
         size="sm"
         title={disabled ? "Enable this mod" : "Disable this mod"}
         loading={isToggling}
-        onClick={onToggle}
+        onClick={() => setConfirmAction(disabled ? "enable" : "disable")}
       >
         {disabled ? (
           <Power size={14} className="text-success" />
@@ -37,27 +40,57 @@ export function InstalledModCardAction({
           <PowerOff size={14} className="text-warning" />
         )}
       </Button>
-      {confirming ? (
-        <Button
-          variant="danger"
-          size="sm"
-          loading={isUninstalling}
-          onClick={() => {
-            onUninstall();
-            setConfirming(false);
+      <Button
+        variant="ghost"
+        size="sm"
+        title="Uninstall this mod"
+        onClick={() => setConfirmAction("uninstall")}
+      >
+        <Trash2 size={14} className="text-danger" />
+      </Button>
+
+      {(confirmAction === "disable" || confirmAction === "enable") && (
+        <ConfirmDialog
+          title={confirmAction === "disable" ? "Disable Mod?" : "Enable Mod?"}
+          message={
+            confirmAction === "disable"
+              ? "This mod's files will be renamed and it won't load in-game."
+              : "This mod's files will be restored and it will load in-game."
+          }
+          confirmLabel={confirmAction === "disable" ? "Disable" : "Enable"}
+          variant="warning"
+          icon={confirmAction === "disable" ? PowerOff : Power}
+          loading={isToggling}
+          onConfirm={async () => {
+            try {
+              await onToggle();
+              setConfirmAction(null);
+            } catch {
+              // Error handled by mutation's onError callback
+            }
           }}
-        >
-          Confirm
-        </Button>
-      ) : (
-        <Button
-          variant="ghost"
-          size="sm"
-          title="Uninstall this mod"
-          onClick={() => setConfirming(true)}
-        >
-          <Trash2 size={14} className="text-danger" />
-        </Button>
+          onCancel={() => setConfirmAction(null)}
+        />
+      )}
+
+      {confirmAction === "uninstall" && (
+        <ConfirmDialog
+          title="Uninstall Mod?"
+          message="All installed files for this mod will be permanently deleted."
+          confirmLabel="Uninstall"
+          variant="danger"
+          icon={Trash2}
+          loading={isUninstalling}
+          onConfirm={async () => {
+            try {
+              await onUninstall();
+              setConfirmAction(null);
+            } catch {
+              // Error handled by mutation's onError callback
+            }
+          }}
+          onCancel={() => setConfirmAction(null)}
+        />
       )}
     </div>
   );
