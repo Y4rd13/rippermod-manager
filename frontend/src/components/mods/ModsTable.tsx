@@ -9,6 +9,7 @@ import { ConfidenceBadge } from "@/components/ui/Badge";
 import { formatBytes } from "@/lib/format";
 import type { ModGroup } from "@/types/api";
 import { useContextMenu } from "@/hooks/use-context-menu";
+import { toast } from "@/stores/toast-store";
 
 type SortKey = "name" | "files" | "confidence" | "match";
 type SortDir = "asc" | "desc";
@@ -116,7 +117,10 @@ export function ModsTable({ mods, isLoading }: { mods: ModGroup[]; isLoading?: b
 
     switch (key) {
       case "copy-name":
-        navigator.clipboard.writeText(mod.display_name);
+        void navigator.clipboard.writeText(mod.display_name).then(
+          () => toast.success("Copied to clipboard"),
+          () => toast.error("Failed to copy"),
+        );
         break;
       case "expand":
         toggleExpand(mod.id);
@@ -271,10 +275,18 @@ export function ModsTable({ mods, isLoading }: { mods: ModGroup[]; isLoading?: b
       </div>
 
       {filtered.length === 0 && (filter || matchFilter !== "all") && (
-        <p className="py-4 text-sm text-text-muted">
-          No mods matching the current filter
-          {filter ? ` "${filter}"` : ""}.
-        </p>
+        <div className="py-4 text-sm text-text-muted text-center space-y-2">
+          <p>
+            No mods matching the current filter
+            {filter ? <> &quot;{filter}&quot;</> : ""}.
+          </p>
+          <button
+            className="text-accent hover:text-accent-hover text-xs transition-colors"
+            onClick={() => { setFilter(""); setMatchFilter("all"); }}
+          >
+            Clear filters
+          </button>
+        </div>
       )}
 
       {menuState.visible && menuState.data && (

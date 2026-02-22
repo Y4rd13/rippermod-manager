@@ -36,6 +36,7 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
   const startDownload = useStartDownload();
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<UpdateSortKey>("updated");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [chip, setChip] = useState("all");
 
   const filteredUpdates = useMemo(() => {
@@ -47,20 +48,26 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
     });
 
     items.sort((a, b) => {
+      let cmp = 0;
       switch (sortKey) {
         case "name":
-          return a.display_name.localeCompare(b.display_name);
+          cmp = a.display_name.localeCompare(b.display_name);
+          break;
         case "author":
-          return a.author.localeCompare(b.author);
+          cmp = a.author.localeCompare(b.author);
+          break;
         case "source":
-          return a.source.localeCompare(b.source);
+          cmp = a.source.localeCompare(b.source);
+          break;
         case "updated":
-          return (b.nexus_timestamp ?? 0) - (a.nexus_timestamp ?? 0);
+          cmp = (a.nexus_timestamp ?? 0) - (b.nexus_timestamp ?? 0);
+          break;
       }
+      return sortDir === "asc" ? cmp : -cmp;
     });
 
     return items;
-  }, [updates, filter, sortKey, chip]);
+  }, [updates, filter, sortKey, sortDir, chip]);
 
   const downloadableUpdates = filteredUpdates.filter((u) => u.nexus_file_id != null);
 
@@ -111,6 +118,8 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
           value={sortKey}
           onChange={(v) => setSortKey(v as UpdateSortKey)}
           options={UPDATE_SORT_OPTIONS}
+          sortDir={sortDir}
+          onSortDirChange={setSortDir}
         />
         <span className="text-xs text-text-muted">
           {filteredUpdates.length} update{filteredUpdates.length !== 1 ? "s" : ""}
@@ -179,7 +188,7 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
               {filteredUpdates.map((u, i) => (
                 <tr
                   key={u.installed_mod_id ?? `group-${u.mod_group_id ?? i}`}
-                  className="border-b border-border/50"
+                  className="border-b border-border/50 hover:bg-surface-1/50 transition-colors"
                 >
                   <td className="py-2 pr-4 text-text-primary">
                     <div className="flex items-center gap-1.5">

@@ -107,10 +107,21 @@ export function ModDetailModal({ gameDomain, modId, update, action, onClose }: P
         className="w-full max-w-3xl max-h-[90vh] rounded-xl border border-border bg-surface-0 overflow-hidden flex flex-col animate-modal-in"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Loading state */}
+        {/* Loading skeleton */}
         {isLoading && (
-          <div className="flex items-center justify-center h-64 text-text-muted text-sm">
-            Loading mod details...
+          <div className="animate-pulse">
+            <div className="h-40 bg-surface-2" />
+            <div className="flex items-center gap-4 px-5 py-3 border-b border-border">
+              <div className="h-3 w-20 bg-surface-2 rounded" />
+              <div className="h-3 w-12 bg-surface-2 rounded" />
+              <div className="h-3 w-16 bg-surface-2 rounded" />
+            </div>
+            <div className="px-5 py-5 space-y-3">
+              <div className="h-4 w-3/4 bg-surface-2 rounded" />
+              <div className="h-3 w-full bg-surface-2 rounded" />
+              <div className="h-3 w-full bg-surface-2 rounded" />
+              <div className="h-3 w-2/3 bg-surface-2 rounded" />
+            </div>
           </div>
         )}
 
@@ -246,7 +257,7 @@ export function ModDetailModal({ gameDomain, modId, update, action, onClose }: P
                       key={f.file_id}
                       className="rounded-lg border border-border bg-surface-1 p-3"
                     >
-                      <p className="text-sm text-text-primary font-medium truncate">
+                      <p className="text-sm text-text-primary font-medium truncate" title={f.file_name}>
                         {f.file_name}
                       </p>
                       <div className="flex items-center gap-3 text-xs text-text-muted mt-1 flex-wrap">

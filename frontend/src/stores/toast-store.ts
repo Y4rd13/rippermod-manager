@@ -15,7 +15,7 @@ interface ToastState {
   removeToast: (id: string) => void;
 }
 
-const MAX_TOASTS = 5;
+const MAX_TOASTS = 3;
 
 export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
