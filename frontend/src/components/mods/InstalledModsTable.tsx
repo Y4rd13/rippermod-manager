@@ -602,7 +602,7 @@ export function InstalledModsTable({
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-text-primary" title="Mods installed and managed through this app — you can enable, disable, or uninstall them">
-              Managed Mods ({filteredMods.length})
+              Installed Mods ({filteredMods.length})
             </h3>
             <FilterChips
               chips={CHIP_OPTIONS}
@@ -623,7 +623,7 @@ export function InstalledModsTable({
       {filteredRecognized.length > 0 && (
         <div>
           <h3 className="text-sm font-semibold text-text-primary mb-3" title="Mods found on disk and matched to Nexus — click Install to manage them">
-            Recognized Mods ({filteredRecognized.length})
+            Detected on Disk ({filteredRecognized.length})
           </h3>
           <p className="text-xs text-text-muted mb-3">
             These mods were detected during scanning and matched to Nexus, but haven&apos;t been
