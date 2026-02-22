@@ -590,7 +590,7 @@ export function OnboardingPage() {
     if (onboardingStatus.has_openai_key && !onboardingStatus.has_nexus_key) {
       store.setStep(2);
     }
-  }, [onboardingStatus, store]);
+  }, [onboardingStatus, store.setStep]);
 
   const handleNext = () => {
     const nextStep = store.currentStep + 1;
@@ -598,7 +598,10 @@ export function OnboardingPage() {
     if (nextStep === 3 && onboardingStatus?.has_game) {
       completeOnboarding.mutate(
         {},
-        { onSuccess: () => navigate("/dashboard", { replace: true }) },
+        {
+          onSuccess: () => navigate("/dashboard", { replace: true }),
+          onError: () => store.setStep(nextStep),
+        },
       );
       return;
     }

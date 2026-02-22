@@ -129,7 +129,7 @@ export function useCompleteOnboarding() {
   });
 }
 
-export function useLogout() {
+export function useDisconnectNexus() {
   const qc = useQueryClient();
   return useMutation<OnboardingStatus, Error, void>({
     mutationFn: () => api.post("/api/v1/onboarding/reset"),

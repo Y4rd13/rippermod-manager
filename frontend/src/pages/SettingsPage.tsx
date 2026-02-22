@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
-import { useLogout, useSaveSettings } from "@/hooks/mutations";
+import { useDisconnectNexus, useSaveSettings } from "@/hooks/mutations";
 import { useNexusSSO } from "@/hooks/use-nexus-sso";
 import { useSettings } from "@/hooks/queries";
 
@@ -51,13 +51,13 @@ function ApiKeyField({
 export function SettingsPage() {
   const { data: settings = [] } = useSettings();
   const saveSettings = useSaveSettings();
-  const logout = useLogout();
+  const disconnect = useDisconnectNexus();
   const sso = useNexusSSO();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [openaiKey, setOpenaiKey] = useState("");
   const [nexusKey, setNexusKey] = useState("");
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showDisconnectConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     if (sso.state === "success") {
@@ -153,7 +153,7 @@ export function SettingsPage() {
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <p className="text-sm text-text-secondary">
-                Connected with key <span className="font-mono text-xs">{currentNexus}</span>
+                Connected with key <span className="font-mono text-xs">{"•".repeat(8)}{currentNexus.slice(-4)}</span>
               </p>
             </div>
             <Button
@@ -165,15 +165,15 @@ export function SettingsPage() {
               Disconnect
             </Button>
           </div>
-          {showLogoutConfirm && (
+          {showDisconnectConfirm && (
             <ConfirmDialog
               title="Disconnect Nexus Account"
               message="This will remove your Nexus API key and return you to the onboarding screen to reconnect. Your games and mods will be preserved."
               confirmLabel="Disconnect"
               icon={LogOut}
-              loading={logout.isPending}
+              loading={disconnect.isPending}
               onConfirm={() =>
-                logout.mutate(undefined, {
+                disconnect.mutate(undefined, {
                   onSuccess: () => navigate("/onboarding", { replace: true }),
                 })
               }
