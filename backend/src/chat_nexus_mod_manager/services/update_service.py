@@ -202,8 +202,11 @@ def collect_tracked_mods(
             mod_group_id=mod.mod_group_id,
             upload_timestamp=mod.upload_timestamp,
             nexus_url=nexus_url,
-            local_file_mtime=(mtime_map.get(mod.mod_group_id) if mod.mod_group_id else None)
-            or mod.upload_timestamp,
+            local_file_mtime=(
+                mtime_map[mod.mod_group_id]
+                if mod.mod_group_id and mod.mod_group_id in mtime_map
+                else mod.upload_timestamp
+            ),
             source_archive=mod.source_archive,
         )
 
@@ -714,11 +717,7 @@ async def check_all_updates(
             if u["detection_method"] in ("version", "both"):
                 resolved_nexus_v = u.get("nexus_version", "")
                 local_v = u.get("local_version", "")
-                if (
-                    resolved_nexus_v
-                    and local_v
-                    and not is_newer_version(resolved_nexus_v, local_v)
-                ):
+                if resolved_nexus_v and local_v and not is_newer_version(resolved_nexus_v, local_v):
                     logger.debug(
                         "Filtered (resolved version not newer): %s — nexus=%s, local=%s",
                         u["display_name"],

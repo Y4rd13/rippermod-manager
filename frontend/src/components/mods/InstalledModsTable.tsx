@@ -647,9 +647,9 @@ export function InstalledModsTable({
         </div>
       )}
 
-      {totalCount === 0 && filter && (mods.length > 0 || recognized.length > 0) && (
-        <p className="py-4 text-sm text-text-muted">
-          No mods matching &quot;{filter}&quot;.
+      {totalCount === 0 && (filter || scope !== "all") && (mods.length > 0 || recognized.length > 0) && (
+        <p className="py-4 text-sm text-text-muted text-center">
+          {filter ? <>No mods matching &quot;{filter}&quot;.</> : "No mods in this view."}
         </p>
       )}
     </div>

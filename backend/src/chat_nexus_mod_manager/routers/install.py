@@ -41,6 +41,27 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/games/{game_name}/install", tags=["install"])
 
 
+def _download_date_map(session: Session, game_id: int, filenames: set[str]) -> dict[str, datetime]:
+    """Build a mapping of filename → most recent completed_at from DownloadJobs."""
+    if not filenames:
+        return {}
+    dl_rows = session.exec(
+        select(DownloadJob.file_name, DownloadJob.completed_at).where(
+            DownloadJob.game_id == game_id,
+            DownloadJob.status == "completed",
+            DownloadJob.completed_at.is_not(None),  # type: ignore[union-attr]
+            DownloadJob.file_name.in_(filenames),  # type: ignore[union-attr]
+        )
+    ).all()
+    result: dict[str, datetime] = {}
+    for fn, completed in dl_rows:
+        if fn and completed:
+            existing = result.get(fn)
+            if existing is None or completed > existing:
+                result[fn] = completed
+    return result
+
+
 @router.get("/available", response_model=list[AvailableArchive])
 async def list_archives(
     game_name: str,
@@ -60,20 +81,8 @@ async def list_archives(
     for sa in rows:
         installed_archives.add(sa)
 
-    # Build download-date lookup from completed DownloadJobs
-    dl_rows = session.exec(
-        select(DownloadJob.file_name, DownloadJob.completed_at).where(
-            DownloadJob.game_id == game.id,
-            DownloadJob.status == "completed",
-            DownloadJob.completed_at.is_not(None),  # type: ignore[union-attr]
-        )
-    ).all()
-    dl_date_map: dict[str, datetime] = {}
-    for fn, completed in dl_rows:
-        if fn and completed:
-            existing = dl_date_map.get(fn)
-            if existing is None or completed > existing:
-                dl_date_map[fn] = completed
+    archive_names = {p.name for p in archives}
+    dl_date_map = _download_date_map(session, game.id, archive_names)
 
     result: list[AvailableArchive] = []
     for path in archives:
@@ -109,23 +118,8 @@ async def list_installed(
         .where(InstalledMod.game_id == game.id)
     ).all()
 
-    # Build download-date lookup for installed mods' source archives
     source_archives = {mod.source_archive for mod, _ in rows if mod.source_archive}
-    dl_date_map: dict[str, datetime] = {}
-    if source_archives:
-        dl_rows = session.exec(
-            select(DownloadJob.file_name, DownloadJob.completed_at).where(
-                DownloadJob.game_id == game.id,
-                DownloadJob.status == "completed",
-                DownloadJob.completed_at.is_not(None),  # type: ignore[union-attr]
-                DownloadJob.file_name.in_(source_archives),  # type: ignore[union-attr]
-            )
-        ).all()
-        for fn, completed in dl_rows:
-            if fn and completed:
-                existing = dl_date_map.get(fn)
-                if existing is None or completed > existing:
-                    dl_date_map[fn] = completed
+    dl_date_map = _download_date_map(session, game.id, source_archives)
 
     result: list[InstalledModOut] = []
     for mod, meta in rows:
