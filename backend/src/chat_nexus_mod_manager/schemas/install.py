@@ -34,6 +34,7 @@ class InstalledModOut(BaseModel):
     picture_url: str | None = None
     category: str | None = None
     last_downloaded_at: datetime | None = None
+    nexus_url: str | None = None
 
 
 class UninstallResult(BaseModel):

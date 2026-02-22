@@ -1,4 +1,4 @@
-import { Download, RefreshCw, Search } from "lucide-react";
+import { Download, ExternalLink, RefreshCw, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { SourceBadge } from "@/components/mods/SourceBadge";
@@ -8,6 +8,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { openUrl } from "@tauri-apps/plugin-opener";
+
 import { useCheckUpdates, useStartDownload } from "@/hooks/mutations";
 import { useDownloadJobs } from "@/hooks/queries";
 import { timeAgo } from "@/lib/format";
@@ -179,7 +181,20 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
                   key={u.installed_mod_id ?? `group-${u.mod_group_id ?? i}`}
                   className="border-b border-border/50"
                 >
-                  <td className="py-2 pr-4 text-text-primary">{u.display_name}</td>
+                  <td className="py-2 pr-4 text-text-primary">
+                    <div className="flex items-center gap-1.5">
+                      <span>{u.display_name}</span>
+                      {u.nexus_url && (
+                        <button
+                          onClick={() => openUrl(u.nexus_url).catch(() => {})}
+                          title="Open mod page on Nexus Mods"
+                          className="text-text-muted hover:text-accent shrink-0"
+                        >
+                          <ExternalLink size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </td>
                   <td className="py-2 pr-4 text-text-muted">{u.local_version}</td>
                   <td className="py-2 pr-4 text-success font-medium">{u.nexus_version}</td>
                   <td className="py-2 pr-4">

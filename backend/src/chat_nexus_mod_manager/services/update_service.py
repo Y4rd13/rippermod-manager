@@ -711,22 +711,23 @@ async def check_all_updates(
         # Filter false positives
         filtered: list[dict[str, Any]] = []
         for u in updates:
-            # Post-resolution version re-check: file-level version is ground truth.
-            # Only filter when version comparison was part of the detection —
-            # pure timestamp detections should survive (same-version hotfixes).
-            if u["detection_method"] in ("version", "both"):
-                resolved_nexus_v = u.get("nexus_version", "")
-                local_v = u.get("local_version", "")
-                if resolved_nexus_v and local_v and not is_newer_version(resolved_nexus_v, local_v):
-                    logger.debug(
-                        "Filtered (resolved version not newer): %s — nexus=%s, local=%s",
-                        u["display_name"],
-                        resolved_nexus_v,
-                        local_v,
-                    )
-                    continue
+            # Post-resolution version re-check: file-level version is ground
+            # truth.  If the resolved Nexus file version is not newer than
+            # local, there is no update — regardless of detection method.
+            # (Same-version hotfixes can't be detected without hash comparison;
+            # showing "update available" for identical versions confuses users.)
+            resolved_nexus_v = u.get("nexus_version", "")
+            local_v = u.get("local_version", "")
+            if resolved_nexus_v and local_v and not is_newer_version(resolved_nexus_v, local_v):
+                logger.debug(
+                    "Filtered (resolved version not newer): %s — nexus=%s, local=%s",
+                    u["display_name"],
+                    resolved_nexus_v,
+                    local_v,
+                )
+                continue
 
-            # Timestamp-only: resolved file's timestamp <= local mtime
+            # Secondary: resolved file's timestamp <= local mtime
             if u["detection_method"] == "timestamp":
                 nexus_file_ts = u.get("nexus_timestamp")
                 mid = u["nexus_mod_id"]
