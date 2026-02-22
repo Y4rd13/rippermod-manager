@@ -757,6 +757,11 @@ async def check_all_updates(
                         local_mtime,
                     )
                     continue
+                if nexus_file_ts is None:
+                    logger.debug(
+                        "Kept (same-version, file-update signal, no resolved timestamp): %s",
+                        u["display_name"],
+                    )
 
             filtered.append(u)
         updates = filtered
