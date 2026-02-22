@@ -128,7 +128,7 @@ def search_downloads(
         select(NexusDownload)
         .where(
             NexusDownload.game_id == game.id,
-            col(NexusDownload.mod_name).ilike(f"%{escaped_q}%"),
+            col(NexusDownload.mod_name).ilike(f"%{escaped_q}%", escape="\\"),
         )
         .group_by(NexusDownload.nexus_mod_id)
         .limit(20)
