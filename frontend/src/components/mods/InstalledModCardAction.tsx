@@ -62,8 +62,12 @@ export function InstalledModCardAction({
           icon={confirmAction === "disable" ? PowerOff : Power}
           loading={isToggling}
           onConfirm={async () => {
-            await onToggle();
-            setConfirmAction(null);
+            try {
+              await onToggle();
+              setConfirmAction(null);
+            } catch {
+              // Error handled by mutation's onError callback
+            }
           }}
           onCancel={() => setConfirmAction(null)}
         />
@@ -78,8 +82,12 @@ export function InstalledModCardAction({
           icon={Trash2}
           loading={isUninstalling}
           onConfirm={async () => {
-            await onUninstall();
-            setConfirmAction(null);
+            try {
+              await onUninstall();
+              setConfirmAction(null);
+            } catch {
+              // Error handled by mutation's onError callback
+            }
           }}
           onCancel={() => setConfirmAction(null)}
         />
