@@ -1,11 +1,16 @@
 use serde::Serialize;
 use std::process::Command;
+use std::sync::Mutex;
 use tauri::Emitter;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct DetectedGame {
     pub path: String,
     pub source: String,
+}
+
+struct BackendProcess {
+    child: Option<tauri_plugin_shell::process::CommandChild>,
 }
 
 #[tauri::command]
@@ -278,12 +283,129 @@ fn launch_game(
     Ok(())
 }
 
+fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    use tauri_plugin_shell::ShellExt;
+
+    log::info!("Spawning backend sidecar...");
+
+    // Resolve CNMM_DATA_DIR for the sidecar process
+    let data_dir = app
+        .path()
+        .local_data_dir()
+        .map(|d| d.join("ChatNexusModManager"))
+        .unwrap_or_else(|_| std::path::PathBuf::from("./data"));
+
+    let sidecar_command = app
+        .shell()
+        .sidecar("binaries/cnmm-backend")
+        .map_err(|e| format!("Failed to create sidecar command: {e}"))?
+        .env("CNMM_DATA_DIR", data_dir.to_string_lossy().to_string());
+
+    let (mut rx, child) = sidecar_command
+        .spawn()
+        .map_err(|e| format!("Failed to spawn sidecar: {e}"))?;
+
+    // Store the child process handle for cleanup
+    let state = app.state::<Mutex<BackendProcess>>();
+    if let Ok(mut bp) = state.lock() {
+        bp.child = Some(child);
+    }
+
+    // Forward sidecar stdout/stderr to Tauri logs
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        use tauri_plugin_shell::process::CommandEvent;
+        while let Some(event) = rx.recv().await {
+            match event {
+                CommandEvent::Stdout(line) => {
+                    log::info!("[backend] {}", String::from_utf8_lossy(&line));
+                }
+                CommandEvent::Stderr(line) => {
+                    let msg = String::from_utf8_lossy(&line);
+                    log::info!("[backend] {}", msg);
+                }
+                CommandEvent::Terminated(payload) => {
+                    log::warn!("Backend process terminated: {:?}", payload);
+                    let _ = app_handle.emit("backend-crashed", ());
+                    break;
+                }
+                CommandEvent::Error(err) => {
+                    log::error!("Backend sidecar error: {}", err);
+                    break;
+                }
+                _ => {}
+            }
+        }
+    });
+
+    // Health poll: wait for backend to be ready
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let max_attempts = 60;
+        let delay = std::time::Duration::from_millis(500);
+
+        for attempt in 1..=max_attempts {
+            // TCP connect check first
+            if std::net::TcpStream::connect("127.0.0.1:8425").is_ok() {
+                // Then HTTP health check
+                if let Ok(stream) = std::net::TcpStream::connect("127.0.0.1:8425") {
+                    use std::io::{Read, Write};
+                    let mut stream = stream;
+                    let _ = stream
+                        .set_read_timeout(Some(std::time::Duration::from_secs(2)));
+                    let request = "GET /health HTTP/1.1\r\nHost: 127.0.0.1:8425\r\nConnection: close\r\n\r\n";
+                    if stream.write_all(request.as_bytes()).is_ok() {
+                        let mut response = String::new();
+                        if stream.read_to_string(&mut response).is_ok()
+                            && response.contains("200")
+                            && response.contains("healthy")
+                        {
+                            log::info!(
+                                "Backend ready after {} attempts ({:.1}s)",
+                                attempt,
+                                attempt as f64 * 0.5
+                            );
+                            let _ = app_handle.emit("backend-ready", ());
+                            return;
+                        }
+                    }
+                }
+            }
+
+            if attempt % 10 == 0 {
+                log::info!(
+                    "Waiting for backend... attempt {}/{}",
+                    attempt,
+                    max_attempts
+                );
+            }
+            tokio::time::sleep(delay).await;
+        }
+
+        log::error!("Backend failed to start within 30 seconds");
+        let _ = app_handle.emit("backend-startup-failed", ());
+    });
+
+    Ok(())
+}
+
+fn kill_sidecar(app: &tauri::AppHandle) {
+    let state = app.state::<Mutex<BackendProcess>>();
+    if let Ok(mut bp) = state.lock() {
+        if let Some(child) = bp.child.take() {
+            log::info!("Killing backend sidecar...");
+            let _ = child.kill();
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
-        .plugin(tauri_plugin_opener::init());
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_shell::init());
 
     #[cfg(desktop)]
     {
@@ -296,6 +418,7 @@ pub fn run() {
     }
 
     builder
+        .manage(Mutex::new(BackendProcess { child: None }))
         .invoke_handler(tauri::generate_handler![detect_game_paths, launch_game])
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -306,7 +429,20 @@ pub fn run() {
                 )?;
             }
 
+            // In release builds, spawn the backend sidecar
+            if !cfg!(debug_assertions) {
+                if let Err(e) = spawn_sidecar(app.handle()) {
+                    log::error!("Failed to spawn backend sidecar: {}", e);
+                    let _ = app.handle().emit("backend-startup-failed", ());
+                }
+            }
+
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                kill_sidecar(window.app_handle());
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

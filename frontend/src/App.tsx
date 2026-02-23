@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "react-router";
 
+import { BackendGate } from "@/components/BackendGate";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { setupNxmHandler } from "@/lib/nxm-handler";
 import { router } from "@/router";
@@ -38,9 +40,13 @@ function NxmHandler() {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <NxmHandler />
-      <RouterProvider router={router} />
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BackendGate>
+          <NxmHandler />
+          <RouterProvider router={router} />
+        </BackendGate>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

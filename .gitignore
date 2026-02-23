@@ -12,6 +12,11 @@ dist/
 
 # Tauri
 frontend/src-tauri/target/
+frontend/src-tauri/binaries/
+
+# PyInstaller
+backend/dist/
+backend/build/
 
 # IDE
 .idea/
