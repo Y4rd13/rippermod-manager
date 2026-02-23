@@ -1,7 +1,7 @@
 use serde::Serialize;
 use std::process::Command;
 use std::sync::Mutex;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 #[derive(Debug, Serialize, Clone)]
 pub struct DetectedGame {
@@ -292,7 +292,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error
     let data_dir = app
         .path()
         .local_data_dir()
-        .map(|d| d.join("ChatNexusModManager"))
+        .map(|d: std::path::PathBuf| d.join("ChatNexusModManager"))
         .unwrap_or_else(|_| std::path::PathBuf::from("./data"));
 
     let sidecar_command = app
@@ -338,9 +338,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error
         }
     });
 
-    // Health poll: wait for backend to be ready
+    // Health poll: wait for backend to be ready (blocking thread — no tokio dep needed)
     let app_handle = app.clone();
-    tauri::async_runtime::spawn(async move {
+    std::thread::spawn(move || {
         let max_attempts = 60;
         let delay = std::time::Duration::from_millis(500);
 
@@ -379,7 +379,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error
                     max_attempts
                 );
             }
-            tokio::time::sleep(delay).await;
+            std::thread::sleep(delay);
         }
 
         log::error!("Backend failed to start within 30 seconds");
