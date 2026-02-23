@@ -6,13 +6,15 @@ class TestOnboardingStatus:
         assert data["current_step"] == 0
         assert data["completed"] is False
 
-    def test_with_openai_step_1(self, client):
+    def test_with_openai_only_still_step_0(self, client):
+        """OpenAI key is optional and does not advance the onboarding step."""
         client.put(
             "/api/v1/settings/",
             json={"settings": {"openai_api_key": "sk-test"}},
         )
         r = client.get("/api/v1/onboarding/status")
-        assert r.json()["current_step"] == 1
+        assert r.json()["current_step"] == 0
+        assert r.json()["has_openai_key"] is True
 
     def test_with_nexus_step_2(self, client):
         client.put(
