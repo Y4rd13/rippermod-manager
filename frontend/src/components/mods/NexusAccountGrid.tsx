@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
+import { FomodDialog } from "@/components/mods/FomodDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge } from "@/components/ui/Badge";
@@ -258,6 +259,10 @@ export function NexusAccountGrid({
           );
         }}
       />
+
+      {flow.fomodArchive && (
+        <FomodDialog archiveFilename={flow.fomodArchive} onDismiss={flow.dismissFomod} />
+      )}
 
       {flow.conflicts && (
         <ConflictDialog

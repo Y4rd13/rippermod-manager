@@ -2,6 +2,7 @@ import { Check, Clock, Copy, Download, ExternalLink, Eye, Heart, Info, RefreshCw
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
+import { FomodDialog } from "@/components/mods/FomodDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge } from "@/components/ui/Badge";
@@ -328,6 +329,10 @@ export function TrendingGrid({
           title="No Trending Data"
           description="No mods match the current filter. Try changing the filter or search term."
         />
+      )}
+
+      {flow.fomodArchive && (
+        <FomodDialog archiveFilename={flow.fomodArchive} onDismiss={flow.dismissFomod} />
       )}
 
       {flow.conflicts && (
