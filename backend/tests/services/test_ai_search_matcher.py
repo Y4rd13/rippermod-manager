@@ -4,11 +4,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlmodel import Session, select
 
-from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
-from chat_nexus_mod_manager.models.game import Game, GameModPath
-from chat_nexus_mod_manager.models.mod import ModFile, ModGroup
-from chat_nexus_mod_manager.models.nexus import NexusDownload
-from chat_nexus_mod_manager.services.ai_search_matcher import (
+from rippermod_manager.models.correlation import ModNexusCorrelation
+from rippermod_manager.models.game import Game, GameModPath
+from rippermod_manager.models.mod import ModFile, ModGroup
+from rippermod_manager.models.nexus import NexusDownload
+from rippermod_manager.services.ai_search_matcher import (
     AISearchMatch,
     ai_search_unmatched_mods,
 )
@@ -79,11 +79,11 @@ class TestAISearchUnmatchedMods:
 
         with (
             patch(
-                "chat_nexus_mod_manager.services.ai_search_matcher.AsyncOpenAI",
+                "rippermod_manager.services.ai_search_matcher.AsyncOpenAI",
                 return_value=mock_client,
             ),
             patch(
-                "chat_nexus_mod_manager.services.ai_search_matcher.NexusClient",
+                "rippermod_manager.services.ai_search_matcher.NexusClient",
                 return_value=mock_nexus,
             ),
         ):
@@ -121,11 +121,11 @@ class TestAISearchUnmatchedMods:
 
         with (
             patch(
-                "chat_nexus_mod_manager.services.ai_search_matcher.AsyncOpenAI",
+                "rippermod_manager.services.ai_search_matcher.AsyncOpenAI",
                 return_value=mock_client,
             ),
             patch(
-                "chat_nexus_mod_manager.services.ai_search_matcher.NexusClient",
+                "rippermod_manager.services.ai_search_matcher.NexusClient",
                 return_value=mock_nexus,
             ),
         ):
@@ -158,11 +158,11 @@ class TestAISearchUnmatchedMods:
 
         with (
             patch(
-                "chat_nexus_mod_manager.services.ai_search_matcher.AsyncOpenAI",
+                "rippermod_manager.services.ai_search_matcher.AsyncOpenAI",
                 return_value=mock_client,
             ),
             patch(
-                "chat_nexus_mod_manager.services.ai_search_matcher.NexusClient",
+                "rippermod_manager.services.ai_search_matcher.NexusClient",
                 return_value=mock_nexus,
             ),
         ):
@@ -213,11 +213,11 @@ class TestAISearchUnmatchedMods:
 
         with (
             patch(
-                "chat_nexus_mod_manager.services.ai_search_matcher.AsyncOpenAI",
+                "rippermod_manager.services.ai_search_matcher.AsyncOpenAI",
                 return_value=mock_client,
             ),
             patch(
-                "chat_nexus_mod_manager.services.ai_search_matcher.NexusClient",
+                "rippermod_manager.services.ai_search_matcher.NexusClient",
                 return_value=mock_nexus,
             ),
         ):
@@ -248,11 +248,11 @@ class TestAISearchUnmatchedMods:
 
         with (
             patch(
-                "chat_nexus_mod_manager.services.ai_search_matcher.AsyncOpenAI",
+                "rippermod_manager.services.ai_search_matcher.AsyncOpenAI",
                 return_value=mock_client,
             ),
             patch(
-                "chat_nexus_mod_manager.services.ai_search_matcher.NexusClient",
+                "rippermod_manager.services.ai_search_matcher.NexusClient",
                 return_value=mock_nexus,
             ),
         ):

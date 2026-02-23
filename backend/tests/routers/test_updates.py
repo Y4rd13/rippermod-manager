@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from chat_nexus_mod_manager.services.update_service import _resolve_file_ids
+from rippermod_manager.services.update_service import _resolve_file_ids
 
 
 class TestListUpdates:
@@ -24,10 +24,10 @@ class TestListUpdates:
     def test_no_version_diff_empty(self, client, engine):
         from sqlmodel import Session
 
-        from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
-        from chat_nexus_mod_manager.models.game import Game, GameModPath
-        from chat_nexus_mod_manager.models.mod import ModGroup
-        from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
+        from rippermod_manager.models.correlation import ModNexusCorrelation
+        from rippermod_manager.models.game import Game, GameModPath
+        from rippermod_manager.models.mod import ModGroup
+        from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 
         with Session(engine) as s:
             game = Game(name="G", domain_name="g", install_path="/g")
@@ -57,10 +57,10 @@ class TestListUpdates:
         """'1.0' vs '1.0.0' should NOT be flagged as an update."""
         from sqlmodel import Session
 
-        from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
-        from chat_nexus_mod_manager.models.game import Game, GameModPath
-        from chat_nexus_mod_manager.models.mod import ModGroup
-        from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
+        from rippermod_manager.models.correlation import ModNexusCorrelation
+        from rippermod_manager.models.game import Game, GameModPath
+        from rippermod_manager.models.mod import ModGroup
+        from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 
         with Session(engine) as s:
             game = Game(name="G", domain_name="g", install_path="/g")
@@ -89,10 +89,10 @@ class TestListUpdates:
     def test_version_mismatch_returns_update(self, client, engine):
         from sqlmodel import Session
 
-        from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
-        from chat_nexus_mod_manager.models.game import Game, GameModPath
-        from chat_nexus_mod_manager.models.mod import ModGroup
-        from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
+        from rippermod_manager.models.correlation import ModNexusCorrelation
+        from rippermod_manager.models.game import Game, GameModPath
+        from rippermod_manager.models.mod import ModGroup
+        from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 
         with Session(engine) as s:
             game = Game(name="G", domain_name="g", install_path="/g")
@@ -137,10 +137,10 @@ class TestListUpdates:
     def test_response_includes_source_field(self, client, engine):
         from sqlmodel import Session
 
-        from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
-        from chat_nexus_mod_manager.models.game import Game, GameModPath
-        from chat_nexus_mod_manager.models.mod import ModGroup
-        from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
+        from rippermod_manager.models.correlation import ModNexusCorrelation
+        from rippermod_manager.models.game import Game, GameModPath
+        from rippermod_manager.models.mod import ModGroup
+        from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 
         with Session(engine) as s:
             game = Game(name="G", domain_name="g", install_path="/g")

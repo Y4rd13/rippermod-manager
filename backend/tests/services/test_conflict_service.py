@@ -1,9 +1,9 @@
 import zipfile
 
-from chat_nexus_mod_manager.models.game import Game, GameModPath
-from chat_nexus_mod_manager.models.install import InstalledMod, InstalledModFile
-from chat_nexus_mod_manager.services.conflict_service import check_conflicts
-from chat_nexus_mod_manager.services.install_service import install_mod
+from rippermod_manager.models.game import Game, GameModPath
+from rippermod_manager.models.install import InstalledMod, InstalledModFile
+from rippermod_manager.services.conflict_service import check_conflicts
+from rippermod_manager.services.install_service import install_mod
 
 
 def _make_zip(path, files: dict[str, bytes]) -> None:

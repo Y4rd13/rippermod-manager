@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "AI-powered mod manager for PC games with Nexus Mods integration"
 authors = ["Y4rd13"]
 license = "MIT"
-repository = "https://github.com/Y4rd13/chat-nexus-mod-manager"
+repository = "https://github.com/Y4rd13/rippermod-manager"
 edition = "2021"
 rust-version = "1.77.2"
 

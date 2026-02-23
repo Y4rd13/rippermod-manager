@@ -1,5 +1,5 @@
 [project]
-name = "chat-nexus-mod-manager"
+name = "rippermod-manager"
 version = "0.1.0"
 description = "Chat-powered Nexus Mods manager for Cyberpunk 2077"
 requires-python = ">=3.12"
@@ -30,7 +30,7 @@ test = ["pytest>=8.0", "pytest-asyncio>=0.24", "respx>=0.22"]
 build = ["pyinstaller>=6.0"]
 
 [project.scripts]
-cnmm-backend = "chat_nexus_mod_manager.__main__:main"
+rmm-backend = "rippermod_manager.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -42,7 +42,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/chat_nexus_mod_manager"]
+packages = ["src/rippermod_manager"]
 
 [tool.ruff]
 target-version = "py312"
@@ -53,7 +53,7 @@ src = ["src"]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
-"src/chat_nexus_mod_manager/routers/*.py" = ["B008"]
+"src/rippermod_manager/routers/*.py" = ["B008"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["chat_nexus_mod_manager"]
+known-first-party = ["rippermod_manager"]

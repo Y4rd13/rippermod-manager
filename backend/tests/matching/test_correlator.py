@@ -1,12 +1,12 @@
-from chat_nexus_mod_manager.matching.correlator import (
+from rippermod_manager.matching.correlator import (
     compute_name_score,
     correlate_game_mods,
     normalize,
     token_jaccard,
 )
-from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
-from chat_nexus_mod_manager.models.mod import ModGroup
-from chat_nexus_mod_manager.models.nexus import NexusDownload
+from rippermod_manager.models.correlation import ModNexusCorrelation
+from rippermod_manager.models.mod import ModGroup
+from rippermod_manager.models.nexus import NexusDownload
 
 
 class TestTokenJaccard:

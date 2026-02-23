@@ -2,7 +2,7 @@ import zipfile
 
 import pytest
 
-from chat_nexus_mod_manager.archive.handler import (
+from rippermod_manager.archive.handler import (
     ArchiveEntry,
     ZipHandler,
     open_archive,

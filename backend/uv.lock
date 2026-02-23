@@ -381,74 +381,6 @@ wheels = [
 ]
 
 [[package]]
-name = "chat-nexus-mod-manager"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "chromadb" },
-    { name = "defusedxml" },
-    { name = "fastapi" },
-    { name = "httpx" },
-    { name = "jellyfish" },
-    { name = "langchain" },
-    { name = "langchain-openai" },
-    { name = "openai" },
-    { name = "pefile" },
-    { name = "py7zr" },
-    { name = "pydantic-settings" },
-    { name = "scikit-learn" },
-    { name = "sqlmodel" },
-    { name = "sse-starlette" },
-    { name = "uvicorn", extra = ["standard"] },
-    { name = "websockets" },
-    { name = "xxhash" },
-]
-
-[package.optional-dependencies]
-build = [
-    { name = "pyinstaller" },
-]
-dev = [
-    { name = "ruff" },
-]
-search = [
-    { name = "tavily-python" },
-]
-test = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "respx" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "chromadb", specifier = ">=0.6.0" },
-    { name = "defusedxml", specifier = ">=0.7.0" },
-    { name = "fastapi", specifier = ">=0.115.0" },
-    { name = "httpx", specifier = ">=0.28.0" },
-    { name = "jellyfish", specifier = ">=1.1.0" },
-    { name = "langchain", specifier = ">=0.3.0" },
-    { name = "langchain-openai", specifier = ">=0.3.0" },
-    { name = "openai", specifier = ">=1.60.0" },
-    { name = "pefile", specifier = ">=2024.8.26" },
-    { name = "py7zr", specifier = ">=0.22.0" },
-    { name = "pydantic-settings", specifier = ">=2.7.0" },
-    { name = "pyinstaller", marker = "extra == 'build'", specifier = ">=6.0" },
-    { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0" },
-    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.24" },
-    { name = "respx", marker = "extra == 'test'", specifier = ">=0.22" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
-    { name = "scikit-learn", specifier = ">=1.6.0" },
-    { name = "sqlmodel", specifier = ">=0.0.22" },
-    { name = "sse-starlette", specifier = ">=2.2.0" },
-    { name = "tavily-python", marker = "extra == 'search'", specifier = ">=0.7.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
-    { name = "websockets", specifier = ">=14.0" },
-    { name = "xxhash", specifier = ">=3.5.0" },
-]
-provides-extras = ["search", "dev", "test", "build"]
-
-[[package]]
 name = "chromadb"
 version = "1.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2409,6 +2341,74 @@ sdist = { url = "https://files.pythonhosted.org/packages/74/99/a4cab2acbb884f80e
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ef/45/615f5babd880b4bd7d405cc0dc348234c5ffb6ed1ea33e152ede08b2072d/rich-14.3.2-py3-none-any.whl", hash = "sha256:08e67c3e90884651da3239ea668222d19bea7b589149d8014a21c633420dbb69", size = 309963, upload-time = "2026-02-01T16:20:46.078Z" },
 ]
+
+[[package]]
+name = "rippermod-manager"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "chromadb" },
+    { name = "defusedxml" },
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "jellyfish" },
+    { name = "langchain" },
+    { name = "langchain-openai" },
+    { name = "openai" },
+    { name = "pefile" },
+    { name = "py7zr" },
+    { name = "pydantic-settings" },
+    { name = "scikit-learn" },
+    { name = "sqlmodel" },
+    { name = "sse-starlette" },
+    { name = "uvicorn", extra = ["standard"] },
+    { name = "websockets" },
+    { name = "xxhash" },
+]
+
+[package.optional-dependencies]
+build = [
+    { name = "pyinstaller" },
+]
+dev = [
+    { name = "ruff" },
+]
+search = [
+    { name = "tavily-python" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "respx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "chromadb", specifier = ">=0.6.0" },
+    { name = "defusedxml", specifier = ">=0.7.0" },
+    { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "httpx", specifier = ">=0.28.0" },
+    { name = "jellyfish", specifier = ">=1.1.0" },
+    { name = "langchain", specifier = ">=0.3.0" },
+    { name = "langchain-openai", specifier = ">=0.3.0" },
+    { name = "openai", specifier = ">=1.60.0" },
+    { name = "pefile", specifier = ">=2024.8.26" },
+    { name = "py7zr", specifier = ">=0.22.0" },
+    { name = "pydantic-settings", specifier = ">=2.7.0" },
+    { name = "pyinstaller", marker = "extra == 'build'", specifier = ">=6.0" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0" },
+    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.24" },
+    { name = "respx", marker = "extra == 'test'", specifier = ">=0.22" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
+    { name = "scikit-learn", specifier = ">=1.6.0" },
+    { name = "sqlmodel", specifier = ">=0.0.22" },
+    { name = "sse-starlette", specifier = ">=2.2.0" },
+    { name = "tavily-python", marker = "extra == 'search'", specifier = ">=0.7.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
+    { name = "websockets", specifier = ">=14.0" },
+    { name = "xxhash", specifier = ">=3.5.0" },
+]
+provides-extras = ["search", "dev", "test", "build"]
 
 [[package]]
 name = "rpds-py"

@@ -49,13 +49,13 @@ jobs:
         working-directory: backend
         run: |
           uv sync --extra build
-          uv run pyinstaller cnmm-backend.spec --clean --noconfirm
+          uv run pyinstaller rmm-backend.spec --clean --noconfirm
 
       - name: Copy sidecar binary
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path frontend\src-tauri\binaries
-          Copy-Item backend\dist\cnmm-backend.exe frontend\src-tauri\binaries\cnmm-backend-x86_64-pc-windows-msvc.exe
+          Copy-Item backend\dist\rmm-backend.exe frontend\src-tauri\binaries\rmm-backend-x86_64-pc-windows-msvc.exe
 
       - name: Install frontend dependencies
         working-directory: frontend

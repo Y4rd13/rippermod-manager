@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="frontend/src-tauri/icons/128x128.png" alt="Chat Nexus Mod Manager" width="100" />
+  <img src="frontend/src-tauri/icons/128x128.png" alt="RipperMod Manager" width="100" />
 </p>
 
-<h1 align="center">Chat Nexus Mod Manager</h1>
+<h1 align="center">RipperMod Manager</h1>
 
 <p align="center">
   A desktop AI-powered mod manager for PC games.<br>
@@ -14,8 +14,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Y4rd13/chat-nexus-mod-manager/actions/workflows/ci.yml"><img src="https://github.com/Y4rd13/chat-nexus-mod-manager/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/Y4rd13/chat-nexus-mod-manager" alt="License" /></a>
+  <a href="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci.yml"><img src="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Y4rd13/rippermod-manager" alt="License" /></a>
 </p>
 
 ---
@@ -58,9 +58,9 @@
 ## Project Structure
 
 ```
-chat-nexus-mod-manager/
+rippermod-manager/
 ├── backend/
-│   ├── src/chat_nexus_mod_manager/
+│   ├── src/rippermod_manager/
 │   │   ├── __main__.py              # Standalone entry point (uvicorn)
 │   │   ├── main.py                  # FastAPI app, lifespan, CORS, /health
 │   │   ├── config.py                # Pydantic settings (AppData paths)
@@ -98,7 +98,7 @@ chat-nexus-mod-manager/
 │   │   │   ├── indexer.py           # Index mods/nexus/correlations
 │   │   │   └── search.py            # Semantic search queries
 │   │   └── agents/orchestrator.py   # LangChain agent + tools
-│   ├── cnmm-backend.spec            # PyInstaller spec (--onefile)
+│   ├── rmm-backend.spec            # PyInstaller spec (--onefile)
 │   └── tests/                       # 305 pytest tests
 ├── frontend/
 │   ├── src/
@@ -153,8 +153,8 @@ chat-nexus-mod-manager/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/Y4rd13/chat-nexus-mod-manager.git
-cd chat-nexus-mod-manager
+git clone https://github.com/Y4rd13/rippermod-manager.git
+cd rippermod-manager
 ```
 
 ### 2. Backend setup
@@ -165,12 +165,12 @@ uv sync                  # Install dependencies
 uv sync --extra test     # Include test dependencies
 
 # Start the dev server
-uv run uvicorn chat_nexus_mod_manager.main:app --reload --port 8425
+uv run uvicorn rippermod_manager.main:app --reload --port 8425
 ```
 
-The API will be available at `http://localhost:8425`. The SQLite database and ChromaDB are auto-created at `%LOCALAPPDATA%\ChatNexusModManager\` on Windows (or `~/.local/share/ChatNexusModManager/` on Linux) on first startup.
+The API will be available at `http://localhost:8425`. The SQLite database and ChromaDB are auto-created at `%LOCALAPPDATA%\RipperModManager\` on Windows (or `~/.local/share/RipperModManager/` on Linux) on first startup.
 
-> **Tip:** Set `CNMM_DATA_DIR=./data` in `backend/.env` to use a local data directory instead.
+> **Tip:** Set `RMM_DATA_DIR=./data` in `backend/.env` to use a local data directory instead.
 
 ### 3. Frontend setup
 
@@ -202,7 +202,7 @@ API keys are stored in the local SQLite database and masked in the settings UI.
 
 ```bash
 cd backend
-uv run uvicorn chat_nexus_mod_manager.main:app --reload --port 8425   # Dev server
+uv run uvicorn rippermod_manager.main:app --reload --port 8425   # Dev server
 uv run ruff check src/ tests/                                         # Lint
 uv run ruff format src/ tests/                                        # Format
 uv run pytest tests/ -v                                               # Tests (305 tests)
@@ -227,7 +227,7 @@ The release build produces a standalone Windows installer (NSIS `.exe`) with the
 # 1. Build backend as standalone .exe
 cd backend
 uv sync --extra build
-uv run pyinstaller cnmm-backend.spec --clean --noconfirm
+uv run pyinstaller rmm-backend.spec --clean --noconfirm
 
 # 2. Copy sidecar to Tauri binaries
 .\scripts\build-backend.ps1
@@ -393,7 +393,7 @@ Tests use an in-memory SQLite database and patched ChromaDB for full isolation. 
 │       │             │               │             │
 │  ┌────┴─────────────┴───────────────┴──────────┐  │
 │  │              SQLite (SQLModel)              │  │
-│  │       %LOCALAPPDATA%/ChatNexusModManager    │  │
+│  │       %LOCALAPPDATA%/RipperModManager    │  │
 │  └──────────────────┬──────────────────────────┘  │
 │                     │                             │
 │  ┌──────────────────┴──────────────────────────┐  │
@@ -412,10 +412,10 @@ Tests use an in-memory SQLite database and patched ChromaDB for full isolation. 
 In production, the app ships as a single Windows installer (NSIS):
 
 - **Frontend** → bundled by Vite into static assets inside the Tauri shell
-- **Backend** → compiled by PyInstaller into `cnmm-backend.exe`, embedded as a Tauri sidecar
+- **Backend** → compiled by PyInstaller into `rmm-backend.exe`, embedded as a Tauri sidecar
 - **Startup** → Tauri spawns the sidecar, health-polls `/health`, emits `backend-ready` event
 - **Shutdown** → Cancels active downloads, disposes DB engine, releases ChromaDB, kills sidecar
-- **Data** → Stored in `%LOCALAPPDATA%\ChatNexusModManager\` (DB, ChromaDB, downloads)
+- **Data** → Stored in `%LOCALAPPDATA%\RipperModManager\` (DB, ChromaDB, downloads)
 
 ## Contributing
 

@@ -1,6 +1,6 @@
 import pytest
 
-from chat_nexus_mod_manager.matching.filename_parser import (
+from rippermod_manager.matching.filename_parser import (
     ParsedFilename,
     is_newer_version,
     parse_mod_filename,
