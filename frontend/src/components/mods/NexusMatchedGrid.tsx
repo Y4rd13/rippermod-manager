@@ -311,8 +311,8 @@ export function NexusMatchedGrid({
           variant="danger"
           icon={XCircle}
           loading={rejectCorrelation.isPending}
-          onConfirm={() => {
-            rejectCorrelation.mutate({ gameName, modGroupId: rejectModId });
+          onConfirm={async () => {
+            await rejectCorrelation.mutateAsync({ gameName, modGroupId: rejectModId });
             setRejectModId(null);
           }}
           onCancel={() => setRejectModId(null)}

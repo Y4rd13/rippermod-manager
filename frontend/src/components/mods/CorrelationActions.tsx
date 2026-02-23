@@ -75,8 +75,8 @@ export function CorrelationActions({ gameName, modGroupId, confirmed }: Props) {
           variant="danger"
           icon={XCircle}
           loading={reject.isPending}
-          onConfirm={() => {
-            reject.mutate({ gameName, modGroupId });
+          onConfirm={async () => {
+            await reject.mutateAsync({ gameName, modGroupId });
             setShowRejectConfirm(false);
           }}
           onCancel={() => setShowRejectConfirm(false)}
