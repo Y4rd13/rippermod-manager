@@ -17,6 +17,7 @@ export function useInstallFlow(
   const [downloadingModId, setDownloadingModId] = useState<number | null>(null);
   const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
   const [conflictModId, setConflictModId] = useState<number | null>(null);
+  const [fomodArchive, setFomodArchive] = useState<string | null>(null);
 
   const installMod = useInstallMod();
   const checkConflicts = useCheckConflicts();
@@ -106,6 +107,12 @@ export function useInstallFlow(
           archiveFilename: archive.filename,
         });
 
+        if (result.is_fomod) {
+          setFomodArchive(archive.filename);
+          removeInstalling(nexusModId);
+          return;
+        }
+
         if (result.conflicts.length > 0) {
           setConflicts(result);
           setConflictModId(nexusModId);
@@ -127,6 +134,12 @@ export function useInstallFlow(
           gameName,
           archiveFilename: fileName,
         });
+
+        if (result.is_fomod) {
+          setFomodArchive(fileName);
+          removeInstalling(nexusModId);
+          return;
+        }
 
         if (result.conflicts.length > 0) {
           setConflicts(result);
@@ -171,6 +184,10 @@ export function useInstallFlow(
     setConflictModId(null);
   }, [conflictModId, removeInstalling]);
 
+  const dismissFomod = useCallback(() => {
+    setFomodArchive(null);
+  }, []);
+
   const handleDownload = useCallback(
     (nexusModId: number) => {
       setDownloadingModId(nexusModId);
@@ -194,6 +211,7 @@ export function useInstallFlow(
     installingModIds,
     downloadingModId,
     conflicts,
+    fomodArchive,
     activeDownloadByModId,
     completedDownloadByModId,
     handleInstall,
@@ -201,6 +219,7 @@ export function useInstallFlow(
     handleInstallWithSkip,
     handleInstallOverwrite,
     dismissConflicts,
+    dismissFomod,
     handleDownload,
     handleCancelDownload,
   };

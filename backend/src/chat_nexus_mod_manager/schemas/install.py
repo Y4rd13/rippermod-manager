@@ -57,6 +57,7 @@ class ConflictCheckResult(BaseModel):
     archive_filename: str
     total_files: int
     conflicts: list[FileConflict]
+    is_fomod: bool = False
 
 
 class AvailableArchive(BaseModel):

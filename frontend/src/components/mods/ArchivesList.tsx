@@ -2,6 +2,7 @@ import { Archive, Check, Copy, Download, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
+import { FomodDialog } from "@/components/mods/FomodDialog";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { BulkActionBar } from "@/components/ui/BulkActionBar";
@@ -62,6 +63,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
   const deleteArchive = useDeleteArchive();
   const cleanupOrphans = useCleanupOrphans();
   const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
+  const [fomodArchive, setFomodArchive] = useState<string | null>(null);
   const [selectedArchive, setSelectedArchive] = useState<string | null>(null);
   const [confirmCleanup, setConfirmCleanup] = useState(false);
   const [confirmDeleteFile, setConfirmDeleteFile] = useState<string | null>(null);
@@ -152,6 +154,12 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
   const handleCheckConflicts = async (filename: string) => {
     setSelectedArchive(filename);
     const result = await checkConflicts.mutateAsync({ gameName, archiveFilename: filename });
+    if (result.is_fomod) {
+      setFomodArchive(filename);
+      setSelectedArchive(null);
+      processNextInQueue();
+      return;
+    }
     if (result.conflicts.length > 0) {
       setConflicts(result);
     } else {
@@ -481,6 +489,13 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
             setConfirmBulkDelete(false);
           }}
           onCancel={() => setConfirmBulkDelete(false)}
+        />
+      )}
+
+      {fomodArchive && (
+        <FomodDialog
+          archiveFilename={fomodArchive}
+          onDismiss={() => setFomodArchive(null)}
         />
       )}
 
