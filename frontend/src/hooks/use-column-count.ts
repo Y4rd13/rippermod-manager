@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+// Must match Tailwind breakpoints: md=768px, xl=1280px
 function getColumnCount(): number {
   if (typeof window === "undefined") return 1;
   if (window.matchMedia("(min-width: 1280px)").matches) return 3;

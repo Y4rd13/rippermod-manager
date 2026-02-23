@@ -1,5 +1,5 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useScrollContainer } from "@/hooks/use-scroll-container";
 
@@ -26,6 +26,12 @@ export function VirtualTable<T>({
 }: VirtualTableProps<T>) {
   const scrollContainerRef = useScrollContainer();
   const tableRef = useRef<HTMLTableElement>(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
+
+  const tableCallbackRef = useCallback((node: HTMLTableElement | null) => {
+    tableRef.current = node;
+    setScrollMargin(node?.offsetTop ?? 0);
+  }, []);
 
   const virtualizer = useVirtualizer({
     count: items.length,
@@ -35,14 +41,15 @@ export function VirtualTable<T>({
     measureElement: dynamicHeight
       ? (el) => el.getBoundingClientRect().height
       : undefined,
-    scrollMargin: tableRef.current?.offsetTop ?? 0,
+    scrollMargin,
   });
 
   useEffect(() => {
     if (dynamicHeight && remeasureDep !== undefined) {
       virtualizer.measure();
     }
-  }, [remeasureDep, dynamicHeight, virtualizer]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remeasureDep, dynamicHeight]);
 
   const virtualItems = virtualizer.getVirtualItems();
   const totalSize = virtualizer.getTotalSize();
@@ -58,12 +65,12 @@ export function VirtualTable<T>({
 
   return (
     <div className={className ?? "overflow-x-auto"}>
-      <table ref={tableRef} className="w-full text-sm">
+      <table ref={tableCallbackRef} className="w-full text-sm">
         <thead>{renderHead()}</thead>
         {paddingTop > 0 && (
           <tbody>
             <tr>
-              <td style={{ height: paddingTop, padding: 0, border: "none" }} />
+              <td colSpan={999} style={{ height: paddingTop, padding: 0, border: "none" }} />
             </tr>
           </tbody>
         )}
@@ -82,7 +89,7 @@ export function VirtualTable<T>({
         {paddingBottom > 0 && (
           <tbody>
             <tr>
-              <td style={{ height: paddingBottom, padding: 0, border: "none" }} />
+              <td colSpan={999} style={{ height: paddingBottom, padding: 0, border: "none" }} />
             </tr>
           </tbody>
         )}

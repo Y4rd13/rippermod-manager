@@ -1,5 +1,5 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useColumnCount } from "@/hooks/use-column-count";
 import { useScrollContainer } from "@/hooks/use-scroll-container";
@@ -26,6 +26,12 @@ export function VirtualCardGrid<T>({
   const columnCount = useColumnCount();
   const scrollContainerRef = useScrollContainer();
   const listRef = useRef<HTMLDivElement>(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
+
+  const listCallbackRef = useCallback((node: HTMLDivElement | null) => {
+    listRef.current = node;
+    setScrollMargin(node?.offsetTop ?? 0);
+  }, []);
 
   const rows = useMemo(() => {
     const result: T[][] = [];
@@ -43,22 +49,25 @@ export function VirtualCardGrid<T>({
     measureElement: dynamicHeight
       ? (el) => el.getBoundingClientRect().height
       : undefined,
-    scrollMargin: listRef.current?.offsetTop ?? 0,
+    scrollMargin,
   });
 
   useEffect(() => {
     virtualizer.measure();
-  }, [columnCount, virtualizer]);
+    // virtualizer ref is stable from useVirtualizer — safe to omit from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columnCount]);
 
   useEffect(() => {
     if (dynamicHeight && remeasureDep !== undefined) {
       virtualizer.measure();
     }
-  }, [remeasureDep, dynamicHeight, virtualizer]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remeasureDep, dynamicHeight]);
 
   return (
     <div
-      ref={listRef}
+      ref={listCallbackRef}
       className={className}
       style={{ height: virtualizer.getTotalSize(), position: "relative" }}
     >
