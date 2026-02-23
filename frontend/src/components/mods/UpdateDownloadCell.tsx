@@ -220,6 +220,8 @@ export function UpdateDownloadCell({ update, gameName, downloadJobs }: Props) {
     <Button
       variant="ghost"
       size="sm"
+      title="Download update from Nexus"
+      aria-label="Download update"
       onClick={() => {
         if (update.nexus_file_id) {
           startDownload.mutate({

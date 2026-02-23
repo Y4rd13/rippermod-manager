@@ -4,11 +4,13 @@ import { Fragment, useMemo, useState } from "react";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { ConfidenceBadge } from "@/components/ui/Badge";
 import { formatBytes } from "@/lib/format";
 import type { ModGroup } from "@/types/api";
 import { useContextMenu } from "@/hooks/use-context-menu";
+import { useSessionState } from "@/hooks/use-session-state";
 import { toast } from "@/stores/toast-store";
 
 type SortKey = "name" | "files" | "confidence" | "match";
@@ -20,12 +22,12 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
   return sortDir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />;
 }
 
-export function ModsTable({ mods, isLoading }: { mods: ModGroup[]; isLoading?: boolean }) {
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+export function ModsTable({ mods, gameName, isLoading }: { mods: ModGroup[]; gameName: string; isLoading?: boolean }) {
+  const [sortKey, setSortKey] = useSessionState<SortKey>(`mods-sort-${gameName}`, "name");
+  const [sortDir, setSortDir] = useSessionState<SortDir>(`mods-dir-${gameName}`, "asc");
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [filter, setFilter] = useState("");
-  const [matchFilter, setMatchFilter] = useState<MatchFilter>("all");
+  const [matchFilter, setMatchFilter] = useSessionState<MatchFilter>(`mods-chip-${gameName}`, "all");
 
   const { menuState, openMenu, closeMenu } = useContextMenu<ModGroup>();
 
@@ -155,16 +157,7 @@ export function ModsTable({ mods, isLoading }: { mods: ModGroup[]; isLoading?: b
           onChange={(key) => setMatchFilter(key as MatchFilter)}
         />
 
-        <div className="relative flex-1 max-w-xs ml-auto">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input
-            type="text"
-            placeholder="Filter by name or match..."
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="w-full rounded-lg border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-          />
-        </div>
+        <SearchInput value={filter} onChange={setFilter} placeholder="Filter by name or match..." className="ml-auto" />
 
         <span className="text-xs text-text-muted">
           {filtered.length} mod{filtered.length !== 1 ? "s" : ""}

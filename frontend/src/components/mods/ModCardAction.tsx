@@ -121,6 +121,7 @@ export function ModCardAction({
         <button
           onClick={() => openUrl(nexusUrl).catch(() => {})}
           title="Open mod page on Nexus Mods"
+          aria-label="Open on Nexus Mods"
           className="inline-flex items-center gap-1 rounded-md bg-surface-2 px-2 py-1 text-xs font-medium text-text-secondary hover:bg-surface-2/80 border border-border"
         >
           <ExternalLink size={12} />
