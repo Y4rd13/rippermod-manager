@@ -274,6 +274,7 @@ export interface ConflictCheckResult {
   archive_filename: string;
   total_files: number;
   conflicts: FileConflict[];
+  is_fomod: boolean;
 }
 
 // Profile feature types

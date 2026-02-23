@@ -28,6 +28,11 @@ from chat_nexus_mod_manager.schemas.install import (
     ToggleResult,
     UninstallResult,
 )
+from chat_nexus_mod_manager.services.archive_layout import (
+    ArchiveLayout,
+    detect_layout,
+    known_roots_for_game,
+)
 from chat_nexus_mod_manager.services.nexus_helpers import match_local_to_nexus_file
 
 logger = logging.getLogger(__name__)
@@ -99,12 +104,32 @@ def install_mod(
     with open_archive(archive_path) as archive:
         all_entries = archive.list_entries()
 
+        known_roots = known_roots_for_game(game.domain_name)
+        layout_result = detect_layout(all_entries, known_roots)
+
+        if layout_result.layout == ArchiveLayout.FOMOD:
+            raise ValueError(
+                "FOMOD installer detected. This archive requires a FOMOD-aware "
+                "tool (Vortex, MO2) to install."
+            )
+
+        strip_prefix = layout_result.strip_prefix
+
         # Pre-filter entries to determine which files to extract
         valid_entries: list[tuple[ArchiveEntry, str, str]] = []
         for entry in all_entries:
             if entry.is_dir:
                 continue
             normalised = entry.filename.replace("\\", "/")
+
+            if strip_prefix:
+                if normalised.startswith(strip_prefix + "/"):
+                    normalised = normalised[len(strip_prefix) + 1 :]
+                else:
+                    logger.debug("Skipping entry outside wrapper: %s", entry.filename)
+                    skipped += 1
+                    continue
+
             normalised_lower = normalised.lower()
             if normalised_lower in skip_set:
                 skipped += 1
