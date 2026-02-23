@@ -9,7 +9,6 @@ interface VirtualCardGridProps<T> {
   renderItem: (item: T, index: number) => React.ReactNode;
   estimateHeight?: number;
   overscan?: number;
-  dynamicHeight?: boolean;
   remeasureDep?: unknown;
   className?: string;
 }
@@ -19,7 +18,6 @@ export function VirtualCardGrid<T>({
   renderItem,
   estimateHeight = 296,
   overscan = 2,
-  dynamicHeight = false,
   remeasureDep,
   className,
 }: VirtualCardGridProps<T>) {
@@ -46,9 +44,7 @@ export function VirtualCardGrid<T>({
     getScrollElement: () => scrollContainerRef?.current ?? null,
     estimateSize: () => estimateHeight,
     overscan,
-    measureElement: dynamicHeight
-      ? (el) => el.getBoundingClientRect().height
-      : undefined,
+    measureElement: (el) => el.getBoundingClientRect().height,
     scrollMargin,
   });
 
@@ -59,11 +55,11 @@ export function VirtualCardGrid<T>({
   }, [columnCount]);
 
   useEffect(() => {
-    if (dynamicHeight && remeasureDep !== undefined) {
+    if (remeasureDep !== undefined) {
       virtualizer.measure();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remeasureDep, dynamicHeight]);
+  }, [remeasureDep]);
 
   return (
     <div
@@ -76,7 +72,7 @@ export function VirtualCardGrid<T>({
         return (
           <div
             key={virtualRow.index}
-            ref={dynamicHeight ? virtualizer.measureElement : undefined}
+            ref={virtualizer.measureElement}
             data-index={virtualRow.index}
             className="grid gap-x-4 mb-4"
             style={{
