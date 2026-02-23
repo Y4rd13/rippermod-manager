@@ -20,6 +20,7 @@ import { BulkActionBar } from "@/components/ui/BulkActionBar";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
+import { OverflowMenuButton } from "@/components/ui/OverflowMenuButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -273,7 +274,7 @@ function ManagedModsGrid({
                 footer={
                   <div className="flex items-center gap-1.5">
                     <Badge variant={mod.disabled ? "danger" : "success"}>
-                      {mod.disabled ? "Disabled" : "Enabled"}
+                      {mod.disabled ? <><PowerOff size={10} className="mr-0.5" /> Disabled</> : <><Power size={10} className="mr-0.5" /> Enabled</>}
                     </Badge>
                     {mod.nexus_updated_at && (
                       <span className="text-xs text-text-muted">
@@ -293,7 +294,7 @@ function ManagedModsGrid({
                         }}
                         title="Open mod page on Nexus Mods"
                         aria-label="Open on Nexus Mods"
-                        className="ml-auto text-text-muted hover:text-accent shrink-0"
+                        className="ml-auto rounded p-1 text-text-muted hover:text-accent hover:bg-accent/10 shrink-0 transition-colors"
                       >
                         <ExternalLink size={12} />
                       </button>
@@ -307,6 +308,31 @@ function ManagedModsGrid({
                     isUninstalling={uninstallMod.isPending && uninstallMod.variables?.modId === mod.id}
                     onToggle={() => toggleMod.mutateAsync({ gameName, modId: mod.id })}
                     onUninstall={() => uninstallMod.mutateAsync({ gameName, modId: mod.id })}
+                  />
+                }
+                overflowMenu={
+                  <OverflowMenuButton
+                    items={buildContextMenuItems(mod)}
+                    onSelect={(key) => {
+                      switch (key) {
+                        case "enable":
+                        case "disable":
+                          toggleMod.mutate({ gameName, modId: mod.id });
+                          break;
+                        case "nexus":
+                          if (mod.nexus_mod_id) onModClick?.(mod.nexus_mod_id);
+                          break;
+                        case "copy":
+                          void navigator.clipboard.writeText(mod.nexus_name || mod.name).then(
+                            () => toast.success("Copied to clipboard"),
+                            () => toast.error("Failed to copy"),
+                          );
+                          break;
+                        case "delete":
+                          uninstallMod.mutate({ gameName, modId: mod.id });
+                          break;
+                      }
+                    }}
                   />
                 }
                 onClick={mod.nexus_mod_id ? () => onModClick?.(mod.nexus_mod_id!) : undefined}
@@ -408,7 +434,7 @@ function RecognizedModsGrid({
                 version={match.version}
                 endorsementCount={match.endorsement_count}
                 pictureUrl={match.picture_url}
-                badge={update ? <Badge variant="warning" prominent>v{update.nexus_version} available</Badge> : undefined}
+                badge={update ? <Badge variant="warning" prominent><ArrowUp size={10} className="mr-0.5" />v{update.nexus_version} available</Badge> : undefined}
                 onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
                 action={
                   <ModCardAction

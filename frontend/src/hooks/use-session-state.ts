@@ -1,46 +1,40 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
+
+function readStorage<T>(key: string, fallback: T): T {
+  try {
+    const stored = sessionStorage.getItem(key);
+    return stored !== null ? (JSON.parse(stored) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 /**
  * Like useState but persists to sessionStorage (survives tab changes, lost on
  * window close).  Falls back to plain useState if storage is unavailable.
  */
 export function useSessionState<T>(key: string, initialValue: T) {
-  const [value, setValue] = useState<T>(() => {
-    try {
-      const stored = sessionStorage.getItem(key);
-      return stored !== null ? (JSON.parse(stored) as T) : initialValue;
-    } catch {
-      return initialValue;
-    }
-  });
+  const [state, setState] = useState({ key, value: readStorage(key, initialValue) });
 
-  // Sync state when key changes without remount (e.g. gameName change).
-  const prevKey = useRef(key);
-  useEffect(() => {
-    if (prevKey.current === key) return;
-    prevKey.current = key;
-    try {
-      const stored = sessionStorage.getItem(key);
-      setValue(stored !== null ? (JSON.parse(stored) as T) : initialValue);
-    } catch {
-      setValue(initialValue);
-    }
-  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Adjust state during render when key changes (React-recommended pattern).
+  if (state.key !== key) {
+    setState({ key, value: readStorage(key, initialValue) });
+  }
 
   const set = useCallback(
     (next: T | ((prev: T) => T)) => {
-      setValue((prev) => {
-        const resolved = typeof next === "function" ? (next as (p: T) => T)(prev) : next;
+      setState((prev) => {
+        const resolved = typeof next === "function" ? (next as (p: T) => T)(prev.value) : next;
         try {
           sessionStorage.setItem(key, JSON.stringify(resolved));
         } catch {
           // quota exceeded — degrade silently
         }
-        return resolved;
+        return { key, value: resolved };
       });
     },
     [key],
   );
 
-  return [value, set] as const;
+  return [state.value, set] as const;
 }

@@ -191,7 +191,7 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
                           onClick={() => openUrl(u.nexus_url).catch(() => {})}
                           title="Open mod page on Nexus Mods"
                           aria-label="Open on Nexus Mods"
-                          className="text-text-muted hover:text-accent shrink-0"
+                          className="rounded p-1 text-text-muted hover:text-accent hover:bg-accent/10 shrink-0 transition-colors"
                         >
                           <ExternalLink size={12} />
                         </button>

@@ -1,4 +1,5 @@
 import {
+  ArrowUp,
   ChevronDown,
   ChevronRight,
   Clock,
@@ -104,7 +105,7 @@ export function ModDetailModal({ gameDomain, modId, update, action, onClose }: P
       <div
         role="dialog"
         aria-modal="true"
-        className="w-full max-w-3xl max-h-[90vh] rounded-xl border border-border bg-surface-0 overflow-hidden flex flex-col animate-modal-in"
+        className="w-full max-w-2xl max-h-[90vh] rounded-xl border border-border bg-surface-0 overflow-hidden flex flex-col animate-modal-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Loading skeleton */}
@@ -156,7 +157,7 @@ export function ModDetailModal({ gameDomain, modId, update, action, onClose }: P
                 <span className="text-text-secondary">by {detail.author}</span>
                 <span>v{detail.version}</span>
                 {update && (
-                  <Badge variant="warning">v{update.nexus_version} available</Badge>
+                  <Badge variant="warning"><ArrowUp size={10} className="mr-0.5" />v{update.nexus_version} available</Badge>
                 )}
                 <span className="flex items-center gap-1">
                   <Download size={12} />

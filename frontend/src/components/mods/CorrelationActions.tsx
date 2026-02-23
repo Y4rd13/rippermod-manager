@@ -32,7 +32,7 @@ export function CorrelationActions({ gameName, modGroupId, confirmed }: Props) {
             confirm.mutate({ gameName, modGroupId });
           }}
           className={cn(
-            "rounded p-1 transition-colors",
+            "rounded p-1.5 transition-colors",
             confirmed
               ? "text-success cursor-default"
               : "text-text-muted hover:text-success hover:bg-success/10",
@@ -49,7 +49,7 @@ export function CorrelationActions({ gameName, modGroupId, confirmed }: Props) {
             e.stopPropagation();
             setShowRejectConfirm(true);
           }}
-          className="rounded p-1 text-text-muted transition-colors hover:text-danger hover:bg-danger/10"
+          className="rounded p-1.5 text-text-muted transition-colors hover:text-danger hover:bg-danger/10"
         >
           <XCircle size={14} />
         </button>
@@ -61,7 +61,7 @@ export function CorrelationActions({ gameName, modGroupId, confirmed }: Props) {
             e.stopPropagation();
             setShowReassign(true);
           }}
-          className="rounded p-1 text-text-muted transition-colors hover:text-accent hover:bg-accent/10"
+          className="rounded p-1.5 text-text-muted transition-colors hover:text-accent hover:bg-accent/10"
         >
           <Pencil size={14} />
         </button>

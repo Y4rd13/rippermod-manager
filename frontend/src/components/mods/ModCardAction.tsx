@@ -106,7 +106,7 @@ export function ModCardAction({
         onClick={onDownload}
         disabled={isDownloading}
         title={isUpdate ? `Download update${updateVersion ? ` v${updateVersion}` : ""} from Nexus` : "Download this mod from Nexus"}
-        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
+        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium disabled:opacity-50 ${isUpdate ? "bg-warning text-black hover:opacity-80" : "border border-accent text-accent hover:bg-accent/10"}`}
       >
         {isDownloading ? (
           <Loader2 size={12} className="animate-spin" />

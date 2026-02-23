@@ -1,3 +1,5 @@
+import { AlertTriangle, Check, XCircle } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 
 type Variant = "success" | "warning" | "danger" | "neutral";
@@ -41,9 +43,10 @@ export function ConfidenceBadge({ score }: { score: number }) {
   const variant = score >= 0.9 ? "success" : score >= 0.75 ? "warning" : "danger";
   const pct = Math.round(score * 100);
   const label = score >= 0.9 ? "High" : score >= 0.75 ? "Medium" : "Low";
+  const Icon = score >= 0.9 ? Check : score >= 0.75 ? AlertTriangle : XCircle;
   return (
     <span title={`${label} confidence match (${pct}%) — how closely this mod matches the Nexus entry`}>
-      <Badge variant={variant}>{pct}%</Badge>
+      <Badge variant={variant}><Icon size={10} className="mr-0.5" />{pct}%</Badge>
     </span>
   );
 }

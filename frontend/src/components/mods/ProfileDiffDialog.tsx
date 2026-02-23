@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Minus, Power, PowerOff } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
@@ -56,7 +56,7 @@ export function ProfileDiffDialog({ diff, loading, onCancel, onConfirm }: Props)
         role="dialog"
         aria-modal="true"
         aria-labelledby="diff-dialog-title"
-        className="w-full max-w-lg rounded-xl border border-border bg-surface-1 p-6"
+        className="w-full max-w-2xl rounded-xl border border-border bg-surface-1 p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 id="diff-dialog-title" className="mb-4 text-lg font-semibold text-text-primary">
@@ -65,16 +65,16 @@ export function ProfileDiffDialog({ diff, loading, onCancel, onConfirm }: Props)
 
         <div className="mb-4 flex flex-wrap gap-2">
           {diff.enable_count > 0 && (
-            <Badge variant="success">{diff.enable_count} to enable</Badge>
+            <Badge variant="success"><Power size={10} className="mr-0.5" />{diff.enable_count} to enable</Badge>
           )}
           {diff.disable_count > 0 && (
-            <Badge variant="warning">{diff.disable_count} to disable</Badge>
+            <Badge variant="warning"><PowerOff size={10} className="mr-0.5" />{diff.disable_count} to disable</Badge>
           )}
           {diff.missing_count > 0 && (
-            <Badge variant="danger">{diff.missing_count} missing</Badge>
+            <Badge variant="danger"><AlertTriangle size={10} className="mr-0.5" />{diff.missing_count} missing</Badge>
           )}
           {diff.unchanged_count > 0 && (
-            <Badge variant="neutral">{diff.unchanged_count} unchanged</Badge>
+            <Badge variant="neutral"><Minus size={10} className="mr-0.5" />{diff.unchanged_count} unchanged</Badge>
           )}
         </div>
 
