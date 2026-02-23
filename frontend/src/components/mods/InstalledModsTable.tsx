@@ -206,6 +206,9 @@ function ManagedModsGrid({
   const selectedMods = sorted.filter((m) => bulk.selectedIds.has(m.id));
   const hasDisabledSelected = selectedMods.some((m) => m.disabled);
   const hasEnabledSelected = selectedMods.some((m) => !m.disabled);
+  const confirmDeleteMod = confirmDeleteModId != null
+    ? sorted.find((m) => m.id === confirmDeleteModId)
+    : null;
 
   return (
     <>
@@ -369,24 +372,21 @@ function ManagedModsGrid({
         />
       )}
 
-      {confirmDeleteModId != null && (() => {
-        const mod = sorted.find((m) => m.id === confirmDeleteModId);
-        return mod ? (
-          <ConfirmDialog
-            title="Delete Mod?"
-            message={`Permanently delete "${mod.nexus_name || mod.name}" and its files? This cannot be undone.`}
-            confirmLabel="Delete"
-            variant="danger"
-            icon={Trash2}
-            loading={uninstallMod.isPending}
-            onConfirm={async () => {
-              await uninstallMod.mutateAsync({ gameName, modId: confirmDeleteModId });
-              setConfirmDeleteModId(null);
-            }}
-            onCancel={() => setConfirmDeleteModId(null)}
-          />
-        ) : null;
-      })()}
+      {confirmDeleteMod && (
+        <ConfirmDialog
+          title="Delete Mod?"
+          message={`Permanently delete "${confirmDeleteMod.nexus_name || confirmDeleteMod.name}" and its files? This cannot be undone.`}
+          confirmLabel="Delete"
+          variant="danger"
+          icon={Trash2}
+          loading={uninstallMod.isPending}
+          onConfirm={async () => {
+            await uninstallMod.mutateAsync({ gameName, modId: confirmDeleteMod.id });
+            setConfirmDeleteModId(null);
+          }}
+          onCancel={() => setConfirmDeleteModId(null)}
+        />
+      )}
     </>
   );
 }
