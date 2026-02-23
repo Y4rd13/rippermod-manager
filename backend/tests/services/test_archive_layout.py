@@ -134,12 +134,21 @@ class TestFomod:
         assert result.layout == ArchiveLayout.STANDARD
 
     def test_fomod_takes_precedence_over_standard(self) -> None:
-        """FOMOD check runs after STANDARD, but FOMOD archives typically
-        don't have known roots at top level. When fomod/ is present alongside
-        non-root dirs, it should be flagged."""
+        """When fomod/ is present alongside non-root dirs, it should be flagged."""
         entries = [
             FakeEntry("fomod/ModuleConfig.xml"),
             FakeEntry("variant-a/archive/pc/mod/a.archive"),
+        ]
+        result = detect_layout(entries, CP_ROOTS)
+        assert result.layout == ArchiveLayout.FOMOD
+
+    def test_fomod_with_known_root_at_top_level(self) -> None:
+        """A FOMOD archive that also has a known game root at the top level
+        should still be flagged as FOMOD."""
+        entries = [
+            FakeEntry("fomod/ModuleConfig.xml"),
+            FakeEntry("archive/pc/mod/core.archive"),
+            FakeEntry("option-b/archive/pc/mod/b.archive"),
         ]
         result = detect_layout(entries, CP_ROOTS)
         assert result.layout == ArchiveLayout.FOMOD

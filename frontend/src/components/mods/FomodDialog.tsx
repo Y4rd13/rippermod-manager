@@ -1,4 +1,5 @@
 import { Package } from "lucide-react";
+import { useEffect } from "react";
 
 import { Button } from "@/components/ui/Button";
 
@@ -8,13 +9,25 @@ interface Props {
 }
 
 export function FomodDialog({ archiveFilename, onDismiss }: Props) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onDismiss();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onDismiss]);
+
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+      onClick={onDismiss}
+    >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="fomod-dialog-title"
         className="w-full max-w-md rounded-xl border border-border bg-surface-1 p-6"
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center gap-2 text-warning">
           <Package size={20} />

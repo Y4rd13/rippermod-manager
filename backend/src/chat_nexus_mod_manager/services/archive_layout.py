@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import PurePosixPath
+from typing import Protocol
 
 from chat_nexus_mod_manager.constants import GAME_REGISTRY
 
@@ -19,6 +20,11 @@ class ArchiveLayout(StrEnum):
     WRAPPED = "wrapped"
     FOMOD = "fomod"
     UNKNOWN = "unknown"
+
+
+class ArchiveEntryLike(Protocol):
+    filename: str
+    is_dir: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,7 +50,7 @@ def known_roots_for_game(domain_name: str) -> set[str]:
 
 
 def detect_layout(
-    entries: list[object],
+    entries: list[ArchiveEntryLike],
     known_roots: set[str],
 ) -> LayoutResult:
     """Classify an archive's layout from its file/directory entries.
@@ -73,7 +79,7 @@ def detect_layout(
     second_level_dirs: set[str] = set()
 
     for entry in entries:
-        filename: str = entry.filename  # type: ignore[union-attr]
+        filename: str = entry.filename
         normalised = filename.replace("\\", "/").strip("/")
         if not normalised:
             continue
@@ -101,13 +107,14 @@ def detect_layout(
         if len(parts) >= 2:
             second_level_dirs.add(parts[1].lower())
 
-    # 1. Any top-level component matches a known game root -> STANDARD
-    if known_roots and top_level_dirs & known_roots:
-        return LayoutResult(layout=ArchiveLayout.STANDARD)
-
-    # 2. FOMOD detected
+    # 1. FOMOD detected — check first since FOMOD archives may also contain
+    #    known game roots as sub-options
     if has_fomod_config:
         return LayoutResult(layout=ArchiveLayout.FOMOD)
+
+    # 2. Any top-level component matches a known game root -> STANDARD
+    if known_roots and top_level_dirs & known_roots:
+        return LayoutResult(layout=ArchiveLayout.STANDARD)
 
     # 3. Single wrapper directory, no loose root files, second-level has known roots
     if (
@@ -119,7 +126,7 @@ def detect_layout(
         wrapper = next(iter(top_level_dirs))
         # Recover the original-case prefix from the first entry that matches
         for entry in entries:
-            filename = entry.filename.replace("\\", "/").strip("/")  # type: ignore[union-attr]
+            filename = entry.filename.replace("\\", "/").strip("/")
             if filename:
                 original_first = PurePosixPath(filename).parts[0]
                 if original_first.lower() == wrapper:
