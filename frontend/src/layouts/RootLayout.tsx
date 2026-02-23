@@ -6,12 +6,16 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Titlebar } from "@/components/layout/Titlebar";
 import { KeyboardShortcutsModal } from "@/components/ui/KeyboardShortcutsModal";
 import { ToastContainer } from "@/components/ui/Toast";
+import { useHasOpenaiKey } from "@/hooks/queries";
 import { ScrollContainerContext } from "@/hooks/use-scroll-container";
 import { useUIStore } from "@/stores/ui-store";
 
 export function RootLayout() {
   const toggleChatPanel = useUIStore((s) => s.toggleChatPanel);
   const setChatPanelOpen = useUIStore((s) => s.setChatPanelOpen);
+  const hasOpenaiKey = useHasOpenaiKey();
+  const hasOpenaiKeyRef = useRef(hasOpenaiKey);
+  useEffect(() => { hasOpenaiKeyRef.current = hasOpenaiKey; }, [hasOpenaiKey]);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
 
@@ -19,6 +23,7 @@ export function RootLayout() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
         e.preventDefault();
+        if (!hasOpenaiKeyRef.current) return;
         toggleChatPanel();
       }
       if (e.key === "Escape" && useUIStore.getState().chatPanelOpen) {
