@@ -13,6 +13,11 @@
   Built with Cyberpunk 2077 as the primary target, but designed to support any game on Nexus Mods.
 </p>
 
+<p align="center">
+  <a href="https://github.com/Y4rd13/chat-nexus-mod-manager/actions/workflows/ci.yml"><img src="https://github.com/Y4rd13/chat-nexus-mod-manager/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Y4rd13/chat-nexus-mod-manager" alt="License" /></a>
+</p>
+
 ---
 
 ## Features
@@ -44,9 +49,11 @@
 | Styling | Tailwind CSS v4 |
 | State | Zustand (client), TanStack React Query (server) |
 | Desktop | Tauri v2 (Rust) |
+| Bundling | PyInstaller (backend → sidecar .exe), NSIS (Windows installer) |
 | Package Manager | uv (backend), npm (frontend) |
 | Linting | Ruff (Python), ESLint (TypeScript) |
 | Testing | pytest, pytest-asyncio, respx |
+| CI/CD | GitHub Actions (lint, test, Tauri build, release pipeline) |
 
 ## Project Structure
 
@@ -54,77 +61,82 @@
 chat-nexus-mod-manager/
 ├── backend/
 │   ├── src/chat_nexus_mod_manager/
-│   │   ├── main.py                 # FastAPI app, lifespan, CORS
-│   │   ├── config.py               # Pydantic settings (env vars)
-│   │   ├── database.py             # SQLite engine, session factory
-│   │   ├── models/                 # SQLModel tables
-│   │   │   ├── game.py             #   Game, GameModPath
-│   │   │   ├── mod.py              #   ModGroup, ModFile, ModGroupAlias
-│   │   │   ├── nexus.py            #   NexusDownload, NexusModMeta
-│   │   │   ├── correlation.py      #   ModNexusCorrelation
-│   │   │   ├── settings.py         #   AppSetting, PCSpecs
-│   │   │   └── chat.py             #   ChatMessage
-│   │   ├── schemas/                # Pydantic request/response models
-│   │   ├── routers/                # FastAPI routers (prefix /api/v1/)
-│   │   │   ├── games.py            #   CRUD games + mod paths
-│   │   │   ├── mods.py             #   List, scan, correlate mods
-│   │   │   ├── nexus.py            #   Validate, connect, sync Nexus
-│   │   │   ├── install.py          #   Install, uninstall, toggle mods
-│   │   │   ├── downloads.py        #   Download mods from Nexus
-│   │   │   ├── profiles.py         #   Save, load, export/import profiles
-│   │   │   ├── updates.py          #   Version diff + update check
-│   │   │   ├── settings.py         #   App settings + PC specs
-│   │   │   ├── onboarding.py       #   Onboarding status + completion
-│   │   │   ├── chat.py             #   SSE chat endpoint
-│   │   │   └── vector.py           #   Reindex, search, stats
-│   │   ├── scanner/service.py      # File discovery + grouping
+│   │   ├── __main__.py              # Standalone entry point (uvicorn)
+│   │   ├── main.py                  # FastAPI app, lifespan, CORS, /health
+│   │   ├── config.py                # Pydantic settings (AppData paths)
+│   │   ├── database.py              # SQLite engine, session factory
+│   │   ├── models/                  # SQLModel tables
+│   │   │   ├── game.py              #   Game, GameModPath
+│   │   │   ├── mod.py               #   ModGroup, ModFile, ModGroupAlias
+│   │   │   ├── nexus.py             #   NexusDownload, NexusModMeta
+│   │   │   ├── correlation.py       #   ModNexusCorrelation
+│   │   │   ├── settings.py          #   AppSetting, PCSpecs
+│   │   │   └── chat.py              #   ChatMessage
+│   │   ├── schemas/                 # Pydantic request/response models
+│   │   ├── routers/                 # FastAPI routers (prefix /api/v1/)
+│   │   │   ├── games.py             #   CRUD games + mod paths
+│   │   │   ├── mods.py              #   List, scan, correlate mods
+│   │   │   ├── nexus.py             #   Validate, connect, sync Nexus
+│   │   │   ├── install.py           #   Install, uninstall, toggle mods
+│   │   │   ├── downloads.py         #   Download mods from Nexus
+│   │   │   ├── profiles.py          #   Save, load, export/import profiles
+│   │   │   ├── updates.py           #   Version diff + update check
+│   │   │   ├── settings.py          #   App settings + PC specs
+│   │   │   ├── onboarding.py        #   Onboarding status + completion
+│   │   │   ├── chat.py              #   SSE chat endpoint
+│   │   │   └── vector.py            #   Reindex, search, stats
+│   │   ├── scanner/service.py       # File discovery + grouping
 │   │   ├── matching/
-│   │   │   ├── grouper.py          # TF-IDF + DBSCAN file grouping
-│   │   │   └── correlator.py       # Local↔Nexus name matching
-│   │   ├── nexus/client.py         # Async Nexus Mods API client
-│   │   ├── services/nexus_sync.py  # Sync tracked/endorsed mods
+│   │   │   ├── grouper.py           # TF-IDF + DBSCAN file grouping
+│   │   │   └── correlator.py        # Local↔Nexus name matching
+│   │   ├── nexus/client.py          # Async Nexus Mods API client
+│   │   ├── services/
+│   │   │   ├── nexus_sync.py        # Sync tracked/endorsed mods
+│   │   │   └── download_service.py  # Download orchestration + shutdown
 │   │   ├── vector/
-│   │   │   ├── store.py            # ChromaDB client + collections
-│   │   │   ├── indexer.py          # Index mods/nexus/correlations
-│   │   │   └── search.py           # Semantic search queries
-│   │   └── agents/orchestrator.py  # LangChain agent + tools
-│   └── tests/                      # 305 pytest tests
-│       ├── conftest.py             # In-memory SQLite fixtures
-│       ├── matching/               # Grouper + correlator tests
-│       ├── scanner/                # File scanner tests
-│       ├── nexus/                  # Nexus API client tests (respx)
-│       ├── services/               # Sync, install, profile, update tests
-│       ├── routers/                # All router test files
-│       ├── archive/                # Archive handler tests
-│       ├── vector/                 # Indexer + search tests
-│       └── agents/                 # Orchestrator tool tests
+│   │   │   ├── store.py             # ChromaDB client + collections
+│   │   │   ├── indexer.py           # Index mods/nexus/correlations
+│   │   │   └── search.py            # Semantic search queries
+│   │   └── agents/orchestrator.py   # LangChain agent + tools
+│   ├── cnmm-backend.spec            # PyInstaller spec (--onefile)
+│   └── tests/                       # 305 pytest tests
 ├── frontend/
 │   ├── src/
-│   │   ├── components/             # UI components
-│   │   │   ├── chat/               #   ChatPanel
-│   │   │   ├── layout/             #   Sidebar, Titlebar
-│   │   │   ├── mods/               #   NexusModCard, NexusMatchedGrid,
-│   │   │   │                       #   NexusAccountGrid, InstalledModsTable,
-│   │   │   │                       #   ArchivesList, ProfileManager,
-│   │   │   │                       #   ConflictDialog, ModsTable
-│   │   │   └── ui/                 #   Badge, Button, Card, Input, Toast
-│   │   ├── pages/                  # Route pages
+│   │   ├── components/
+│   │   │   ├── BackendGate.tsx       # Waits for backend before rendering
+│   │   │   ├── ErrorBoundary.tsx     # Catches crashes, shows fallback UI
+│   │   │   ├── chat/                 #   ChatPanel
+│   │   │   ├── layout/              #   Sidebar, Titlebar
+│   │   │   ├── mods/                #   NexusModCard, NexusMatchedGrid,
+│   │   │   │                        #   NexusAccountGrid, InstalledModsTable,
+│   │   │   │                        #   ArchivesList, ProfileManager,
+│   │   │   │                        #   ConflictDialog, ModsTable
+│   │   │   └── ui/                  #   Badge, Button, Card, Input, Toast
+│   │   ├── pages/
 │   │   │   ├── DashboardPage.tsx
 │   │   │   ├── GamesPage.tsx
 │   │   │   ├── GameDetailPage.tsx
 │   │   │   ├── SettingsPage.tsx
 │   │   │   ├── UpdatesPage.tsx
 │   │   │   └── OnboardingPage.tsx
-│   │   ├── hooks/                  # React Query hooks + useInstallFlow
-│   │   ├── stores/                 # Zustand stores
-│   │   ├── lib/                    # API client, SSE parser, utils
-│   │   ├── router/                 # Routes + OnboardingGuard
-│   │   ├── layouts/                # Root + Onboarding layouts
-│   │   └── types/                  # TypeScript API types
-│   └── src-tauri/                  # Tauri v2 Rust shell
-├── CLAUDE.md                       # AI assistant project context
-├── CLA.md                          # Contributor License Agreement
-└── .github/workflows/              # CI, CLA, Claude review
+│   │   ├── hooks/                   # React Query hooks + useInstallFlow
+│   │   ├── stores/                  # Zustand stores
+│   │   ├── lib/                     # API client, SSE parser, utils
+│   │   ├── router/                  # Routes + OnboardingGuard
+│   │   ├── layouts/                 # Root + Onboarding layouts
+│   │   └── types/                   # TypeScript API types
+│   └── src-tauri/                   # Tauri v2 Rust shell + sidecar lifecycle
+├── scripts/
+│   ├── build-backend.ps1            # PyInstaller build + sidecar copy
+│   └── ensure-dev-sidecar.ps1       # Dev placeholder for Tauri compile
+├── .github/workflows/
+│   ├── ci.yml                       # Backend + Frontend + Tauri build
+│   ├── release.yml                  # Tag-triggered release pipeline
+│   ├── claude.yml                   # Claude Code interactive (@claude)
+│   └── claude-pr-review.yml         # Automated PR review
+├── CLAUDE.md                        # AI assistant project context
+├── CLA.md                           # Contributor License Agreement
+└── LICENSE                          # MIT
 ```
 
 ## Prerequisites
@@ -134,7 +146,7 @@ chat-nexus-mod-manager/
 - [Node.js 22+](https://nodejs.org/)
 - [Rust](https://rustup.rs/) (for Tauri desktop builds)
 - [Nexus Mods API key](https://www.nexusmods.com/users/myaccount?tab=api+access) (free personal key)
-- [OpenAI API key](https://platform.openai.com/api-keys) (for chat assistant)
+- [OpenAI API key](https://platform.openai.com/api-keys) (optional — only for chat assistant)
 
 ## Getting Started
 
@@ -156,7 +168,9 @@ uv sync --extra test     # Include test dependencies
 uv run uvicorn chat_nexus_mod_manager.main:app --reload --port 8425
 ```
 
-The API will be available at `http://localhost:8425`. The SQLite database is auto-created at `backend/data/cnmm.db` on first startup.
+The API will be available at `http://localhost:8425`. The SQLite database and ChromaDB are auto-created at `%LOCALAPPDATA%\ChatNexusModManager\` on Windows (or `~/.local/share/ChatNexusModManager/` on Linux) on first startup.
+
+> **Tip:** Set `CNMM_DATA_DIR=./data` in `backend/.env` to use a local data directory instead.
 
 ### 3. Frontend setup
 
@@ -175,9 +189,9 @@ npx tauri dev
 
 On first launch, the onboarding flow will guide you through:
 
-1. **OpenAI API key** — Powers the chat assistant
+1. **OpenAI API key** — Powers the chat assistant (optional)
 2. **Nexus Mods API key** — Enables mod tracking and metadata sync
-3. **Game setup** — Configure your game install path (Cyberpunk 2077 auto-detects 7 default mod directories)
+3. **Game setup** — Configure your game install path (Cyberpunk 2077 auto-detects from Steam, GOG, and Epic)
 4. **Initial scan** — Discovers and groups your installed mods
 
 API keys are stored in the local SQLite database and masked in the settings UI.
@@ -203,6 +217,33 @@ npm run build        # TypeScript check + Vite build
 npm run lint         # ESLint
 npx tauri dev        # Tauri desktop window
 npx tauri build      # Production desktop build
+```
+
+### Building for Production
+
+The release build produces a standalone Windows installer (NSIS `.exe`) with the Python backend bundled as a sidecar:
+
+```powershell
+# 1. Build backend as standalone .exe
+cd backend
+uv sync --extra build
+uv run pyinstaller cnmm-backend.spec --clean --noconfirm
+
+# 2. Copy sidecar to Tauri binaries
+.\scripts\build-backend.ps1
+
+# 3. Build Tauri installer
+cd frontend
+npx tauri build
+# Output: frontend/src-tauri/target/release/bundle/nsis/*.exe
+```
+
+Or push a version tag to trigger the automated release pipeline:
+
+```bash
+git tag v1.0.0
+git push --tags
+# → GitHub Actions builds and creates a draft release with the installer
 ```
 
 ### API Endpoints
@@ -335,11 +376,15 @@ Tests use an in-memory SQLite database and patched ChromaDB for full isolation. 
 │  ┌───────────────────────────────────────────┐   │
 │  │            React Frontend                 │   │
 │  │  Zustand ─── React Query ─── SSE Parser   │   │
+│  │  ErrorBoundary ─── BackendGate            │   │
 │  └──────────────────┬────────────────────────┘   │
+│                     │                            │
+│          Sidecar Lifecycle Manager                │
+│  (spawn → health poll → events → kill on close)  │
 └─────────────────────┼────────────────────────────┘
-                      │ HTTP / SSE
+                      │ HTTP / SSE (localhost:8425)
 ┌─────────────────────┼────────────────────────────┐
-│              FastAPI Backend                      │
+│    FastAPI Backend (PyInstaller sidecar .exe)     │
 │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐  │
 │  │ Routers  │ │ Scanner  │ │   Chat Agent     │  │
 │  │(11 APIs) │ │ Grouper  │ │ (LangChain+OAI)  │  │
@@ -348,6 +393,7 @@ Tests use an in-memory SQLite database and patched ChromaDB for full isolation. 
 │       │             │               │             │
 │  ┌────┴─────────────┴───────────────┴──────────┐  │
 │  │              SQLite (SQLModel)              │  │
+│  │       %LOCALAPPDATA%/ChatNexusModManager    │  │
 │  └──────────────────┬──────────────────────────┘  │
 │                     │                             │
 │  ┌──────────────────┴──────────────────────────┐  │
@@ -360,6 +406,16 @@ Tests use an in-memory SQLite database and patched ChromaDB for full isolation. 
 │  └─────────────────────────────────────────────┘  │
 └───────────────────────────────────────────────────┘
 ```
+
+### Desktop Distribution
+
+In production, the app ships as a single Windows installer (NSIS):
+
+- **Frontend** → bundled by Vite into static assets inside the Tauri shell
+- **Backend** → compiled by PyInstaller into `cnmm-backend.exe`, embedded as a Tauri sidecar
+- **Startup** → Tauri spawns the sidecar, health-polls `/health`, emits `backend-ready` event
+- **Shutdown** → Cancels active downloads, disposes DB engine, releases ChromaDB, kills sidecar
+- **Data** → Stored in `%LOCALAPPDATA%\ChatNexusModManager\` (DB, ChromaDB, downloads)
 
 ## Contributing
 
@@ -374,6 +430,4 @@ All contributors must agree to the [Contributor License Agreement](CLA.md) befor
 
 ## License
 
-This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
-
-See [CLA.md](CLA.md) for contributor licensing terms.
+This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
