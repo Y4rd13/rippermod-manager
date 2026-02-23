@@ -250,7 +250,7 @@ function ManagedModsGrid({
             updateByInstalledId.get(mod.id) ??
             (mod.nexus_mod_id ? updateByNexusId.get(mod.nexus_mod_id) : undefined);
           return (
-            <div className={cn("relative", mod.disabled && "opacity-60")}>
+            <div className={cn("relative grid", mod.disabled && "opacity-60")}>
               <div className="absolute top-2 left-2 z-10">
                 <input
                   type="checkbox"
@@ -445,7 +445,7 @@ function RecognizedModsGrid({
           const update = nexusModId != null ? updateByNexusId.get(nexusModId) : undefined;
 
           return (
-            <div className="relative">
+            <div className="relative grid">
               <div className="absolute top-2 left-2 z-10">
                 <input
                   type="checkbox"

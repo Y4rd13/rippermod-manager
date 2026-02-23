@@ -213,7 +213,8 @@ export function NexusMatchedGrid({
           };
 
           return (
-            <div>
+            <div className="flex flex-col">
+              <div className="flex-1 grid">
               <NexusModCard
                 modName={match.mod_name}
                 summary={match.summary}
@@ -290,8 +291,9 @@ export function NexusMatchedGrid({
                   </div>
                 }
               />
+              </div>
               {isExpanded && mod.files.length > 0 && (
-                <div className="rounded-b-xl border border-t-0 border-border bg-surface-2 px-4 py-2 -mt-1 space-y-0.5">
+                <div className="shrink-0 rounded-b-xl border border-t-0 border-border bg-surface-2 px-4 py-2 -mt-1 space-y-0.5">
                   {mod.files.map((f) => (
                     <div key={f.id} className="flex justify-between text-xs gap-2">
                       <span className="font-mono truncate text-text-secondary">{f.file_path}</span>

@@ -44,6 +44,7 @@ export function VirtualCardGrid<T>({
     getScrollElement: () => scrollContainerRef?.current ?? null,
     estimateSize: () => estimateHeight,
     overscan,
+    gap: 16,
     measureElement: (el) => el.getBoundingClientRect().height,
     scrollMargin,
   });
@@ -74,7 +75,7 @@ export function VirtualCardGrid<T>({
             key={virtualRow.index}
             ref={virtualizer.measureElement}
             data-index={virtualRow.index}
-            className="grid gap-x-4 mb-4"
+            className="grid gap-x-4"
             style={{
               position: "absolute",
               top: 0,
@@ -87,7 +88,7 @@ export function VirtualCardGrid<T>({
             {row.map((item, colIndex) => {
               const globalIndex = virtualRow.index * columnCount + colIndex;
               return (
-                <div key={globalIndex}>{renderItem(item, globalIndex)}</div>
+                <div key={globalIndex} className="grid">{renderItem(item, globalIndex)}</div>
               );
             })}
           </div>
