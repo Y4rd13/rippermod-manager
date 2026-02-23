@@ -42,21 +42,24 @@ function useBackendStatus(): Status {
     }
 
     // Production: listen for Tauri events
-    let cleanup: (() => void) | undefined;
+    let cancelled = false;
+    let unlisten: (() => void)[] = [];
 
     (async () => {
       const { listen } = await import("@tauri-apps/api/event");
+      if (cancelled) return;
 
-      const unlisten = await Promise.all([
+      unlisten = await Promise.all([
         listen("backend-ready", () => setStatus("ready")),
         listen("backend-startup-failed", () => setStatus("failed")),
         listen("backend-crashed", () => setStatus("failed")),
       ]);
-
-      cleanup = () => unlisten.forEach((u) => u());
     })();
 
-    return () => cleanup?.();
+    return () => {
+      cancelled = true;
+      unlisten.forEach((u) => u());
+    };
   }, []);
 
   return status;

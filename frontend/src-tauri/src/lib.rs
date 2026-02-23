@@ -307,8 +307,13 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error
 
     // Store the child process handle for cleanup
     let state = app.state::<Mutex<BackendProcess>>();
-    if let Ok(mut bp) = state.lock() {
-        bp.child = Some(child);
+    match state.lock() {
+        Ok(mut bp) => {
+            bp.child = Some(child);
+        }
+        Err(e) => {
+            log::error!("Failed to lock BackendProcess for init: {}", e);
+        }
     }
 
     // Forward sidecar stdout/stderr to Tauri logs
@@ -345,29 +350,24 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error
         let delay = std::time::Duration::from_millis(500);
 
         for attempt in 1..=max_attempts {
-            // TCP connect check first
-            if std::net::TcpStream::connect("127.0.0.1:8425").is_ok() {
-                // Then HTTP health check
-                if let Ok(stream) = std::net::TcpStream::connect("127.0.0.1:8425") {
-                    use std::io::{Read, Write};
-                    let mut stream = stream;
-                    let _ = stream
-                        .set_read_timeout(Some(std::time::Duration::from_secs(2)));
-                    let request = "GET /health HTTP/1.1\r\nHost: 127.0.0.1:8425\r\nConnection: close\r\n\r\n";
-                    if stream.write_all(request.as_bytes()).is_ok() {
-                        let mut response = String::new();
-                        if stream.read_to_string(&mut response).is_ok()
-                            && response.contains("200")
-                            && response.contains("healthy")
-                        {
-                            log::info!(
-                                "Backend ready after {} attempts ({:.1}s)",
-                                attempt,
-                                attempt as f64 * 0.5
-                            );
-                            let _ = app_handle.emit("backend-ready", ());
-                            return;
-                        }
+            // HTTP health check via single TCP connection
+            if let Ok(mut stream) = std::net::TcpStream::connect("127.0.0.1:8425") {
+                use std::io::{Read, Write};
+                let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(2)));
+                let request = "GET /health HTTP/1.1\r\nHost: 127.0.0.1:8425\r\nConnection: close\r\n\r\n";
+                if stream.write_all(request.as_bytes()).is_ok() {
+                    let mut response = String::new();
+                    if stream.read_to_string(&mut response).is_ok()
+                        && response.contains("200")
+                        && response.contains("healthy")
+                    {
+                        log::info!(
+                            "Backend ready after {} attempts ({:.1}s)",
+                            attempt,
+                            attempt as f64 * 0.5
+                        );
+                        let _ = app_handle.emit("backend-ready", ());
+                        return;
                     }
                 }
             }
@@ -391,10 +391,15 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error
 
 fn kill_sidecar(app: &tauri::AppHandle) {
     let state = app.state::<Mutex<BackendProcess>>();
-    if let Ok(mut bp) = state.lock() {
-        if let Some(child) = bp.child.take() {
-            log::info!("Killing backend sidecar...");
-            let _ = child.kill();
+    match state.lock() {
+        Ok(mut bp) => {
+            if let Some(child) = bp.child.take() {
+                log::info!("Killing backend sidecar...");
+                let _ = child.kill();
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to lock BackendProcess for cleanup: {}", e);
         }
     }
 }
@@ -441,7 +446,9 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
-                kill_sidecar(window.app_handle());
+                if window.label() == "main" {
+                    kill_sidecar(window.app_handle());
+                }
             }
         })
         .run(tauri::generate_context!())

@@ -33,18 +33,27 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     logger.info("Application started")
     yield
     logger.info("Shutting down...")
-    from chat_nexus_mod_manager.services.download_service import shutdown as shutdown_downloads
+    try:
+        from chat_nexus_mod_manager.services.download_service import (
+            shutdown as shutdown_downloads,
+        )
 
-    await shutdown_downloads()
-    from chat_nexus_mod_manager.database import engine
+        await shutdown_downloads()
+    except Exception:
+        logger.exception("Failed to shutdown downloads")
+    try:
+        from chat_nexus_mod_manager.database import engine
 
-    engine.dispose()
-    logger.info("Database engine disposed")
-    import chat_nexus_mod_manager.vector.store as _store
+        engine.dispose()
+        logger.info("Database engine disposed")
+    except Exception:
+        logger.exception("Failed to dispose database engine")
+    try:
+        from chat_nexus_mod_manager.vector.store import release_client
 
-    if _store._client is not None:
-        _store._client = None
-        logger.info("ChromaDB client released")
+        release_client()
+    except Exception:
+        logger.exception("Failed to release ChromaDB client")
     logger.info("Shutdown complete")
 
 

@@ -43,7 +43,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           cd frontend/src-tauri
-          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" tauri.conf.json
+          jq --arg v "$VERSION" '.version = $v' tauri.conf.json > tmp.json && mv tmp.json tauri.conf.json
 
       - name: Build backend (PyInstaller)
         working-directory: backend

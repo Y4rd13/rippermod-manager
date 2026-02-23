@@ -90,7 +90,8 @@ jobs:
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path src-tauri\binaries | Out-Null
-          # Create a minimal valid PE executable (dummy placeholder for CI)
+          # Tauri validates externalBin entries are valid PE executables during build.
+          # Copy a small system .exe as a placeholder (no PyInstaller in CI).
           $bytes = [System.IO.File]::ReadAllBytes("$env:windir\System32\where.exe")
           [System.IO.File]::WriteAllBytes("src-tauri\binaries\cnmm-backend-x86_64-pc-windows-msvc.exe", $bytes)
 
