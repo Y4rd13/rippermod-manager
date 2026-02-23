@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { NavLink } from "react-router";
 
+import { useSettings } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui-store";
 
@@ -21,6 +22,8 @@ const navItems = [
 
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, toggleChatPanel } = useUIStore();
+  const { data: settings = [] } = useSettings();
+  const hasOpenaiKey = settings.some((s) => s.key === "openai_api_key" && s.value);
 
   return (
     <aside
@@ -67,16 +70,18 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="border-t border-border p-2">
-        <button
-          onClick={toggleChatPanel}
-          aria-label="Toggle chat panel"
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-text-secondary hover:bg-surface-2 hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          <MessageSquare size={18} />
-          {!sidebarCollapsed && <span>Chat</span>}
-        </button>
-      </div>
+      {hasOpenaiKey && (
+        <div className="border-t border-border p-2">
+          <button
+            onClick={toggleChatPanel}
+            aria-label="Toggle chat panel"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-text-secondary hover:bg-surface-2 hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <MessageSquare size={18} />
+            {!sidebarCollapsed && <span>Chat</span>}
+          </button>
+        </div>
+      )}
     </aside>
   );
 }
