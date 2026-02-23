@@ -27,6 +27,13 @@ def get_chroma_client() -> chromadb.ClientAPI:
     return _client
 
 
+def release_client() -> None:
+    global _client
+    if _client is not None:
+        _client = None
+        logger.info("ChromaDB client released")
+
+
 def get_collection(name: str) -> chromadb.Collection:
     client = get_chroma_client()
     return client.get_or_create_collection(

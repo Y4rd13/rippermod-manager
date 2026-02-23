@@ -19,6 +19,11 @@
     "dialog:default",
     "core:app:default",
     "deep-link:default",
-    "opener:default"
+    "opener:default",
+    "shell:default",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [{ "name": "binaries/cnmm-backend", "sidecar": true }]
+    }
   ]
 }
