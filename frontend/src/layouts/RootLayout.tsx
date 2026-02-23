@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Outlet } from "react-router";
 
 import { ChatPanel } from "@/components/chat/ChatPanel";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Titlebar } from "@/components/layout/Titlebar";
 import { KeyboardShortcutsModal } from "@/components/ui/KeyboardShortcutsModal";
@@ -57,7 +58,9 @@ export function RootLayout() {
         <Sidebar />
         <main ref={mainRef} id="main-content" className="flex-1 overflow-y-auto bg-surface-0 p-6">
           <ScrollContainerContext value={mainRef}>
-            <Outlet />
+            <ErrorBoundary>
+              <Outlet />
+            </ErrorBoundary>
           </ScrollContainerContext>
         </main>
         <ChatPanel />

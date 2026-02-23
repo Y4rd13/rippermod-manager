@@ -61,3 +61,41 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  tauri-build:
+    name: Tauri Build (Windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: frontend/src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Create dummy sidecar binary
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path src-tauri\binaries | Out-Null
+          # Tauri validates externalBin entries are valid PE executables during build.
+          # Copy a small system .exe as a placeholder (no PyInstaller in CI).
+          $bytes = [System.IO.File]::ReadAllBytes("$env:windir\System32\where.exe")
+          [System.IO.File]::WriteAllBytes("src-tauri\binaries\cnmm-backend-x86_64-pc-windows-msvc.exe", $bytes)
+
+      - name: Build Tauri app (no sidecar)
+        run: npx tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""

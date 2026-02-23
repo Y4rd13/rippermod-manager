@@ -1,10 +1,10 @@
 [package]
 name = "app"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
-license = ""
-repository = ""
+description = "AI-powered mod manager for PC games with Nexus Mods integration"
+authors = ["Y4rd13"]
+license = "MIT"
+repository = "https://github.com/Y4rd13/chat-nexus-mod-manager"
 edition = "2021"
 rust-version = "1.77.2"
 
@@ -27,6 +27,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-opener = "2"
+tauri-plugin-shell = "2"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

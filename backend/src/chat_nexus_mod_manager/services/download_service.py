@@ -22,6 +22,17 @@ _background_tasks: set[asyncio.Task] = set()  # type: ignore[type-arg]
 _PROGRESS_DB_INTERVAL = 5  # seconds between DB progress updates
 
 
+async def shutdown() -> None:
+    """Cancel all active downloads and wait for completion."""
+    for event in _cancel_events.values():
+        event.set()
+    if _background_tasks:
+        _, pending = await asyncio.wait(list(_background_tasks), timeout=10.0)
+        for task in pending:
+            task.cancel()
+    _cancel_events.clear()
+
+
 async def create_and_start_download(
     game: Game,
     nexus_mod_id: int,
