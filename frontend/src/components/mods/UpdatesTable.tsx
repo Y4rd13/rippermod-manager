@@ -9,6 +9,7 @@ import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { VirtualTable } from "@/components/ui/VirtualTable";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { useCheckUpdates, useStartDownload } from "@/hooks/mutations";
@@ -163,65 +164,61 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
           }
         />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-text-muted sticky top-0 z-10 bg-surface-0">
-                <th className="py-2 pr-4">Mod</th>
-                <th className="py-2 pr-4">Local Version</th>
-                <th className="py-2 pr-4">Nexus Version</th>
-                <th className="py-2 pr-4">Source</th>
-                <th className="py-2 pr-4">Author</th>
-                <th className="py-2 pr-4">Updated</th>
-                <th className="py-2 pr-4">Downloaded</th>
-                <th className="py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {filteredUpdates.map((u, i) => (
-                <tr
-                  key={u.installed_mod_id ?? `group-${u.mod_group_id ?? i}`}
-                  className="border-b border-border/50 hover:bg-surface-1/50 transition-colors"
-                >
-                  <td className="py-2 pr-4 text-text-primary">
-                    <div className="flex items-center gap-1.5">
-                      <span>{u.display_name}</span>
-                      {u.nexus_url && (
-                        <button
-                          onClick={() => openUrl(u.nexus_url).catch(() => {})}
-                          title="Open mod page on Nexus Mods"
-                          aria-label="Open on Nexus Mods"
-                          className="rounded p-1 text-text-muted hover:text-accent hover:bg-accent/10 shrink-0 transition-colors"
-                        >
-                          <ExternalLink size={12} />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-2 pr-4 text-text-muted">{u.local_version}</td>
-                  <td className="py-2 pr-4 text-success font-medium">{u.nexus_version}</td>
-                  <td className="py-2 pr-4">
-                    <SourceBadge source={u.source} />
-                  </td>
-                  <td className="py-2 pr-4 text-text-muted">{u.author}</td>
-                  <td className="py-2 pr-4 text-text-muted">
-                    {u.nexus_timestamp ? timeAgo(u.nexus_timestamp) : "\u2014"}
-                  </td>
-                  <td className="py-2 pr-4 text-text-muted text-xs">
-                    {u.local_download_date ? timeAgo(u.local_download_date) : "\u2014"}
-                  </td>
-                  <td className="py-2">
-                    <UpdateDownloadCell
-                      update={u}
-                      gameName={gameName}
-                      downloadJobs={downloadJobs}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <VirtualTable
+          items={filteredUpdates}
+          renderHead={() => (
+            <tr className="border-b border-border text-left text-text-muted sticky top-0 z-10 bg-surface-0">
+              <th className="py-2 pr-4">Mod</th>
+              <th className="py-2 pr-4">Local Version</th>
+              <th className="py-2 pr-4">Nexus Version</th>
+              <th className="py-2 pr-4">Source</th>
+              <th className="py-2 pr-4">Author</th>
+              <th className="py-2 pr-4">Updated</th>
+              <th className="py-2 pr-4">Downloaded</th>
+              <th className="py-2" />
+            </tr>
+          )}
+          renderRow={(u) => (
+            <tr
+              className="border-b border-border/50 hover:bg-surface-1/50 transition-colors"
+            >
+              <td className="py-2 pr-4 text-text-primary">
+                <div className="flex items-center gap-1.5">
+                  <span>{u.display_name}</span>
+                  {u.nexus_url && (
+                    <button
+                      onClick={() => openUrl(u.nexus_url).catch(() => {})}
+                      title="Open mod page on Nexus Mods"
+                      aria-label="Open on Nexus Mods"
+                      className="rounded p-1 text-text-muted hover:text-accent hover:bg-accent/10 shrink-0 transition-colors"
+                    >
+                      <ExternalLink size={12} />
+                    </button>
+                  )}
+                </div>
+              </td>
+              <td className="py-2 pr-4 text-text-muted">{u.local_version}</td>
+              <td className="py-2 pr-4 text-success font-medium">{u.nexus_version}</td>
+              <td className="py-2 pr-4">
+                <SourceBadge source={u.source} />
+              </td>
+              <td className="py-2 pr-4 text-text-muted">{u.author}</td>
+              <td className="py-2 pr-4 text-text-muted">
+                {u.nexus_timestamp ? timeAgo(u.nexus_timestamp) : "\u2014"}
+              </td>
+              <td className="py-2 pr-4 text-text-muted text-xs">
+                {u.local_download_date ? timeAgo(u.local_download_date) : "\u2014"}
+              </td>
+              <td className="py-2">
+                <UpdateDownloadCell
+                  update={u}
+                  gameName={gameName}
+                  downloadJobs={downloadJobs}
+                />
+              </td>
+            </tr>
+          )}
+        />
       )}
     </div>
   );
