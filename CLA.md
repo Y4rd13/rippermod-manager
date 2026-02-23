@@ -32,7 +32,7 @@ You understand that the decision to include your Contribution in the Project is 
 
 ## 6. Project License
 
-The Project is distributed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. Your Contributions will be licensed under the same terms unless explicitly agreed otherwise.
+The Project is distributed under the **GNU General Public License v3.0 (GPL-3.0)**. Your Contributions will be licensed under the same terms unless explicitly agreed otherwise.
 
 ## 7. Agreement
 
