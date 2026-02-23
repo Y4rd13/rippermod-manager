@@ -28,8 +28,10 @@ logger = logging.getLogger(__name__)
 _CONCURRENCY = 5
 _MAX_SEARCHES = 30
 _SEARCH_TIMEOUT = 180  # seconds
-_MODEL = "gpt-4.1-mini"
+_MODEL = "gpt-5-mini"
+_MAX_OUTPUT_TOKENS = 1024
 _NEXUS_MOD_ID_RE = re.compile(r"nexusmods\.com/\w+/mods/(\d+)")
+_JSON_OBJECT_RE = re.compile(r"\{[^{}]*\}", re.DOTALL)
 
 _SYSTEM_PROMPT = """\
 You are a mod identification specialist for PC games. Given information about
@@ -186,10 +188,24 @@ async def ai_search_unmatched_mods(
                     input=user_prompt,
                     tools=[{"type": "web_search"}],
                     text={"format": _RESPONSE_SCHEMA},
+                    max_output_tokens=_MAX_OUTPUT_TOKENS,
                 )
 
                 raw = response.output_text
-                data = json.loads(raw)
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError:
+                    # Model may wrap JSON in markdown or return truncated output;
+                    # attempt to extract the first complete JSON object.
+                    m = _JSON_OBJECT_RE.search(raw)
+                    if not m:
+                        logger.warning(
+                            "AI search: no valid JSON in response for '%s': %s",
+                            group.display_name,
+                            raw[:200],
+                        )
+                        return
+                    data = json.loads(m.group())
                 match = AISearchMatch(**data)
 
                 if match.nexus_mod_id and match.confidence > 0:

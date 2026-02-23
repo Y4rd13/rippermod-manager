@@ -13,6 +13,7 @@ import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { VirtualCardGrid } from "@/components/ui/VirtualCardGrid";
 import { useRefreshTrending } from "@/hooks/mutations";
 import { toast } from "@/stores/toast-store";
 import { useContextMenu } from "@/hooks/use-context-menu";
@@ -303,9 +304,7 @@ export function TrendingGrid({
               {filteredTrending.length} mod{filteredTrending.length !== 1 ? "s" : ""}
             </span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filteredTrending.map(renderModCard)}
-          </div>
+          <VirtualCardGrid items={filteredTrending} renderItem={renderModCard} />
         </div>
       )}
 
@@ -318,9 +317,7 @@ export function TrendingGrid({
               {filteredLatest.length} mod{filteredLatest.length !== 1 ? "s" : ""}
             </span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filteredLatest.map(renderModCard)}
-          </div>
+          <VirtualCardGrid items={filteredLatest} renderItem={renderModCard} />
         </div>
       )}
 
