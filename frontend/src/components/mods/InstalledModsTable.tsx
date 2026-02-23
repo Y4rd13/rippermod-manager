@@ -5,7 +5,6 @@ import {
   Package,
   Power,
   PowerOff,
-  Search,
   Trash2,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -23,10 +22,12 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { useBulkSelect } from "@/hooks/use-bulk-select";
 import { useContextMenu } from "@/hooks/use-context-menu";
+import { useSessionState } from "@/hooks/use-session-state";
 import { useToggleMod, useUninstallMod } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { isoToEpoch, timeAgo } from "@/lib/format";
@@ -489,9 +490,9 @@ export function InstalledModsTable({
   onTabChange,
 }: Props) {
   const [filter, setFilter] = useState("");
-  const [chip, setChip] = useState<ChipKey>("all");
-  const [scope, setScope] = useState<ScopeKey>("all");
-  const [recognizedSort, setRecognizedSort] = useState<RecognizedSortKey>("updated");
+  const [chip, setChip] = useSessionState<ChipKey>(`installed-chip-${gameName}`, "all");
+  const [scope, setScope] = useSessionState<ScopeKey>(`installed-scope-${gameName}`, "all");
+  const [recognizedSort, setRecognizedSort] = useSessionState<RecognizedSortKey>(`installed-recsort-${gameName}`, "updated");
 
   const updateByNexusId = useMemo(() => {
     const map = new Map<number, ModUpdate>();
@@ -602,16 +603,7 @@ export function InstalledModsTable({
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input
-            type="text"
-            placeholder="Filter by name..."
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="w-full rounded-lg border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-          />
-        </div>
+        <SearchInput value={filter} onChange={setFilter} placeholder="Filter by name..." />
         {recognized.length > 0 && (
           <SortSelect
             value={recognizedSort}

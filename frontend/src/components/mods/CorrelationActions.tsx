@@ -2,6 +2,7 @@ import { CheckCircle, Pencil, XCircle } from "lucide-react";
 import { useState } from "react";
 
 import { useConfirmCorrelation, useRejectCorrelation } from "@/hooks/mutations";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/utils";
 
 import { ReassignDialog } from "./ReassignDialog";
@@ -14,6 +15,7 @@ interface Props {
 
 export function CorrelationActions({ gameName, modGroupId, confirmed }: Props) {
   const [showReassign, setShowReassign] = useState(false);
+  const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const confirm = useConfirmCorrelation();
   const reject = useRejectCorrelation();
 
@@ -23,6 +25,7 @@ export function CorrelationActions({ gameName, modGroupId, confirmed }: Props) {
         <button
           type="button"
           title={confirmed ? "Match confirmed" : "Accept match"}
+          aria-label={confirmed ? "Match confirmed" : "Accept match"}
           disabled={confirmed || confirm.isPending}
           onClick={(e) => {
             e.stopPropagation();
@@ -40,12 +43,11 @@ export function CorrelationActions({ gameName, modGroupId, confirmed }: Props) {
         <button
           type="button"
           title="Reject match"
+          aria-label="Reject match"
           disabled={reject.isPending}
           onClick={(e) => {
             e.stopPropagation();
-            if (window.confirm("Remove this Nexus match? The mod will appear as unmatched.")) {
-              reject.mutate({ gameName, modGroupId });
-            }
+            setShowRejectConfirm(true);
           }}
           className="rounded p-1 text-text-muted transition-colors hover:text-danger hover:bg-danger/10"
         >
@@ -54,6 +56,7 @@ export function CorrelationActions({ gameName, modGroupId, confirmed }: Props) {
         <button
           type="button"
           title="Correct match"
+          aria-label="Correct match"
           onClick={(e) => {
             e.stopPropagation();
             setShowReassign(true);
@@ -63,6 +66,22 @@ export function CorrelationActions({ gameName, modGroupId, confirmed }: Props) {
           <Pencil size={14} />
         </button>
       </div>
+
+      {showRejectConfirm && (
+        <ConfirmDialog
+          title="Reject Match?"
+          message="Remove this Nexus match? The mod will appear as unmatched."
+          confirmLabel="Reject"
+          variant="danger"
+          icon={XCircle}
+          loading={reject.isPending}
+          onConfirm={async () => {
+            await reject.mutateAsync({ gameName, modGroupId });
+            setShowRejectConfirm(false);
+          }}
+          onCancel={() => setShowRejectConfirm(false)}
+        />
+      )}
 
       {showReassign && (
         <ReassignDialog

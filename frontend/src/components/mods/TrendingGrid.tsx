@@ -1,4 +1,4 @@
-import { Check, Clock, Copy, Download, ExternalLink, Eye, Heart, Info, RefreshCw, Search, TrendingUp } from "lucide-react";
+import { Check, Clock, Copy, Download, ExternalLink, Eye, Heart, Info, RefreshCw, TrendingUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -9,12 +9,14 @@ import { Button } from "@/components/ui/Button";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { useRefreshTrending } from "@/hooks/mutations";
 import { toast } from "@/stores/toast-store";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useInstallFlow } from "@/hooks/use-install-flow";
+import { useSessionState } from "@/hooks/use-session-state";
 import { formatCount, timeAgo } from "@/lib/format";
 import type { AvailableArchive, DownloadJobOut, InstalledModOut, TrendingMod } from "@/types/api";
 
@@ -64,8 +66,8 @@ export function TrendingGrid({
   onModClick,
 }: Props) {
   const [filter, setFilter] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("updated");
-  const [chip, setChip] = useState<ChipKey>("all");
+  const [sortKey, setSortKey] = useSessionState<SortKey>(`trending-sort-${gameName}`, "updated");
+  const [chip, setChip] = useSessionState<ChipKey>(`trending-chip-${gameName}`, "all");
   const [isStale, setIsStale] = useState(false);
 
   useEffect(() => {
@@ -247,19 +249,7 @@ export function TrendingGrid({
       {/* Toolbar: search, sort, filter chips, refresh, and count */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-xs">
-            <Search
-              size={14}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
-            />
-            <input
-              type="text"
-              placeholder="Filter by name or author..."
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="w-full rounded-lg border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-            />
-          </div>
+          <SearchInput value={filter} onChange={setFilter} placeholder="Filter by name or author..." />
           <SortSelect
             value={sortKey}
             onChange={(v) => setSortKey(v as SortKey)}
