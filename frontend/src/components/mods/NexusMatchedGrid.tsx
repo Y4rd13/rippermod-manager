@@ -215,82 +215,82 @@ export function NexusMatchedGrid({
           return (
             <div className="flex flex-col">
               <div className="flex-1 grid">
-              <NexusModCard
-                modName={match.mod_name}
-                summary={match.summary}
-                author={match.author}
-                version={match.version}
-                endorsementCount={match.endorsement_count}
-                pictureUrl={match.picture_url}
-                onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
-                onContextMenu={(e) => openMenu(e, mod)}
-                action={
-                  <ModCardAction
-                    isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
-                    isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
-                    activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
-                    completedDownload={nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined}
-                    archive={archive}
-                    nexusUrl={match.nexus_url}
-                    hasConflicts={flow.conflicts != null}
-                    isDownloading={flow.downloadingModId === nexusModId}
-                    onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
-                    onInstallByFilename={() => {
-                      const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
-                      if (nexusModId != null && dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
-                    }}
-                    onDownload={() => nexusModId != null && flow.handleDownload(nexusModId)}
-                    onCancelDownload={() => {
-                      const dl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
-                      if (dl) flow.handleCancelDownload(dl.id);
-                    }}
-                  />
-                }
-                overflowMenu={
-                  <OverflowMenuButton
-                    items={contextMenuItems}
-                    onSelect={(key) => {
-                      if (key === "view" && nexusModId != null) onModClick?.(nexusModId);
-                      else if (key === "open-nexus" && match.nexus_url) window.open(match.nexus_url, "_blank", "noopener,noreferrer");
-                      else if (key === "copy-name") void navigator.clipboard.writeText(match.mod_name).then(
-                        () => toast.success("Copied to clipboard"),
-                        () => toast.error("Failed to copy"),
-                      );
-                      else if (key === "accept-match") confirmCorrelation.mutate({ gameName, modGroupId: mod.id });
-                      else if (key === "reject-match") setRejectModId(mod.id);
-                      else if (key === "correct-match") setReassignGroupId(mod.id);
-                    }}
-                  />
-                }
-                footer={
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <ConfidenceBadge score={match.score} />
-                    <Badge variant="neutral">{match.method}</Badge>
-                    <CorrelationActions
-                      gameName={gameName}
-                      modGroupId={mod.id}
-                      confirmed={match.confirmed}
+                <NexusModCard
+                  modName={match.mod_name}
+                  summary={match.summary}
+                  author={match.author}
+                  version={match.version}
+                  endorsementCount={match.endorsement_count}
+                  pictureUrl={match.picture_url}
+                  onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
+                  onContextMenu={(e) => openMenu(e, mod)}
+                  action={
+                    <ModCardAction
+                      isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
+                      isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
+                      activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
+                      completedDownload={nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined}
+                      archive={archive}
+                      nexusUrl={match.nexus_url}
+                      hasConflicts={flow.conflicts != null}
+                      isDownloading={flow.downloadingModId === nexusModId}
+                      onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
+                      onInstallByFilename={() => {
+                        const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
+                        if (nexusModId != null && dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
+                      }}
+                      onDownload={() => nexusModId != null && flow.handleDownload(nexusModId)}
+                      onCancelDownload={() => {
+                        const dl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
+                        if (dl) flow.handleCancelDownload(dl.id);
+                      }}
                     />
-                    {match.updated_at && (
-                      <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
-                    )}
-                    {mod.earliest_file_mtime != null && (
-                      <span className="text-xs text-text-muted" title="File date on disk">
-                        DL: {timeAgo(mod.earliest_file_mtime)}
-                      </span>
-                    )}
-                    {mod.files.length > 0 && (
-                      <button
-                        onClick={toggleExpand}
-                        className="ml-auto flex items-center gap-0.5 text-xs text-accent hover:underline"
-                      >
-                        {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                        {mod.files.length} file{mod.files.length !== 1 ? "s" : ""}
-                      </button>
-                    )}
-                  </div>
-                }
-              />
+                  }
+                  overflowMenu={
+                    <OverflowMenuButton
+                      items={contextMenuItems}
+                      onSelect={(key) => {
+                        if (key === "view" && nexusModId != null) onModClick?.(nexusModId);
+                        else if (key === "open-nexus" && match.nexus_url) window.open(match.nexus_url, "_blank", "noopener,noreferrer");
+                        else if (key === "copy-name") void navigator.clipboard.writeText(match.mod_name).then(
+                          () => toast.success("Copied to clipboard"),
+                          () => toast.error("Failed to copy"),
+                        );
+                        else if (key === "accept-match") confirmCorrelation.mutate({ gameName, modGroupId: mod.id });
+                        else if (key === "reject-match") setRejectModId(mod.id);
+                        else if (key === "correct-match") setReassignGroupId(mod.id);
+                      }}
+                    />
+                  }
+                  footer={
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <ConfidenceBadge score={match.score} />
+                      <Badge variant="neutral">{match.method}</Badge>
+                      <CorrelationActions
+                        gameName={gameName}
+                        modGroupId={mod.id}
+                        confirmed={match.confirmed}
+                      />
+                      {match.updated_at && (
+                        <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
+                      )}
+                      {mod.earliest_file_mtime != null && (
+                        <span className="text-xs text-text-muted" title="File date on disk">
+                          DL: {timeAgo(mod.earliest_file_mtime)}
+                        </span>
+                      )}
+                      {mod.files.length > 0 && (
+                        <button
+                          onClick={toggleExpand}
+                          className="ml-auto flex items-center gap-0.5 text-xs text-accent hover:underline"
+                        >
+                          {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          {mod.files.length} file{mod.files.length !== 1 ? "s" : ""}
+                        </button>
+                      )}
+                    </div>
+                  }
+                />
               </div>
               {isExpanded && mod.files.length > 0 && (
                 <div className="shrink-0 rounded-b-xl border border-t-0 border-border bg-surface-2 px-4 py-2 -mt-1 space-y-0.5">
