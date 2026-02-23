@@ -4,17 +4,17 @@ from datetime import UTC, datetime
 import pytest
 from sqlmodel import select
 
-from chat_nexus_mod_manager.models.game import Game, GameModPath
-from chat_nexus_mod_manager.models.install import InstalledMod
-from chat_nexus_mod_manager.models.profile import Profile
-from chat_nexus_mod_manager.schemas.profile import (
+from rippermod_manager.models.game import Game, GameModPath
+from rippermod_manager.models.install import InstalledMod
+from rippermod_manager.models.profile import Profile
+from rippermod_manager.schemas.profile import (
     ProfileCreate,
     ProfileExport,
     ProfileExportMod,
     ProfileUpdate,
 )
-from chat_nexus_mod_manager.services.install_service import install_mod
-from chat_nexus_mod_manager.services.profile_service import (
+from rippermod_manager.services.install_service import install_mod
+from rippermod_manager.services.profile_service import (
     compare_profiles,
     create_profile,
     delete_profile,

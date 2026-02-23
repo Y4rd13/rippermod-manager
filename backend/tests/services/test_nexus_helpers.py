@@ -1,8 +1,8 @@
 from sqlmodel import Session, select
 
-from chat_nexus_mod_manager.models.game import Game, GameModPath
-from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
-from chat_nexus_mod_manager.services.nexus_helpers import upsert_nexus_mod
+from rippermod_manager.models.game import Game, GameModPath
+from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
+from rippermod_manager.services.nexus_helpers import upsert_nexus_mod
 
 
 class TestUpsertNexusMod:

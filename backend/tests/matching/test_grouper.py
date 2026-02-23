@@ -1,8 +1,8 @@
-from chat_nexus_mod_manager.matching.grouper import (
+from rippermod_manager.matching.grouper import (
     group_mod_files,
     normalize_name,
 )
-from chat_nexus_mod_manager.models.mod import ModFile
+from rippermod_manager.models.mod import ModFile
 
 
 def _file(name: str, folder: str = "mods", subfolder: str | None = None) -> ModFile:

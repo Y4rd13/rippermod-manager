@@ -3,7 +3,7 @@
 # In dev, the backend is run manually (uvicorn), so this is just a placeholder.
 
 $binDir = "$PSScriptRoot\..\frontend\src-tauri\binaries"
-$target = "$binDir\cnmm-backend-x86_64-pc-windows-msvc.exe"
+$target = "$binDir\rmm-backend-x86_64-pc-windows-msvc.exe"
 
 if (-not (Test-Path $target)) {
     New-Item -ItemType Directory -Force -Path $binDir | Out-Null

@@ -1,11 +1,11 @@
-from chat_nexus_mod_manager.agents.orchestrator import (
+from rippermod_manager.agents.orchestrator import (
     _generate_suggestions,
     get_nexus_mod_info,
     list_all_games,
     search_local_mods,
 )
-from chat_nexus_mod_manager.models.mod import ModFile, ModGroup
-from chat_nexus_mod_manager.models.nexus import NexusModMeta
+from rippermod_manager.models.mod import ModFile, ModGroup
+from rippermod_manager.models.nexus import NexusModMeta
 
 
 class TestGenerateSuggestions:

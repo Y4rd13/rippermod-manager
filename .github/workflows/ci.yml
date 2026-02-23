@@ -93,7 +93,7 @@ jobs:
           # Tauri validates externalBin entries are valid PE executables during build.
           # Copy a small system .exe as a placeholder (no PyInstaller in CI).
           $bytes = [System.IO.File]::ReadAllBytes("$env:windir\System32\where.exe")
-          [System.IO.File]::WriteAllBytes("src-tauri\binaries\cnmm-backend-x86_64-pc-windows-msvc.exe", $bytes)
+          [System.IO.File]::WriteAllBytes("src-tauri\binaries\rmm-backend-x86_64-pc-windows-msvc.exe", $bytes)
 
       - name: Build Tauri app (no sidecar)
         run: npx tauri build

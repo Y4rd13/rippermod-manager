@@ -1,7 +1,7 @@
 import httpx
 import respx
 
-from chat_nexus_mod_manager.nexus.client import BASE_URL
+from rippermod_manager.nexus.client import BASE_URL
 
 
 class TestValidateKey:

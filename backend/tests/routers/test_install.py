@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from chat_nexus_mod_manager.models.game import Game, GameModPath
-from chat_nexus_mod_manager.models.install import InstalledMod
+from rippermod_manager.models.game import Game, GameModPath
+from rippermod_manager.models.install import InstalledMod
 
 
 def _make_zip(path: Path, files: dict[str, bytes]) -> None:

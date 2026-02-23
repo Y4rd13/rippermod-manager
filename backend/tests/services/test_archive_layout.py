@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from chat_nexus_mod_manager.services.archive_layout import (
+from rippermod_manager.services.archive_layout import (
     ArchiveLayout,
     LayoutResult,
     detect_layout,

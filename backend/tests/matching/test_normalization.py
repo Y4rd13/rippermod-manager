@@ -1,4 +1,4 @@
-from chat_nexus_mod_manager.matching.normalization import (
+from rippermod_manager.matching.normalization import (
     clean_display_name,
     split_camel,
     strip_ordering_prefix,

@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Chat Nexus Mod Manager",
+  "productName": "RipperMod Manager",
   "version": "0.1.0",
-  "identifier": "com.cnmm.app",
+  "identifier": "com.rippermod.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Chat Nexus Mod Manager",
+        "title": "RipperMod Manager",
         "width": 1280,
         "height": 800,
         "minWidth": 900,
@@ -43,9 +43,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["binaries/cnmm-backend"],
+    "externalBin": ["binaries/rmm-backend"],
     "shortDescription": "AI-powered mod manager for PC games",
-    "longDescription": "Chat Nexus Mod Manager combines a chat agent with Nexus Mods integration to scan, group, correlate, and manage game mods.",
+    "longDescription": "RipperMod Manager combines a chat agent with Nexus Mods integration to scan, group, correlate, and manage game mods.",
     "copyright": "Copyright (c) 2025 Y4rd13",
     "category": "Utility",
     "publisher": "Y4rd13",

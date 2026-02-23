@@ -1,6 +1,6 @@
 # Individual Contributor License Agreement
 
-Thank you for your interest in contributing to **Chat Nexus Mod Manager** ("the Project"), owned and maintained by **Y4rd13** ("the Maintainer"). This Contributor License Agreement ("Agreement") documents the rights granted by contributors to the Maintainer.
+Thank you for your interest in contributing to **RipperMod Manager** ("the Project"), owned and maintained by **Y4rd13** ("the Maintainer"). This Contributor License Agreement ("Agreement") documents the rights granted by contributors to the Maintainer.
 
 By submitting a pull request or otherwise contributing to this Project, you accept and agree to the following terms and conditions for your present and future contributions.
 

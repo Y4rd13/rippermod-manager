@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from chat_nexus_mod_manager.schemas.mod import CorrelateResult, ScanResult
+from rippermod_manager.schemas.mod import CorrelateResult, ScanResult
 
 
 class TestListModGroups:
@@ -20,8 +20,8 @@ class TestListModGroups:
     def test_with_groups(self, client, engine):
         from sqlmodel import Session
 
-        from chat_nexus_mod_manager.models.game import Game, GameModPath
-        from chat_nexus_mod_manager.models.mod import ModFile, ModGroup
+        from rippermod_manager.models.game import Game, GameModPath
+        from rippermod_manager.models.mod import ModFile, ModGroup
 
         with Session(engine) as s:
             game = Game(name="G", domain_name="g", install_path="/g")
@@ -55,7 +55,7 @@ class TestScanMods:
             json={"name": "G", "domain_name": "g", "install_path": "/g"},
         )
         with patch(
-            "chat_nexus_mod_manager.scanner.service.scan_game_mods",
+            "rippermod_manager.scanner.service.scan_game_mods",
             return_value=ScanResult(files_found=5, groups_created=2, new_files=3),
         ):
             r = client.post("/api/v1/games/G/mods/scan")
@@ -74,7 +74,7 @@ class TestCorrelateMods:
             json={"name": "G", "domain_name": "g", "install_path": "/g"},
         )
         with patch(
-            "chat_nexus_mod_manager.matching.correlator.correlate_game_mods",
+            "rippermod_manager.matching.correlator.correlate_game_mods",
             return_value=CorrelateResult(total_groups=10, matched=7, unmatched=3),
         ):
             r = client.post("/api/v1/games/G/mods/correlate")
