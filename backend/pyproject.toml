@@ -1,7 +1,7 @@
 [project]
 name = "rippermod-manager"
 version = "0.1.0"
-description = "Chat-powered Nexus Mods manager for Cyberpunk 2077"
+description = "AI-powered mod manager for PC games"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",
