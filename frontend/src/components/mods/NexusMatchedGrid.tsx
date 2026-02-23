@@ -193,7 +193,6 @@ export function NexusMatchedGrid({
 
       <VirtualCardGrid
         items={filtered}
-        dynamicHeight
         remeasureDep={expandedCards.size}
         renderItem={(mod) => {
           const match = mod.nexus_match;
