@@ -28,8 +28,6 @@ def get_onboarding_status(
     completed = bool(completed_setting and completed_setting.value == "true")
 
     step = 0
-    if has_openai:
-        step = 1
     if has_nexus:
         step = 2
     if has_game:

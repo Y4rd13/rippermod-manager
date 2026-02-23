@@ -88,10 +88,6 @@ function AISetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => voi
   const [error, setError] = useState("");
 
   const handleSave = () => {
-    if (!store.openaiKey.trim()) {
-      setError("API key is required");
-      return;
-    }
     saveSettings.mutate(
       { openai_api_key: store.openaiKey },
       {
@@ -108,7 +104,9 @@ function AISetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => voi
           AI Configuration
         </h2>
         <p className="text-text-secondary text-sm">
-          Enter your OpenAI API key to enable the chat assistant.
+          An OpenAI API key enables the <strong>Chat Assistant</strong> and{" "}
+          <strong>AI-powered Search</strong>. This is optional — you can add it
+          later in Settings.
         </p>
       </div>
       <Input
@@ -125,7 +123,12 @@ function AISetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => voi
       />
       <div className="flex justify-end gap-3">
         <Button variant="ghost" onClick={onBack}>Back</Button>
-        <Button onClick={handleSave} loading={saveSettings.isPending}>
+        <Button variant="ghost" onClick={onNext}>Skip</Button>
+        <Button
+          onClick={handleSave}
+          loading={saveSettings.isPending}
+          disabled={!store.openaiKey.trim()}
+        >
           Continue
         </Button>
       </div>
@@ -587,8 +590,8 @@ export function OnboardingPage() {
   useEffect(() => {
     if (!onboardingStatus || initializedRef.current) return;
     initializedRef.current = true;
-    if (onboardingStatus.has_openai_key && !onboardingStatus.has_nexus_key) {
-      store.setStep(2);
+    if (onboardingStatus.current_step > 0) {
+      store.setStep(Math.min(onboardingStatus.current_step + 1, 3));
     }
   }, [onboardingStatus, store.setStep]);
 

@@ -96,6 +96,11 @@ export function useSettings() {
   });
 }
 
+export function useHasOpenaiKey(): boolean {
+  const { data: settings = [] } = useSettings();
+  return settings.some((s) => s.key === "openai_api_key" && s.value);
+}
+
 export function useAvailableArchives(gameName: string) {
   return useQuery<AvailableArchive[]>({
     queryKey: ["available-archives", gameName],

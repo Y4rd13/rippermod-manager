@@ -44,7 +44,7 @@ import {
   useInstalledMods,
   useMods,
   useProfiles,
-  useSettings,
+  useHasOpenaiKey,
   useTrackedMods,
   useTrendingMods,
   useUpdates,
@@ -82,12 +82,11 @@ export function GameDetailPage() {
   const { data: trendingResult, isLoading: trendingLoading, dataUpdatedAt: trendingUpdatedAt } = useTrendingMods(name);
   const { data: updates, isLoading: updatesLoading } = useUpdates(name);
   const { data: downloadJobs = [] } = useDownloadJobs(name);
-  const { data: settings = [] } = useSettings();
+  const hasOpenaiKey = useHasOpenaiKey();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("installed");
   const [selectedModId, setSelectedModId] = useState<number | null>(null);
   const [aiSearch, setAiSearch] = useState(false);
-  const hasOpenaiKey = settings.some((s) => s.key === "openai_api_key" && s.value);
 
   const modalFlow = useInstallFlow(name, archives, downloadJobs);
 
