@@ -12,7 +12,8 @@ export function OverflowMenuButton({ items, onSelect }: Props) {
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (menuPos) {
       setMenuPos(null);
       return;
@@ -29,6 +30,7 @@ export function OverflowMenuButton({ items, onSelect }: Props) {
         ref={btnRef}
         type="button"
         onClick={handleClick}
+        aria-label="More actions"
         className="rounded-md p-1 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         <MoreHorizontal size={16} />

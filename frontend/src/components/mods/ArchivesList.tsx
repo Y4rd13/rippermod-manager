@@ -8,6 +8,7 @@ import { BulkActionBar } from "@/components/ui/BulkActionBar";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { OverflowMenuButton } from "@/components/ui/OverflowMenuButton";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
@@ -48,6 +49,10 @@ const ROW_CONTEXT_ITEMS: ContextMenuItem[] = [
   { key: "install", label: "Install", icon: Download },
   { key: "copy", label: "Copy Filename", icon: Copy },
   { key: "delete", label: "Delete Archive", icon: Trash2, variant: "danger" },
+];
+
+const OVERFLOW_ITEMS: ContextMenuItem[] = [
+  { key: "copy", label: "Copy Filename", icon: Copy },
 ];
 
 export function ArchivesList({ archives, gameName, isLoading }: Props) {
@@ -359,6 +364,17 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                       >
                         <Trash2 size={14} />
                       </Button>
+                      <OverflowMenuButton
+                        items={OVERFLOW_ITEMS}
+                        onSelect={(key) => {
+                          if (key === "copy") {
+                            void navigator.clipboard.writeText(a.filename).then(
+                              () => toast.success("Copied to clipboard"),
+                              () => toast.error("Failed to copy"),
+                            );
+                          }
+                        }}
+                      />
                     </div>
                   </td>
                 </tr>
@@ -406,7 +422,11 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
       {queueProgress && (
         <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-40 rounded-lg border border-border bg-surface-1 px-4 py-3 shadow-lg min-w-[240px]">
           <div className="flex items-center justify-between text-sm text-text-primary mb-2">
-            <span>Installing {queueProgress.current} of {queueProgress.total}...</span>
+            <span>
+              {queueProgress.current === 0
+                ? "Preparing install..."
+                : `Installing ${queueProgress.current} of ${queueProgress.total}...`}
+            </span>
             <span className="text-xs text-text-muted tabular-nums">
               {queueProgress.total > 0
                 ? Math.round((queueProgress.current / queueProgress.total) * 100)

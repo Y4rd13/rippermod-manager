@@ -7,6 +7,7 @@ import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
+import { OverflowMenuButton } from "@/components/ui/OverflowMenuButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -212,6 +213,19 @@ export function TrendingGrid({
             onCancelDownload={() => {
               const dl = flow.activeDownloadByModId.get(nexusModId);
               if (dl) flow.handleCancelDownload(dl.id);
+            }}
+          />
+        }
+        overflowMenu={
+          <OverflowMenuButton
+            items={CONTEXT_MENU_ITEMS}
+            onSelect={(key) => {
+              if (key === "view") onModClick?.(nexusModId);
+              else if (key === "nexus") window.open(mod.nexus_url, "_blank", "noopener,noreferrer");
+              else if (key === "copy") void navigator.clipboard.writeText(mod.name).then(
+                () => toast.success("Copied to clipboard"),
+                () => toast.error("Failed to copy"),
+              );
             }}
           />
         }

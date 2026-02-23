@@ -17,7 +17,7 @@ export function ConflictDialog({ conflicts, onCancel, onSkip, onOverwrite }: Pro
         role="dialog"
         aria-modal="true"
         aria-labelledby="conflict-dialog-title"
-        className="w-full max-w-lg rounded-xl border border-border bg-surface-1 p-6"
+        className="w-full max-w-md rounded-xl border border-border bg-surface-1 p-6"
       >
         <div className="mb-4 flex items-center gap-2 text-warning">
           <AlertTriangle size={20} />

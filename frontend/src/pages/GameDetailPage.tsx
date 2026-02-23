@@ -76,8 +76,8 @@ export function GameDetailPage() {
   const { data: installedMods = [], isLoading: installedLoading } = useInstalledMods(name);
   const { data: archives = [], isLoading: archivesLoading } = useAvailableArchives(name);
   const { data: profiles = [], isLoading: profilesLoading } = useProfiles(name);
-  const { data: endorsedMods = [], isLoading: endorsedLoading } = useEndorsedMods(name);
-  const { data: trackedMods = [], isLoading: trackedLoading } = useTrackedMods(name);
+  const { data: endorsedMods = [], isLoading: endorsedLoading, dataUpdatedAt: endorsedUpdatedAt } = useEndorsedMods(name);
+  const { data: trackedMods = [], isLoading: trackedLoading, dataUpdatedAt: trackedUpdatedAt } = useTrackedMods(name);
   const { data: trendingResult, isLoading: trendingLoading, dataUpdatedAt: trendingUpdatedAt } = useTrendingMods(name);
   const { data: updates, isLoading: updatesLoading } = useUpdates(name);
   const { data: downloadJobs = [] } = useDownloadJobs(name);
@@ -483,6 +483,7 @@ export function GameDetailPage() {
           emptyMessage="Sync your Nexus account to see mods you've endorsed."
           downloadJobs={downloadJobs}
           isLoading={endorsedLoading}
+          dataUpdatedAt={endorsedUpdatedAt}
           onModClick={setSelectedModId}
         />
       )}
@@ -497,6 +498,7 @@ export function GameDetailPage() {
           emptyMessage="Sync your Nexus account to see mods you're tracking."
           downloadJobs={downloadJobs}
           isLoading={trackedLoading}
+          dataUpdatedAt={trackedUpdatedAt}
           onModClick={setSelectedModId}
         />
       )}
