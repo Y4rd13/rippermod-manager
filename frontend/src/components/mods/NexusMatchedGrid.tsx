@@ -1,5 +1,5 @@
 import { CheckCircle, ChevronDown, ChevronUp, Link2, Pencil, XCircle } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "@/stores/toast-store";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -46,6 +46,20 @@ const CONFIDENCE_CHIPS = [
   { key: "low", label: "Low (<75%)" },
 ];
 
+const METHOD_LABELS: Record<string, string> = {
+  exact: "Exact",
+  substring: "Substring",
+  fuzzy: "Fuzzy",
+  filename_id: "Filename ID",
+  installed: "Installed",
+  file_list: "File List",
+  endorsed_name: "Endorsed",
+  fomod: "FOMOD",
+  ai_search: "AI Search",
+  web_search: "Web Search",
+  manual: "Manual",
+};
+
 interface Props {
   mods: ModGroup[];
   archives: AvailableArchive[];
@@ -68,6 +82,7 @@ export function NexusMatchedGrid({
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useSessionState<SortKey>(`matched-sort-${gameName}`, "updated");
   const [chip, setChip] = useSessionState(`matched-chip-${gameName}`, "all");
+  const [methodChip, setMethodChip] = useSessionState(`matched-method-${gameName}`, "all");
 
   const flow = useInstallFlow(gameName, archives, downloadJobs);
   const { menuState, openMenu, closeMenu } = useContextMenu<ModGroup>();
@@ -76,6 +91,25 @@ export function NexusMatchedGrid({
     () => new Set(installedMods.filter((m) => m.nexus_mod_id != null).map((m) => m.nexus_mod_id!)),
     [installedMods],
   );
+
+  const methodChips = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const m of mods) {
+      const method = m.nexus_match?.method;
+      if (method) counts.set(method, (counts.get(method) ?? 0) + 1);
+    }
+    const chips: { key: string; label: string; count?: number }[] = [{ key: "all", label: "All" }];
+    for (const [key, count] of [...counts.entries()].sort((a, b) => b[1] - a[1])) {
+      chips.push({ key, label: METHOD_LABELS[key] ?? key, count });
+    }
+    return chips;
+  }, [mods]);
+
+  useEffect(() => {
+    if (methodChip !== "all" && !methodChips.some((c) => c.key === methodChip)) {
+      setMethodChip("all");
+    }
+  }, [methodChips, methodChip, setMethodChip]);
 
   const filtered = useMemo(() => {
     const q = filter.toLowerCase();
@@ -97,6 +131,9 @@ export function NexusMatchedGrid({
       });
     else if (chip === "low") items = items.filter((m) => (m.nexus_match?.score ?? 0) < 0.75);
 
+    if (methodChip !== "all")
+      items = items.filter((m) => m.nexus_match?.method === methodChip);
+
     items.sort((a, b) => {
       const ma = a.nexus_match;
       const mb = b.nexus_match;
@@ -116,7 +153,7 @@ export function NexusMatchedGrid({
     });
 
     return items;
-  }, [mods, filter, sortKey, chip]);
+  }, [mods, filter, sortKey, chip, methodChip]);
 
   const confirmCorrelation = useConfirmCorrelation();
   const rejectCorrelation = useRejectCorrelation();
@@ -191,6 +228,7 @@ export function NexusMatchedGrid({
       </div>
 
       <FilterChips chips={CONFIDENCE_CHIPS} active={chip} onChange={setChip} />
+      <FilterChips chips={methodChips} active={methodChip} onChange={setMethodChip} />
 
       <VirtualCardGrid
         items={filtered}
