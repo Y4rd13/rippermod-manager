@@ -10,6 +10,7 @@ import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
+import { OverflowMenuButton } from "@/components/ui/OverflowMenuButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -238,6 +239,22 @@ export function NexusMatchedGrid({
                     onCancelDownload={() => {
                       const dl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
                       if (dl) flow.handleCancelDownload(dl.id);
+                    }}
+                  />
+                }
+                overflowMenu={
+                  <OverflowMenuButton
+                    items={contextMenuItems}
+                    onSelect={(key) => {
+                      if (key === "view" && nexusModId != null) onModClick?.(nexusModId);
+                      else if (key === "open-nexus" && match.nexus_url) window.open(match.nexus_url, "_blank", "noopener,noreferrer");
+                      else if (key === "copy-name") void navigator.clipboard.writeText(match.mod_name).then(
+                        () => toast.success("Copied to clipboard"),
+                        () => toast.error("Failed to copy"),
+                      );
+                      else if (key === "accept-match") confirmCorrelation.mutate({ gameName, modGroupId: mod.id });
+                      else if (key === "reject-match") setRejectModId(mod.id);
+                      else if (key === "correct-match") setReassignGroupId(mod.id);
                     }}
                   />
                 }

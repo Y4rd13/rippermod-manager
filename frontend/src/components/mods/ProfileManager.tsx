@@ -565,12 +565,12 @@ export function ProfileManager({ profiles, gameName, isLoading = false, installe
                       </p>
                       {p.is_active && !p.is_drifted && (
                         <span title="This profile is currently loaded and matches your mod state">
-                          <Badge variant="success" prominent>Active</Badge>
+                          <Badge variant="success" prominent><Check size={10} className="mr-0.5" />Active</Badge>
                         </span>
                       )}
                       {p.is_active && p.is_drifted && (
                         <span title="This profile is loaded but your mod state has changed since loading it">
-                          <Badge variant="warning" prominent>Active (modified)</Badge>
+                          <Badge variant="warning" prominent><AlertTriangle size={10} className="mr-0.5" />Active (modified)</Badge>
                         </span>
                       )}
                     </div>

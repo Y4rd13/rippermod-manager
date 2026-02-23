@@ -16,6 +16,7 @@ interface Props {
   action?: ReactNode;
   footer?: ReactNode;
   badge?: ReactNode;
+  overflowMenu?: ReactNode;
   onClick?: () => void;
   onContextMenu?: React.MouseEventHandler;
 }
@@ -30,6 +31,7 @@ export function NexusModCard({
   action,
   footer,
   badge,
+  overflowMenu,
   onClick,
   onContextMenu,
 }: Props) {
@@ -85,7 +87,10 @@ export function NexusModCard({
 
         <div className="flex items-center justify-between pt-2 border-t border-border/50">
           {footer ?? <div />}
-          {action ?? <div />}
+          <div className="flex items-center gap-1">
+            {action}
+            {overflowMenu}
+          </div>
         </div>
       </div>
     </div>

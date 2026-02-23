@@ -1,5 +1,5 @@
 import { Check, Eye, Heart, Settings } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -8,10 +8,12 @@ import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
+import { OverflowMenuButton } from "@/components/ui/OverflowMenuButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
+import { toast } from "@/stores/toast-store";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { useSessionState } from "@/hooks/use-session-state";
@@ -50,6 +52,7 @@ interface Props {
   isLoading?: boolean;
   emptyIcon?: "heart" | "eye";
   emptyTitle?: string;
+  dataUpdatedAt?: number;
 }
 
 export function NexusAccountGrid({
@@ -63,9 +66,19 @@ export function NexusAccountGrid({
   isLoading = false,
   emptyIcon = "heart",
   emptyTitle = "No mods found",
+  dataUpdatedAt,
 }: Props) {
   const navigate = useNavigate();
   const [filter, setFilter] = useState("");
+  const [isStale, setIsStale] = useState(false);
+
+  useEffect(() => {
+    if (dataUpdatedAt == null) return;
+    const check = () => setIsStale(Date.now() - dataUpdatedAt > 30 * 60 * 1000);
+    check();
+    const timer = setInterval(check, 60_000);
+    return () => clearInterval(timer);
+  }, [dataUpdatedAt]);
   const [sortKey, setSortKey] = useSessionState<SortKey>(`account-sort-${gameName}`, "updated");
   const [chip, setChip] = useSessionState(`account-chip-${gameName}`, "all");
 
@@ -114,7 +127,10 @@ export function NexusAccountGrid({
     if (!mod) return;
     if (key === "details") onModClick?.(mod.nexus_mod_id);
     else if (key === "nexus") window.open(mod.nexus_url, "_blank", "noopener,noreferrer");
-    else if (key === "copy-name") navigator.clipboard.writeText(mod.mod_name);
+    else if (key === "copy-name") void navigator.clipboard.writeText(mod.mod_name).then(
+      () => toast.success("Copied to clipboard"),
+      () => toast.error("Failed to copy"),
+    );
   }
 
   if (isLoading) {
@@ -156,6 +172,11 @@ export function NexusAccountGrid({
         <span className="text-xs text-text-muted">
           {filtered.length} mod{filtered.length !== 1 ? "s" : ""}
         </span>
+        {isStale && dataUpdatedAt != null && (
+          <span className="text-xs text-warning" title="Data may be outdated — sync your Nexus account to update">
+            Updated {timeAgo(Math.floor(dataUpdatedAt / 1000))}
+          </span>
+        )}
       </div>
 
       <FilterChips
@@ -216,6 +237,19 @@ export function NexusAccountGrid({
                   onCancelDownload={() => {
                     const dl = flow.activeDownloadByModId.get(nexusModId);
                     if (dl) flow.handleCancelDownload(dl.id);
+                  }}
+                />
+              }
+              overflowMenu={
+                <OverflowMenuButton
+                  items={CONTEXT_MENU_ITEMS}
+                  onSelect={(key) => {
+                    if (key === "details") onModClick?.(nexusModId);
+                    else if (key === "nexus") window.open(mod.nexus_url, "_blank", "noopener,noreferrer");
+                    else if (key === "copy-name") void navigator.clipboard.writeText(mod.mod_name).then(
+                      () => toast.success("Copied to clipboard"),
+                      () => toast.error("Failed to copy"),
+                    );
                   }}
                 />
               }
