@@ -51,6 +51,10 @@ const ROW_CONTEXT_ITEMS: ContextMenuItem[] = [
   { key: "delete", label: "Delete Archive", icon: Trash2, variant: "danger" },
 ];
 
+const OVERFLOW_ITEMS: ContextMenuItem[] = [
+  { key: "copy", label: "Copy Filename", icon: Copy },
+];
+
 export function ArchivesList({ archives, gameName, isLoading }: Props) {
   const installMod = useInstallMod();
   const checkConflicts = useCheckConflicts();
@@ -361,15 +365,14 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                         <Trash2 size={14} />
                       </Button>
                       <OverflowMenuButton
-                        items={ROW_CONTEXT_ITEMS}
+                        items={OVERFLOW_ITEMS}
                         onSelect={(key) => {
-                          if (key === "install") handleCheckConflicts(a.filename);
-                          else if (key === "copy") {
+                          if (key === "copy") {
                             void navigator.clipboard.writeText(a.filename).then(
                               () => toast.success("Copied to clipboard"),
                               () => toast.error("Failed to copy"),
                             );
-                          } else if (key === "delete") setConfirmDeleteFile(a.filename);
+                          }
                         }}
                       />
                     </div>

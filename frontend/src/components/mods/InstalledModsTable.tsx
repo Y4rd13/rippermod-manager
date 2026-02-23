@@ -99,6 +99,7 @@ function ManagedModsGrid({
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("updated");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmDeleteModId, setConfirmDeleteModId] = useState<number | null>(null);
   const toggleMod = useToggleMod();
   const uninstallMod = useUninstallMod();
 
@@ -163,7 +164,7 @@ function ManagedModsGrid({
         );
         break;
       case "delete":
-        uninstallMod.mutate({ gameName, modId: mod.id });
+        setConfirmDeleteModId(mod.id);
         break;
     }
   };
@@ -274,7 +275,11 @@ function ManagedModsGrid({
                 footer={
                   <div className="flex items-center gap-1.5">
                     <Badge variant={mod.disabled ? "danger" : "success"}>
-                      {mod.disabled ? <><PowerOff size={10} className="mr-0.5" /> Disabled</> : <><Power size={10} className="mr-0.5" /> Enabled</>}
+                      {mod.disabled ? (
+                        <><PowerOff size={10} className="mr-0.5" /> Disabled</>
+                      ) : (
+                        <><Power size={10} className="mr-0.5" /> Enabled</>
+                      )}
                     </Badge>
                     {mod.nexus_updated_at && (
                       <span className="text-xs text-text-muted">
@@ -329,7 +334,7 @@ function ManagedModsGrid({
                           );
                           break;
                         case "delete":
-                          uninstallMod.mutate({ gameName, modId: mod.id });
+                          setConfirmDeleteModId(mod.id);
                           break;
                       }
                     }}
@@ -363,6 +368,25 @@ function ManagedModsGrid({
           onCancel={() => setConfirmDelete(false)}
         />
       )}
+
+      {confirmDeleteModId != null && (() => {
+        const mod = sorted.find((m) => m.id === confirmDeleteModId);
+        return mod ? (
+          <ConfirmDialog
+            title="Delete Mod?"
+            message={`Permanently delete "${mod.nexus_name || mod.name}" and its files? This cannot be undone.`}
+            confirmLabel="Delete"
+            variant="danger"
+            icon={Trash2}
+            loading={uninstallMod.isPending}
+            onConfirm={async () => {
+              await uninstallMod.mutateAsync({ gameName, modId: confirmDeleteModId });
+              setConfirmDeleteModId(null);
+            }}
+            onCancel={() => setConfirmDeleteModId(null)}
+          />
+        ) : null;
+      })()}
     </>
   );
 }

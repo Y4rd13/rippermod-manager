@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
+import { toast } from "@/stores/toast-store";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { useSessionState } from "@/hooks/use-session-state";
@@ -126,7 +127,10 @@ export function NexusAccountGrid({
     if (!mod) return;
     if (key === "details") onModClick?.(mod.nexus_mod_id);
     else if (key === "nexus") window.open(mod.nexus_url, "_blank", "noopener,noreferrer");
-    else if (key === "copy-name") navigator.clipboard.writeText(mod.mod_name);
+    else if (key === "copy-name") void navigator.clipboard.writeText(mod.mod_name).then(
+      () => toast.success("Copied to clipboard"),
+      () => toast.error("Failed to copy"),
+    );
   }
 
   if (isLoading) {
@@ -242,7 +246,10 @@ export function NexusAccountGrid({
                   onSelect={(key) => {
                     if (key === "details") onModClick?.(nexusModId);
                     else if (key === "nexus") window.open(mod.nexus_url, "_blank", "noopener,noreferrer");
-                    else if (key === "copy-name") navigator.clipboard.writeText(mod.mod_name);
+                    else if (key === "copy-name") void navigator.clipboard.writeText(mod.mod_name).then(
+                      () => toast.success("Copied to clipboard"),
+                      () => toast.error("Failed to copy"),
+                    );
                   }}
                 />
               }
