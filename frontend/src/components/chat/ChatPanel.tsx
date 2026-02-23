@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/Button";
-import { useSettings } from "@/hooks/queries";
+import { useHasOpenaiKey } from "@/hooks/queries";
 import { api } from "@/lib/api-client";
 import { parseSSE } from "@/lib/sse-parser";
 import { cn } from "@/lib/utils";
@@ -127,8 +127,7 @@ export function ChatPanel() {
   const setReasoningEffort = useChatStore((s) => s.setReasoningEffort);
   const setSuggestedActions = useChatStore((s) => s.setSuggestedActions);
 
-  const { data: settings = [] } = useSettings();
-  const hasOpenaiKey = settings.some((s) => s.key === "openai_api_key" && s.value);
+  const hasOpenaiKey = useHasOpenaiKey();
 
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);

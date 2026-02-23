@@ -88,10 +88,6 @@ function AISetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => voi
   const [error, setError] = useState("");
 
   const handleSave = () => {
-    if (!store.openaiKey.trim()) {
-      onNext();
-      return;
-    }
     saveSettings.mutate(
       { openai_api_key: store.openaiKey },
       {
@@ -128,7 +124,11 @@ function AISetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => voi
       <div className="flex justify-end gap-3">
         <Button variant="ghost" onClick={onBack}>Back</Button>
         <Button variant="ghost" onClick={onNext}>Skip</Button>
-        <Button onClick={handleSave} loading={saveSettings.isPending}>
+        <Button
+          onClick={handleSave}
+          loading={saveSettings.isPending}
+          disabled={!store.openaiKey.trim()}
+        >
           Continue
         </Button>
       </div>
@@ -590,8 +590,8 @@ export function OnboardingPage() {
   useEffect(() => {
     if (!onboardingStatus || initializedRef.current) return;
     initializedRef.current = true;
-    if (onboardingStatus.current_step > 0 && onboardingStatus.current_step < 4) {
-      store.setStep(onboardingStatus.current_step);
+    if (onboardingStatus.current_step > 0) {
+      store.setStep(Math.min(onboardingStatus.current_step + 1, 3));
     }
   }, [onboardingStatus, store.setStep]);
 

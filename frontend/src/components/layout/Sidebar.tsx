@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { NavLink } from "react-router";
 
-import { useSettings } from "@/hooks/queries";
+import { useHasOpenaiKey } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui-store";
 
@@ -22,8 +22,7 @@ const navItems = [
 
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, toggleChatPanel } = useUIStore();
-  const { data: settings = [] } = useSettings();
-  const hasOpenaiKey = settings.some((s) => s.key === "openai_api_key" && s.value);
+  const hasOpenaiKey = useHasOpenaiKey();
 
   return (
     <aside
