@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 
 /**
  * Like useState but persists to sessionStorage (survives tab changes, lost on
@@ -13,6 +13,19 @@ export function useSessionState<T>(key: string, initialValue: T) {
       return initialValue;
     }
   });
+
+  // Sync state when key changes without remount (e.g. gameName change).
+  const prevKey = useRef(key);
+  useEffect(() => {
+    if (prevKey.current === key) return;
+    prevKey.current = key;
+    try {
+      const stored = sessionStorage.getItem(key);
+      setValue(stored !== null ? (JSON.parse(stored) as T) : initialValue);
+    } catch {
+      setValue(initialValue);
+    }
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = useCallback(
     (next: T | ((prev: T) => T)) => {

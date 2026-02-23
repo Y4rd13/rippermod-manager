@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Copy, ExternalLink, FileText } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, ExternalLink, FileText, Search } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
 
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
@@ -22,12 +22,12 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
   return sortDir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />;
 }
 
-export function ModsTable({ mods, isLoading }: { mods: ModGroup[]; isLoading?: boolean }) {
-  const [sortKey, setSortKey] = useSessionState<SortKey>("mods-sort", "name");
-  const [sortDir, setSortDir] = useSessionState<SortDir>("mods-dir", "asc");
+export function ModsTable({ mods, gameName, isLoading }: { mods: ModGroup[]; gameName: string; isLoading?: boolean }) {
+  const [sortKey, setSortKey] = useSessionState<SortKey>(`mods-sort-${gameName}`, "name");
+  const [sortDir, setSortDir] = useSessionState<SortDir>(`mods-dir-${gameName}`, "asc");
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [filter, setFilter] = useState("");
-  const [matchFilter, setMatchFilter] = useSessionState<MatchFilter>("mods-chip", "all");
+  const [matchFilter, setMatchFilter] = useSessionState<MatchFilter>(`mods-chip-${gameName}`, "all");
 
   const { menuState, openMenu, closeMenu } = useContextMenu<ModGroup>();
 

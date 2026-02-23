@@ -460,7 +460,7 @@ export function GameDetailPage() {
       </div>
 
       <div key={tab} className="animate-fade-in">
-      {tab === "mods" && <ModsTable mods={mods} isLoading={modsLoading} />}
+      {tab === "mods" && <ModsTable mods={mods} gameName={gameName} isLoading={modsLoading} />}
       {tab === "matched" && (
         <NexusMatchedGrid
           mods={nexusMatched}

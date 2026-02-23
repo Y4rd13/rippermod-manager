@@ -59,6 +59,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
   const [selectedArchive, setSelectedArchive] = useState<string | null>(null);
   const [confirmCleanup, setConfirmCleanup] = useState(false);
   const [confirmDeleteFile, setConfirmDeleteFile] = useState<string | null>(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useSessionState<ArchiveSortKey>(`archives-sort-${gameName}`, "name");
   const [sortDir, setSortDir] = useSessionState<"asc" | "desc">(`archives-dir-${gameName}`, "asc");
@@ -396,14 +397,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
         <Button
           variant="secondary"
           size="sm"
-          loading={deleteArchive.isPending}
-          onClick={async () => {
-            const filenames = [...bulk.selectedIds];
-            for (const filename of filenames) {
-              await deleteArchive.mutateAsync({ gameName, filename });
-            }
-            bulk.deselectAll();
-          }}
+          onClick={() => setConfirmBulkDelete(true)}
         >
           <Trash2 size={14} /> Delete {bulk.selectedCount}
         </Button>
@@ -445,11 +439,31 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
           variant="danger"
           icon={Trash2}
           loading={deleteArchive.isPending}
-          onConfirm={() => {
-            deleteArchive.mutate({ gameName, filename: confirmDeleteFile });
+          onConfirm={async () => {
+            await deleteArchive.mutateAsync({ gameName, filename: confirmDeleteFile });
             setConfirmDeleteFile(null);
           }}
           onCancel={() => setConfirmDeleteFile(null)}
+        />
+      )}
+
+      {confirmBulkDelete && (
+        <ConfirmDialog
+          title="Delete Archives?"
+          message={`Permanently delete ${bulk.selectedCount} archive${bulk.selectedCount !== 1 ? "s" : ""}? This cannot be undone.`}
+          confirmLabel="Delete"
+          variant="danger"
+          icon={Trash2}
+          loading={deleteArchive.isPending}
+          onConfirm={async () => {
+            const filenames = [...bulk.selectedIds];
+            for (const filename of filenames) {
+              await deleteArchive.mutateAsync({ gameName, filename });
+            }
+            bulk.deselectAll();
+            setConfirmBulkDelete(false);
+          }}
+          onCancel={() => setConfirmBulkDelete(false)}
         />
       )}
 
