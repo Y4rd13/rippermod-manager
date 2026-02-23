@@ -6,10 +6,10 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
-import chat_nexus_mod_manager.models  # noqa: F401 — register all tables
-from chat_nexus_mod_manager.database import get_session
-from chat_nexus_mod_manager.main import app
-from chat_nexus_mod_manager.models.game import Game, GameModPath
+import rippermod_manager.models  # noqa: F401 — register all tables
+from rippermod_manager.database import get_session
+from rippermod_manager.main import app
+from rippermod_manager.models.game import Game, GameModPath
 
 
 @pytest.fixture
@@ -25,10 +25,10 @@ def engine():
 
 def _safe_monkeypatch_engine(monkeypatch, engine):
     """Monkeypatch engine references, skipping modules with unavailable deps."""
-    monkeypatch.setattr("chat_nexus_mod_manager.database.engine", engine)
+    monkeypatch.setattr("rippermod_manager.database.engine", engine)
     for module_path in (
-        "chat_nexus_mod_manager.vector.indexer.engine",
-        "chat_nexus_mod_manager.agents.orchestrator.engine",
+        "rippermod_manager.vector.indexer.engine",
+        "rippermod_manager.agents.orchestrator.engine",
     ):
         with contextlib.suppress(ImportError, AttributeError):
             monkeypatch.setattr(module_path, engine)
@@ -57,8 +57,8 @@ def client(engine, monkeypatch):
 
 @pytest.fixture
 def patched_chroma(tmp_path, monkeypatch):
-    monkeypatch.setattr("chat_nexus_mod_manager.config.settings.chroma_path", tmp_path / "chroma")
-    import chat_nexus_mod_manager.vector.store as store_mod
+    monkeypatch.setattr("rippermod_manager.config.settings.chroma_path", tmp_path / "chroma")
+    import rippermod_manager.vector.store as store_mod
 
     monkeypatch.setattr(store_mod, "_client", None)
     yield

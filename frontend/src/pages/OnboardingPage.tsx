@@ -68,7 +68,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
   return (
     <div className="text-center space-y-6">
       <h2 className="text-3xl font-bold text-text-primary">
-        Chat Nexus Mod Manager
+        RipperMod Manager
       </h2>
       <p className="text-text-secondary max-w-md mx-auto">
         Manage your mods with AI-powered assistance. Connect your Nexus Mods
@@ -465,7 +465,7 @@ function AddGameStep({ onFinish, onBack }: { onFinish: () => void; onBack: () =>
           Add Your Game
         </h2>
         <p className="text-text-secondary text-sm">
-          Point CNMM to your game installation directory.
+          Point RMM to your game installation directory.
         </p>
       </div>
       <Input

@@ -3,9 +3,9 @@ import pytest
 import respx
 from sqlmodel import select
 
-from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
-from chat_nexus_mod_manager.nexus.client import BASE_URL
-from chat_nexus_mod_manager.services.nexus_sync import sync_nexus_history
+from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
+from rippermod_manager.nexus.client import BASE_URL
+from rippermod_manager.services.nexus_sync import sync_nexus_history
 
 
 def _setup_respx(tracked, endorsed, mod_infos):

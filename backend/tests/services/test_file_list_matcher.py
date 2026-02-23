@@ -3,12 +3,12 @@ from unittest.mock import MagicMock, patch
 
 from sqlmodel import Session, select
 
-from chat_nexus_mod_manager.archive.handler import ArchiveEntry
-from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
-from chat_nexus_mod_manager.models.game import Game, GameModPath
-from chat_nexus_mod_manager.models.mod import ModFile, ModGroup
-from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModFile
-from chat_nexus_mod_manager.services.file_list_matcher import match_endorsed_to_local
+from rippermod_manager.archive.handler import ArchiveEntry
+from rippermod_manager.models.correlation import ModNexusCorrelation
+from rippermod_manager.models.game import Game, GameModPath
+from rippermod_manager.models.mod import ModFile, ModGroup
+from rippermod_manager.models.nexus import NexusDownload, NexusModFile
+from rippermod_manager.services.file_list_matcher import match_endorsed_to_local
 
 
 def _make_game(session: Session) -> Game:
@@ -30,8 +30,8 @@ def _mock_archive(entries: list[ArchiveEntry]) -> MagicMock:
     return handler
 
 
-_PATCH_ARCHIVES = "chat_nexus_mod_manager.services.file_list_matcher.list_available_archives"
-_PATCH_OPEN = "chat_nexus_mod_manager.services.file_list_matcher.open_archive"
+_PATCH_ARCHIVES = "rippermod_manager.services.file_list_matcher.list_available_archives"
+_PATCH_OPEN = "rippermod_manager.services.file_list_matcher.open_archive"
 
 
 class TestFileListMatcher:

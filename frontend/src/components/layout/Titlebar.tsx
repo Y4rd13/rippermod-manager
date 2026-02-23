@@ -13,7 +13,7 @@ export function Titlebar() {
         data-tauri-drag-region
         className="text-xs font-semibold tracking-wide text-text-secondary"
       >
-        CNMM
+        RMM
       </span>
 
       <div className="flex items-center">

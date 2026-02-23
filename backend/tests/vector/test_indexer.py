@@ -1,7 +1,7 @@
-from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
-from chat_nexus_mod_manager.models.mod import ModFile, ModGroup
-from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
-from chat_nexus_mod_manager.vector.indexer import (
+from rippermod_manager.models.correlation import ModNexusCorrelation
+from rippermod_manager.models.mod import ModFile, ModGroup
+from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
+from rippermod_manager.vector.indexer import (
     index_all,
     index_correlations,
     index_mod_groups,

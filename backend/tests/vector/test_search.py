@@ -1,6 +1,6 @@
-from chat_nexus_mod_manager.models.mod import ModFile, ModGroup
-from chat_nexus_mod_manager.vector.indexer import index_mod_groups
-from chat_nexus_mod_manager.vector.search import (
+from rippermod_manager.models.mod import ModFile, ModGroup
+from rippermod_manager.vector.indexer import index_mod_groups
+from rippermod_manager.vector.search import (
     search_all_semantic,
     semantic_search,
 )

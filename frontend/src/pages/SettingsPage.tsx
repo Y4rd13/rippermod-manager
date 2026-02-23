@@ -188,7 +188,7 @@ export function SettingsPage() {
           About
         </h2>
         <div className="space-y-2 text-sm text-text-secondary">
-          <p>Chat Nexus Mod Manager v0.1.0</p>
+          <p>RipperMod Manager v0.1.0</p>
           <p>AI-powered mod manager for PC games.</p>
         </div>
       </Card>

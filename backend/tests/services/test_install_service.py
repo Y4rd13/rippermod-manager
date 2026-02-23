@@ -3,9 +3,9 @@ import zipfile
 import pytest
 from sqlmodel import select
 
-from chat_nexus_mod_manager.models.game import Game, GameModPath
-from chat_nexus_mod_manager.models.install import InstalledMod, InstalledModFile
-from chat_nexus_mod_manager.services.install_service import (
+from rippermod_manager.models.game import Game, GameModPath
+from rippermod_manager.models.install import InstalledMod, InstalledModFile
+from rippermod_manager.services.install_service import (
     get_file_ownership_map,
     install_mod,
     list_available_archives,

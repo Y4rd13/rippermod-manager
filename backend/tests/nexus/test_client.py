@@ -2,7 +2,7 @@ import httpx
 import pytest
 import respx
 
-from chat_nexus_mod_manager.nexus.client import BASE_URL, NexusClient
+from rippermod_manager.nexus.client import BASE_URL, NexusClient
 
 
 class TestNexusClient:

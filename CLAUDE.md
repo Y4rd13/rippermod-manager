@@ -2,9 +2,9 @@
 
 ## Project overview
 
-Chat Nexus Mod Manager is a desktop AI-powered mod manager for PC games (focused on Cyberpunk 2077). It combines a chat agent backend with Nexus Mods integration to scan, group, correlate, and manage mods.
+RipperMod Manager is a desktop AI-powered mod manager for PC games (focused on Cyberpunk 2077). It combines a chat agent backend with Nexus Mods integration to scan, group, correlate, and manage mods.
 
-- **Backend:** FastAPI (Python 3.12, uv, src layout at `backend/src/chat_nexus_mod_manager/`)
+- **Backend:** FastAPI (Python 3.12, uv, src layout at `backend/src/rippermod_manager/`)
 - **Frontend:** React 19 + TypeScript + Vite + Tailwind CSS v4 (`frontend/`)
 - **Desktop shell:** Tauri v2 (Rust, `frontend/src-tauri/`)
 - **State:** Zustand for client state, React Query for server state, SQLite for persistence
@@ -14,7 +14,7 @@ Chat Nexus Mod Manager is a desktop AI-powered mod manager for PC games (focused
 
 ```bash
 # Backend
-cd backend && uv run uvicorn chat_nexus_mod_manager.main:app --reload --port 8425  # Dev server
+cd backend && uv run uvicorn rippermod_manager.main:app --reload --port 8425  # Dev server
 cd backend && uv run ruff check src/ tests/    # Lint
 cd backend && uv run ruff format src/ tests/   # Format
 cd backend && uv run pytest tests/ -v          # Tests

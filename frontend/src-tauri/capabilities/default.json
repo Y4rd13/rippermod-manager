@@ -23,7 +23,7 @@
     "shell:default",
     {
       "identifier": "shell:allow-spawn",
-      "allow": [{ "name": "binaries/cnmm-backend", "sidecar": true }]
+      "allow": [{ "name": "binaries/rmm-backend", "sidecar": true }]
     }
   ]
 }

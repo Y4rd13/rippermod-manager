@@ -288,18 +288,18 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error
 
     log::info!("Spawning backend sidecar...");
 
-    // Resolve CNMM_DATA_DIR for the sidecar process
+    // Resolve RMM_DATA_DIR for the sidecar process
     let data_dir = app
         .path()
         .local_data_dir()
-        .map(|d: std::path::PathBuf| d.join("ChatNexusModManager"))
+        .map(|d: std::path::PathBuf| d.join("RipperModManager"))
         .unwrap_or_else(|_| std::path::PathBuf::from("./data"));
 
     let sidecar_command = app
         .shell()
-        .sidecar("binaries/cnmm-backend")
+        .sidecar("binaries/rmm-backend")
         .map_err(|e| format!("Failed to create sidecar command: {e}"))?
-        .env("CNMM_DATA_DIR", data_dir.to_string_lossy().to_string());
+        .env("RMM_DATA_DIR", data_dir.to_string_lossy().to_string());
 
     let (mut rx, child) = sidecar_command
         .spawn()

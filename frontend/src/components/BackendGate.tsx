@@ -81,7 +81,7 @@ export function BackendGate({ children }: { children: ReactNode }) {
         </h1>
         <p className="max-w-md text-sm text-text-secondary">
           {import.meta.env.DEV
-            ? "Make sure the backend server is running: cd backend && uv run uvicorn chat_nexus_mod_manager.main:app --port 8425"
+            ? "Make sure the backend server is running: cd backend && uv run uvicorn rippermod_manager.main:app --port 8425"
             : "The application backend could not be started. Try restarting the application."}
         </p>
         <Button variant="secondary" onClick={() => window.location.reload()}>

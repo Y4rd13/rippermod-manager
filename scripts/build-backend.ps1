@@ -8,11 +8,11 @@ Push-Location "$PSScriptRoot\..\backend"
 
 try {
     uv sync --extra build
-    uv run pyinstaller cnmm-backend.spec --clean --noconfirm
+    uv run pyinstaller rmm-backend.spec --clean --noconfirm
 
     $dest = "$PSScriptRoot\..\frontend\src-tauri\binaries"
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
-    Copy-Item "dist\cnmm-backend.exe" "$dest\cnmm-backend-x86_64-pc-windows-msvc.exe" -Force
+    Copy-Item "dist\rmm-backend.exe" "$dest\rmm-backend-x86_64-pc-windows-msvc.exe" -Force
 
     Write-Host "Backend binary copied to $dest"
 } finally {

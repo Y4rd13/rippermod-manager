@@ -4,13 +4,13 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlmodel import Session
 
-from chat_nexus_mod_manager.matching.variant_scorer import pick_best_file
-from chat_nexus_mod_manager.models.correlation import ModNexusCorrelation
-from chat_nexus_mod_manager.models.game import Game, GameModPath
-from chat_nexus_mod_manager.models.install import InstalledMod
-from chat_nexus_mod_manager.models.mod import ModGroup
-from chat_nexus_mod_manager.models.nexus import NexusDownload, NexusModMeta
-from chat_nexus_mod_manager.services.update_service import (
+from rippermod_manager.matching.variant_scorer import pick_best_file
+from rippermod_manager.models.correlation import ModNexusCorrelation
+from rippermod_manager.models.game import Game, GameModPath
+from rippermod_manager.models.install import InstalledMod
+from rippermod_manager.models.mod import ModGroup
+from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
+from rippermod_manager.services.update_service import (
     UpdateResult,
     _cache_update_result,
     check_all_updates,

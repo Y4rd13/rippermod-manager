@@ -4,7 +4,7 @@ from unittest.mock import patch
 class TestReindex:
     def test_reindex_mock(self, client):
         with patch(
-            "chat_nexus_mod_manager.vector.indexer.index_all",
+            "rippermod_manager.vector.indexer.index_all",
             return_value={"mod_groups": 3, "nexus_mods": 5, "correlations": 2},
         ):
             r = client.post("/api/v1/vector/reindex")
@@ -21,7 +21,7 @@ class TestSearch:
 
     def test_returns_results_mock(self, client):
         with patch(
-            "chat_nexus_mod_manager.vector.search.semantic_search",
+            "rippermod_manager.vector.search.semantic_search",
             return_value=[
                 {
                     "collection": "mod_groups",
@@ -43,7 +43,7 @@ class TestSearch:
 class TestStats:
     def test_returns_3_collections(self, client):
         with patch(
-            "chat_nexus_mod_manager.vector.store.get_collection",
+            "rippermod_manager.vector.store.get_collection",
         ) as mock_coll:
             mock_coll.return_value.count.return_value = 0
             r = client.get("/api/v1/vector/stats")
