@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Outlet } from "react-router";
 
 import { ChatPanel } from "@/components/chat/ChatPanel";
@@ -6,12 +6,14 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Titlebar } from "@/components/layout/Titlebar";
 import { KeyboardShortcutsModal } from "@/components/ui/KeyboardShortcutsModal";
 import { ToastContainer } from "@/components/ui/Toast";
+import { ScrollContainerContext } from "@/hooks/use-scroll-container";
 import { useUIStore } from "@/stores/ui-store";
 
 export function RootLayout() {
   const toggleChatPanel = useUIStore((s) => s.toggleChatPanel);
   const setChatPanelOpen = useUIStore((s) => s.setChatPanelOpen);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -48,8 +50,10 @@ export function RootLayout() {
       <Titlebar />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
-        <main id="main-content" className="flex-1 overflow-y-auto bg-surface-0 p-6">
-          <Outlet />
+        <main ref={mainRef} id="main-content" className="flex-1 overflow-y-auto bg-surface-0 p-6">
+          <ScrollContainerContext value={mainRef}>
+            <Outlet />
+          </ScrollContainerContext>
         </main>
         <ChatPanel />
       </div>

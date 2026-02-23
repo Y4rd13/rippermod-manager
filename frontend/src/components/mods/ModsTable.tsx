@@ -1,11 +1,12 @@
 import { ChevronDown, ChevronUp, Copy, ExternalLink, FileText, Search } from "lucide-react";
-import { Fragment, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
+import { VirtualTable } from "@/components/ui/VirtualTable";
 import { ConfidenceBadge } from "@/components/ui/Badge";
 import { formatBytes } from "@/lib/format";
 import type { ModGroup } from "@/types/api";
@@ -164,108 +165,107 @@ export function ModsTable({ mods, gameName, isLoading }: { mods: ModGroup[]; gam
         </span>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="sticky top-0 z-10 bg-surface-0 border-b border-border text-left">
-              <th className="py-2 pr-4 w-6" />
-              <th
-                className="py-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
-                onClick={() => toggleSort("name")}
-              >
-                <span className="flex items-center gap-1">
-                  Mod Name <SortIcon col="name" sortKey={sortKey} sortDir={sortDir} />
-                </span>
-              </th>
-              <th
-                className="py-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
-                onClick={() => toggleSort("files")}
-              >
-                <span className="flex items-center gap-1">
-                  Files <SortIcon col="files" sortKey={sortKey} sortDir={sortDir} />
-                </span>
-              </th>
-              <th
-                className="py-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
-                onClick={() => toggleSort("match")}
-              >
-                <span className="flex items-center gap-1">
-                  Nexus Match <SortIcon col="match" sortKey={sortKey} sortDir={sortDir} />
-                </span>
-              </th>
-              <th
-                className="py-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
-                onClick={() => toggleSort("confidence")}
-              >
-                <span className="flex items-center gap-1" title="How tightly the files in this mod group cluster together">
-                  Cluster <SortIcon col="confidence" sortKey={sortKey} sortDir={sortDir} />
-                </span>
-              </th>
+      <VirtualTable
+        items={filtered}
+        dynamicHeight
+        remeasureDep={expanded.size}
+        renderHead={() => (
+          <tr className="sticky top-0 z-10 bg-surface-0 border-b border-border text-left">
+            <th className="py-2 pr-4 w-6" />
+            <th
+              className="py-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
+              onClick={() => toggleSort("name")}
+            >
+              <span className="flex items-center gap-1">
+                Mod Name <SortIcon col="name" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </th>
+            <th
+              className="py-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
+              onClick={() => toggleSort("files")}
+            >
+              <span className="flex items-center gap-1">
+                Files <SortIcon col="files" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </th>
+            <th
+              className="py-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
+              onClick={() => toggleSort("match")}
+            >
+              <span className="flex items-center gap-1">
+                Nexus Match <SortIcon col="match" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </th>
+            <th
+              className="py-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
+              onClick={() => toggleSort("confidence")}
+            >
+              <span className="flex items-center gap-1" title="How tightly the files in this mod group cluster together">
+                Cluster <SortIcon col="confidence" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </th>
+          </tr>
+        )}
+        renderRow={(mod) => (
+          <>
+            <tr
+              className="border-b border-border/50 hover:bg-surface-1/50 cursor-pointer"
+              onClick={() => toggleExpand(mod.id)}
+              onContextMenu={(e) => openMenu(e, mod)}
+            >
+              <td className="py-2 pr-2">
+                {expanded.has(mod.id) ? (
+                  <ChevronDown size={14} className="text-text-muted" />
+                ) : (
+                  <FileText size={14} className="text-text-muted" />
+                )}
+              </td>
+              <td className="py-2 pr-4 text-text-primary font-medium">{mod.display_name}</td>
+              <td className="py-2 pr-4 text-text-muted">{mod.files.length}</td>
+              <td className="py-2 pr-4">
+                {mod.nexus_match ? (
+                  <div className="flex items-center gap-2">
+                    <ConfidenceBadge score={mod.nexus_match.score} />
+                    <span className="text-text-secondary text-xs truncate max-w-[200px]">
+                      {mod.nexus_match.mod_name}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-text-muted text-xs">No match</span>
+                )}
+              </td>
+              <td className="py-2 pr-4">
+                <ConfidenceBadge score={mod.confidence} />
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {filtered.map((mod) => (
-              <Fragment key={mod.id}>
-                <tr
-                  className="border-b border-border/50 hover:bg-surface-1/50 cursor-pointer"
-                  onClick={() => toggleExpand(mod.id)}
-                  onContextMenu={(e) => openMenu(e, mod)}
-                >
-                  <td className="py-2 pr-2">
-                    {expanded.has(mod.id) ? (
-                      <ChevronDown size={14} className="text-text-muted" />
-                    ) : (
-                      <FileText size={14} className="text-text-muted" />
-                    )}
-                  </td>
-                  <td className="py-2 pr-4 text-text-primary font-medium">{mod.display_name}</td>
-                  <td className="py-2 pr-4 text-text-muted">{mod.files.length}</td>
-                  <td className="py-2 pr-4">
-                    {mod.nexus_match ? (
-                      <div className="flex items-center gap-2">
-                        <ConfidenceBadge score={mod.nexus_match.score} />
-                        <span className="text-text-secondary text-xs truncate max-w-[200px]">
-                          {mod.nexus_match.mod_name}
+            {expanded.has(mod.id) && (
+              <tr>
+                <td colSpan={5} className="pb-3 pt-1 px-8">
+                  <div className="rounded-lg bg-surface-2 p-3 space-y-1">
+                    {mod.files.map((f) => (
+                      <div key={f.id} className="flex items-center justify-between text-xs">
+                        <span className="text-text-secondary font-mono truncate max-w-[400px]">
+                          {f.file_path}
+                        </span>
+                        <span className="text-text-muted">{formatBytes(f.file_size)}</span>
+                      </div>
+                    ))}
+                    {mod.nexus_match && (
+                      <div className="mt-2 pt-2 border-t border-border flex items-center gap-2 text-xs">
+                        <ExternalLink size={12} className="text-accent" />
+                        <span className="text-text-muted">
+                          Matched via {mod.nexus_match.method} — Nexus Mod #
+                          {mod.nexus_match.nexus_mod_id}
                         </span>
                       </div>
-                    ) : (
-                      <span className="text-text-muted text-xs">No match</span>
                     )}
-                  </td>
-                  <td className="py-2 pr-4">
-                    <ConfidenceBadge score={mod.confidence} />
-                  </td>
-                </tr>
-                {expanded.has(mod.id) && (
-                  <tr key={`${mod.id}-detail`}>
-                    <td colSpan={5} className="pb-3 pt-1 px-8">
-                      <div className="rounded-lg bg-surface-2 p-3 space-y-1">
-                        {mod.files.map((f) => (
-                          <div key={f.id} className="flex items-center justify-between text-xs">
-                            <span className="text-text-secondary font-mono truncate max-w-[400px]">
-                              {f.file_path}
-                            </span>
-                            <span className="text-text-muted">{formatBytes(f.file_size)}</span>
-                          </div>
-                        ))}
-                        {mod.nexus_match && (
-                          <div className="mt-2 pt-2 border-t border-border flex items-center gap-2 text-xs">
-                            <ExternalLink size={12} className="text-accent" />
-                            <span className="text-text-muted">
-                              Matched via {mod.nexus_match.method} — Nexus Mod #
-                              {mod.nexus_match.nexus_mod_id}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                  </div>
+                </td>
+              </tr>
+            )}
+          </>
+        )}
+      />
 
       {filtered.length === 0 && (filter || matchFilter !== "all") && (
         <div className="py-4 text-sm text-text-muted text-center space-y-2">

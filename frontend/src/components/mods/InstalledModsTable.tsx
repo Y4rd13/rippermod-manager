@@ -26,6 +26,7 @@ import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { VirtualCardGrid } from "@/components/ui/VirtualCardGrid";
 import { useBulkSelect } from "@/hooks/use-bulk-select";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useSessionState } from "@/hooks/use-session-state";
@@ -242,13 +243,14 @@ function ManagedModsGrid({
         </Button>
       </BulkActionBar>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {sorted.map((mod) => {
+      <VirtualCardGrid
+        items={sorted}
+        renderItem={(mod) => {
           const update =
             updateByInstalledId.get(mod.id) ??
             (mod.nexus_mod_id ? updateByNexusId.get(mod.nexus_mod_id) : undefined);
           return (
-            <div key={mod.id} className={cn("relative", mod.disabled && "opacity-60")}>
+            <div className={cn("relative", mod.disabled && "opacity-60")}>
               <div className="absolute top-2 left-2 z-10">
                 <input
                   type="checkbox"
@@ -348,8 +350,8 @@ function ManagedModsGrid({
               />
             </div>
           );
-        })}
-      </div>
+        }}
+      />
 
       {menuState.visible && menuState.data && (
         <ContextMenu
@@ -432,8 +434,9 @@ function RecognizedModsGrid({
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {mods.map((mod) => {
+      <VirtualCardGrid
+        items={mods}
+        renderItem={(mod) => {
           const match = mod.nexus_match;
           if (!match) return null;
 
@@ -442,7 +445,7 @@ function RecognizedModsGrid({
           const update = nexusModId != null ? updateByNexusId.get(nexusModId) : undefined;
 
           return (
-            <div key={mod.id} className="relative">
+            <div className="relative">
               <div className="absolute top-2 left-2 z-10">
                 <input
                   type="checkbox"
@@ -501,8 +504,8 @@ function RecognizedModsGrid({
               />
             </div>
           );
-        })}
-      </div>
+        }}
+      />
 
       <BulkActionBar
         selectedCount={bulk.selectedCount}

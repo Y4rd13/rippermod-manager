@@ -13,6 +13,7 @@ import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { VirtualTable } from "@/components/ui/VirtualTable";
 import {
   useCheckConflicts,
   useCleanupOrphans,
@@ -281,107 +282,103 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
           )}
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted">
-                <th className="py-2 pr-4 w-8">
-                  <input
-                    type="checkbox"
-                    checked={bulk.isAllSelected}
-                    onChange={() => bulk.isAllSelected ? bulk.deselectAll() : bulk.selectAll()}
-                    className="rounded border-border accent-accent"
+        <VirtualTable
+          items={filtered}
+          renderHead={() => (
+            <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted">
+              <th className="py-2 pr-4 w-8">
+                <input
+                  type="checkbox"
+                  checked={bulk.isAllSelected}
+                  onChange={() => bulk.isAllSelected ? bulk.deselectAll() : bulk.selectAll()}
+                  className="rounded border-border accent-accent"
+                />
+              </th>
+              <th className="py-2 pr-4">Archive</th>
+              <th className="py-2 pr-4">Parsed Name</th>
+              <th className="py-2 pr-4">Version</th>
+              <th className="py-2 pr-4">Size</th>
+              <th className="py-2 pr-4">Nexus ID</th>
+              <th className="py-2 pr-4">Downloaded</th>
+              <th className="py-2 pr-4">Status</th>
+              <th className="py-2 text-right">Actions</th>
+            </tr>
+          )}
+          renderRow={(a) => (
+            <tr
+              className="border-b border-border/50 hover:bg-surface-1/50 transition-colors"
+              onContextMenu={(e) => openMenu(e, a)}
+            >
+              <td className="py-2 pr-4">
+                <input
+                  type="checkbox"
+                  checked={bulk.isSelected(a.filename)}
+                  onChange={() => bulk.toggle(a.filename)}
+                  className="rounded border-border accent-accent"
+                />
+              </td>
+              <td className="py-2 pr-4 font-mono text-xs text-text-primary max-w-[200px] truncate" title={a.filename}>
+                {a.filename}
+              </td>
+              <td className="py-2 pr-4 text-text-secondary">
+                {a.parsed_name}
+              </td>
+              <td className="py-2 pr-4 text-text-muted">
+                {a.parsed_version ?? "--"}
+              </td>
+              <td className="py-2 pr-4 text-text-muted">
+                {formatBytes(a.size)}
+              </td>
+              <td className="py-2 pr-4 text-text-muted">
+                {a.nexus_mod_id ?? "--"}
+              </td>
+              <td className="py-2 pr-4 text-text-muted text-xs">
+                {a.last_downloaded_at ? timeAgo(isoToEpoch(a.last_downloaded_at)) : "--"}
+              </td>
+              <td className="py-2 pr-4">
+                {a.is_installed ? (
+                  <Badge variant="success"><Check size={10} /> Installed</Badge>
+                ) : (
+                  <Badge variant="neutral">Orphan</Badge>
+                )}
+              </td>
+              <td className="py-2 text-right">
+                <div className="flex items-center justify-end gap-1">
+                  <Button
+                    size="sm"
+                    loading={
+                      (checkConflicts.isPending || installMod.isPending) &&
+                      selectedArchive === a.filename
+                    }
+                    onClick={() => handleCheckConflicts(a.filename)}
+                  >
+                    <Download size={14} /> Install
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setConfirmDeleteFile(a.filename)}
+                    title="Delete this archive file"
+                    aria-label="Delete archive"
+                  >
+                    <Trash2 size={14} />
+                  </Button>
+                  <OverflowMenuButton
+                    items={OVERFLOW_ITEMS}
+                    onSelect={(key) => {
+                      if (key === "copy") {
+                        void navigator.clipboard.writeText(a.filename).then(
+                          () => toast.success("Copied to clipboard"),
+                          () => toast.error("Failed to copy"),
+                        );
+                      }
+                    }}
                   />
-                </th>
-                <th className="py-2 pr-4">Archive</th>
-                <th className="py-2 pr-4">Parsed Name</th>
-                <th className="py-2 pr-4">Version</th>
-                <th className="py-2 pr-4">Size</th>
-                <th className="py-2 pr-4">Nexus ID</th>
-                <th className="py-2 pr-4">Downloaded</th>
-                <th className="py-2 pr-4">Status</th>
-                <th className="py-2 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((a) => (
-                <tr
-                  key={a.filename}
-                  className="border-b border-border/50 hover:bg-surface-1/50 transition-colors"
-                  onContextMenu={(e) => openMenu(e, a)}
-                >
-                  <td className="py-2 pr-4">
-                    <input
-                      type="checkbox"
-                      checked={bulk.isSelected(a.filename)}
-                      onChange={() => bulk.toggle(a.filename)}
-                      className="rounded border-border accent-accent"
-                    />
-                  </td>
-                  <td className="py-2 pr-4 font-mono text-xs text-text-primary max-w-[200px] truncate" title={a.filename}>
-                    {a.filename}
-                  </td>
-                  <td className="py-2 pr-4 text-text-secondary">
-                    {a.parsed_name}
-                  </td>
-                  <td className="py-2 pr-4 text-text-muted">
-                    {a.parsed_version ?? "--"}
-                  </td>
-                  <td className="py-2 pr-4 text-text-muted">
-                    {formatBytes(a.size)}
-                  </td>
-                  <td className="py-2 pr-4 text-text-muted">
-                    {a.nexus_mod_id ?? "--"}
-                  </td>
-                  <td className="py-2 pr-4 text-text-muted text-xs">
-                    {a.last_downloaded_at ? timeAgo(isoToEpoch(a.last_downloaded_at)) : "--"}
-                  </td>
-                  <td className="py-2 pr-4">
-                    {a.is_installed ? (
-                      <Badge variant="success"><Check size={10} /> Installed</Badge>
-                    ) : (
-                      <Badge variant="neutral">Orphan</Badge>
-                    )}
-                  </td>
-                  <td className="py-2 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        size="sm"
-                        loading={
-                          (checkConflicts.isPending || installMod.isPending) &&
-                          selectedArchive === a.filename
-                        }
-                        onClick={() => handleCheckConflicts(a.filename)}
-                      >
-                        <Download size={14} /> Install
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setConfirmDeleteFile(a.filename)}
-                        title="Delete this archive file"
-                        aria-label="Delete archive"
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                      <OverflowMenuButton
-                        items={OVERFLOW_ITEMS}
-                        onSelect={(key) => {
-                          if (key === "copy") {
-                            void navigator.clipboard.writeText(a.filename).then(
-                              () => toast.success("Copied to clipboard"),
-                              () => toast.error("Failed to copy"),
-                            );
-                          }
-                        }}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                </div>
+              </td>
+            </tr>
+          )}
+        />
 
         {filtered.length === 0 && (filter || linkChip !== "all") && (
           <div className="py-4 text-sm text-text-muted text-center space-y-2">

@@ -15,6 +15,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
+import { VirtualCardGrid } from "@/components/ui/VirtualCardGrid";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useConfirmCorrelation, useRejectCorrelation } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
@@ -190,8 +191,11 @@ export function NexusMatchedGrid({
 
       <FilterChips chips={CONFIDENCE_CHIPS} active={chip} onChange={setChip} />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filtered.map((mod) => {
+      <VirtualCardGrid
+        items={filtered}
+        dynamicHeight
+        remeasureDep={expandedCards.size}
+        renderItem={(mod) => {
           const match = mod.nexus_match;
           if (!match) return null;
 
@@ -210,7 +214,7 @@ export function NexusMatchedGrid({
           };
 
           return (
-            <div key={mod.id}>
+            <div>
               <NexusModCard
                 modName={match.mod_name}
                 summary={match.summary}
@@ -299,8 +303,8 @@ export function NexusMatchedGrid({
               )}
             </div>
           );
-        })}
-      </div>
+        }}
+      />
 
       {flow.conflicts && (
         <ConflictDialog

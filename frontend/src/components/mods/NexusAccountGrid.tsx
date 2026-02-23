@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
+import { VirtualCardGrid } from "@/components/ui/VirtualCardGrid";
 import { toast } from "@/stores/toast-store";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useInstallFlow } from "@/hooks/use-install-flow";
@@ -189,14 +190,14 @@ export function NexusAccountGrid({
         onChange={setChip}
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filtered.map((mod) => {
+      <VirtualCardGrid
+        items={filtered}
+        renderItem={(mod) => {
           const nexusModId = mod.nexus_mod_id;
           const archive = flow.archiveByModId.get(nexusModId);
 
           return (
             <NexusModCard
-              key={mod.id}
               modName={mod.mod_name}
               summary={mod.summary}
               author={mod.author}
@@ -255,8 +256,8 @@ export function NexusAccountGrid({
               }
             />
           );
-        })}
-      </div>
+        }}
+      />
 
       {flow.conflicts && (
         <ConflictDialog
