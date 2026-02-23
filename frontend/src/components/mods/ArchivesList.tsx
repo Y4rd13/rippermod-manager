@@ -1,13 +1,15 @@
-import { Archive, Check, Copy, Download, Search, Trash2 } from "lucide-react";
+import { Archive, Check, Copy, Download, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { BulkActionBar } from "@/components/ui/BulkActionBar";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { SortSelect } from "@/components/ui/SortSelect";
 import {
@@ -18,6 +20,7 @@ import {
 } from "@/hooks/mutations";
 import { toast } from "@/stores/toast-store";
 import { useBulkSelect } from "@/hooks/use-bulk-select";
+import { useSessionState } from "@/hooks/use-session-state";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { formatBytes, isoToEpoch, timeAgo } from "@/lib/format";
 import type {
@@ -55,10 +58,11 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
   const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
   const [selectedArchive, setSelectedArchive] = useState<string | null>(null);
   const [confirmCleanup, setConfirmCleanup] = useState(false);
+  const [confirmDeleteFile, setConfirmDeleteFile] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
-  const [sortKey, setSortKey] = useState<ArchiveSortKey>("name");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [linkChip, setLinkChip] = useState<LinkChip>("all");
+  const [sortKey, setSortKey] = useSessionState<ArchiveSortKey>(`archives-sort-${gameName}`, "name");
+  const [sortDir, setSortDir] = useSessionState<"asc" | "desc">(`archives-dir-${gameName}`, "asc");
+  const [linkChip, setLinkChip] = useSessionState<LinkChip>(`archives-chip-${gameName}`, "all");
 
   const { menuState, openMenu, closeMenu } = useContextMenu<AvailableArchive>();
 
@@ -187,7 +191,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
         () => toast.error("Failed to copy"),
       );
     } else if (key === "delete") {
-      deleteArchive.mutate({ gameName, filename: archive.filename });
+      setConfirmDeleteFile(archive.filename);
     }
   };
 
@@ -228,16 +232,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
         />
 
         <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-xs">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
-            <input
-              type="text"
-              placeholder="Filter by filename..."
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="w-full rounded-lg border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-            />
-          </div>
+          <SearchInput value={filter} onChange={setFilter} placeholder="Filter by filename..." />
           <SortSelect
             value={sortKey}
             onChange={(v) => {
@@ -357,8 +352,9 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => deleteArchive.mutate({ gameName, filename: a.filename })}
+                        onClick={() => setConfirmDeleteFile(a.filename)}
                         title="Delete this archive file"
+                        aria-label="Delete archive"
                       >
                         <Trash2 size={14} />
                       </Button>
@@ -438,6 +434,22 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
           position={menuState.position}
           onSelect={handleContextMenuSelect}
           onClose={closeMenu}
+        />
+      )}
+
+      {confirmDeleteFile && (
+        <ConfirmDialog
+          title="Delete Archive?"
+          message={`Permanently delete "${confirmDeleteFile}"? This cannot be undone.`}
+          confirmLabel="Delete"
+          variant="danger"
+          icon={Trash2}
+          loading={deleteArchive.isPending}
+          onConfirm={() => {
+            deleteArchive.mutate({ gameName, filename: confirmDeleteFile });
+            setConfirmDeleteFile(null);
+          }}
+          onCancel={() => setConfirmDeleteFile(null)}
         />
       )}
 

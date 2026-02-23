@@ -1,4 +1,4 @@
-import { Download, ExternalLink, RefreshCw, Search } from "lucide-react";
+import { Download, ExternalLink, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { SourceBadge } from "@/components/mods/SourceBadge";
@@ -6,12 +6,14 @@ import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { useCheckUpdates, useStartDownload } from "@/hooks/mutations";
 import { useDownloadJobs } from "@/hooks/queries";
+import { useSessionState } from "@/hooks/use-session-state";
 import { timeAgo } from "@/lib/format";
 import type { ModUpdate } from "@/types/api";
 
@@ -35,9 +37,9 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
   const checkUpdates = useCheckUpdates();
   const startDownload = useStartDownload();
   const [filter, setFilter] = useState("");
-  const [sortKey, setSortKey] = useState<UpdateSortKey>("updated");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [chip, setChip] = useState("all");
+  const [sortKey, setSortKey] = useSessionState<UpdateSortKey>(`updates-sort-${gameName}`, "updated");
+  const [sortDir, setSortDir] = useSessionState<"asc" | "desc">(`updates-dir-${gameName}`, "desc");
+  const [chip, setChip] = useSessionState(`updates-chip-${gameName}`, "all");
 
   const filteredUpdates = useMemo(() => {
     const q = filter.toLowerCase();
@@ -104,16 +106,7 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input
-            type="text"
-            placeholder="Filter by name or author..."
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="w-full rounded-lg border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-          />
-        </div>
+        <SearchInput value={filter} onChange={setFilter} placeholder="Filter by name or author..." />
         <SortSelect
           value={sortKey}
           onChange={(v) => setSortKey(v as UpdateSortKey)}
@@ -197,6 +190,7 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
                         <button
                           onClick={() => openUrl(u.nexus_url).catch(() => {})}
                           title="Open mod page on Nexus Mods"
+                          aria-label="Open on Nexus Mods"
                           className="text-text-muted hover:text-accent shrink-0"
                         >
                           <ExternalLink size={12} />

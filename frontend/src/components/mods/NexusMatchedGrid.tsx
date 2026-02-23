@@ -1,4 +1,4 @@
-import { CheckCircle, ChevronDown, ChevronUp, Link2, Pencil, Search, XCircle } from "lucide-react";
+import { CheckCircle, ChevronDown, ChevronUp, Link2, Pencil, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "@/stores/toast-store";
 
@@ -8,13 +8,16 @@ import { ReassignDialog } from "@/components/mods/ReassignDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useConfirmCorrelation, useRejectCorrelation } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
+import { useSessionState } from "@/hooks/use-session-state";
 import { formatBytes, isoToEpoch, timeAgo } from "@/lib/format";
 import type {
   AvailableArchive,
@@ -60,8 +63,8 @@ export function NexusMatchedGrid({
   onModClick,
 }: Props) {
   const [filter, setFilter] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("updated");
-  const [chip, setChip] = useState("all");
+  const [sortKey, setSortKey] = useSessionState<SortKey>(`matched-sort-${gameName}`, "updated");
+  const [chip, setChip] = useSessionState(`matched-chip-${gameName}`, "all");
 
   const flow = useInstallFlow(gameName, archives, downloadJobs);
   const { menuState, openMenu, closeMenu } = useContextMenu<ModGroup>();
@@ -115,6 +118,7 @@ export function NexusMatchedGrid({
   const confirmCorrelation = useConfirmCorrelation();
   const rejectCorrelation = useRejectCorrelation();
   const [reassignGroupId, setReassignGroupId] = useState<number | null>(null);
+  const [rejectModId, setRejectModId] = useState<number | null>(null);
   const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
 
   const contextMenuItems: ContextMenuItem[] = [
@@ -143,9 +147,7 @@ export function NexusMatchedGrid({
     } else if (key === "accept-match") {
       confirmCorrelation.mutate({ gameName, modGroupId: mod.id });
     } else if (key === "reject-match") {
-      if (window.confirm("Remove this Nexus match?")) {
-        rejectCorrelation.mutate({ gameName, modGroupId: mod.id });
-      }
+      setRejectModId(mod.id);
     } else if (key === "correct-match") {
       setReassignGroupId(mod.id);
     }
@@ -168,16 +170,7 @@ export function NexusMatchedGrid({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input
-            type="text"
-            placeholder="Filter by name or author..."
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="w-full rounded-lg border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-          />
-        </div>
+        <SearchInput value={filter} onChange={setFilter} placeholder="Filter by name or author..." />
         <select
           value={sortKey}
           onChange={(e) => setSortKey(e.target.value as SortKey)}
@@ -307,6 +300,22 @@ export function NexusMatchedGrid({
           position={menuState.position}
           onSelect={handleContextMenuSelect}
           onClose={closeMenu}
+        />
+      )}
+
+      {rejectModId != null && (
+        <ConfirmDialog
+          title="Reject Match?"
+          message="Remove this Nexus match? The mod will appear as unmatched."
+          confirmLabel="Reject"
+          variant="danger"
+          icon={XCircle}
+          loading={rejectCorrelation.isPending}
+          onConfirm={() => {
+            rejectCorrelation.mutate({ gameName, modGroupId: rejectModId });
+            setRejectModId(null);
+          }}
+          onCancel={() => setRejectModId(null)}
         />
       )}
 

@@ -31,6 +31,7 @@ export function InstalledModCardAction({
         variant="ghost"
         size="sm"
         title={disabled ? "Enable this mod" : "Disable this mod"}
+        aria-label={disabled ? "Enable this mod" : "Disable this mod"}
         loading={isToggling}
         onClick={() => setConfirmAction(disabled ? "enable" : "disable")}
       >
@@ -44,6 +45,7 @@ export function InstalledModCardAction({
         variant="ghost"
         size="sm"
         title="Uninstall this mod"
+        aria-label="Uninstall this mod"
         onClick={() => setConfirmAction("uninstall")}
       >
         <Trash2 size={14} className="text-danger" />
