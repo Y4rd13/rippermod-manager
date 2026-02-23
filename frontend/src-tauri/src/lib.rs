@@ -401,7 +401,7 @@ fn kill_sidecar(app: &tauri::AppHandle) {
         Err(e) => {
             log::error!("Failed to lock BackendProcess for cleanup: {}", e);
         }
-    }
+    }; // Semicolon drops MutexGuard before `state`
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
