@@ -1,5 +1,6 @@
 use serde::Serialize;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 
@@ -8,6 +9,9 @@ pub struct DetectedGame {
     pub path: String,
     pub source: String,
 }
+
+static BACKEND_PID: AtomicU32 = AtomicU32::new(0);
+static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
 
 struct BackendProcess {
     child: Option<tauri_plugin_shell::process::CommandChild>,
@@ -305,6 +309,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error
         .spawn()
         .map_err(|e| format!("Failed to spawn sidecar: {e}"))?;
 
+    // Store PID for process-tree cleanup (PyInstaller spawns a child process)
+    BACKEND_PID.store(child.pid(), Ordering::SeqCst);
+    log::info!("Backend sidecar PID: {}", child.pid());
+
     // Store the child process handle for cleanup
     let state = app.state::<Mutex<BackendProcess>>();
     match state.lock() {
@@ -330,8 +338,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error
                     log::info!("[backend] {}", msg);
                 }
                 CommandEvent::Terminated(payload) => {
-                    log::warn!("Backend process terminated: {:?}", payload);
-                    let _ = app_handle.emit("backend-crashed", ());
+                    if !SHUTTING_DOWN.load(Ordering::SeqCst) {
+                        log::warn!("Backend process terminated unexpectedly: {:?}", payload);
+                        let _ = app_handle.emit("backend-crashed", ());
+                    }
                     break;
                 }
                 CommandEvent::Error(err) => {
@@ -390,18 +400,39 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error
 }
 
 fn kill_sidecar(app: &tauri::AppHandle) {
+    SHUTTING_DOWN.store(true, Ordering::SeqCst);
+
+    // Kill the entire process tree first (PyInstaller --onefile spawns a child)
+    let pid = BACKEND_PID.load(Ordering::SeqCst);
+    if pid != 0 {
+        log::info!("Killing backend process tree (pid={})", pid);
+        kill_process_tree(pid);
+    }
+
+    // Then drop the CommandChild handle
     let state = app.state::<Mutex<BackendProcess>>();
-    match state.lock() {
-        Ok(mut bp) => {
-            if let Some(child) = bp.child.take() {
-                log::info!("Killing backend sidecar...");
-                let _ = child.kill();
-            }
-        }
-        Err(e) => {
-            log::error!("Failed to lock BackendProcess for cleanup: {}", e);
-        }
-    }; // Semicolon drops MutexGuard before `state`
+    if let Ok(mut bp) = state.lock() {
+        let _ = bp.child.take();
+    }
+}
+
+fn kill_process_tree(pid: u32) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let _ = Command::new("taskkill")
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = Command::new("kill")
+            .args(["-9", &format!("-{}", pid)])
+            .output();
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
