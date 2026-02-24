@@ -10,8 +10,38 @@ export interface FomodFlagSetter {
   value: string;
 }
 
+export type PluginTypeString =
+  | "Required"
+  | "Recommended"
+  | "Optional"
+  | "NotUsable"
+  | "CouldBeUsable";
+
+export interface FomodFlagCondition {
+  name: string;
+  value: string;
+}
+
+export interface FomodFileCondition {
+  file: string;
+  state: "Active" | "Inactive" | "Missing";
+}
+
+export interface FomodCompositeDependency {
+  operator: "And" | "Or";
+  flag_conditions: FomodFlagCondition[];
+  file_conditions: FomodFileCondition[];
+  nested: FomodCompositeDependency[];
+}
+
+export interface FomodTypeDescriptorPattern {
+  dependency: FomodCompositeDependency;
+  type: PluginTypeString;
+}
+
 export interface FomodTypeDescriptor {
   default_type: string;
+  patterns: FomodTypeDescriptorPattern[];
 }
 
 export interface FomodPluginOut {
@@ -32,6 +62,7 @@ export interface FomodGroupOut {
 export interface FomodStepOut {
   name: string;
   groups: FomodGroupOut[];
+  visible: FomodCompositeDependency | null;
 }
 
 export interface FomodConfigOut {

@@ -1,5 +1,7 @@
 """Pydantic schemas for FOMOD wizard API endpoints."""
 
+from __future__ import annotations
+
 from pydantic import BaseModel
 
 
@@ -15,8 +17,34 @@ class FomodFlagSetter(BaseModel):
     value: str
 
 
+class FomodFlagCondition(BaseModel):
+    name: str
+    value: str
+
+
+class FomodFileCondition(BaseModel):
+    file: str
+    state: str
+
+
+class FomodCompositeDependency(BaseModel):
+    operator: str
+    flag_conditions: list[FomodFlagCondition] = []
+    file_conditions: list[FomodFileCondition] = []
+    nested: list[FomodCompositeDependency] = []
+
+
+FomodCompositeDependency.model_rebuild()
+
+
+class FomodTypeDescriptorPattern(BaseModel):
+    dependency: FomodCompositeDependency
+    type: str
+
+
 class FomodTypeDescriptor(BaseModel):
     default_type: str
+    patterns: list[FomodTypeDescriptorPattern] = []
 
 
 class FomodPluginOut(BaseModel):
@@ -37,6 +65,7 @@ class FomodGroupOut(BaseModel):
 class FomodStepOut(BaseModel):
     name: str
     groups: list[FomodGroupOut]
+    visible: FomodCompositeDependency | None = None
 
 
 class FomodConfigOut(BaseModel):

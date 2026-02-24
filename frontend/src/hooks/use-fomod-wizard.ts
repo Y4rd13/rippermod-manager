@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useFomodConfig, useFomodInstall } from "@/hooks/mutations";
-import type { FomodConfigOut, FomodGroupOut } from "@/types/fomod";
+import {
+  computeFlags,
+  computeVisibleSteps,
+  resolvePluginType,
+} from "@/lib/fomod-evaluator";
+import type {
+  FomodConfigOut,
+  FomodGroupOut,
+  FomodPluginOut,
+  PluginTypeString,
+} from "@/types/fomod";
 
 type Selections = Record<number, Record<number, number[]>>;
 
@@ -19,7 +29,6 @@ function initializeDefaults(config: FomodConfigOut): Selections {
       if (group.type === "SelectAll") {
         group.plugins.forEach((_, i) => selected.push(i));
       } else {
-        // Pre-select Required and Recommended plugins
         group.plugins.forEach((plugin, i) => {
           const dt = plugin.type_descriptor.default_type;
           if (dt === "Required" || dt === "Recommended") {
@@ -27,7 +36,6 @@ function initializeDefaults(config: FomodConfigOut): Selections {
           }
         });
 
-        // For SelectExactlyOne with no recommended, pre-select first non-NotUsable
         if (group.type === "SelectExactlyOne" && selected.length === 0) {
           const firstUsable = group.plugins.findIndex(
             (p) => p.type_descriptor.default_type !== "NotUsable",
@@ -58,7 +66,7 @@ function validateGroup(group: FomodGroupOut, selected: number[]): boolean {
 
 export function useFomodWizard(gameName: string, archiveFilename: string) {
   const [config, setConfig] = useState<FomodConfigOut | null>(null);
-  const [currentStep, setCurrentStep] = useState(0);
+  const [visibleStepCursor, setVisibleStepCursor] = useState(0);
   const [selections, setSelections] = useState<Selections>({});
   const [hasModified, setHasModified] = useState(false);
 
@@ -79,6 +87,35 @@ export function useFomodWizard(gameName: string, archiveFilename: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameName, archiveFilename]);
 
+  // Derive flags from current selections
+  const flags = useMemo(() => {
+    if (!config) return {};
+    return computeFlags(config, selections);
+  }, [config, selections]);
+
+  // Derive visible steps from flags
+  const visibleSteps = useMemo(() => {
+    if (!config) return [];
+    return computeVisibleSteps(config, flags);
+  }, [config, flags]);
+
+  // The original config step index for the current cursor position
+  const currentStep = visibleSteps[visibleStepCursor] ?? 0;
+
+  // Clamp cursor if it goes out of range (e.g. step hidden while user is on it)
+  useEffect(() => {
+    if (visibleSteps.length > 0 && visibleStepCursor >= visibleSteps.length) {
+      setVisibleStepCursor(visibleSteps.length - 1);
+    }
+  }, [visibleSteps, visibleStepCursor]);
+
+  const getPluginType = useCallback(
+    (plugin: FomodPluginOut): PluginTypeString => {
+      return resolvePluginType(plugin.type_descriptor, flags);
+    },
+    [flags],
+  );
+
   const selectPlugin = useCallback(
     (stepIdx: number, groupIdx: number, pluginIdx: number, groupType: string) => {
       setHasModified(true);
@@ -88,14 +125,12 @@ export function useFomodWizard(gameName: string, archiveFilename: string) {
         const current = [...(stepSels[groupIdx] ?? [])];
 
         if (groupType === "SelectExactlyOne" || groupType === "SelectAtMostOne") {
-          // Radio behavior: check if clicking same option in AtMostOne to deselect
           if (groupType === "SelectAtMostOne" && current.includes(pluginIdx)) {
             stepSels[groupIdx] = [];
           } else {
             stepSels[groupIdx] = [pluginIdx];
           }
         } else if (groupType === "SelectAtLeastOne" || groupType === "SelectAny") {
-          // Toggle behavior
           const idx = current.indexOf(pluginIdx);
           if (idx >= 0) {
             current.splice(idx, 1);
@@ -124,21 +159,22 @@ export function useFomodWizard(gameName: string, archiveFilename: string) {
     });
   }, [config, currentStep, selections]);
 
-  const isFirstStep = currentStep === 0;
-  const isLastStep = config ? currentStep >= config.steps.length - 1 : true;
-  const totalSteps = config?.total_steps ?? 0;
+  const isFirstStep = visibleStepCursor === 0;
+  const isLastStep =
+    visibleSteps.length === 0 || visibleStepCursor >= visibleSteps.length - 1;
+  const totalSteps = visibleSteps.length;
 
   const goNext = useCallback(() => {
-    if (config && currentStep < config.steps.length - 1) {
-      setCurrentStep((s) => s + 1);
+    if (visibleStepCursor < visibleSteps.length - 1) {
+      setVisibleStepCursor((c) => c + 1);
     }
-  }, [config, currentStep]);
+  }, [visibleSteps.length, visibleStepCursor]);
 
   const goBack = useCallback(() => {
-    if (currentStep > 0) {
-      setCurrentStep((s) => s - 1);
+    if (visibleStepCursor > 0) {
+      setVisibleStepCursor((c) => c - 1);
     }
-  }, [currentStep]);
+  }, [visibleStepCursor]);
 
   const doInstall = useCallback(
     (modName: string) => {
@@ -159,7 +195,10 @@ export function useFomodWizard(gameName: string, archiveFilename: string) {
   return {
     config,
     currentStep,
+    visibleStepCursor,
+    visibleSteps,
     selections,
+    flags,
     isLoading: fetchConfig.isPending,
     error: fetchConfig.error,
     isInstalling: installMutation.isPending,
@@ -171,6 +210,7 @@ export function useFomodWizard(gameName: string, archiveFilename: string) {
     totalSteps,
     hasModified,
     selectPlugin,
+    getPluginType,
     goNext,
     goBack,
     doInstall,

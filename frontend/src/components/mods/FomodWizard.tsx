@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { useFomodWizard } from "@/hooks/use-fomod-wizard";
 import { cn } from "@/lib/utils";
-import type { FomodGroupOut, FomodPluginOut } from "@/types/fomod";
+import type { FomodConfigOut, FomodGroupOut, FomodPluginOut, PluginTypeString } from "@/types/fomod";
 
 interface Props {
   gameName: string;
@@ -13,27 +13,38 @@ interface Props {
   onInstallComplete: () => void;
 }
 
-function StepIndicator({ current, total }: { current: number; total: number }) {
-  if (total <= 1) return null;
+function StepIndicator({
+  cursor,
+  totalVisible,
+  visibleSteps,
+  config,
+}: {
+  cursor: number;
+  totalVisible: number;
+  visibleSteps: number[];
+  config: FomodConfigOut;
+}) {
+  if (totalVisible <= 1) return null;
   return (
     <div className="flex items-center gap-2">
-      {Array.from({ length: total }, (_, i) => (
-        <div key={i} className="flex items-center gap-2">
+      {visibleSteps.map((origIdx, i) => (
+        <div key={origIdx} className="flex items-center gap-2">
           <div
+            title={config.steps[origIdx]?.name}
             className={cn(
               "flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold transition-colors",
-              i < current
+              i < cursor
                 ? "bg-success text-white"
-                : i === current
+                : i === cursor
                   ? "bg-accent text-white"
                   : "bg-surface-3 text-text-muted",
             )}
           >
-            {i < current ? <Check size={12} /> : i + 1}
+            {i < cursor ? <Check size={12} /> : i + 1}
           </div>
-          {i < total - 1 && (
+          {i < totalVisible - 1 && (
             <div
-              className={cn("h-px w-6", i < current ? "bg-success" : "bg-border")}
+              className={cn("h-px w-6", i < cursor ? "bg-success" : "bg-border")}
             />
           )}
         </div>
@@ -75,6 +86,7 @@ function TypeBadge({ type }: { type: string }) {
 
 function PluginOption({
   plugin,
+  pluginType,
   selected,
   disabled,
   inputType,
@@ -82,13 +94,13 @@ function PluginOption({
   onChange,
 }: {
   plugin: FomodPluginOut;
+  pluginType: PluginTypeString;
   selected: boolean;
   disabled: boolean;
   inputType: "radio" | "checkbox";
   inputName: string;
   onChange: () => void;
 }) {
-  const pluginType = plugin.type_descriptor.default_type;
   const isNotUsable = pluginType === "NotUsable";
   const isRequired = pluginType === "Required";
   const isDisabled = disabled || isNotUsable || isRequired;
@@ -132,12 +144,14 @@ function GroupSection({
   stepIdx,
   selected,
   onSelect,
+  getPluginType,
 }: {
   group: FomodGroupOut;
   groupIdx: number;
   stepIdx: number;
   selected: number[];
   onSelect: (stepIdx: number, groupIdx: number, pluginIdx: number, groupType: string) => void;
+  getPluginType: (plugin: FomodPluginOut) => PluginTypeString;
 }) {
   const isRadio = group.type === "SelectExactlyOne" || group.type === "SelectAtMostOne";
   const isSelectAll = group.type === "SelectAll";
@@ -161,6 +175,7 @@ function GroupSection({
           <PluginOption
             key={pluginIdx}
             plugin={plugin}
+            pluginType={getPluginType(plugin)}
             selected={selected.includes(pluginIdx)}
             disabled={isSelectAll}
             inputType={inputType}
@@ -210,7 +225,7 @@ export function FomodWizard({ gameName, archiveFilename, onDismiss, onInstallCom
   }, [handleKeyDown]);
 
   const currentStepData = wizard.config?.steps[wizard.currentStep];
-  const stepName = currentStepData?.name || `Step ${wizard.currentStep + 1}`;
+  const stepName = currentStepData?.name || `Step ${wizard.visibleStepCursor + 1}`;
 
   const filesCount = useMemo(() => {
     if (!wizard.config) return 0;
@@ -261,8 +276,13 @@ export function FomodWizard({ gameName, archiveFilename, onDismiss, onInstallCom
               )}
             </div>
           </div>
-          {wizard.totalSteps > 1 && (
-            <StepIndicator current={wizard.currentStep} total={wizard.totalSteps} />
+          {wizard.config && wizard.totalSteps > 1 && (
+            <StepIndicator
+              cursor={wizard.visibleStepCursor}
+              totalVisible={wizard.totalSteps}
+              visibleSteps={wizard.visibleSteps}
+              config={wizard.config}
+            />
           )}
         </div>
 
@@ -292,6 +312,7 @@ export function FomodWizard({ gameName, archiveFilename, onDismiss, onInstallCom
                   stepIdx={wizard.currentStep}
                   selected={wizard.selections[wizard.currentStep]?.[groupIdx] ?? []}
                   onSelect={wizard.selectPlugin}
+                  getPluginType={wizard.getPluginType}
                 />
               ))}
             </div>
