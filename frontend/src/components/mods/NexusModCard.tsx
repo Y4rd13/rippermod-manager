@@ -85,9 +85,9 @@ export function NexusModCard({
           )}
         </div>
 
-        <div className="flex items-center justify-between pt-2 border-t border-border/50">
-          {footer ?? <div />}
-          <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/50">
+          <div className="min-w-0 flex-1">{footer ?? <div />}</div>
+          <div className="flex items-center gap-1 shrink-0 ml-auto">
             {action}
             {overflowMenu}
           </div>
