@@ -11,4 +11,3 @@ class OnboardingStatus(BaseModel):
 
 class OnboardingComplete(BaseModel):
     openai_api_key: str = ""
-    nexus_api_key: str = ""

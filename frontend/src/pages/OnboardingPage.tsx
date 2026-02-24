@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/Input";
 import { ScanProgress, type ScanLog } from "@/components/ui/ScanProgress";
 import {
   useCompleteOnboarding,
-  useConnectNexus,
   useCreateGame,
   useSaveSettings,
   useSyncNexus,
@@ -137,12 +136,7 @@ function AISetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => voi
 }
 
 function NexusSetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
-  const store = useOnboardingStore();
-  const connectNexus = useConnectNexus();
   const sso = useNexusSSO();
-  const [error, setError] = useState("");
-  const [manualValidated, setManualValidated] = useState(false);
-  const [showManual, setShowManual] = useState(false);
 
   const ssoStartRef = useRef(0);
   const [ssoElapsed, setSsoElapsed] = useState(0);
@@ -157,12 +151,7 @@ function NexusSetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
   }, [sso.state]);
 
   const ssoSuccess = sso.state === "success" && sso.result !== null;
-  const validated = manualValidated || ssoSuccess;
-  const displayUsername = ssoSuccess
-    ? sso.result!.username
-    : store.nexusUsername;
 
-  // Sync SSO username to onboarding store
   const nexusUsername = useOnboardingStore((s) => s.nexusUsername);
   const setNexusUsername = useOnboardingStore((s) => s.setNexusUsername);
 
@@ -171,25 +160,6 @@ function NexusSetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
       setNexusUsername(sso.result.username);
     }
   }, [ssoSuccess, sso.result, nexusUsername, setNexusUsername]);
-
-  const handleManualValidate = () => {
-    if (!store.nexusKey.trim()) {
-      setError("API key is required");
-      return;
-    }
-    connectNexus.mutate(store.nexusKey, {
-      onSuccess: (result) => {
-        if (result.valid) {
-          store.setNexusUsername(result.username);
-          setManualValidated(true);
-          setError("");
-        } else {
-          setError(result.error || "Invalid API key");
-        }
-      },
-      onError: (e) => setError(e.message),
-    });
-  };
 
   return (
     <div className="space-y-6 max-w-md mx-auto">
@@ -202,10 +172,10 @@ function NexusSetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
         </p>
       </div>
 
-      {validated ? (
+      {ssoSuccess ? (
         <>
           <p className="text-success text-sm">
-            Connected as {displayUsername}
+            Connected as {sso.result!.username}
           </p>
           <div className="flex justify-end gap-3">
             <Button variant="ghost" onClick={onBack}>Back</Button>
@@ -241,7 +211,7 @@ function NexusSetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
               </p>
               {ssoElapsed > 120 && (
                 <p className="text-warning text-xs">
-                  Taking longer than expected — try again or use manual entry below.
+                  Taking longer than expected — try cancelling and starting again.
                 </p>
               )}
             </div>
@@ -249,48 +219,10 @@ function NexusSetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
 
           {sso.error && <p className="text-danger text-sm">{sso.error}</p>}
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-surface-1 px-2 text-text-muted">or</span>
-            </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="ghost" onClick={onBack}>Back</Button>
+            <Button variant="ghost" onClick={onNext}>Skip</Button>
           </div>
-
-          {!showManual ? (
-            <button
-              type="button"
-              onClick={() => setShowManual(true)}
-              className="text-sm text-text-muted hover:text-text-secondary underline w-full text-center"
-            >
-              Enter API key manually
-            </button>
-          ) : (
-            <div className="space-y-4">
-              <Input
-                id="nexus-key"
-                label="Nexus Mods API Key"
-                type="password"
-                placeholder="Your API key from nexusmods.com/users/myaccount?tab=api+access"
-                value={store.nexusKey}
-                onChange={(e) => {
-                  store.setNexusKey(e.target.value);
-                  setError("");
-                  setManualValidated(false);
-                }}
-                error={error}
-              />
-              <div className="flex justify-end">
-                <Button
-                  onClick={handleManualValidate}
-                  loading={connectNexus.isPending}
-                >
-                  Validate & Connect
-                </Button>
-              </div>
-            </div>
-          )}
         </>
       )}
     </div>

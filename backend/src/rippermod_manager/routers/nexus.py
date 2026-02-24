@@ -9,8 +9,6 @@ from rippermod_manager.models.settings import AppSetting
 from rippermod_manager.schemas.nexus import (
     ModDetailOut,
     NexusDownloadBrief,
-    NexusKeyResult,
-    NexusKeyValidation,
     NexusModEnrichedOut,
     NexusModFileOut,
     NexusSyncResult,
@@ -19,35 +17,6 @@ from rippermod_manager.schemas.nexus import (
 )
 
 router = APIRouter(prefix="/nexus", tags=["nexus"])
-
-
-@router.post("/validate", response_model=NexusKeyResult)
-async def validate_key(data: NexusKeyValidation) -> NexusKeyResult:
-    from rippermod_manager.nexus.client import NexusClient
-
-    async with NexusClient(data.api_key) as client:
-        return await client.validate_key()
-
-
-@router.post("/connect", response_model=NexusKeyResult)
-async def connect_and_store(
-    data: NexusKeyValidation, session: Session = Depends(get_session)
-) -> NexusKeyResult:
-    from rippermod_manager.nexus.client import NexusClient
-
-    async with NexusClient(data.api_key) as client:
-        result = await client.validate_key()
-
-    if result.valid:
-        setting = session.exec(select(AppSetting).where(AppSetting.key == "nexus_api_key")).first()
-        if setting:
-            setting.value = data.api_key
-        else:
-            setting = AppSetting(key="nexus_api_key", value=data.api_key)
-            session.add(setting)
-        session.commit()
-
-    return result
 
 
 @router.post("/sync-history/{game_name}", response_model=NexusSyncResult)

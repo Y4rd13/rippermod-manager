@@ -48,16 +48,12 @@ def get_onboarding_status(
 def complete_onboarding(
     data: OnboardingComplete, session: Session = Depends(get_session)
 ) -> OnboardingStatus:
-    for key, value in [
-        ("openai_api_key", data.openai_api_key),
-        ("nexus_api_key", data.nexus_api_key),
-    ]:
-        if value:
-            setting = session.exec(select(AppSetting).where(AppSetting.key == key)).first()
-            if setting:
-                setting.value = value
-            else:
-                session.add(AppSetting(key=key, value=value))
+    if data.openai_api_key:
+        setting = session.exec(select(AppSetting).where(AppSetting.key == "openai_api_key")).first()
+        if setting:
+            setting.value = data.openai_api_key
+        else:
+            session.add(AppSetting(key="openai_api_key", value=data.openai_api_key))
 
     completed_setting = session.exec(
         select(AppSetting).where(AppSetting.key == "onboarding_completed")
