@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -74,6 +75,8 @@ class CorrelationReassign(BaseModel):
 
 class ScanStreamRequest(BaseModel):
     ai_search: bool = False
+    ai_search_model: Literal["gpt-5-mini", "gpt-5.2"] | None = None
+    ai_search_effort: Literal["low", "medium", "high"] | None = None
 
 
 ModGroupOut.model_rebuild()

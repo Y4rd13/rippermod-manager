@@ -9,6 +9,7 @@ import {
   Play,
   RefreshCw,
   Scan,
+  Sparkles,
   TrendingUp,
   UserCheck,
 } from "lucide-react";
@@ -347,11 +348,22 @@ export function GameDetailPage() {
           <Button variant="secondary" onClick={handleLaunch} loading={isLaunching} disabled={!gameVersion?.exe_path} title="Launch the game executable">
             <Play size={16} /> Play
           </Button>
-          {hasOpenaiKey && (
-            <span title="Use AI-powered semantic search to improve mod matching accuracy (uses OpenAI API)">
-              <Switch checked={aiSearch} onChange={setAiSearch} label="AI Search" disabled={isScanning} />
-            </span>
-          )}
+          <span
+            title={
+              hasOpenaiKey
+                ? "Use AI-powered semantic search to improve mod matching accuracy (uses OpenAI API)"
+                : "Add your OpenAI API key in Settings to enable AI Search"
+            }
+            className="flex items-center gap-1.5"
+          >
+            <Sparkles size={16} className={cn(aiSearch && hasOpenaiKey ? "text-accent" : "text-text-muted")} />
+            <Switch
+              checked={aiSearch}
+              onChange={setAiSearch}
+              label="AI Search"
+              disabled={isScanning || !hasOpenaiKey}
+            />
+          </span>
           <Button onClick={handleFullScan} loading={isScanning} title="Scan game folder for mods, group files, and match them to Nexus Mods">
             <Scan size={16} /> Scan & Correlate
           </Button>
