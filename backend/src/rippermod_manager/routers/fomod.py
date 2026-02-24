@@ -15,8 +15,11 @@ from rippermod_manager.database import get_session
 from rippermod_manager.models.game import Game
 from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.fomod import (
+    FomodCompositeDependency,
     FomodConfigOut,
+    FomodFileCondition,
     FomodFileMapping,
+    FomodFlagCondition,
     FomodFlagSetter,
     FomodGroupOut,
     FomodInstallRequest,
@@ -26,9 +29,14 @@ from rippermod_manager.schemas.fomod import (
     FomodPreviewResult,
     FomodStepOut,
     FomodTypeDescriptor,
+    FomodTypeDescriptorPattern,
 )
 from rippermod_manager.schemas.install import InstallResult
-from rippermod_manager.services.fomod_config_parser import FomodConfig, parse_fomod_config
+from rippermod_manager.services.fomod_config_parser import (
+    CompositeDependency,
+    FomodConfig,
+    parse_fomod_config,
+)
 from rippermod_manager.services.fomod_install_service import compute_file_list, install_fomod
 from rippermod_manager.services.fomod_parser import inspect_archive
 
@@ -86,6 +94,20 @@ def _get_fomod_config(
     return config, entries, fomod_prefix, game, archive_path
 
 
+def _dependency_to_out(dep: CompositeDependency) -> FomodCompositeDependency:
+    """Convert internal CompositeDependency dataclass to Pydantic schema."""
+    return FomodCompositeDependency(
+        operator=dep.operator.value,
+        flag_conditions=[
+            FomodFlagCondition(name=fc.name, value=fc.value) for fc in dep.flag_conditions
+        ],
+        file_conditions=[
+            FomodFileCondition(file=fc.file, state=fc.state.value) for fc in dep.file_conditions
+        ],
+        nested=[_dependency_to_out(n) for n in dep.nested],
+    )
+
+
 def _config_to_out(config: FomodConfig) -> FomodConfigOut:
     """Convert parsed FomodConfig to API response schema."""
     steps = []
@@ -114,6 +136,13 @@ def _config_to_out(config: FomodConfig) -> FomodConfigOut:
                         ],
                         type_descriptor=FomodTypeDescriptor(
                             default_type=plugin.type_descriptor.default_type.value,
+                            patterns=[
+                                FomodTypeDescriptorPattern(
+                                    dependency=_dependency_to_out(dep),
+                                    type=pat_type.value,
+                                )
+                                for dep, pat_type in plugin.type_descriptor.patterns
+                            ],
                         ),
                     )
                 )
@@ -124,7 +153,13 @@ def _config_to_out(config: FomodConfig) -> FomodConfigOut:
                     plugins=plugins,
                 )
             )
-        steps.append(FomodStepOut(name=step.name, groups=groups))
+        steps.append(
+            FomodStepOut(
+                name=step.name,
+                groups=groups,
+                visible=_dependency_to_out(step.visible) if step.visible else None,
+            )
+        )
 
     return FomodConfigOut(
         module_name=config.module_name,
