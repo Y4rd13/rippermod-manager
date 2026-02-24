@@ -300,7 +300,7 @@ export function GameDetailPage() {
             <div className="h-9 w-36 bg-surface-2 rounded-lg" />
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {Array.from({ length: 4 }, (_, i) => (
             <div key={i} className="rounded-xl border border-border bg-surface-1 p-5">
               <div className="flex items-center gap-3">
@@ -374,7 +374,7 @@ export function GameDetailPage() {
         <ScanProgress logs={scanLogs} percent={scanPercent} phase={scanPhase} />
       )}
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card
           className="hover:border-success/40 transition-colors"
           onClick={() => setTab("mods")}
