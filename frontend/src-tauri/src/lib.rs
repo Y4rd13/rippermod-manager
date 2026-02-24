@@ -292,11 +292,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error
 
     log::info!("Spawning backend sidecar...");
 
-    // Resolve RMM_DATA_DIR for the sidecar process
+    // Use Tauri's app data dir so all data lives under one folder
     let data_dir = app
         .path()
-        .local_data_dir()
-        .map(|d: std::path::PathBuf| d.join("RipperModManager"))
+        .app_local_data_dir()
         .unwrap_or_else(|_| std::path::PathBuf::from("./data"));
 
     let sidecar_command = app
