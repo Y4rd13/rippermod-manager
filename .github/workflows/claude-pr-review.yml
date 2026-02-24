@@ -3,9 +3,11 @@ name: Claude PR Review
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
-    paths:
-      - "backend/**"
-      - "frontend/**"
+    paths-ignore:
+      - "*.md"
+      - "docs/**"
+      - "LICENSE"
+      - "signatures/**"
 
 concurrency:
   group: claude-pr-review-${{ github.event.pull_request.number }}
