@@ -16,7 +16,6 @@ import type {
   GameCreate,
   InstallRequest,
   InstallResult,
-  NexusKeyResult,
   NexusSyncResult,
   OnboardingStatus,
   OrphanCleanupResult,
@@ -64,20 +63,6 @@ export function useDeleteGame() {
       toast.success("Game deleted", name);
     },
     onError: () => toast.error("Failed to delete game"),
-  });
-}
-
-export function useValidateNexusKey() {
-  return useMutation<NexusKeyResult, Error, string>({
-    mutationFn: (apiKey) =>
-      api.post("/api/v1/nexus/validate", { api_key: apiKey }),
-  });
-}
-
-export function useConnectNexus() {
-  return useMutation<NexusKeyResult, Error, string>({
-    mutationFn: (apiKey) =>
-      api.post("/api/v1/nexus/connect", { api_key: apiKey }),
   });
 }
 
@@ -129,7 +114,7 @@ export function useSaveSettings() {
 
 export function useCompleteOnboarding() {
   const qc = useQueryClient();
-  return useMutation<OnboardingStatus, Error, { openai_api_key?: string; nexus_api_key?: string }>({
+  return useMutation<OnboardingStatus, Error, { openai_api_key?: string }>({
     mutationFn: (data) => api.post("/api/v1/onboarding/complete", data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["onboarding"] }),
   });

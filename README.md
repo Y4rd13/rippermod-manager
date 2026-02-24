@@ -23,7 +23,7 @@
 ## Features
 
 - **Mod Scanner** — Recursively discovers mod files from configured game paths, groups them by name similarity using TF-IDF + DBSCAN clustering, and computes file hashes for integrity tracking.
-- **Nexus Mods Integration** — Connects to your Nexus account (via SSO or API key), syncs tracked/endorsed mods, fetches mod metadata, and checks for available updates.
+- **Nexus Mods Integration** — Connects to your Nexus account via SSO, syncs tracked/endorsed mods, fetches mod metadata, and checks for available updates.
 - **Auto-Correlation** — Matches local mod groups to Nexus downloads using Jaccard similarity + Jaro-Winkler distance scoring.
 - **Mod Installation** — Install mods from downloaded archives with conflict detection, skip/overwrite resolution, and enable/disable toggling.
 - **Download Manager** — Download mod archives directly from Nexus Mods with progress tracking and premium account support.
@@ -162,7 +162,7 @@ rippermod-manager/
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
 - [Node.js 22+](https://nodejs.org/)
 - [Rust](https://rustup.rs/) (for Tauri desktop builds)
-- [Nexus Mods account](https://www.nexusmods.com/) (free — sign in via SSO or API key)
+- [Nexus Mods account](https://www.nexusmods.com/) (free — sign in via SSO)
 
 ## Getting Started
 
@@ -205,7 +205,7 @@ npx tauri dev
 
 On first launch, the onboarding flow will guide you through:
 
-1. **Nexus Mods login** — Sign in with your Nexus Mods account via SSO, or paste your API key manually
+1. **Nexus Mods login** — Sign in with your Nexus Mods account via SSO
 2. **Game setup** — Configure your game install path (Cyberpunk 2077 auto-detects from Steam, GOG, and Epic)
 3. **Initial scan** — Discovers and groups your installed mods
 
@@ -336,8 +336,6 @@ All endpoints are prefixed with `/api/v1/`.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/nexus/validate` | Validate a Nexus API key |
-| `POST` | `/nexus/connect` | Validate and store a Nexus key |
 | `POST` | `/nexus/sync-history/{name}` | Sync tracked/endorsed mods |
 | `GET` | `/nexus/downloads/{name}` | List synced downloads (filterable by `?source=endorsed\|tracked`) |
 
