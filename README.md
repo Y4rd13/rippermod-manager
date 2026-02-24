@@ -25,7 +25,7 @@
 ## Features
 
 - **Mod Scanner** — Recursively discovers mod files from configured game paths, groups them by name similarity using TF-IDF + DBSCAN clustering, and computes file hashes for integrity tracking.
-- **Nexus Mods Integration** — Validates API keys, syncs tracked/endorsed mods, fetches mod metadata, and checks for available updates.
+- **Nexus Mods Integration** — Connects to your Nexus account (via SSO or API key), syncs tracked/endorsed mods, fetches mod metadata, and checks for available updates.
 - **Auto-Correlation** — Matches local mod groups to Nexus downloads using Jaccard similarity + Jaro-Winkler distance scoring.
 - **Mod Installation** — Install mods from downloaded archives with conflict detection, skip/overwrite resolution, and enable/disable toggling.
 - **Download Manager** — Download mod archives directly from Nexus Mods with progress tracking and premium account support.
@@ -34,7 +34,7 @@
 - **Update Checker** — Compares local mod versions against Nexus metadata to surface available updates with one-click download.
 - **Semantic Search** — ChromaDB vector store indexes mods, Nexus metadata, and correlations for natural-language queries.
 - **Chat Assistant** — LangChain-powered agent with tool access to the local mod database and Nexus data, streamed via SSE.
-- **Guided Onboarding** — Step-by-step setup for API keys, game configuration, and initial mod scan.
+- **Guided Onboarding** — Step-by-step setup for Nexus Mods login, game configuration, and initial mod scan.
 - **Custom Titlebar** — Native-feeling Tauri window with custom drag region and window controls.
 
 ## Tech Stack
@@ -149,8 +149,7 @@ rippermod-manager/
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
 - [Node.js 22+](https://nodejs.org/)
 - [Rust](https://rustup.rs/) (for Tauri desktop builds)
-- [Nexus Mods API key](https://www.nexusmods.com/users/myaccount?tab=api+access) (free personal key)
-- [OpenAI API key](https://platform.openai.com/api-keys) (optional — only for chat assistant)
+- [Nexus Mods account](https://www.nexusmods.com/) (free — sign in via SSO or API key)
 
 ## Getting Started
 
@@ -193,12 +192,11 @@ npx tauri dev
 
 On first launch, the onboarding flow will guide you through:
 
-1. **OpenAI API key** — Powers the chat assistant (optional)
-2. **Nexus Mods API key** — Enables mod tracking and metadata sync
-3. **Game setup** — Configure your game install path (Cyberpunk 2077 auto-detects from Steam, GOG, and Epic)
-4. **Initial scan** — Discovers and groups your installed mods
+1. **Nexus Mods login** — Sign in with your Nexus Mods account via SSO, or paste your API key manually
+2. **Game setup** — Configure your game install path (Cyberpunk 2077 auto-detects from Steam, GOG, and Epic)
+3. **Initial scan** — Discovers and groups your installed mods
 
-API keys are stored in the local SQLite database and masked in the settings UI.
+Credentials are stored in the local SQLite database and masked in the settings UI.
 
 ## Development
 
