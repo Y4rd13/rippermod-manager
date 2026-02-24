@@ -29,7 +29,7 @@ _CONCURRENCY = 5
 _MAX_SEARCHES = 30
 _SEARCH_TIMEOUT = 180  # seconds
 _MODEL = "gpt-5-mini"
-_MAX_OUTPUT_TOKENS = 16384
+_MAX_OUTPUT_TOKENS = 4096
 _NEXUS_MOD_ID_RE = re.compile(r"nexusmods\.com/\w+/mods/(\d+)")
 _JSON_OBJECT_RE = re.compile(r"\{[^{}]*\}", re.DOTALL)
 
