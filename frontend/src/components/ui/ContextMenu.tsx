@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export interface ContextMenuItem {
   key: string;
@@ -102,7 +103,7 @@ export function ContextMenu({ items, position, onSelect, onClose }: ContextMenuP
     return map;
   }, [items]);
 
-  return (
+  return createPortal(
     <div
       ref={menuRef}
       role="menu"
@@ -135,6 +136,7 @@ export function ContextMenu({ items, position, onSelect, onClose }: ContextMenuP
           </button>
         );
       })}
-    </div>
+    </div>,
+    document.body,
   );
 }
