@@ -297,7 +297,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error
 
     let sidecar_command = app
         .shell()
-        .sidecar("binaries/rmm-backend")
+        .sidecar("rmm-backend")
         .map_err(|e| format!("Failed to create sidecar command: {e}"))?
         .env("RMM_DATA_DIR", data_dir.to_string_lossy().to_string());
 
