@@ -127,3 +127,41 @@ input[type="checkbox"]:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--color-surface-0), 0 0 0 4px var(--color-accent);
 }
+
+input[type="radio"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--color-border-bright);
+  border-radius: 50%;
+  background-color: var(--color-surface-2);
+  cursor: pointer;
+  transition: background-color 150ms, border-color 150ms;
+  position: relative;
+}
+
+input[type="radio"]:checked {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+input[type="radio"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: white;
+}
+
+input[type="radio"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input[type="radio"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-surface-0), 0 0 0 4px var(--color-accent);
+}
