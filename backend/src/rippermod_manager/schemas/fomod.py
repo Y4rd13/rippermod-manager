@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -24,11 +26,11 @@ class FomodFlagCondition(BaseModel):
 
 class FomodFileCondition(BaseModel):
     file: str
-    state: str
+    state: Literal["Active", "Inactive", "Missing"]
 
 
 class FomodCompositeDependency(BaseModel):
-    operator: str
+    operator: Literal["And", "Or"]
     flag_conditions: list[FomodFlagCondition] = []
     file_conditions: list[FomodFileCondition] = []
     nested: list[FomodCompositeDependency] = []

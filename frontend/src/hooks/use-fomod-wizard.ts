@@ -99,15 +99,20 @@ export function useFomodWizard(gameName: string, archiveFilename: string) {
     return computeVisibleSteps(config, flags);
   }, [config, flags]);
 
-  // The original config step index for the current cursor position
-  const currentStep = visibleSteps[visibleStepCursor] ?? 0;
-
-  // Clamp cursor if it goes out of range (e.g. step hidden while user is on it)
-  useEffect(() => {
-    if (visibleSteps.length > 0 && visibleStepCursor >= visibleSteps.length) {
-      setVisibleStepCursor(visibleSteps.length - 1);
-    }
+  // Clamp inline so there's no stale-cursor render frame
+  const clampedCursor = useMemo(() => {
+    if (visibleSteps.length === 0) return 0;
+    return Math.min(visibleStepCursor, visibleSteps.length - 1);
   }, [visibleSteps, visibleStepCursor]);
+
+  const currentStep = visibleSteps[clampedCursor] ?? 0;
+
+  // Sync state to the clamped value so next/back still work correctly
+  useEffect(() => {
+    if (clampedCursor !== visibleStepCursor) {
+      setVisibleStepCursor(clampedCursor);
+    }
+  }, [clampedCursor, visibleStepCursor]);
 
   const getPluginType = useCallback(
     (plugin: FomodPluginOut): PluginTypeString => {
@@ -159,22 +164,22 @@ export function useFomodWizard(gameName: string, archiveFilename: string) {
     });
   }, [config, currentStep, selections]);
 
-  const isFirstStep = visibleStepCursor === 0;
+  const isFirstStep = clampedCursor === 0;
   const isLastStep =
-    visibleSteps.length === 0 || visibleStepCursor >= visibleSteps.length - 1;
+    visibleSteps.length > 0 && clampedCursor >= visibleSteps.length - 1;
   const totalSteps = visibleSteps.length;
 
   const goNext = useCallback(() => {
-    if (visibleStepCursor < visibleSteps.length - 1) {
+    if (clampedCursor < visibleSteps.length - 1) {
       setVisibleStepCursor((c) => c + 1);
     }
-  }, [visibleSteps.length, visibleStepCursor]);
+  }, [visibleSteps.length, clampedCursor]);
 
   const goBack = useCallback(() => {
-    if (visibleStepCursor > 0) {
+    if (clampedCursor > 0) {
       setVisibleStepCursor((c) => c - 1);
     }
-  }, [visibleStepCursor]);
+  }, [clampedCursor]);
 
   const doInstall = useCallback(
     (modName: string) => {
@@ -195,7 +200,7 @@ export function useFomodWizard(gameName: string, archiveFilename: string) {
   return {
     config,
     currentStep,
-    visibleStepCursor,
+    visibleStepCursor: clampedCursor,
     visibleSteps,
     selections,
     flags,

@@ -81,7 +81,7 @@ export function resolvePluginType(
       return pattern.type;
     }
   }
-  return descriptor.default_type as PluginTypeString;
+  return descriptor.default_type;
 }
 
 /**

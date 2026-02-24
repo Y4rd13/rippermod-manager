@@ -40,7 +40,7 @@ export interface FomodTypeDescriptorPattern {
 }
 
 export interface FomodTypeDescriptor {
-  default_type: string;
+  default_type: PluginTypeString;
   patterns: FomodTypeDescriptorPattern[];
 }
 
