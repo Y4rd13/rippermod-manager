@@ -107,7 +107,7 @@ export function SettingsPage() {
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <p className="text-sm text-text-secondary">
-                  Connected with key <span className="font-mono text-xs">{"•".repeat(8)}{currentNexus.slice(-4)}</span>
+                  Connected with key <span className="font-mono text-xs">{"•".repeat(8)}{currentNexus.length >= 4 ? currentNexus.slice(-4) : "••••"}</span>
                 </p>
               </div>
               <Button
