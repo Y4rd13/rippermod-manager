@@ -14,9 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci-backend.yml"><img src="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci-backend.yml/badge.svg" alt="Backend" /></a>
-  <a href="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci-frontend.yml"><img src="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci-frontend.yml/badge.svg" alt="Frontend" /></a>
-  <a href="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci-tauri.yml"><img src="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci-tauri.yml/badge.svg" alt="Tauri Build" /></a>
+  <a href="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci.yml"><img src="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/Y4rd13/rippermod-manager" alt="License" /></a>
 </p>
 
@@ -132,12 +130,11 @@ rippermod-manager/
 │   ├── build-backend.ps1            # PyInstaller build + sidecar copy
 │   └── ensure-dev-sidecar.ps1       # Dev placeholder for Tauri compile
 ├── .github/workflows/
-│   ├── ci-backend.yml               # Python lint + tests (path-filtered)
-│   ├── ci-frontend.yml              # TypeScript lint + build (path-filtered)
-│   ├── ci-tauri.yml                 # Windows Tauri build (path-filtered)
+│   ├── ci.yml                       # Consolidated CI (backend, frontend, Tauri + gate)
 │   ├── release.yml                  # Tag-triggered release pipeline
 │   ├── claude.yml                   # Claude Code interactive (@claude)
-│   └── claude-pr-review.yml         # Automated PR review
+│   ├── claude-pr-review.yml         # Automated PR review
+│   └── cla.yml                      # Contributor License Agreement check
 ├── CLAUDE.md                        # AI assistant project context
 ├── CLA.md                           # Contributor License Agreement
 └── LICENSE                          # GPL-3.0
