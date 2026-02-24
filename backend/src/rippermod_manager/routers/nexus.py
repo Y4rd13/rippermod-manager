@@ -213,6 +213,18 @@ async def sso_poll(session_uuid: str, session: Session = Depends(get_session)) -
         else:
             setting = AppSetting(key="nexus_api_key", value=sso.api_key)
             session.add(setting)
+
+        if sso.result and sso.result.username:
+            for k, v in [
+                ("nexus_username", sso.result.username),
+                ("nexus_is_premium", str(sso.result.is_premium).lower()),
+            ]:
+                row = session.exec(select(AppSetting).where(AppSetting.key == k)).first()
+                if row:
+                    row.value = v
+                else:
+                    session.add(AppSetting(key=k, value=v))
+
         session.commit()
         sso.result_persisted = True
 

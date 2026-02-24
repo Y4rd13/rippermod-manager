@@ -29,7 +29,7 @@ _CONCURRENCY = 5
 _MAX_SEARCHES = 30
 _SEARCH_TIMEOUT = 180  # seconds
 _MODEL = "gpt-5-mini"
-_MAX_OUTPUT_TOKENS = 1024
+_MAX_OUTPUT_TOKENS = 16384
 _NEXUS_MOD_ID_RE = re.compile(r"nexusmods\.com/\w+/mods/(\d+)")
 _JSON_OBJECT_RE = re.compile(r"\{[^{}]*\}", re.DOTALL)
 
@@ -138,6 +138,8 @@ async def ai_search_unmatched_mods(
     session: Session,
     on_progress: ProgressCallback = noop_progress,
     max_searches: int = _MAX_SEARCHES,
+    model: str = _MODEL,
+    reasoning_effort: str = "low",
 ) -> WebSearchResult:
     """Search the web using AI for unmatched mod groups and create correlations."""
     all_groups = session.exec(select(ModGroup).where(ModGroup.game_id == game.id)).all()
@@ -183,11 +185,12 @@ async def ai_search_unmatched_mods(
 
             try:
                 response = await client.responses.create(
-                    model=_MODEL,
+                    model=model,
                     instructions=_SYSTEM_PROMPT,
                     input=user_prompt,
                     tools=[{"type": "web_search"}],
                     text={"format": _RESPONSE_SCHEMA},
+                    reasoning={"effort": reasoning_effort},
                     max_output_tokens=_MAX_OUTPUT_TOKENS,
                 )
 

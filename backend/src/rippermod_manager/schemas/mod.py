@@ -74,6 +74,8 @@ class CorrelationReassign(BaseModel):
 
 class ScanStreamRequest(BaseModel):
     ai_search: bool = False
+    ai_search_model: str | None = None
+    ai_search_effort: str | None = None
 
 
 ModGroupOut.model_rebuild()
