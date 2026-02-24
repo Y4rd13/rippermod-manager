@@ -125,7 +125,7 @@ export function useFomodWizard(gameName: string, archiveFilename: string) {
   }, [config, currentStep, selections]);
 
   const isFirstStep = currentStep === 0;
-  const isLastStep = config ? currentStep === config.steps.length - 1 : true;
+  const isLastStep = config ? currentStep >= config.steps.length - 1 : true;
   const totalSteps = config?.total_steps ?? 0;
 
   const goNext = useCallback(() => {
@@ -152,7 +152,8 @@ export function useFomodWizard(gameName: string, archiveFilename: string) {
         },
       });
     },
-    [config, gameName, archiveFilename, selections, installMutation],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [config, gameName, archiveFilename, selections],
   );
 
   return {

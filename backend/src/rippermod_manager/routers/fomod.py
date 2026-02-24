@@ -143,7 +143,7 @@ def _config_to_out(config: FomodConfig) -> FomodConfigOut:
 
 
 @router.get("/config", response_model=FomodConfigOut)
-async def get_config(
+def get_config(
     game_name: str,
     archive_filename: str,
     session: Session = Depends(get_session),
@@ -154,7 +154,7 @@ async def get_config(
 
 
 @router.post("/preview", response_model=FomodPreviewResult)
-async def preview_files(
+def preview_files(
     game_name: str,
     data: FomodPreviewRequest,
     session: Session = Depends(get_session),
@@ -164,11 +164,13 @@ async def preview_files(
         game_name, data.archive_filename, session
     )
 
-    # Convert string keys from JSON to int keys
-    selections = {
-        int(sk): {int(gk): v for gk, v in gv.items()}
-        for sk, gv in data.selections.items()
-    }
+    try:
+        selections = {
+            int(sk): {int(gk): v for gk, v in gv.items()}
+            for sk, gv in data.selections.items()
+        }
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(422, f"Invalid selection keys: {exc}") from exc
 
     resolved = compute_file_list(config, selections, entries, prefix)
     files = [
@@ -183,35 +185,46 @@ async def preview_files(
 
 
 @router.post("/install", response_model=InstallResult, status_code=201)
-async def install(
+def install(
     game_name: str,
     data: FomodInstallRequest,
     session: Session = Depends(get_session),
 ) -> InstallResult:
     """Install a FOMOD archive with the given selections."""
-    game = get_game_or_404(game_name, session)
-    staging = Path(game.install_path) / "downloaded_mods"
-    archive_path = staging / data.archive_filename
-    if not archive_path.resolve().is_relative_to(staging.resolve()):
-        raise HTTPException(400, "Invalid archive filename")
-    if not archive_path.is_file():
-        raise HTTPException(404, f"Archive not found: {data.archive_filename}")
-
-    # Parse config and compute file list
     config, entries, prefix = _get_fomod_config(
         game_name, data.archive_filename, session
     )
 
-    # Convert string keys from JSON to int keys
-    selections = {
-        int(sk): {int(gk): v for gk, v in gv.items()}
-        for sk, gv in data.selections.items()
-    }
+    # Resolve archive path for install_fomod
+    game = get_game_or_404(game_name, session)
+    staging = Path(game.install_path) / "downloaded_mods"
+    archive_path = staging / data.archive_filename
+
+    try:
+        selections = {
+            int(sk): {int(gk): v for gk, v in gv.items()}
+            for sk, gv in data.selections.items()
+        }
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(422, f"Invalid selection keys: {exc}") from exc
 
     resolved = compute_file_list(config, selections, entries, prefix)
 
+    # Extract nexus_mod_id from archive metadata
+    nexus_mod_id: int | None = None
     try:
-        result = install_fomod(game, archive_path, session, resolved, data.mod_name)
+        from rippermod_manager.services.fomod_parser import inspect_archive
+
+        metadata = inspect_archive(archive_path)
+        if metadata and metadata.nexus_mod_id:
+            nexus_mod_id = metadata.nexus_mod_id
+    except Exception:
+        logger.debug("Could not extract nexus_mod_id from archive", exc_info=True)
+
+    try:
+        result = install_fomod(
+            game, archive_path, session, resolved, data.mod_name, nexus_mod_id
+        )
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     except FileNotFoundError as exc:

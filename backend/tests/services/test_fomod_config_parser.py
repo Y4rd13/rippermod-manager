@@ -143,6 +143,34 @@ class TestOrderAttribute:
         assert config.steps[0].name == "Second"
         assert config.steps[1].name == "First"
 
+    def test_ascending_sorts_alphabetically(self):
+        xml = b"""\
+<?xml version="1.0"?>
+<config>
+  <moduleName>M</moduleName>
+  <installSteps order="Ascending">
+    <installStep name="Zebra">
+      <optionalFileGroups>
+        <group name="G" type="SelectAny"><plugins /></group>
+      </optionalFileGroups>
+    </installStep>
+    <installStep name="Apple">
+      <optionalFileGroups>
+        <group name="G" type="SelectAny"><plugins /></group>
+      </optionalFileGroups>
+    </installStep>
+    <installStep name="Mango">
+      <optionalFileGroups>
+        <group name="G" type="SelectAny"><plugins /></group>
+      </optionalFileGroups>
+    </installStep>
+  </installSteps>
+</config>
+"""
+        config = parse_fomod_config(xml)
+        names = [s.name for s in config.steps]
+        assert names == ["Apple", "Mango", "Zebra"]
+
     def test_explicit_order_preserves_document_order(self):
         xml = b"""\
 <?xml version="1.0"?>

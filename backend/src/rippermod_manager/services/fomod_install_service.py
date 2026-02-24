@@ -290,6 +290,7 @@ def install_fomod(
     session: Session,
     resolved_files: list[ResolvedFile],
     mod_name: str,
+    nexus_mod_id: int | None = None,
 ) -> InstallResult:
     """Extract resolved FOMOD files to the game directory and record ownership.
 
@@ -361,12 +362,8 @@ def install_fomod(
         source_archive=archive_path.name,
     )
 
-    # Enrich with nexus_mod_id from fomod_parser metadata
-    from rippermod_manager.services.fomod_parser import inspect_archive
-
-    metadata = inspect_archive(archive_path)
-    if metadata and metadata.nexus_mod_id:
-        installed.nexus_mod_id = metadata.nexus_mod_id
+    if nexus_mod_id is not None:
+        installed.nexus_mod_id = nexus_mod_id
 
     session.add(installed)
     session.flush()

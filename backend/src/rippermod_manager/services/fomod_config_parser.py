@@ -282,10 +282,12 @@ def _parse_plugin(element) -> FomodPlugin:
     )
 
 
-def _apply_order(items: list, order: str) -> list:
+def _apply_order(items: list, order: str, key_attr: str = "name") -> list:
     """Apply ordering attribute: Explicit (default), Ascending, or Descending."""
+    if order == "Ascending":
+        return sorted(items, key=lambda x: getattr(x, key_attr, "").lower())
     if order == "Descending":
-        return list(reversed(items))
+        return sorted(items, key=lambda x: getattr(x, key_attr, "").lower(), reverse=True)
     return items
 
 

@@ -1,7 +1,6 @@
 """Tests for FOMOD install service (file list computation + extraction)."""
 
 import zipfile
-from unittest.mock import patch
 
 import pytest
 from sqlmodel import Session
@@ -363,10 +362,7 @@ class TestInstallFomod:
             ResolvedFile(archive_path="data.txt", game_relative_path="mods/data.txt", priority=0),
         ]
 
-        with Session(engine) as s, patch(
-            "rippermod_manager.services.fomod_parser.inspect_archive",
-            return_value=None,
-        ):
+        with Session(engine) as s:
             result = install_fomod(game, archive, s, resolved, "TestFomod")
 
         assert result.files_extracted == 1
@@ -387,10 +383,7 @@ class TestInstallFomod:
             ),
         ]
 
-        with Session(engine) as s, patch(
-            "rippermod_manager.services.fomod_parser.inspect_archive",
-            return_value=None,
-        ):
+        with Session(engine) as s:
             result = install_fomod(game, archive, s, resolved, "Evil")
 
         assert result.files_extracted == 0

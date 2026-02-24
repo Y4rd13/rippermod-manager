@@ -319,7 +319,13 @@ export function FomodWizard({ gameName, archiveFilename, onDismiss, onInstallCom
             {wizard.config && `${filesCount} file mapping${filesCount !== 1 ? "s" : ""}`}
           </span>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={onDismiss}>
+            <Button variant="secondary" size="sm" onClick={() => {
+              if (wizard.hasModified) {
+                if (window.confirm("Discard FOMOD selections?")) onDismiss();
+              } else {
+                onDismiss();
+              }
+            }}>
               Cancel
             </Button>
             {!wizard.isFirstStep && (
