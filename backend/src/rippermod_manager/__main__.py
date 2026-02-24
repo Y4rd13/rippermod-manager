@@ -5,11 +5,12 @@ import sys
 import uvicorn
 
 from rippermod_manager.config import settings
+from rippermod_manager.main import app
 
 
 def main() -> None:
     uvicorn.run(
-        "rippermod_manager.main:app",
+        app,
         host=settings.host,
         port=settings.port,
         log_level="info",
