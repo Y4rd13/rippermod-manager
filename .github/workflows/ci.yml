@@ -1,0 +1,159 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      tauri: ${{ steps.filter.outputs.tauri }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'frontend/src/**'
+              - 'frontend/package.json'
+              - 'frontend/package-lock.json'
+              - 'frontend/tsconfig*.json'
+              - 'frontend/vite.config.ts'
+              - 'frontend/eslint.config.js'
+              - '.github/workflows/ci.yml'
+            tauri:
+              - 'frontend/src-tauri/**'
+              - 'frontend/src/**'
+              - 'frontend/package.json'
+              - 'frontend/package-lock.json'
+              - 'frontend/vite.config.ts'
+              - '.github/workflows/ci.yml'
+
+  backend:
+    name: "Backend: Lint & Test"
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.9.x"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Lint
+        run: uv run ruff check src/ tests/
+
+      - name: Format check
+        run: uv run ruff format --check src/ tests/
+
+      - name: Tests
+        run: uv run pytest tests/ -v --tb=short
+
+  frontend:
+    name: "Frontend: Lint & Build"
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  tauri:
+    name: "Tauri: Windows Build"
+    needs: changes
+    if: needs.changes.outputs.tauri == 'true'
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: frontend/src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Create dummy sidecar binary
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path src-tauri\binaries | Out-Null
+          $bytes = [System.IO.File]::ReadAllBytes("$env:windir\System32\where.exe")
+          [System.IO.File]::WriteAllBytes("src-tauri\binaries\rmm-backend-x86_64-pc-windows-msvc.exe", $bytes)
+
+      - name: Build Tauri app (no sidecar)
+        run: npx tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+
+  gate:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [changes, backend, frontend, tauri]
+    steps:
+      - name: Check CI results
+        run: |
+          results=(
+            "${{ needs.changes.result }}"
+            "${{ needs.backend.result }}"
+            "${{ needs.frontend.result }}"
+            "${{ needs.tauri.result }}"
+          )
+          for result in "${results[@]}"; do
+            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
+              echo "::error::CI failed — result: $result"
+              exit 1
+            fi
+          done
+          echo "All CI checks passed or were skipped"
