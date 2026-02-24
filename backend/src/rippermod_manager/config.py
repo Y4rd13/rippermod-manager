@@ -27,7 +27,6 @@ class Settings(BaseSettings):
     data_dir: Path = Path("")
     db_path: Path = Path("")
     chroma_path: Path = Path("")
-    nexus_api_key: str = ""
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
     tavily_api_key: str = ""

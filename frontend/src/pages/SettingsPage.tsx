@@ -56,7 +56,6 @@ export function SettingsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [openaiKey, setOpenaiKey] = useState("");
-  const [nexusKey, setNexusKey] = useState("");
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
 
   useEffect(() => {
@@ -66,17 +65,11 @@ export function SettingsPage() {
   }, [sso.state, qc]);
 
   const handleSave = () => {
-    const updates: Record<string, string> = {};
-    if (openaiKey) updates.openai_api_key = openaiKey;
-    if (nexusKey) updates.nexus_api_key = nexusKey;
-    if (Object.keys(updates).length === 0) return;
-
-    saveSettings.mutate(updates, {
-      onSuccess: () => {
-        setOpenaiKey("");
-        setNexusKey("");
-      },
-    });
+    if (!openaiKey) return;
+    saveSettings.mutate(
+      { openai_api_key: openaiKey },
+      { onSuccess: () => setOpenaiKey("") },
+    );
   };
 
   const currentOpenai = settings.find((s) => s.key === "openai_api_key")?.value;
@@ -99,18 +92,56 @@ export function SettingsPage() {
             value={openaiKey}
             onChange={setOpenaiKey}
           />
+          <Button onClick={handleSave} loading={saveSettings.isPending} disabled={!openaiKey}>
+            Save Changes
+          </Button>
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="text-lg font-semibold text-text-primary mb-4">
+          Nexus Account
+        </h2>
+        {currentNexus ? (
           <div className="space-y-3">
-            <ApiKeyField
-              id="nexus-key"
-              label="Nexus Mods API Key"
-              placeholder="Your Nexus API key"
-              currentValue={currentNexus}
-              value={nexusKey}
-              onChange={setNexusKey}
-            />
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-sm text-text-secondary">
+                  Connected with key <span className="font-mono text-xs">{"•".repeat(8)}{currentNexus.slice(-4)}</span>
+                </p>
+              </div>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => setShowDisconnectConfirm(true)}
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Disconnect
+              </Button>
+            </div>
+            {showDisconnectConfirm && (
+              <ConfirmDialog
+                title="Disconnect Nexus Account"
+                message="This will remove your Nexus API key and return you to the onboarding screen to reconnect. Your games and mods will be preserved."
+                confirmLabel="Disconnect"
+                icon={LogOut}
+                loading={disconnect.isPending}
+                onConfirm={() =>
+                  disconnect.mutate(undefined, {
+                    onSuccess: () => navigate("/onboarding", { replace: true }),
+                  })
+                }
+                onCancel={() => setShowDisconnectConfirm(false)}
+              />
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-text-secondary">
+              Sign in with your Nexus Mods account to sync mod history.
+            </p>
             <Button
               variant="secondary"
-              size="sm"
               onClick={() => sso.startSSO()}
               loading={sso.state === "connecting" || sso.state === "waiting"}
               disabled={sso.state === "connecting" || sso.state === "waiting"}
@@ -139,49 +170,8 @@ export function SettingsPage() {
             )}
             {sso.error && <p className="text-danger text-xs">{sso.error}</p>}
           </div>
-          <Button onClick={handleSave} loading={saveSettings.isPending}>
-            Save Changes
-          </Button>
-        </div>
+        )}
       </Card>
-
-      {currentNexus && (
-        <Card>
-          <h2 className="text-lg font-semibold text-text-primary mb-4">
-            Nexus Account
-          </h2>
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-sm text-text-secondary">
-                Connected with key <span className="font-mono text-xs">{"•".repeat(8)}{currentNexus.slice(-4)}</span>
-              </p>
-            </div>
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => setShowDisconnectConfirm(true)}
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              Disconnect
-            </Button>
-          </div>
-          {showDisconnectConfirm && (
-            <ConfirmDialog
-              title="Disconnect Nexus Account"
-              message="This will remove your Nexus API key and return you to the onboarding screen to reconnect. Your games and mods will be preserved."
-              confirmLabel="Disconnect"
-              icon={LogOut}
-              loading={disconnect.isPending}
-              onConfirm={() =>
-                disconnect.mutate(undefined, {
-                  onSuccess: () => navigate("/onboarding", { replace: true }),
-                })
-              }
-              onCancel={() => setShowDisconnectConfirm(false)}
-            />
-          )}
-        </Card>
-      )}
 
       <Card>
         <h2 className="text-lg font-semibold text-text-primary mb-4">

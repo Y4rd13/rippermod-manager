@@ -47,7 +47,7 @@ class TestOnboardingStatus:
         )
         client.post(
             "/api/v1/onboarding/complete",
-            json={"openai_api_key": "", "nexus_api_key": ""},
+            json={},
         )
         r = client.get("/api/v1/onboarding/status")
         assert r.json()["current_step"] == 4
@@ -58,13 +58,12 @@ class TestCompleteOnboarding:
     def test_stores_keys(self, client):
         r = client.post(
             "/api/v1/onboarding/complete",
-            json={"openai_api_key": "sk-new", "nexus_api_key": "nk-new"},
+            json={"openai_api_key": "sk-new"},
         )
         assert r.status_code == 200
         data = r.json()
         assert data["completed"] is True
         assert data["has_openai_key"] is True
-        assert data["has_nexus_key"] is True
 
     def test_returns_status(self, client):
         r = client.post(

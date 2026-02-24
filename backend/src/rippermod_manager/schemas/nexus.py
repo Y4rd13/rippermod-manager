@@ -3,10 +3,6 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
-class NexusKeyValidation(BaseModel):
-    api_key: str
-
-
 class NexusKeyResult(BaseModel):
     valid: bool
     username: str = ""
