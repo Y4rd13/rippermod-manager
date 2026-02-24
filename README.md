@@ -14,9 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci-backend.yml"><img src="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci-backend.yml/badge.svg" alt="Backend" /></a>
-  <a href="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci-frontend.yml"><img src="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci-frontend.yml/badge.svg" alt="Frontend" /></a>
-  <a href="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci-tauri.yml"><img src="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci-tauri.yml/badge.svg" alt="Tauri Build" /></a>
+  <a href="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci.yml"><img src="https://github.com/Y4rd13/rippermod-manager/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/Y4rd13/rippermod-manager" alt="License" /></a>
 </p>
 
@@ -55,7 +53,7 @@
 | Package Manager | uv (backend), npm (frontend) |
 | Linting | Ruff (Python), ESLint (TypeScript) |
 | Testing | pytest, pytest-asyncio, respx |
-| CI/CD | GitHub Actions (lint, test, Tauri build, release pipeline) |
+| CI/CD | GitHub Actions (consolidated CI gate, automated PR review, release pipeline) |
 
 ## Project Structure
 
@@ -72,6 +70,9 @@ rippermod-manager/
 │   │   │   ├── mod.py               #   ModGroup, ModFile, ModGroupAlias
 │   │   │   ├── nexus.py             #   NexusDownload, NexusModMeta
 │   │   │   ├── correlation.py       #   ModNexusCorrelation
+│   │   │   ├── download.py          #   DownloadJob
+│   │   │   ├── install.py           #   InstalledMod, InstalledFile
+│   │   │   ├── profile.py           #   ModProfile, ProfileEntry
 │   │   │   ├── settings.py          #   AppSetting, PCSpecs
 │   │   │   └── chat.py              #   ChatMessage
 │   │   ├── schemas/                 # Pydantic request/response models
@@ -80,8 +81,10 @@ rippermod-manager/
 │   │   │   ├── mods.py              #   List, scan, correlate mods
 │   │   │   ├── nexus.py             #   Validate, connect, sync Nexus
 │   │   │   ├── install.py           #   Install, uninstall, toggle mods
+│   │   │   ├── fomod.py             #   FOMOD installer wizard
 │   │   │   ├── downloads.py         #   Download mods from Nexus
 │   │   │   ├── profiles.py          #   Save, load, export/import profiles
+│   │   │   ├── trending.py          #   Trending mods from Nexus
 │   │   │   ├── updates.py           #   Version diff + update check
 │   │   │   ├── settings.py          #   App settings + PC specs
 │   │   │   ├── onboarding.py        #   Onboarding status + completion
@@ -94,14 +97,24 @@ rippermod-manager/
 │   │   ├── nexus/client.py          # Async Nexus Mods API client
 │   │   ├── services/
 │   │   │   ├── nexus_sync.py        # Sync tracked/endorsed mods
-│   │   │   └── download_service.py  # Download orchestration + shutdown
+│   │   │   ├── download_service.py  # Download orchestration + shutdown
+│   │   │   ├── install_service.py   # Mod install/uninstall/toggle logic
+│   │   │   ├── fomod_config_parser.py # FOMOD XML config parser
+│   │   │   ├── fomod_install_service.py # FOMOD step-based installation
+│   │   │   ├── profile_service.py   # Profile save/load/export/import
+│   │   │   ├── update_service.py    # Version comparison + update check
+│   │   │   ├── conflict_service.py  # File conflict detection
+│   │   │   ├── trending_service.py  # Trending mods fetching
+│   │   │   ├── ai_search_matcher.py # AI-powered mod matching
+│   │   │   ├── web_search_matcher.py # Web search fallback matching
+│   │   │   └── ...                  # 22 services total
 │   │   ├── vector/
 │   │   │   ├── store.py             # ChromaDB client + collections
 │   │   │   ├── indexer.py           # Index mods/nexus/correlations
 │   │   │   └── search.py            # Semantic search queries
 │   │   └── agents/orchestrator.py   # LangChain agent + tools
 │   ├── rmm-backend.spec            # PyInstaller spec (--onefile)
-│   └── tests/                       # 305 pytest tests
+│   └── tests/                       # 480+ pytest tests across 32 files
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
@@ -110,9 +123,10 @@ rippermod-manager/
 │   │   │   ├── chat/                 #   ChatPanel
 │   │   │   ├── layout/              #   Sidebar, Titlebar
 │   │   │   ├── mods/                #   NexusModCard, NexusMatchedGrid,
-│   │   │   │                        #   NexusAccountGrid, InstalledModsTable,
-│   │   │   │                        #   ArchivesList, ProfileManager,
-│   │   │   │                        #   ConflictDialog, ModsTable
+│   │   │   │                        #   InstalledModsTable, ArchivesList,
+│   │   │   │                        #   ProfileManager, FomodWizard,
+│   │   │   │                        #   TrendingGrid, UpdatesTable,
+│   │   │   │                        #   ConflictDialog (20 components)
 │   │   │   └── ui/                  #   Badge, Button, Card, Input, Toast
 │   │   ├── pages/
 │   │   │   ├── DashboardPage.tsx
@@ -121,7 +135,7 @@ rippermod-manager/
 │   │   │   ├── SettingsPage.tsx
 │   │   │   ├── UpdatesPage.tsx
 │   │   │   └── OnboardingPage.tsx
-│   │   ├── hooks/                   # React Query hooks + useInstallFlow
+│   │   ├── hooks/                   # React Query, useInstallFlow, useFomodWizard (10 hooks)
 │   │   ├── stores/                  # Zustand stores
 │   │   ├── lib/                     # API client, SSE parser, utils
 │   │   ├── router/                  # Routes + OnboardingGuard
@@ -132,12 +146,11 @@ rippermod-manager/
 │   ├── build-backend.ps1            # PyInstaller build + sidecar copy
 │   └── ensure-dev-sidecar.ps1       # Dev placeholder for Tauri compile
 ├── .github/workflows/
-│   ├── ci-backend.yml               # Python lint + tests (path-filtered)
-│   ├── ci-frontend.yml              # TypeScript lint + build (path-filtered)
-│   ├── ci-tauri.yml                 # Windows Tauri build (path-filtered)
+│   ├── ci.yml                       # Consolidated CI (backend, frontend, Tauri + gate)
 │   ├── release.yml                  # Tag-triggered release pipeline
 │   ├── claude.yml                   # Claude Code interactive (@claude)
-│   └── claude-pr-review.yml         # Automated PR review
+│   ├── claude-pr-review.yml         # Automated PR review
+│   └── cla.yml                      # Contributor License Agreement check
 ├── CLAUDE.md                        # AI assistant project context
 ├── CLA.md                           # Contributor License Agreement
 └── LICENSE                          # GPL-3.0
@@ -360,7 +373,7 @@ All endpoints are prefixed with `/api/v1/`.
 
 ### Testing
 
-The backend has a comprehensive test suite with 305 tests across 25 test files covering all modules:
+The backend has a comprehensive test suite with 480+ tests across 32 test files covering all modules:
 
 ```bash
 cd backend
@@ -389,7 +402,7 @@ Tests use an in-memory SQLite database and patched ChromaDB for full isolation. 
 │    FastAPI Backend (PyInstaller sidecar .exe)     │
 │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐  │
 │  │ Routers  │ │ Scanner  │ │   Chat Agent     │  │
-│  │(11 APIs) │ │ Grouper  │ │ (LangChain+OAI)  │  │
+│  │(14 APIs) │ │ Grouper  │ │ (LangChain+OAI)  │  │
 │  │          │ │Correlator│ │   7 tools        │  │
 │  └────┬─────┘ └────┬─────┘ └───────┬──────────┘  │
 │       │             │               │             │
@@ -426,9 +439,9 @@ In production, the app ships as a single Windows installer (NSIS):
 3. Make your changes following the code style in [CLAUDE.md](CLAUDE.md)
 4. Run tests (`cd backend && uv run pytest -v`)
 5. Commit using [conventional commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `refactor:`, etc.)
-6. Open a Pull Request
+6. Open a Pull Request — CI Gate must pass and an automated review is required before merge
 
-All contributors must agree to the [Contributor License Agreement](CLA.md) before their PR can be merged.
+All contributors must agree to the [Contributor License Agreement](CLA.md) before their PR can be merged. The `main` branch is protected: direct pushes, force pushes, and deletions are blocked.
 
 ## License
 
