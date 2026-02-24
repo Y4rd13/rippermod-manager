@@ -19,7 +19,7 @@ import { Link, useParams } from "react-router";
 
 import { ArchivesList } from "@/components/mods/ArchivesList";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
-import { FomodDialog } from "@/components/mods/FomodDialog";
+import { FomodWizard } from "@/components/mods/FomodWizard";
 import { InstalledModsTable } from "@/components/mods/InstalledModsTable";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { ModDetailModal } from "@/components/mods/ModDetailModal";
@@ -582,7 +582,12 @@ export function GameDetailPage() {
       })()}
 
       {modalFlow.fomodArchive && (
-        <FomodDialog archiveFilename={modalFlow.fomodArchive} onDismiss={modalFlow.dismissFomod} />
+        <FomodWizard
+          gameName={name}
+          archiveFilename={modalFlow.fomodArchive}
+          onDismiss={modalFlow.dismissFomod}
+          onInstallComplete={modalFlow.dismissFomod}
+        />
       )}
 
       {modalFlow.conflicts && (

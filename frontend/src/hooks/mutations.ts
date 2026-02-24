@@ -36,6 +36,12 @@ import type {
   UninstallResult,
   UpdateCheckResult,
 } from "@/types/api";
+import type {
+  FomodConfigOut,
+  FomodInstallRequest,
+  FomodPreviewRequest,
+  FomodPreviewResult,
+} from "@/types/fomod";
 
 export function useCreateGame() {
   const qc = useQueryClient();
@@ -483,5 +489,41 @@ export function useReassignCorrelation() {
       toast.success("Match reassigned");
     },
     onError: () => toast.error("Failed to reassign match"),
+  });
+}
+
+export function useFomodConfig() {
+  return useMutation<FomodConfigOut, Error, { gameName: string; archiveFilename: string }>({
+    mutationFn: ({ gameName, archiveFilename }) =>
+      api.get(
+        `/api/v1/games/${gameName}/install/fomod/config?archive_filename=${encodeURIComponent(archiveFilename)}`,
+      ),
+  });
+}
+
+export function useFomodInstall() {
+  const qc = useQueryClient();
+  return useMutation<InstallResult, Error, { gameName: string; data: FomodInstallRequest }>({
+    mutationFn: ({ gameName, data }) =>
+      api.post(`/api/v1/games/${gameName}/install/fomod/install`, data),
+    onSuccess: (result, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
+      toast.success("Mod installed", `${result.files_extracted} files extracted`);
+      if (result.files_overwritten > 0) {
+        toast.warning(
+          "Files overwritten",
+          `${result.files_overwritten} existing file${result.files_overwritten === 1 ? " was" : "s were"} replaced`,
+        );
+      }
+    },
+    onError: () => toast.error("FOMOD installation failed"),
+  });
+}
+
+export function useFomodPreview() {
+  return useMutation<FomodPreviewResult, Error, { gameName: string; data: FomodPreviewRequest }>({
+    mutationFn: ({ gameName, data }) =>
+      api.post(`/api/v1/games/${gameName}/install/fomod/preview`, data),
   });
 }

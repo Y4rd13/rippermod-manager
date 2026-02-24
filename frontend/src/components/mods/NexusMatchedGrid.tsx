@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "@/stores/toast-store";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
-import { FomodDialog } from "@/components/mods/FomodDialog";
+import { FomodWizard } from "@/components/mods/FomodWizard";
 import { CorrelationActions } from "@/components/mods/CorrelationActions";
 import { ReassignDialog } from "@/components/mods/ReassignDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
@@ -347,7 +347,7 @@ export function NexusMatchedGrid({
       />
 
       {flow.fomodArchive && (
-        <FomodDialog archiveFilename={flow.fomodArchive} onDismiss={flow.dismissFomod} />
+        <FomodWizard gameName={gameName} archiveFilename={flow.fomodArchive} onDismiss={flow.dismissFomod} onInstallComplete={flow.dismissFomod} />
       )}
 
       {flow.conflicts && (
