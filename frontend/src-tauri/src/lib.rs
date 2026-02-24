@@ -426,19 +426,22 @@ pub fn run() {
         .manage(Mutex::new(BackendProcess { child: None }))
         .invoke_handler(tauri::generate_handler![detect_game_paths, launch_game])
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log::LevelFilter::Info)
+                    .build(),
+            )?;
 
             // In release builds, spawn the backend sidecar
             if !cfg!(debug_assertions) {
+                let handle = app.handle().clone();
                 if let Err(e) = spawn_sidecar(app.handle()) {
                     log::error!("Failed to spawn backend sidecar: {}", e);
-                    let _ = app.handle().emit("backend-startup-failed", ());
+                    // Delay emission so frontend listeners have time to register
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_secs(2));
+                        let _ = handle.emit("backend-startup-failed", ());
+                    });
                 }
             }
 
