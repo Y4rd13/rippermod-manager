@@ -128,6 +128,8 @@ def scan_mods(game_name: str, session: Session = Depends(get_session)) -> ScanRe
 @router.post("/scan-stream")
 def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> StreamingResponse:
     use_ai_search = body.ai_search if body else False
+    req_ai_model = body.ai_search_model if body else None
+    req_ai_effort = body.ai_search_effort if body else None
     q: queue.Queue[dict | None] = queue.Queue()
 
     def on_progress(phase: str, message: str, percent: int) -> None:
@@ -160,6 +162,8 @@ def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> S
                 )
 
                 openai_key = get_setting(session, "openai_api_key") if use_ai_search else None
+                ai_model = req_ai_model or get_setting(session, "ai_search_model") or "gpt-5-mini"
+                ai_effort = req_ai_effort or get_setting(session, "ai_search_effort") or "low"
 
                 # Phase 1: Scan files + group (0-83%)
                 scan_game_mods(game, session, on_progress=on_progress)
@@ -228,7 +232,13 @@ def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> S
 
                         on_progress("ai-search", "AI searching unmatched mods...", 99)
                         await ai_search_unmatched_mods(
-                            game, openai_key, api_key, session, on_progress
+                            game,
+                            openai_key,
+                            api_key,
+                            session,
+                            on_progress,
+                            model=ai_model,
+                            reasoning_effort=ai_effort,
                         )
                     elif api_key and tavily_key:
                         try:

@@ -35,8 +35,9 @@ export function Sidebar() {
         <div className="flex items-center gap-2 min-w-0">
           <img src="/app-icon.png" alt="RipperMod" className="h-6 w-6 shrink-0" />
           {!sidebarCollapsed && (
-            <span className="text-sm font-semibold text-text-primary truncate">
-              Mod Manager
+            <span className="leading-tight min-w-0">
+              <span className="block text-sm font-semibold text-text-primary">RipperMod</span>
+              <span className="block text-[10px] font-medium text-text-muted uppercase tracking-wider">Manager</span>
             </span>
           )}
         </div>
