@@ -82,7 +82,7 @@ export function VirtualCardGrid<T>({
               left: 0,
               width: "100%",
               transform: `translateY(${virtualRow.start - virtualizer.options.scrollMargin}px)`,
-              gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+              gridTemplateColumns: `repeat(${columnCount}, minmax(200px, 1fr))`,
             }}
           >
             {row.map((item, colIndex) => {
