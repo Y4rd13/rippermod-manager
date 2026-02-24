@@ -96,3 +96,5 @@ export interface FomodPreviewResult {
   files: FomodPreviewFile[];
   total_files: number;
 }
+
+export type FomodSelections = Record<number, Record<number, number[]>>;

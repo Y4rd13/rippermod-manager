@@ -1,13 +1,13 @@
 import type {
   FomodCompositeDependency,
   FomodConfigOut,
+  FomodSelections,
   FomodStepOut,
   FomodTypeDescriptor,
   PluginTypeString,
 } from "@/types/fomod";
 
 export type FlagState = Record<string, string>;
-type Selections = Record<number, Record<number, number[]>>;
 
 /**
  * Recursively evaluate a composite dependency against flag state.
@@ -91,7 +91,7 @@ export function resolvePluginType(
  */
 export function computeFlags(
   config: FomodConfigOut,
-  selections: Selections,
+  selections: FomodSelections,
   installedFiles?: Set<string>,
 ): FlagState {
   const flags: FlagState = {};

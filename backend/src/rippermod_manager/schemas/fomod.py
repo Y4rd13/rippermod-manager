@@ -38,14 +38,16 @@ class FomodCompositeDependency(BaseModel):
 
 FomodCompositeDependency.model_rebuild()
 
+PluginTypeLiteral = Literal["Required", "Recommended", "Optional", "NotUsable", "CouldBeUsable"]
+
 
 class FomodTypeDescriptorPattern(BaseModel):
     dependency: FomodCompositeDependency
-    type: str
+    type: PluginTypeLiteral
 
 
 class FomodTypeDescriptor(BaseModel):
-    default_type: str
+    default_type: PluginTypeLiteral
     patterns: list[FomodTypeDescriptorPattern] = []
 
 

@@ -10,13 +10,12 @@ import type {
   FomodConfigOut,
   FomodGroupOut,
   FomodPluginOut,
+  FomodSelections,
   PluginTypeString,
 } from "@/types/fomod";
 
-type Selections = Record<number, Record<number, number[]>>;
-
-function initializeDefaults(config: FomodConfigOut): Selections {
-  const selections: Selections = {};
+function initializeDefaults(config: FomodConfigOut): FomodSelections {
+  const selections: FomodSelections = {};
 
   for (let stepIdx = 0; stepIdx < config.steps.length; stepIdx++) {
     const step = config.steps[stepIdx];
@@ -67,7 +66,7 @@ function validateGroup(group: FomodGroupOut, selected: number[]): boolean {
 export function useFomodWizard(gameName: string, archiveFilename: string) {
   const [config, setConfig] = useState<FomodConfigOut | null>(null);
   const [visibleStepCursor, setVisibleStepCursor] = useState(0);
-  const [selections, setSelections] = useState<Selections>({});
+  const [selections, setSelections] = useState<FomodSelections>({});
   const [hasModified, setHasModified] = useState(false);
 
   const fetchConfig = useFomodConfig();
