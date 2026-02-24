@@ -409,12 +409,15 @@ fn kill_sidecar(app: &tauri::AppHandle) {
     }
 
     // Then drop the CommandChild handle
-    {
-        let state = app.state::<Mutex<BackendProcess>>();
-        if let Ok(mut bp) = state.lock() {
+    let state = app.state::<Mutex<BackendProcess>>();
+    match state.lock() {
+        Ok(mut bp) => {
             let _ = bp.child.take();
         }
-    } // MutexGuard dropped before `state`
+        Err(e) => {
+            log::error!("Failed to lock BackendProcess for cleanup: {}", e);
+        }
+    }; // Semicolon ensures MutexGuard drops before `state`
 }
 
 fn kill_process_tree(pid: u32) {
