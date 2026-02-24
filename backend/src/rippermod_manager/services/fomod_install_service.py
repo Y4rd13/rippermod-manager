@@ -40,6 +40,7 @@ class ResolvedFile:
 # Dependency evaluation
 # ---------------------------------------------------------------------------
 
+
 def evaluate_dependency(
     dependency: CompositeDependency,
     flags: dict[str, str],
@@ -85,6 +86,7 @@ def is_step_visible(
 # File expansion
 # ---------------------------------------------------------------------------
 
+
 def _build_entry_map(
     archive_entries: list[ArchiveEntry],
     fomod_prefix: str,
@@ -100,7 +102,7 @@ def _build_entry_map(
         normalised = entry.filename.replace("\\", "/")
         lower = normalised.lower()
         if prefix_with_slash and lower.startswith(prefix_with_slash):
-            relative = normalised[len(prefix_with_slash):]
+            relative = normalised[len(prefix_with_slash) :]
         elif not prefix_with_slash:
             relative = normalised
         else:
@@ -124,7 +126,7 @@ def expand_folder_mapping(
         if not source_prefix and source_lower:
             continue
 
-        sub_path = relative_lower[len(source_prefix):] if source_prefix else relative_lower
+        sub_path = relative_lower[len(source_prefix) :] if source_prefix else relative_lower
         game_path = f"{mapping.destination}/{sub_path}" if mapping.destination else sub_path
 
         results.append(
@@ -204,6 +206,7 @@ def _expand_mappings(
 # File list computation
 # ---------------------------------------------------------------------------
 
+
 def compute_file_list(
     config: FomodConfig,
     selections: dict[int, dict[int, list[int]]],
@@ -227,9 +230,7 @@ def compute_file_list(
     flags: dict[str, str] = {}
 
     # 1. Required install files (always installed)
-    expanded, doc_order = _expand_mappings(
-        config.required_install_files, entry_map, doc_order
-    )
+    expanded, doc_order = _expand_mappings(config.required_install_files, entry_map, doc_order)
     all_files.extend(expanded)
 
     # 2. Process each visible step
@@ -248,9 +249,7 @@ def compute_file_list(
                 plugin = group.plugins[plugin_idx]
 
                 # Add plugin files
-                expanded, doc_order = _expand_mappings(
-                    plugin.files, entry_map, doc_order
-                )
+                expanded, doc_order = _expand_mappings(plugin.files, entry_map, doc_order)
                 all_files.extend(expanded)
 
                 # Accumulate condition flags
@@ -260,9 +259,7 @@ def compute_file_list(
     # 3. Evaluate conditional file installs
     for pattern in config.conditional_file_installs:
         if evaluate_dependency(pattern.dependency, flags):
-            expanded, doc_order = _expand_mappings(
-                pattern.files, entry_map, doc_order
-            )
+            expanded, doc_order = _expand_mappings(pattern.files, entry_map, doc_order)
             all_files.extend(expanded)
 
     # 4. Priority resolution: higher priority wins, equal priority -> later doc order wins
@@ -283,6 +280,7 @@ def compute_file_list(
 # ---------------------------------------------------------------------------
 # Installation
 # ---------------------------------------------------------------------------
+
 
 def install_fomod(
     game: Game,

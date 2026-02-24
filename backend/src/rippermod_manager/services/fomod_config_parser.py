@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 # Enums
 # ---------------------------------------------------------------------------
 
+
 class GroupType(StrEnum):
     SELECT_EXACTLY_ONE = "SelectExactlyOne"
     SELECT_AT_MOST_ONE = "SelectAtMostOne"
@@ -50,6 +51,7 @@ class FileState(StrEnum):
 # ---------------------------------------------------------------------------
 # Dataclasses
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class FileMapping:
@@ -133,6 +135,7 @@ class FomodConfig:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _normalise_path(path: str) -> str:
     """Convert backslashes to forward slashes and strip leading/trailing slashes."""
@@ -295,6 +298,7 @@ def _apply_order(items: list, order: str, key_attr: str = "name") -> list:
 # Main parser
 # ---------------------------------------------------------------------------
 
+
 def parse_fomod_config(xml_bytes: bytes) -> FomodConfig:
     """Parse FOMOD ModuleConfig.xml bytes into a FomodConfig dataclass.
 
@@ -374,9 +378,7 @@ def parse_fomod_config(xml_bytes: bytes) -> FomodConfig:
                         raw_plugins = [_parse_plugin(p) for p in plugins_el.findall("plugin")]
                         plugins = _apply_order(raw_plugins, plugins_order)
 
-                    raw_groups.append(
-                        FomodGroup(name=group_name, type=group_type, plugins=plugins)
-                    )
+                    raw_groups.append(FomodGroup(name=group_name, type=group_type, plugins=plugins))
 
                 groups = _apply_order(raw_groups, groups_order)
 

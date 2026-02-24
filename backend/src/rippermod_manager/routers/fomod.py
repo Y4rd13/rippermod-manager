@@ -12,6 +12,7 @@ from sqlmodel import Session
 
 from rippermod_manager.archive.handler import ArchiveEntry, open_archive
 from rippermod_manager.database import get_session
+from rippermod_manager.models.game import Game
 from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.fomod import (
     FomodConfigOut,
@@ -29,6 +30,7 @@ from rippermod_manager.schemas.fomod import (
 from rippermod_manager.schemas.install import InstallResult
 from rippermod_manager.services.fomod_config_parser import FomodConfig, parse_fomod_config
 from rippermod_manager.services.fomod_install_service import compute_file_list, install_fomod
+from rippermod_manager.services.fomod_parser import inspect_archive
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +41,10 @@ def _get_fomod_config(
     game_name: str,
     archive_filename: str,
     session: Session,
-) -> tuple[FomodConfig, list[ArchiveEntry], str]:
+) -> tuple[FomodConfig, list[ArchiveEntry], str, Game, Path]:
     """Validate archive path, find ModuleConfig.xml, parse it.
 
-    Returns (config, archive_entries, fomod_prefix).
+    Returns (config, archive_entries, fomod_prefix, game, archive_path).
     """
     game = get_game_or_404(game_name, session)
     staging = Path(game.install_path) / "downloaded_mods"
@@ -81,7 +83,7 @@ def _get_fomod_config(
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
 
-    return config, entries, fomod_prefix
+    return config, entries, fomod_prefix, game, archive_path
 
 
 def _config_to_out(config: FomodConfig) -> FomodConfigOut:
@@ -149,7 +151,9 @@ def get_config(
     session: Session = Depends(get_session),
 ) -> FomodConfigOut:
     """Parse and return the FOMOD configuration for an archive."""
-    config, _entries, _prefix = _get_fomod_config(game_name, archive_filename, session)
+    config, _entries, _prefix, _game, _path = _get_fomod_config(
+        game_name, archive_filename, session
+    )
     return _config_to_out(config)
 
 
@@ -160,14 +164,13 @@ def preview_files(
     session: Session = Depends(get_session),
 ) -> FomodPreviewResult:
     """Preview the files that would be installed with the given selections."""
-    config, entries, prefix = _get_fomod_config(
+    config, entries, prefix, _game, _path = _get_fomod_config(
         game_name, data.archive_filename, session
     )
 
     try:
         selections = {
-            int(sk): {int(gk): v for gk, v in gv.items()}
-            for sk, gv in data.selections.items()
+            int(sk): {int(gk): v for gk, v in gv.items()} for sk, gv in data.selections.items()
         }
     except (ValueError, TypeError) as exc:
         raise HTTPException(422, f"Invalid selection keys: {exc}") from exc
@@ -191,19 +194,13 @@ def install(
     session: Session = Depends(get_session),
 ) -> InstallResult:
     """Install a FOMOD archive with the given selections."""
-    config, entries, prefix = _get_fomod_config(
+    config, entries, prefix, game, archive_path = _get_fomod_config(
         game_name, data.archive_filename, session
     )
 
-    # Resolve archive path for install_fomod
-    game = get_game_or_404(game_name, session)
-    staging = Path(game.install_path) / "downloaded_mods"
-    archive_path = staging / data.archive_filename
-
     try:
         selections = {
-            int(sk): {int(gk): v for gk, v in gv.items()}
-            for sk, gv in data.selections.items()
+            int(sk): {int(gk): v for gk, v in gv.items()} for sk, gv in data.selections.items()
         }
     except (ValueError, TypeError) as exc:
         raise HTTPException(422, f"Invalid selection keys: {exc}") from exc
@@ -213,18 +210,14 @@ def install(
     # Extract nexus_mod_id from archive metadata
     nexus_mod_id: int | None = None
     try:
-        from rippermod_manager.services.fomod_parser import inspect_archive
-
         metadata = inspect_archive(archive_path)
         if metadata and metadata.nexus_mod_id:
             nexus_mod_id = metadata.nexus_mod_id
-    except Exception:
+    except (FileNotFoundError, ValueError, OSError):
         logger.debug("Could not extract nexus_mod_id from archive", exc_info=True)
 
     try:
-        result = install_fomod(
-            game, archive_path, session, resolved, data.mod_name, nexus_mod_id
-        )
+        result = install_fomod(game, archive_path, session, resolved, data.mod_name, nexus_mod_id)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     except FileNotFoundError as exc:
