@@ -2,7 +2,7 @@ import { Archive, Check, Copy, Download, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
-import { FomodDialog } from "@/components/mods/FomodDialog";
+import { FomodWizard } from "@/components/mods/FomodWizard";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { BulkActionBar } from "@/components/ui/BulkActionBar";
@@ -493,9 +493,11 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
       )}
 
       {fomodArchive && (
-        <FomodDialog
+        <FomodWizard
+          gameName={gameName}
           archiveFilename={fomodArchive}
           onDismiss={() => setFomodArchive(null)}
+          onInstallComplete={() => setFomodArchive(null)}
         />
       )}
 

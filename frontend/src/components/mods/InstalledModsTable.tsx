@@ -11,7 +11,7 @@ import { useMemo, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
-import { FomodDialog } from "@/components/mods/FomodDialog";
+import { FomodWizard } from "@/components/mods/FomodWizard";
 import { CorrelationActions } from "@/components/mods/CorrelationActions";
 import { InstalledModCardAction } from "@/components/mods/InstalledModCardAction";
 import { ModCardAction } from "@/components/mods/ModCardAction";
@@ -521,7 +521,7 @@ function RecognizedModsGrid({
       </BulkActionBar>
 
       {flow.fomodArchive && (
-        <FomodDialog archiveFilename={flow.fomodArchive} onDismiss={flow.dismissFomod} />
+        <FomodWizard gameName={gameName} archiveFilename={flow.fomodArchive} onDismiss={flow.dismissFomod} onInstallComplete={flow.dismissFomod} />
       )}
 
       {flow.conflicts && (

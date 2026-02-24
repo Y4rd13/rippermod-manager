@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
-import { FomodDialog } from "@/components/mods/FomodDialog";
+import { FomodWizard } from "@/components/mods/FomodWizard";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge } from "@/components/ui/Badge";
@@ -261,7 +261,7 @@ export function NexusAccountGrid({
       />
 
       {flow.fomodArchive && (
-        <FomodDialog archiveFilename={flow.fomodArchive} onDismiss={flow.dismissFomod} />
+        <FomodWizard gameName={gameName} archiveFilename={flow.fomodArchive} onDismiss={flow.dismissFomod} onInstallComplete={flow.dismissFomod} />
       )}
 
       {flow.conflicts && (
