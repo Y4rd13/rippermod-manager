@@ -13,7 +13,7 @@ def _default_data_dir() -> Path:
         base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
     else:
         base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    return base / "RipperModManager"
+    return base / "com.rippermod.app"
 
 
 class Settings(BaseSettings):
