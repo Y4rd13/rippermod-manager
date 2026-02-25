@@ -27,8 +27,9 @@ backend/build/
 .env
 *.env.local
 
-# Docs (local strategy notes)
+# Docs (local strategy notes, except publishable files)
 docs/
+!docs/nexus-description.bbcode
 
 # Temp
 temp/
