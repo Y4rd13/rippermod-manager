@@ -10,8 +10,12 @@ import {
   MessageSquare,
   RefreshCw,
   Search,
+  ChevronsLeft,
+  ChevronsRight,
   Send,
   Sparkles,
+  Square,
+  Trash2,
   X,
 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
@@ -88,10 +92,37 @@ const DEFAULT_TOOL_CONFIG: ToolConfig = {
   spin: false,
 };
 
-function ToolCallCard({ tc }: { tc: ToolCallInfo }) {
-  const config = TOOL_CONFIG[tc.name] ?? DEFAULT_TOOL_CONFIG;
+interface GroupedToolCall {
+  name: string;
+  count: number;
+  running: number;
+  done: number;
+}
+
+function groupToolCalls(calls: ToolCallInfo[]): GroupedToolCall[] {
+  const map = new Map<string, GroupedToolCall>();
+  for (const tc of calls) {
+    const existing = map.get(tc.name);
+    if (existing) {
+      existing.count++;
+      if (tc.status === "running") existing.running++;
+      else existing.done++;
+    } else {
+      map.set(tc.name, {
+        name: tc.name,
+        count: 1,
+        running: tc.status === "running" ? 1 : 0,
+        done: tc.status === "done" ? 1 : 0,
+      });
+    }
+  }
+  return Array.from(map.values());
+}
+
+function ToolCallCard({ group }: { group: GroupedToolCall }) {
+  const config = TOOL_CONFIG[group.name] ?? DEFAULT_TOOL_CONFIG;
   const Icon = config.icon;
-  const isRunning = tc.status === "running";
+  const isRunning = group.running > 0;
 
   return (
     <div className="flex items-center gap-2 rounded-md border border-border/50 bg-surface-3/50 px-2.5 py-1.5 text-xs animate-fade-in">
@@ -103,6 +134,11 @@ function ToolCallCard({ tc }: { tc: ToolCallInfo }) {
         )}
       />
       <span className="flex-1 text-text-secondary">{config.label}</span>
+      {group.count > 1 && (
+        <span className="rounded-full bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
+          {isRunning ? `${group.done}/${group.count}` : `×${group.count}`}
+        </span>
+      )}
       {isRunning ? (
         <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
       ) : (
@@ -167,8 +203,8 @@ const ChatMessage = memo(function ChatMessage({ msg }: { msg: ChatMsg }) {
       >
         {msg.toolCalls && msg.toolCalls.length > 0 && (
           <div className="flex flex-col gap-1.5 mb-2">
-            {msg.toolCalls.map((tc, i) => (
-              <ToolCallCard key={`${tc.name}-${i}`} tc={tc} />
+            {groupToolCalls(msg.toolCalls).map((group) => (
+              <ToolCallCard key={group.name} group={group} />
             ))}
           </div>
         )}
@@ -212,12 +248,17 @@ export function ChatPanel() {
   const setThinking = useChatStore((s) => s.setThinking);
   const setReasoningEffort = useChatStore((s) => s.setReasoningEffort);
   const setSuggestedActions = useChatStore((s) => s.setSuggestedActions);
+  const clearMessages = useChatStore((s) => s.clearMessages);
 
   const hasOpenaiKey = useHasOpenaiKey();
 
   const [input, setInput] = useState("");
+  const [panelWidth, setPanelWidth] = useState(384);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const isResizing = useRef(false);
+  const widthBeforeCollapse = useRef(384);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -227,6 +268,45 @@ export function ChatPanel() {
     return () => {
       abortRef.current?.abort();
     };
+  }, []);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    const startX = e.clientX;
+    const startW = panelWidth;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const delta = startX - ev.clientX;
+      const clamped = Math.min(Math.max(startW + delta, 320), 800);
+      setPanelWidth(clamped);
+    };
+
+    const onMouseUp = () => {
+      isResizing.current = false;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }, [panelWidth]);
+
+  const toggleCollapse = useCallback(() => {
+    setIsCollapsed((prev) => {
+      if (!prev) widthBeforeCollapse.current = panelWidth;
+      else setPanelWidth(widthBeforeCollapse.current);
+      return !prev;
+    });
+  }, [panelWidth]);
+
+  const handleStop = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
   }, []);
 
   const handleSend = useCallback(async (text?: string) => {
@@ -306,8 +386,32 @@ export function ChatPanel() {
 
   if (!chatPanelOpen || !hasOpenaiKey) return null;
 
+  if (isCollapsed) {
+    return (
+      <div className="fixed right-0 top-9 bottom-0 w-10 flex flex-col items-center border-l border-border bg-surface-1 z-40 shadow-xl py-3 gap-2">
+        <button
+          onClick={toggleCollapse}
+          aria-label="Expand chat"
+          className="rounded-md p-1 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"
+        >
+          <ChevronsLeft size={16} />
+        </button>
+        <MessageSquare size={16} className="text-accent" />
+      </div>
+    );
+  }
+
   return (
-    <div className="fixed right-0 top-9 bottom-0 w-full sm:w-96 flex flex-col border-l border-border bg-surface-1 z-40 shadow-xl">
+    <div
+      className="fixed right-0 top-9 bottom-0 flex flex-col border-l border-border bg-surface-1 z-40 shadow-xl transition-[width] duration-150"
+      style={{ width: `min(100vw, ${panelWidth}px)` }}
+    >
+      {/* Drag resize handle */}
+      <div
+        onMouseDown={handleResizeStart}
+        className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-accent/30 active:bg-accent/50 transition-colors z-10"
+      />
+
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
           <MessageSquare size={16} className="text-accent" />
@@ -315,13 +419,32 @@ export function ChatPanel() {
             Chat Assistant
           </span>
         </div>
-        <button
-          onClick={() => setChatPanelOpen(false)}
-          aria-label="Close chat"
-          className="rounded-md p-1 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"
-        >
-          <X size={16} />
-        </button>
+        <div className="flex items-center gap-1">
+          {messages.length > 0 && (
+            <button
+              onClick={clearMessages}
+              disabled={isStreaming}
+              aria-label="Clear messages"
+              className="rounded-md p-1 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors disabled:opacity-50"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
+          <button
+            onClick={toggleCollapse}
+            aria-label="Collapse chat"
+            className="rounded-md p-1 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"
+          >
+            <ChevronsRight size={16} />
+          </button>
+          <button
+            onClick={() => setChatPanelOpen(false)}
+            aria-label="Close chat"
+            className="rounded-md p-1 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-2">
@@ -389,14 +512,26 @@ export function ChatPanel() {
               ))}
             </select>
           </div>
-          <Button
-            type="submit"
-            size="sm"
-            disabled={!input.trim() || isStreaming}
-            aria-label="Send message"
-          >
-            <Send size={14} />
-          </Button>
+          {isStreaming ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="danger"
+              onClick={handleStop}
+              aria-label="Stop generation"
+            >
+              <Square size={14} />
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!input.trim()}
+              aria-label="Send message"
+            >
+              <Send size={14} />
+            </Button>
+          )}
         </form>
       </div>
     </div>

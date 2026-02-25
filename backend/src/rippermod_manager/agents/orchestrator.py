@@ -198,6 +198,36 @@ TOOLS = [
 ]
 
 
+def _extract_text(content: Any) -> str:
+    """Extract plain text from a chunk's content.
+
+    When reasoning is enabled, content may be a list of typed blocks
+    (reasoning, text, function_call) instead of a plain string.
+    Blocks can be plain dicts or LangChain typed objects — use duck typing.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+                continue
+            # Duck-type: support both dicts and LangChain content block objects
+            btype = (
+                block.get("type", "") if isinstance(block, dict) else getattr(block, "type", "")
+            )
+            if btype in ("reasoning", "function_call"):
+                continue
+            text = (
+                block.get("text", "") if isinstance(block, dict) else getattr(block, "text", "")
+            )
+            if isinstance(text, str) and text:
+                parts.append(text)
+        return "".join(parts)
+    return ""
+
+
 async def run_agent(
     message: str,
     game_name: str | None = None,
@@ -250,11 +280,13 @@ async def run_agent(
             content=f"[Context: Currently viewing game '{game_name}']\n\n{message}"
         )
 
-    max_iterations = 5
-    for _ in range(max_iterations):
+    max_iterations = 10
+    for iteration in range(max_iterations):
         full_content = ""
         emitted_thinking_start = False
         emitted_thinking_end = False
+
+        logger.debug("Agent iteration %d/%d", iteration + 1, max_iterations)
 
         if use_reasoning:
             yield {"type": "thinking_start", "data": {"effort": reasoning_effort}}
@@ -265,12 +297,18 @@ async def run_agent(
         try:
             async for chunk in llm_with_tools.astream(messages):
                 if chunk.content:
-                    text = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
-                    if emitted_thinking_start and not emitted_thinking_end:
-                        yield {"type": "thinking_end", "data": {}}
-                        emitted_thinking_end = True
-                    full_content += text
-                    yield {"type": "token", "data": {"content": text}}
+                    text = _extract_text(chunk.content)
+                    if not text:
+                        logger.debug(
+                            "Skipped non-text content block: type=%s",
+                            type(chunk.content).__name__,
+                        )
+                    if text:
+                        if emitted_thinking_start and not emitted_thinking_end:
+                            yield {"type": "thinking_end", "data": {}}
+                            emitted_thinking_end = True
+                        full_content += text
+                        yield {"type": "token", "data": {"content": text}}
                 gathered = chunk if gathered is None else gathered + chunk
         except Exception as exc:
             logger.error("LLM streaming error: %s", exc)
@@ -287,6 +325,13 @@ async def run_agent(
         tool_calls_data: list[dict[str, Any]] = []
         if gathered and hasattr(gathered, "tool_calls"):
             tool_calls_data = list(gathered.tool_calls)
+
+        logger.debug(
+            "Iteration %d done: content_len=%d, tool_calls=%d",
+            iteration + 1,
+            len(full_content),
+            len(tool_calls_data),
+        )
 
         if not tool_calls_data:
             with Session(engine) as session:
@@ -337,6 +382,18 @@ async def run_agent(
                 )
             )
             session.commit()
+    else:
+        logger.warning(
+            "Agent exhausted %d iterations without a final text response",
+            max_iterations,
+        )
+        yield {
+            "type": "token",
+            "data": {
+                "content": "\n\nI gathered the information above but ran out of processing "
+                "steps to summarize it. Please try a more specific question."
+            },
+        }
 
     suggestions = _generate_suggestions(message, game_name)
     if suggestions:
