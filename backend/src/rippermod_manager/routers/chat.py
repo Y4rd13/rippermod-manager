@@ -1,4 +1,5 @@
 import json
+import logging
 from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, Depends
@@ -8,6 +9,8 @@ from sse_starlette.sse import EventSourceResponse
 from rippermod_manager.database import get_session
 from rippermod_manager.models.chat import ChatMessage
 from rippermod_manager.schemas.chat import ChatMessageOut, ChatRequest
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -35,7 +38,14 @@ async def chat(data: ChatRequest, session: Session = Depends(get_session)) -> Ev
                     }
                 ),
             }
-        yield {"event": "done", "data": json.dumps({})}
+        except Exception as exc:
+            logger.error("Chat stream error: %s", exc, exc_info=True)
+            yield {
+                "event": "token",
+                "data": json.dumps({"content": f"\n\nError: {exc}"}),
+            }
+        finally:
+            yield {"event": "done", "data": json.dumps({})}
 
     return EventSourceResponse(event_stream())
 

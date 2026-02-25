@@ -1,4 +1,24 @@
-import { Brain, MessageSquare, Send, X } from "lucide-react";
+import {
+  Bot,
+  Brain,
+  Check,
+  CircleUser,
+  Download,
+  FileText,
+  Gamepad2,
+  Globe,
+  MessageSquare,
+  RefreshCw,
+  Search,
+  ChevronsLeft,
+  ChevronsRight,
+  Send,
+  Sparkles,
+  Square,
+  Trash2,
+  X,
+} from "lucide-react";
+import { type LucideIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -9,7 +29,12 @@ import { useHasOpenaiKey } from "@/hooks/queries";
 import { api } from "@/lib/api-client";
 import { parseSSE } from "@/lib/sse-parser";
 import { cn } from "@/lib/utils";
-import { type ChatMsg, type ReasoningEffort, useChatStore } from "@/stores/chat-store";
+import {
+  type ChatMsg,
+  type ReasoningEffort,
+  type ToolCallInfo,
+  useChatStore,
+} from "@/stores/chat-store";
 import { useUIStore } from "@/stores/ui-store";
 
 const remarkPlugins = [remarkGfm];
@@ -43,19 +68,105 @@ const EFFORT_LABELS: Record<ReasoningEffort, string> = {
   high: "High",
 };
 
+interface ToolConfig {
+  icon: LucideIcon;
+  color: string;
+  label: string;
+  spin: boolean;
+}
+
+const TOOL_CONFIG: Record<string, ToolConfig> = {
+  search_local_mods: { icon: Search, color: "text-accent", label: "Searching local mods", spin: true },
+  get_mod_details: { icon: FileText, color: "text-text-secondary", label: "Getting mod details", spin: false },
+  get_nexus_mod_info: { icon: Globe, color: "text-accent-hover", label: "Fetching Nexus info", spin: false },
+  list_all_games: { icon: Gamepad2, color: "text-success", label: "Listing games", spin: false },
+  list_nexus_downloads: { icon: Download, color: "text-warning", label: "Listing downloads", spin: false },
+  semantic_mod_search: { icon: Sparkles, color: "text-accent", label: "Semantic search", spin: true },
+  reindex_vector_store: { icon: RefreshCw, color: "text-danger", label: "Rebuilding index", spin: true },
+};
+
+const DEFAULT_TOOL_CONFIG: ToolConfig = {
+  icon: Search,
+  color: "text-text-secondary",
+  label: "Running tool",
+  spin: false,
+};
+
+interface GroupedToolCall {
+  name: string;
+  count: number;
+  running: number;
+  done: number;
+}
+
+function groupToolCalls(calls: ToolCallInfo[]): GroupedToolCall[] {
+  const map = new Map<string, GroupedToolCall>();
+  for (const tc of calls) {
+    const existing = map.get(tc.name);
+    if (existing) {
+      existing.count++;
+      if (tc.status === "running") existing.running++;
+      else existing.done++;
+    } else {
+      map.set(tc.name, {
+        name: tc.name,
+        count: 1,
+        running: tc.status === "running" ? 1 : 0,
+        done: tc.status === "done" ? 1 : 0,
+      });
+    }
+  }
+  return Array.from(map.values());
+}
+
+function ToolCallCard({ group }: { group: GroupedToolCall }) {
+  const config = TOOL_CONFIG[group.name] ?? DEFAULT_TOOL_CONFIG;
+  const Icon = config.icon;
+  const isRunning = group.running > 0;
+
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-border/50 bg-surface-3/50 px-2.5 py-1.5 text-xs animate-fade-in">
+      <Icon
+        size={14}
+        className={cn(
+          config.color,
+          isRunning && (config.spin ? "animate-spin" : "animate-pulse"),
+        )}
+      />
+      <span className="flex-1 text-text-secondary">{config.label}</span>
+      {group.count > 1 && (
+        <span className="rounded-full bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
+          {isRunning ? `${group.done}/${group.count}` : `×${group.count}`}
+        </span>
+      )}
+      {isRunning ? (
+        <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
+      ) : (
+        <Check size={14} className="text-success animate-fade-in" />
+      )}
+    </div>
+  );
+}
+
 function ThinkingIndicator() {
   return (
     <div className="flex gap-3 py-3 flex-row">
-      <div className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold shrink-0 bg-surface-3 text-text-secondary">
-        AI
+      <div className="relative flex h-7 w-7 items-center justify-center rounded-full shrink-0 bg-accent/10 text-accent">
+        <Bot size={16} />
+        <span className="absolute inset-0 rounded-full border-2 border-accent/40 animate-pulse-ring" />
       </div>
       <div className="rounded-xl px-4 py-2.5 bg-surface-2">
         <div className="flex items-center gap-2">
-          <div className="flex gap-1">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent animate-bounce" />
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent animate-bounce [animation-delay:150ms]" />
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent animate-bounce [animation-delay:300ms]" />
-          </div>
+          <svg width="16" height="16" viewBox="0 0 16 16" className="animate-orbit-spin">
+            <path
+              d="M 8 2 A 6 6 0 0 1 14 8"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              className="text-accent"
+            />
+          </svg>
           <span className="text-xs text-text-muted">Thinking...</span>
         </div>
       </div>
@@ -74,13 +185,13 @@ const ChatMessage = memo(function ChatMessage({ msg }: { msg: ChatMsg }) {
     >
       <div
         className={cn(
-          "flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold shrink-0",
+          "flex h-7 w-7 items-center justify-center rounded-full shrink-0",
           isUser
             ? "bg-accent text-white"
-            : "bg-surface-3 text-text-secondary",
+            : "bg-accent/10 text-accent",
         )}
       >
-        {isUser ? "U" : "AI"}
+        {isUser ? <CircleUser size={16} /> : <Bot size={16} />}
       </div>
       <div
         className={cn(
@@ -90,17 +201,26 @@ const ChatMessage = memo(function ChatMessage({ msg }: { msg: ChatMsg }) {
             : "bg-surface-2 text-text-primary",
         )}
       >
+        {msg.toolCalls && msg.toolCalls.length > 0 && (
+          <div className="flex flex-col gap-1.5 mb-2">
+            {groupToolCalls(msg.toolCalls).map((group) => (
+              <ToolCallCard key={group.name} group={group} />
+            ))}
+          </div>
+        )}
         {msg.role === "tool" ? (
           <pre className="text-xs text-text-muted whitespace-pre-wrap font-mono">
             {msg.content}
           </pre>
         ) : (
-          <ReactMarkdown
-            remarkPlugins={remarkPlugins}
-            components={markdownComponents}
-          >
-            {msg.content}
-          </ReactMarkdown>
+          msg.content && (
+            <ReactMarkdown
+              remarkPlugins={remarkPlugins}
+              components={markdownComponents}
+            >
+              {msg.content}
+            </ReactMarkdown>
+          )
         )}
       </div>
     </div>
@@ -122,16 +242,24 @@ export function ChatPanel() {
   );
   const addMessage = useChatStore((s) => s.addMessage);
   const appendToLast = useChatStore((s) => s.appendToLast);
+  const addToolCall = useChatStore((s) => s.addToolCall);
+  const resolveToolCall = useChatStore((s) => s.resolveToolCall);
   const setStreaming = useChatStore((s) => s.setStreaming);
   const setThinking = useChatStore((s) => s.setThinking);
   const setReasoningEffort = useChatStore((s) => s.setReasoningEffort);
   const setSuggestedActions = useChatStore((s) => s.setSuggestedActions);
+  const clearMessages = useChatStore((s) => s.clearMessages);
 
   const hasOpenaiKey = useHasOpenaiKey();
 
   const [input, setInput] = useState("");
+  const [panelWidth, setPanelWidth] = useState(384);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const isResizing = useRef(false);
+  const resizeCleanup = useRef<(() => void) | null>(null);
+  const widthBeforeCollapse = useRef(384);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -140,7 +268,49 @@ export function ChatPanel() {
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
+      resizeCleanup.current?.();
     };
+  }, []);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    const startX = e.clientX;
+    const startW = panelWidth;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const delta = startX - ev.clientX;
+      const clamped = Math.min(Math.max(startW + delta, 320), 800);
+      setPanelWidth(clamped);
+    };
+
+    const cleanup = () => {
+      isResizing.current = false;
+      resizeCleanup.current = null;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", cleanup);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    resizeCleanup.current = cleanup;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", cleanup);
+  }, [panelWidth]);
+
+  const toggleCollapse = useCallback(() => {
+    setIsCollapsed((prev) => {
+      if (!prev) widthBeforeCollapse.current = panelWidth;
+      else setPanelWidth(widthBeforeCollapse.current);
+      return !prev;
+    });
+  }, [panelWidth]);
+
+  const handleStop = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
   }, []);
 
   const handleSend = useCallback(async (text?: string) => {
@@ -191,9 +361,10 @@ export function ChatPanel() {
               setThinking(false);
               break;
             case "tool_call":
-              appendToLast(`\n\n*Using tool: ${data.name}...*\n\n`);
+              addToolCall(data.name);
               break;
             case "tool_result":
+              resolveToolCall(data.name);
               break;
             case "suggested_actions":
               setSuggestedActions(data.actions ?? []);
@@ -215,12 +386,36 @@ export function ChatPanel() {
       setStreaming(false);
       setThinking(false);
     }
-  }, [input, addMessage, appendToLast, setStreaming, setThinking, setSuggestedActions]);
+  }, [input, addMessage, appendToLast, addToolCall, resolveToolCall, setStreaming, setThinking, setSuggestedActions]);
 
   if (!chatPanelOpen || !hasOpenaiKey) return null;
 
+  if (isCollapsed) {
+    return (
+      <div className="fixed right-0 top-9 bottom-0 w-10 flex flex-col items-center border-l border-border bg-surface-1 z-40 shadow-xl py-3 gap-2">
+        <button
+          onClick={toggleCollapse}
+          aria-label="Expand chat"
+          className="rounded-md p-1 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"
+        >
+          <ChevronsLeft size={16} />
+        </button>
+        <MessageSquare size={16} className="text-accent" />
+      </div>
+    );
+  }
+
   return (
-    <div className="fixed right-0 top-9 bottom-0 w-full sm:w-96 flex flex-col border-l border-border bg-surface-1 z-40 shadow-xl">
+    <div
+      className="fixed right-0 top-9 bottom-0 flex flex-col border-l border-border bg-surface-1 z-40 shadow-xl transition-[width] duration-150"
+      style={{ width: `min(100vw, ${panelWidth}px)` }}
+    >
+      {/* Drag resize handle */}
+      <div
+        onMouseDown={handleResizeStart}
+        className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-accent/30 active:bg-accent/50 transition-colors z-10"
+      />
+
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
           <MessageSquare size={16} className="text-accent" />
@@ -228,13 +423,32 @@ export function ChatPanel() {
             Chat Assistant
           </span>
         </div>
-        <button
-          onClick={() => setChatPanelOpen(false)}
-          aria-label="Close chat"
-          className="rounded-md p-1 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"
-        >
-          <X size={16} />
-        </button>
+        <div className="flex items-center gap-1">
+          {messages.length > 0 && (
+            <button
+              onClick={clearMessages}
+              disabled={isStreaming}
+              aria-label="Clear messages"
+              className="rounded-md p-1 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors disabled:opacity-50"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
+          <button
+            onClick={toggleCollapse}
+            aria-label="Collapse chat"
+            className="rounded-md p-1 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"
+          >
+            <ChevronsRight size={16} />
+          </button>
+          <button
+            onClick={() => setChatPanelOpen(false)}
+            aria-label="Close chat"
+            className="rounded-md p-1 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-2">
@@ -302,14 +516,26 @@ export function ChatPanel() {
               ))}
             </select>
           </div>
-          <Button
-            type="submit"
-            size="sm"
-            disabled={!input.trim() || isStreaming}
-            aria-label="Send message"
-          >
-            <Send size={14} />
-          </Button>
+          {isStreaming ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="danger"
+              onClick={handleStop}
+              aria-label="Stop generation"
+            >
+              <Square size={14} />
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!input.trim()}
+              aria-label="Send message"
+            >
+              <Send size={14} />
+            </Button>
+          )}
         </form>
       </div>
     </div>

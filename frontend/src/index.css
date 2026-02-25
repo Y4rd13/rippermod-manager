@@ -82,6 +82,25 @@ body {
   animation: fade-in 150ms ease-out;
 }
 
+@keyframes pulse-ring {
+  0% { transform: scale(0.85); opacity: 0.6; }
+  50% { transform: scale(1.2); opacity: 0; }
+  100% { transform: scale(0.85); opacity: 0.6; }
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 2s ease-in-out infinite;
+}
+
+@keyframes orbit-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-orbit-spin {
+  animation: orbit-spin 1s linear infinite;
+}
+
 .scrollbar-none {
   scrollbar-width: none;
 }
