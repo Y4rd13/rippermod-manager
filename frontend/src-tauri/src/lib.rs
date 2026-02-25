@@ -439,6 +439,12 @@ fn kill_process_tree(pid: u32) {
     }
 }
 
+#[tauri::command]
+fn prepare_update(app: tauri::AppHandle) {
+    log::info!("Preparing for update — killing backend sidecar");
+    kill_sidecar(&app);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default()
@@ -461,7 +467,7 @@ pub fn run() {
 
     builder
         .manage(Mutex::new(BackendProcess { child: None }))
-        .invoke_handler(tauri::generate_handler![detect_game_paths, launch_game])
+        .invoke_handler(tauri::generate_handler![detect_game_paths, launch_game, prepare_update])
         .setup(|app| {
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
