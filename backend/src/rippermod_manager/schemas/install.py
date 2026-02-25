@@ -67,6 +67,7 @@ class AvailableArchive(BaseModel):
     parsed_name: str = ""
     parsed_version: str | None = None
     is_installed: bool = False
+    installed_mod_id: int | None = None
     last_downloaded_at: datetime | None = None
 
 

@@ -205,6 +205,7 @@ export interface AvailableArchive {
   parsed_name: string;
   parsed_version: string | null;
   is_installed: boolean;
+  installed_mod_id: number | null;
   last_downloaded_at: string | null;
 }
 
