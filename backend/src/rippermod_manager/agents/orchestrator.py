@@ -262,15 +262,23 @@ async def run_agent(
 
         # Concatenate AIMessageChunks to properly merge streamed tool calls
         gathered = None
-        async for chunk in llm_with_tools.astream(messages):
-            if chunk.content:
-                text = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
-                if emitted_thinking_start and not emitted_thinking_end:
-                    yield {"type": "thinking_end", "data": {}}
-                    emitted_thinking_end = True
-                full_content += text
-                yield {"type": "token", "data": {"content": text}}
-            gathered = chunk if gathered is None else gathered + chunk
+        try:
+            async for chunk in llm_with_tools.astream(messages):
+                if chunk.content:
+                    text = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
+                    if emitted_thinking_start and not emitted_thinking_end:
+                        yield {"type": "thinking_end", "data": {}}
+                        emitted_thinking_end = True
+                    full_content += text
+                    yield {"type": "token", "data": {"content": text}}
+                gathered = chunk if gathered is None else gathered + chunk
+        except Exception as exc:
+            logger.error("LLM streaming error: %s", exc)
+            if emitted_thinking_start and not emitted_thinking_end:
+                yield {"type": "thinking_end", "data": {}}
+            err_msg = f"\n\nError communicating with OpenAI: {exc}"
+            yield {"type": "token", "data": {"content": err_msg}}
+            return
 
         # If thinking started but no content tokens arrived (tool-call-only), still end it
         if emitted_thinking_start and not emitted_thinking_end:

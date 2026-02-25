@@ -35,7 +35,13 @@ async def chat(data: ChatRequest, session: Session = Depends(get_session)) -> Ev
                     }
                 ),
             }
-        yield {"event": "done", "data": json.dumps({})}
+        except Exception as exc:
+            yield {
+                "event": "token",
+                "data": json.dumps({"content": f"\n\nError: {exc}"}),
+            }
+        finally:
+            yield {"event": "done", "data": json.dumps({})}
 
     return EventSourceResponse(event_stream())
 
