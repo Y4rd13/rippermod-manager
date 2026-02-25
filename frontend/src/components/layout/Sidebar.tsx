@@ -12,6 +12,7 @@ import { NavLink } from "react-router";
 import { useHasOpenaiKey } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui-store";
+import { useUpdaterStore } from "@/stores/updater-store";
 
 const navItems = [
   { to: "/dashboard", icon: Home, label: "Dashboard" },
@@ -23,6 +24,7 @@ const navItems = [
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, toggleChatPanel } = useUIStore();
   const hasOpenaiKey = useHasOpenaiKey();
+  const updateAvailable = useUpdaterStore((s) => s.status === "available");
 
   return (
     <aside
@@ -64,7 +66,12 @@ export function Sidebar() {
               )
             }
           >
-            <Icon size={18} />
+            <div className="relative">
+              <Icon size={18} />
+              {to === "/settings" && updateAvailable && (
+                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-accent" />
+              )}
+            </div>
             {!sidebarCollapsed && <span className="truncate">{label}</span>}
           </NavLink>
         ))}

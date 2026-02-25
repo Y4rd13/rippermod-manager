@@ -1,4 +1,4 @@
-import { CheckCircle, Crown, ExternalLink, Eye, EyeOff, Heart, LogOut, User } from "lucide-react";
+import { ArrowDownToLine, CheckCircle, Crown, ExternalLink, Eye, EyeOff, Heart, LogOut, RefreshCw, RotateCcw, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { useAbstainMod, useDisconnectNexus, useEndorseMod, useSaveSettings, useTrackMod, useUntrackMod } from "@/hooks/mutations";
+import { useAppUpdater } from "@/hooks/use-app-updater";
 import { useNexusSSO } from "@/hooks/use-nexus-sso";
 import { useGames, useModDetail, useSettings } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
@@ -52,6 +53,85 @@ function ApiKeyField({
   );
 }
 
+function UpdateSection() {
+  const {
+    status,
+    updateInfo,
+    error,
+    downloadProgress,
+    checkForUpdate,
+    downloadAndInstall,
+    restartApp,
+  } = useAppUpdater();
+
+  return (
+    <div className="mt-4 space-y-2">
+      {status === "available" && updateInfo && (
+        <div className="rounded-lg border border-accent/30 bg-accent/5 px-3 py-2">
+          <p className="text-sm font-medium text-accent">
+            Version {updateInfo.version} is available
+          </p>
+          {updateInfo.body && (
+            <p className="mt-1 text-xs text-text-muted line-clamp-3">{updateInfo.body}</p>
+          )}
+        </div>
+      )}
+
+      {status === "downloading" && downloadProgress != null && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-xs text-text-muted">
+            <span>Downloading update...</span>
+            <span>{downloadProgress}%</span>
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-surface-3">
+            <div
+              className="h-full rounded-full bg-accent transition-all duration-300"
+              style={{ width: `${downloadProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {status === "error" && error && (
+        <p className="text-xs text-danger">{error}</p>
+      )}
+
+      {status === "up-to-date" && (
+        <p className="text-xs text-success">You are on the latest version.</p>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        {(status === "idle" || status === "up-to-date" || status === "error") && (
+          <Button variant="secondary" size="sm" onClick={() => void checkForUpdate()}>
+            <RefreshCw className="h-3.5 w-3.5" />
+            Check for Updates
+          </Button>
+        )}
+
+        {status === "checking" && (
+          <Button variant="secondary" size="sm" loading disabled>
+            Checking...
+          </Button>
+        )}
+
+        {status === "available" && (
+          <Button size="sm" onClick={() => void downloadAndInstall()}>
+            <ArrowDownToLine className="h-3.5 w-3.5" />
+            Download &amp; Install
+          </Button>
+        )}
+
+        {status === "ready" && (
+          <Button size="sm" onClick={() => void restartApp()}>
+            <RotateCcw className="h-3.5 w-3.5" />
+            Restart Now
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const RIPPERMOD_NEXUS_MOD_ID = 27781;
 const RIPPERMOD_NEXUS_DOMAIN = "cyberpunk2077";
 const RIPPERMOD_NEXUS_URL = `https://www.nexusmods.com/${RIPPERMOD_NEXUS_DOMAIN}/mods/${RIPPERMOD_NEXUS_MOD_ID}`;
@@ -85,6 +165,7 @@ function AboutCard() {
         <div className="min-w-0 flex-1 space-y-1">
           <h2 className="text-lg font-semibold text-text-primary">RipperMod Manager</h2>
           <p className="text-text-muted text-xs font-mono">{__APP_VERSION__}</p>
+          <UpdateSection />
         </div>
       </div>
 
