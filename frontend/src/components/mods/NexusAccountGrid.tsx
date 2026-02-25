@@ -1,10 +1,11 @@
-import { Check, Eye, Heart, Settings } from "lucide-react";
+import { Check, Copy, Eye, ExternalLink, Heart, Info, Settings } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { FomodWizard } from "@/components/mods/FomodWizard";
 import { ModCardAction } from "@/components/mods/ModCardAction";
+import { ModQuickActions } from "@/components/mods/ModQuickActions";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -15,6 +16,7 @@ import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { VirtualCardGrid } from "@/components/ui/VirtualCardGrid";
+import { useAbstainMod, useEndorseMod, useTrackMod, useUntrackMod } from "@/hooks/mutations";
 import { toast } from "@/stores/toast-store";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useInstallFlow } from "@/hooks/use-install-flow";
@@ -37,11 +39,24 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "author", label: "Author" },
 ];
 
-const CONTEXT_MENU_ITEMS: ContextMenuItem[] = [
-  { key: "details", label: "View Details" },
-  { key: "nexus", label: "Open on Nexus" },
-  { key: "copy-name", label: "Copy Name" },
-];
+function getContextMenuItems(mod: NexusDownload): ContextMenuItem[] {
+  return [
+    { key: "details", label: "View Details", icon: Info },
+    { key: "nexus", label: "Open on Nexus", icon: ExternalLink },
+    { key: "copy-name", label: "Copy Name", icon: Copy },
+    { key: "sep-actions", label: "", separator: true },
+    {
+      key: "endorse",
+      label: mod.is_endorsed ? "Remove Endorsement" : "Endorse",
+      icon: Heart,
+    },
+    {
+      key: "track",
+      label: mod.is_tracked ? "Untrack" : "Track",
+      icon: Eye,
+    },
+  ];
+}
 
 interface Props {
   mods: NexusDownload[];
@@ -85,6 +100,10 @@ export function NexusAccountGrid({
   const [chip, setChip] = useSessionState(`account-chip-${gameName}`, "all");
 
   const flow = useInstallFlow(gameName, archives, downloadJobs);
+  const endorseMod = useEndorseMod();
+  const abstainMod = useAbstainMod();
+  const trackMod = useTrackMod();
+  const untrackMod = useUntrackMod();
   const { menuState, openMenu, closeMenu } = useContextMenu<NexusDownload>();
 
   const installedModIds = useMemo(
@@ -133,6 +152,13 @@ export function NexusAccountGrid({
       () => toast.success("Copied to clipboard"),
       () => toast.error("Failed to copy"),
     );
+    else if (key === "endorse") {
+      if (mod.is_endorsed) abstainMod.mutate({ gameName, modId: mod.nexus_mod_id });
+      else endorseMod.mutate({ gameName, modId: mod.nexus_mod_id });
+    } else if (key === "track") {
+      if (mod.is_tracked) untrackMod.mutate({ gameName, modId: mod.nexus_mod_id });
+      else trackMod.mutate({ gameName, modId: mod.nexus_mod_id });
+    }
   }
 
   if (isLoading) {
@@ -208,17 +234,39 @@ export function NexusAccountGrid({
               onClick={() => onModClick?.(nexusModId)}
               onContextMenu={(e) => openMenu(e, mod)}
               badge={
-                installedModIds.has(nexusModId) ? (
-                  <Badge variant="success">
-                    <Check size={10} className="mr-0.5" />
-                    Installed
-                  </Badge>
+                (installedModIds.has(nexusModId) || mod.is_tracked || mod.is_endorsed) ? (
+                  <div className="flex items-center gap-1">
+                    {installedModIds.has(nexusModId) && (
+                      <Badge variant="success">
+                        <Check size={10} className="mr-0.5" />
+                        Installed
+                      </Badge>
+                    )}
+                    {mod.is_tracked && (
+                      <Badge variant="neutral">
+                        <Eye size={10} className="mr-0.5" /> Tracked
+                      </Badge>
+                    )}
+                    {mod.is_endorsed && (
+                      <Badge variant="success">
+                        <Heart size={10} className="mr-0.5" /> Endorsed
+                      </Badge>
+                    )}
+                  </div>
                 ) : undefined
               }
               footer={
-                mod.updated_at ? (
-                  <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(mod.updated_at))}</span>
-                ) : undefined
+                <div className="flex items-center gap-2">
+                  {mod.updated_at && (
+                    <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(mod.updated_at))}</span>
+                  )}
+                  <ModQuickActions
+                    isEndorsed={mod.is_endorsed}
+                    isTracked={mod.is_tracked}
+                    modId={nexusModId}
+                    gameName={gameName}
+                  />
+                </div>
               }
               action={
                 <ModCardAction
@@ -244,7 +292,7 @@ export function NexusAccountGrid({
               }
               overflowMenu={
                 <OverflowMenuButton
-                  items={CONTEXT_MENU_ITEMS}
+                  items={getContextMenuItems(mod)}
                   onSelect={(key) => {
                     if (key === "details") onModClick?.(nexusModId);
                     else if (key === "nexus") window.open(mod.nexus_url, "_blank", "noopener,noreferrer");
@@ -252,6 +300,13 @@ export function NexusAccountGrid({
                       () => toast.success("Copied to clipboard"),
                       () => toast.error("Failed to copy"),
                     );
+                    else if (key === "endorse") {
+                      if (mod.is_endorsed) abstainMod.mutate({ gameName, modId: nexusModId });
+                      else endorseMod.mutate({ gameName, modId: nexusModId });
+                    } else if (key === "track") {
+                      if (mod.is_tracked) untrackMod.mutate({ gameName, modId: nexusModId });
+                      else trackMod.mutate({ gameName, modId: nexusModId });
+                    }
                   }}
                 />
               }
@@ -273,9 +328,9 @@ export function NexusAccountGrid({
         />
       )}
 
-      {menuState.visible && (
+      {menuState.visible && menuState.data && (
         <ContextMenu
-          items={CONTEXT_MENU_ITEMS}
+          items={getContextMenuItems(menuState.data)}
           position={menuState.position}
           onSelect={handleContextMenuSelect}
           onClose={closeMenu}

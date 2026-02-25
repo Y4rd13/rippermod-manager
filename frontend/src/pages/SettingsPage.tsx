@@ -1,4 +1,4 @@
-import { CheckCircle, Crown, ExternalLink, LogOut, User } from "lucide-react";
+import { CheckCircle, Crown, ExternalLink, Eye, EyeOff, Heart, LogOut, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
-import { useDisconnectNexus, useSaveSettings } from "@/hooks/mutations";
+import { useAbstainMod, useDisconnectNexus, useEndorseMod, useSaveSettings, useTrackMod, useUntrackMod } from "@/hooks/mutations";
 import { useNexusSSO } from "@/hooks/use-nexus-sso";
-import { useSettings } from "@/hooks/queries";
+import { useGames, useModDetail, useSettings } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
 
 function ApiKeyField({
@@ -49,6 +49,122 @@ function ApiKeyField({
         </div>
       )}
     </div>
+  );
+}
+
+const RIPPERMOD_NEXUS_MOD_ID = 27781;
+const RIPPERMOD_NEXUS_DOMAIN = "cyberpunk2077";
+const RIPPERMOD_NEXUS_URL = `https://www.nexusmods.com/${RIPPERMOD_NEXUS_DOMAIN}/mods/${RIPPERMOD_NEXUS_MOD_ID}`;
+
+function AboutCard() {
+  const { data: games = [] } = useGames();
+  const gameName = games[0]?.name;
+  const { data: detail } = useModDetail(
+    RIPPERMOD_NEXUS_DOMAIN,
+    RIPPERMOD_NEXUS_MOD_ID > 0 ? RIPPERMOD_NEXUS_MOD_ID : null,
+  );
+
+  const endorseMod = useEndorseMod();
+  const abstainMod = useAbstainMod();
+  const trackMod = useTrackMod();
+  const untrackMod = useUntrackMod();
+
+  const isEndorsed = detail?.is_endorsed ?? false;
+  const isTracked = detail?.is_tracked ?? false;
+  const endorsePending = endorseMod.isPending || abstainMod.isPending;
+  const trackPending = trackMod.isPending || untrackMod.isPending;
+
+  const canInteract = !!gameName && RIPPERMOD_NEXUS_MOD_ID > 0;
+
+  return (
+    <Card>
+      <div className="flex items-start gap-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent/20 to-accent/5 text-accent">
+          <span className="text-xl font-bold leading-none">R</span>
+        </div>
+        <div className="min-w-0 flex-1 space-y-1">
+          <h2 className="text-lg font-semibold text-text-primary">RipperMod Manager</h2>
+          <p className="text-text-muted text-xs font-mono">{__APP_VERSION__}</p>
+        </div>
+      </div>
+
+      {canInteract && (
+        <>
+          <div className="mt-5 rounded-lg border border-border/60 bg-surface-0 p-4">
+            <p className="text-sm text-text-secondary mb-3">
+              Enjoying RipperMod Manager? Show your support on Nexus Mods!
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={endorsePending}
+                onClick={() => {
+                  if (!gameName) return;
+                  if (isEndorsed) abstainMod.mutate({ gameName, modId: RIPPERMOD_NEXUS_MOD_ID });
+                  else endorseMod.mutate({ gameName, modId: RIPPERMOD_NEXUS_MOD_ID });
+                }}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-all",
+                  "disabled:opacity-50",
+                  isEndorsed
+                    ? "border-danger/30 bg-danger/10 text-danger hover:bg-danger/15"
+                    : "border-border bg-surface-2 text-text-secondary hover:border-danger/40 hover:text-danger",
+                )}
+              >
+                {endorsePending ? (
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                ) : (
+                  <Heart size={16} fill={isEndorsed ? "currentColor" : "none"} />
+                )}
+                {isEndorsed ? "Endorsed" : "Endorse"}
+              </button>
+
+              <button
+                type="button"
+                disabled={trackPending}
+                onClick={() => {
+                  if (!gameName) return;
+                  if (isTracked) untrackMod.mutate({ gameName, modId: RIPPERMOD_NEXUS_MOD_ID });
+                  else trackMod.mutate({ gameName, modId: RIPPERMOD_NEXUS_MOD_ID });
+                }}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-all",
+                  "disabled:opacity-50",
+                  isTracked
+                    ? "border-accent/30 bg-accent/10 text-accent hover:bg-accent/15"
+                    : "border-border bg-surface-2 text-text-secondary hover:border-accent/40 hover:text-accent",
+                )}
+              >
+                {trackPending ? (
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                ) : isTracked ? (
+                  <EyeOff size={16} />
+                ) : (
+                  <Eye size={16} />
+                )}
+                {isTracked ? "Tracked" : "Track"}
+              </button>
+
+              <a
+                href={RIPPERMOD_NEXUS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-text-secondary transition-colors hover:border-text-muted hover:text-text-primary"
+              >
+                <ExternalLink size={14} />
+                View on Nexus
+              </a>
+            </div>
+          </div>
+        </>
+      )}
+    </Card>
   );
 }
 
@@ -280,16 +396,7 @@ export function SettingsPage() {
         )}
       </Card>
 
-      <Card>
-        <h2 className="text-lg font-semibold text-text-primary mb-4">
-          About
-        </h2>
-        <div className="space-y-1 text-sm">
-          <p className="text-text-primary font-medium">RipperMod Manager</p>
-          <p className="text-text-muted text-xs font-mono">{__APP_VERSION__}</p>
-          <p className="text-text-secondary pt-1">AI-powered mod manager for PC games.</p>
-        </div>
-      </Card>
+      <AboutCard />
     </div>
   );
 }

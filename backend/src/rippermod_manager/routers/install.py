@@ -9,7 +9,7 @@ from sqlmodel import Session, select
 from rippermod_manager.database import get_session
 from rippermod_manager.matching.filename_parser import parse_mod_filename
 from rippermod_manager.models.install import InstalledMod
-from rippermod_manager.models.nexus import NexusModMeta
+from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.install import (
     ArchiveDeleteResult,
@@ -97,15 +97,20 @@ async def list_installed(
     game = get_game_or_404(game_name, session)
 
     rows = session.exec(
-        select(InstalledMod, NexusModMeta)
+        select(InstalledMod, NexusModMeta, NexusDownload)
         .outerjoin(
             NexusModMeta,
             InstalledMod.nexus_mod_id == NexusModMeta.nexus_mod_id,
         )
+        .outerjoin(
+            NexusDownload,
+            (InstalledMod.nexus_mod_id == NexusDownload.nexus_mod_id)
+            & (NexusDownload.game_id == game.id),
+        )
         .where(InstalledMod.game_id == game.id)
     ).all()
 
-    source_archives = {mod.source_archive for mod, _ in rows if mod.source_archive}
+    source_archives = {mod.source_archive for mod, _, _ in rows if mod.source_archive}
     dl_date_map = archive_download_dates(
         session,
         game.id,
@@ -113,13 +118,18 @@ async def list_installed(
         source_archives,  # type: ignore[arg-type]
     )
 
+    seen: set[int] = set()
     result: list[InstalledModOut] = []
-    for mod, meta in rows:
+    for mod, meta, ndl in rows:
+        mod_id: int = mod.id  # type: ignore[assignment]
+        if mod_id in seen:
+            continue
+        seen.add(mod_id)
         _ = mod.files
         dl_date = dl_date_map.get(mod.source_archive) if mod.source_archive else None
         result.append(
             InstalledModOut(
-                id=mod.id,  # type: ignore[arg-type]
+                id=mod_id,
                 name=mod.name,
                 source_archive=mod.source_archive,
                 nexus_mod_id=mod.nexus_mod_id,
@@ -141,6 +151,8 @@ async def list_installed(
                     if mod.nexus_mod_id
                     else None
                 ),
+                is_tracked=ndl.is_tracked if ndl else False,
+                is_endorsed=ndl.is_endorsed if ndl else False,
             )
         )
     return result

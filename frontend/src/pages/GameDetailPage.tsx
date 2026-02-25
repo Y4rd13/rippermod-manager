@@ -572,6 +572,7 @@ export function GameDetailPage() {
         return (
           <ModDetailModal
             gameDomain={game.domain_name}
+            gameName={name}
             modId={selectedModId}
             update={modUpdate}
             action={
