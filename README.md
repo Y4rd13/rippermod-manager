@@ -24,12 +24,17 @@
 
 - **Mod Scanner** — Recursively discovers mod files from configured game paths, groups them by name similarity using TF-IDF + DBSCAN clustering, and computes file hashes for integrity tracking.
 - **Nexus Mods Integration** — Connects to your Nexus account via SSO, syncs tracked/endorsed mods, fetches mod metadata, and checks for available updates.
+- **Endorse & Track** — Toggle endorse/track status on any mod directly from card buttons, context menus, or the mod detail modal — syncs with the Nexus Mods API in real time.
 - **Auto-Correlation** — Matches local mod groups to Nexus downloads using Jaccard similarity + Jaro-Winkler distance scoring.
-- **Mod Installation** — Install mods from downloaded archives with conflict detection, skip/overwrite resolution, and enable/disable toggling.
-- **Download Manager** — Download mod archives directly from Nexus Mods with progress tracking and premium account support.
+- **Mod Installation** — Install mods from downloaded archives with conflict detection, skip/overwrite resolution, and enable/disable toggling. Includes FOMOD installer wizard for scripted mod packages.
+- **Archive Management** — Browse, delete, and clean up orphaned mod archives from the downloads staging folder.
+- **Download Manager** — Download mod archives directly from Nexus Mods with progress tracking, NXM deep link handling, and premium account support.
+- **Trending Mods** — Browse trending and recently updated mods from Nexus with one-click install, endorse, or track actions.
 - **Endorsed & Tracked Tabs** — Browse your endorsed and tracked mods from Nexus with install actions or direct Nexus links.
-- **Profile Manager** — Save, load, export, and import mod profiles to switch between mod configurations.
+- **Mod Detail Modal** — View full mod details including description, files, changelogs, and action buttons without leaving the app.
+- **Profile Manager** — Save, load, export, import, duplicate, and compare mod profiles to switch between mod configurations.
 - **Update Checker** — Compares local mod versions against Nexus metadata to surface available updates with one-click download.
+- **AI Search** — AI-powered mod matching with configurable OpenAI model and reasoning effort for enhanced scan accuracy.
 - **Semantic Search** — ChromaDB vector store indexes mods, Nexus metadata, and correlations for natural-language queries.
 - **Chat Assistant** — LangChain-powered agent with tool access to the local mod database and Nexus data, streamed via SSE.
 - **Guided Onboarding** — Step-by-step setup for Nexus Mods login, game configuration, and initial mod scan.
@@ -79,11 +84,11 @@ rippermod-manager/
 │   │   ├── routers/                 # FastAPI routers (prefix /api/v1/)
 │   │   │   ├── games.py             #   CRUD games + mod paths
 │   │   │   ├── mods.py              #   List, scan, correlate mods
-│   │   │   ├── nexus.py             #   Validate, connect, sync Nexus
-│   │   │   ├── install.py           #   Install, uninstall, toggle mods
+│   │   │   ├── nexus.py             #   Sync, search, endorse/track, SSO, mod detail
+│   │   │   ├── install.py           #   Install, uninstall, toggle, archive management
 │   │   │   ├── fomod.py             #   FOMOD installer wizard
 │   │   │   ├── downloads.py         #   Download mods from Nexus
-│   │   │   ├── profiles.py          #   Save, load, export/import profiles
+│   │   │   ├── profiles.py          #   Save, load, export/import, compare profiles
 │   │   │   ├── trending.py          #   Trending mods from Nexus
 │   │   │   ├── updates.py           #   Version diff + update check
 │   │   │   ├── settings.py          #   App settings + PC specs
@@ -107,7 +112,7 @@ rippermod-manager/
 │   │   │   ├── trending_service.py  # Trending mods fetching
 │   │   │   ├── ai_search_matcher.py # AI-powered mod matching
 │   │   │   ├── web_search_matcher.py # Web search fallback matching
-│   │   │   └── ...                  # 22 services total
+│   │   │   └── ...                  # 22+ services total
 │   │   ├── vector/
 │   │   │   ├── store.py             # ChromaDB client + collections
 │   │   │   ├── indexer.py           # Index mods/nexus/correlations
@@ -125,8 +130,9 @@ rippermod-manager/
 │   │   │   ├── mods/                #   NexusModCard, NexusMatchedGrid,
 │   │   │   │                        #   InstalledModsTable, ArchivesList,
 │   │   │   │                        #   ProfileManager, FomodWizard,
-│   │   │   │                        #   TrendingGrid, UpdatesTable,
-│   │   │   │                        #   ConflictDialog (20 components)
+│   │   │   │                        #   TrendingGrid, NexusAccountGrid,
+│   │   │   │                        #   ModDetailModal, ModQuickActions,
+│   │   │   │                        #   UpdatesTable, ConflictDialog (21 components)
 │   │   │   └── ui/                  #   Badge, Button, Card, Input, Toast
 │   │   ├── pages/
 │   │   │   ├── DashboardPage.tsx
@@ -220,7 +226,7 @@ cd backend
 uv run uvicorn rippermod_manager.main:app --reload --port 8425   # Dev server
 uv run ruff check src/ tests/                                         # Lint
 uv run ruff format src/ tests/                                        # Format
-uv run pytest tests/ -v                                               # Tests (305 tests)
+uv run pytest tests/ -v                                               # Tests (477 tests)
 ```
 
 ### Frontend commands
@@ -275,6 +281,7 @@ All endpoints are prefixed with `/api/v1/`.
 | `GET` | `/games/{name}` | Get game details |
 | `DELETE` | `/games/{name}` | Remove a game |
 | `GET` | `/games/{name}/version` | Get detected game version |
+| `POST` | `/games/validate-path` | Validate a game install path |
 
 </details>
 
@@ -301,6 +308,8 @@ All endpoints are prefixed with `/api/v1/`.
 | `DELETE` | `/games/{name}/install/installed/{id}` | Uninstall a mod |
 | `PATCH` | `/games/{name}/install/installed/{id}/toggle` | Enable/disable a mod |
 | `GET` | `/games/{name}/install/conflicts` | Check for file conflicts |
+| `DELETE` | `/games/{name}/install/archives/{filename}` | Delete an archive |
+| `POST` | `/games/{name}/install/archives/cleanup-orphans` | Clean up unused archives |
 
 </details>
 
@@ -313,6 +322,7 @@ All endpoints are prefixed with `/api/v1/`.
 | `GET` | `/games/{name}/downloads/` | List download jobs |
 | `GET` | `/games/{name}/downloads/{id}` | Get download job details |
 | `POST` | `/games/{name}/downloads/{id}/cancel` | Cancel a download |
+| `POST` | `/games/{name}/downloads/from-mod` | Download from mod detail page |
 
 </details>
 
@@ -325,9 +335,13 @@ All endpoints are prefixed with `/api/v1/`.
 | `POST` | `/games/{name}/profiles/` | Save current state as a profile |
 | `GET` | `/games/{name}/profiles/{id}` | Get profile details |
 | `DELETE` | `/games/{name}/profiles/{id}` | Delete a profile |
+| `PATCH` | `/games/{name}/profiles/{id}` | Update profile name/description |
 | `POST` | `/games/{name}/profiles/{id}/load` | Load a profile |
+| `POST` | `/games/{name}/profiles/{id}/preview` | Preview profile load changes |
 | `POST` | `/games/{name}/profiles/{id}/export` | Export profile as JSON |
+| `POST` | `/games/{name}/profiles/{id}/duplicate` | Duplicate a profile |
 | `POST` | `/games/{name}/profiles/import` | Import profile from JSON |
+| `POST` | `/games/{name}/profiles/compare` | Compare two profiles |
 
 </details>
 
@@ -338,6 +352,24 @@ All endpoints are prefixed with `/api/v1/`.
 |---|---|---|
 | `POST` | `/nexus/sync-history/{name}` | Sync tracked/endorsed mods |
 | `GET` | `/nexus/downloads/{name}` | List synced downloads (filterable by `?source=endorsed\|tracked`) |
+| `GET` | `/nexus/downloads/{name}/search` | Search synced downloads by name |
+| `GET` | `/nexus/mods/{domain}/{mod_id}/detail` | Get full mod detail with files and changelogs |
+| `POST` | `/nexus/{name}/mods/{mod_id}/endorse` | Endorse a mod |
+| `POST` | `/nexus/{name}/mods/{mod_id}/abstain` | Remove endorsement |
+| `POST` | `/nexus/{name}/mods/{mod_id}/track` | Track a mod |
+| `DELETE` | `/nexus/{name}/mods/{mod_id}/track` | Untrack a mod |
+| `POST` | `/nexus/sso/start` | Start Nexus SSO session |
+| `GET` | `/nexus/sso/poll/{uuid}` | Poll SSO session status |
+| `DELETE` | `/nexus/sso/{uuid}` | Cancel SSO session |
+
+</details>
+
+<details>
+<summary><strong>Trending</strong></summary>
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/games/{name}/trending/` | Get trending and recently updated mods |
 
 </details>
 
@@ -359,8 +391,10 @@ All endpoints are prefixed with `/api/v1/`.
 | `GET/PUT` | `/settings/` | Read/update app settings |
 | `GET` | `/settings/specs` | Get stored PC specs |
 | `POST` | `/settings/specs/capture` | Store PC specs |
+| `DELETE` | `/settings/nexus` | Disconnect Nexus account |
 | `GET` | `/onboarding/status` | Get onboarding progress |
 | `POST` | `/onboarding/complete` | Complete onboarding |
+| `POST` | `/onboarding/reset` | Reset onboarding status |
 | `POST` | `/chat/` | Chat with AI assistant (SSE) |
 | `GET` | `/chat/history` | Get chat history |
 | `POST` | `/vector/reindex` | Rebuild vector store index |
@@ -400,7 +434,7 @@ Tests use an in-memory SQLite database and patched ChromaDB for full isolation. 
 │    FastAPI Backend (PyInstaller sidecar .exe)     │
 │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐  │
 │  │ Routers  │ │ Scanner  │ │   Chat Agent     │  │
-│  │(14 APIs) │ │ Grouper  │ │ (LangChain+OAI)  │  │
+│  │(15 APIs) │ │ Grouper  │ │ (LangChain+OAI)  │  │
 │  │          │ │Correlator│ │   7 tools        │  │
 │  └────┬─────┘ └────┬─────┘ └───────┬──────────┘  │
 │       │             │               │             │
