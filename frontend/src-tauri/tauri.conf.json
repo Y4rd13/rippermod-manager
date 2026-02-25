@@ -59,6 +59,7 @@
     "windows": {
       "nsis": {
         "displayLanguageSelector": false,
+        "installerHooks": "./nsis-hooks.nsi",
         "installerIcon": "icons/icon.ico",
         "installMode": "currentUser",
         "languages": ["English"]

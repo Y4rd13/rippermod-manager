@@ -1,4 +1,5 @@
 import { useCallback, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 
@@ -73,6 +74,8 @@ export function useAppUpdater() {
     try {
       let downloaded = 0;
       let contentLength = 0;
+
+      await invoke("prepare_update");
 
       await update.downloadAndInstall((event) => {
         switch (event.event) {
