@@ -13,6 +13,8 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { OverflowMenuButton } from "@/components/ui/OverflowMenuButton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { FileTreeView } from "@/components/ui/FileTreeView";
+import { buildFileTree } from "@/lib/file-tree";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
@@ -21,7 +23,7 @@ import { useContextMenu } from "@/hooks/use-context-menu";
 import { useConfirmCorrelation, useRejectCorrelation } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { useSessionState } from "@/hooks/use-session-state";
-import { formatBytes, isoToEpoch, timeAgo } from "@/lib/format";
+import { isoToEpoch, timeAgo } from "@/lib/format";
 import type {
   AvailableArchive,
   DownloadJobOut,
@@ -430,15 +432,8 @@ export function NexusMatchedGrid({
               <p className="mb-3 text-xs text-text-muted">
                 {group.files.length} file{group.files.length !== 1 ? "s" : ""}
               </p>
-              <div className="max-h-80 overflow-y-auto rounded border border-border bg-surface-0 p-3 space-y-1">
-                {group.files.map((f) => (
-                  <div key={f.id} className="flex justify-between text-xs gap-2">
-                    <span className="font-mono break-all text-text-secondary">
-                      {f.file_path}
-                    </span>
-                    <span className="text-text-muted shrink-0">{formatBytes(f.file_size)}</span>
-                  </div>
-                ))}
+              <div className="max-h-80 overflow-y-auto rounded border border-border bg-surface-0 p-3">
+                <FileTreeView tree={buildFileTree(group.files)} />
               </div>
             </div>
           </div>
