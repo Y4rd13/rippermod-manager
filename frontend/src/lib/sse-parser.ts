@@ -11,6 +11,8 @@ export async function* parseSSE(
 
   const decoder = new TextDecoder();
   let buffer = "";
+  let currentEvent = "message";
+  let currentData = "";
 
   try {
     while (true) {
@@ -21,10 +23,9 @@ export async function* parseSSE(
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
 
-      let currentEvent = "message";
-      let currentData = "";
+      for (const raw of lines) {
+        const line = raw.replace(/\r$/, "");
 
-      for (const line of lines) {
         if (line.startsWith("event:")) {
           currentEvent = line.slice(6).trim();
         } else if (line.startsWith("data:")) {
