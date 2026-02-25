@@ -1,0 +1,181 @@
+[size=4][b]RipperMod Manager[/b][/size]
+
+An AI-powered desktop mod manager built with Cyberpunk 2077 as the primary target, but designed to support any game on Nexus Mods. Scan, group, install, update, and manage your mods with deep Nexus Mods integration and optional AI-assisted features.
+
+[size=3][b]Features[/b][/size]
+
+[b]Mod Scanner & Grouping[/b]
+[list]
+[*]Automatically scans your game folder and discovers all installed mod files.
+[*]Groups scattered files that belong to the same mod using TF-IDF clustering — even when they are spread across multiple directories.
+[*]Reads FOMOD and REDmod metadata to improve grouping accuracy.
+[*]Streaming progress indicator with phase-by-phase feedback during scans.
+[/list]
+
+[b]Auto-Matching (Scan & Correlate)[/b]
+[list]
+[*]Automatically links your locally installed mods to their Nexus Mods pages using a multi-tier matching pipeline:
+[list]
+[*][b]Filename ID extraction[/b] — Parses mod IDs embedded in archive filenames.
+[*][b]MD5 hash matching[/b] — Matches downloaded archives against Nexus file hashes (gold standard).
+[*][b]Endorsed & Tracked sync[/b] — Cross-references your Nexus endorsed/tracked lists with local files.
+[*][b]Fuzzy matching[/b] — Jaccard + Jaro-Winkler similarity scoring as a fallback.
+[*][b]AI semantic search[/b] — Optional ChromaDB-powered vector search for difficult matches (requires OpenAI API key).
+[/list]
+[*]Displays a confidence score on every match so you know how reliable it is.
+[*]Deduplication ensures only the best match per Nexus mod is kept.
+[/list]
+
+[b]Match Review Actions[/b]
+[list]
+[*][b]Accept / Confirm[/b] — Approve an automatic match with one click.
+[*][b]Reject[/b] — Remove an incorrect match so the mod can be re-matched.
+[*][b]Correct / Reassign[/b] — Manually search for the right Nexus mod by name, paste a Nexus URL, or enter a mod ID directly.
+[/list]
+
+[b]FOMOD Installer[/b]
+[list]
+[*]Full FOMOD wizard that parses ModuleConfig.xml from archives.
+[*]Multi-step conditional UI with plugin groups, dependency resolution, and visual indicators (Required, Recommended, Optional, Not Usable).
+[*]Preview file selections before installing.
+[*]Supports composite dependencies (AND/OR/XOR conditions).
+[/list]
+
+[b]Mod Installation & Management[/b]
+[list]
+[*][b]Install[/b] from downloaded archives with automatic conflict detection.
+[*][b]Uninstall[/b] mods cleanly with confirmation.
+[*][b]Enable / Disable[/b] individual mods without removing them.
+[*][b]Conflict resolution[/b] dialog showing exactly which files overlap, with Overwrite, Skip, or Cancel options.
+[*][b]Bulk operations[/b] — Select multiple mods and enable, disable, or uninstall them all at once.
+[*][b]Archive cleanup[/b] — Remove orphan archives not linked to any installed mod.
+[/list]
+
+[b]Nexus Mods Integration[/b]
+[list]
+[*][b]SSO Login[/b] — Sign in with your Nexus Mods account via the official OAuth flow. No manual API key needed.
+[*][b]Endorsed mods tab[/b] — Browse all mods you have endorsed on Nexus, with quick install buttons.
+[*][b]Tracked mods tab[/b] — Browse all mods you are tracking on Nexus.
+[*][b]Trending mods tab[/b] — See popular and recently updated mods for your game.
+[*][b]Endorse / Abstain[/b] — Toggle endorsement on any mod directly from the app.
+[*][b]Track / Untrack[/b] — Toggle tracking on any mod directly from the app.
+[*][b]Mod detail view[/b] — Full mod info: banner image, description, author, category, endorsement count, version history, file listings (Main/Update/Optional/Old/Misc), changelogs, and a direct link to the Nexus page.
+[/list]
+
+[b]Download Manager[/b]
+[list]
+[*]Download mods directly from Nexus Mods with real-time progress tracking (bytes and percentage).
+[*]Supports premium download speeds for eligible Nexus accounts.
+[*][b]NXM protocol handler[/b] — Click "Download with manager" links on the Nexus Mods website and the app handles them automatically.
+[*]Queue multiple downloads.
+[*]Downloaded archives appear in the Archives tab, ready for installation.
+[/list]
+
+[b]Update Checker[/b]
+[list]
+[*]Detects which of your installed mods have newer versions available on Nexus.
+[*]Shows local vs. Nexus version comparison with detection method indicators.
+[*]Aggregated Updates page across all games, plus per-game update tables.
+[*]One-click download of the latest version.
+[/list]
+
+[b]Profile Manager[/b]
+[list]
+[*][b]Create[/b] — Snapshot your current mod setup (installed mods + enabled/disabled states) with a name and description.
+[*][b]Load[/b] — Restore a saved profile with a diff preview showing what will change before applying.
+[*][b]Duplicate[/b] — Copy an existing profile with a new name.
+[*][b]Delete[/b] — Remove profiles you no longer need.
+[*][b]Export[/b] — Download a profile as a JSON file to share or back up.
+[*][b]Import[/b] — Upload a JSON profile file.
+[*][b]Compare[/b] — Side-by-side comparison of two profiles to see the differences.
+[/list]
+
+[b]AI-Powered Features (Optional)[/b]
+[list]
+[*][b]AI Search[/b] — Toggle AI-assisted matching during Scan & Correlate for better results on hard-to-match mods. Uses ChromaDB vector search with OpenAI embeddings.
+[*][b]Chat Assistant[/b] — An AI chat panel where you can ask questions about your mod library in plain English (e.g., "which mods are outdated?", "do I have any lighting mods?"). Supports streaming responses, tool calls, and suggested actions.
+[*][b]Model selection[/b] — Choose between [b]gpt-5-mini[/b] (cost-optimized, recommended) and [b]gpt-5.2[/b] (best quality) in Settings.
+[*][b]Reasoning effort[/b] — Adjust from none to high to control how much the AI "thinks" before answering. Lower effort = faster and cheaper, higher effort = more accurate.
+[*]All AI features require an OpenAI API key (configured in Settings) and are completely optional — the app works fully without them.
+[/list]
+
+[b]Game Management[/b]
+[list]
+[*][b]Auto-detection[/b] — Automatically finds game installations from Steam, GOG, and Epic registries (including multi-library Steam setups).
+[*][b]Manual setup[/b] — Browse and select your game folder manually with path validation.
+[*][b]Play button[/b] — Launch your game directly from the app.
+[*]Configurable mod directories per game.
+[*]Dashboard with overview stats: total games, total mods, Nexus matches, available updates.
+[/list]
+
+[b]App Auto-Update[/b]
+[list]
+[*]Automatically checks for new versions of RipperMod Manager on startup.
+[*]Download and install updates directly from Settings → About with a progress bar.
+[*]One-click restart when the update is ready.
+[*]Accent badge on the Settings icon when an update is available.
+[/list]
+
+[b]Guided Onboarding[/b]
+[list]
+[*]Step-by-step setup on first launch:
+[list]
+[*][b]Step 1[/b] — Welcome screen.
+[*][b]Step 2[/b] — AI setup (OpenAI API key — optional, can be skipped).
+[*][b]Step 3[/b] — Nexus Mods login via SSO.
+[*][b]Step 4[/b] — Add your first game (auto-detect or browse) and run the initial scan.
+[/list]
+[/list]
+
+[size=3][b]How to Install[/b][/size]
+
+[b]1.[/b] Download the latest installer from the [b]Files[/b] tab on this Nexus Mods page.
+[b]2.[/b] Run the installer and follow the prompts.
+[b]3.[/b] Launch RipperMod Manager from your Start Menu or desktop shortcut.
+
+That's it — no additional software required. Everything needed is bundled in the installer. Future updates are delivered automatically through the app.
+
+[size=3][b]How to Use[/b][/size]
+
+[b]Step 1: First Launch (Onboarding)[/b]
+The app will guide you through a quick setup:
+
+[list=1]
+[*][b]Nexus Mods Login[/b] — Sign in with your Nexus Mods account via the official SSO flow.
+[*][b]Game Setup[/b] — Point the app to your game install folder. For Cyberpunk 2077, it auto-detects Steam, GOG, and Epic installs.
+[*][b]Initial Scan[/b] — The app scans your game folder and discovers your installed mods.
+[/list]
+
+[b]Step 2: Review Your Mods[/b]
+After scanning, your mods are grouped and organized. The app automatically tries to match them with their Nexus Mods pages so you can see descriptions, versions, and authors. You can [b]Accept[/b], [b]Reject[/b], or [b]Correct[/b] any match.
+
+[b]Tip for better Scan & Correlate results[/b]
+For best results, endorse the mods you have installed on Nexus Mods. Tracked mods also help, but the matching pipeline has been tested most extensively with endorsed mods. A quick way to improve matching: review your download history on Nexus and endorse the mods you currently have installed.
+
+[b]Step 3: Manage Your Mods[/b]
+
+[list]
+[*][b]Install[/b] — Use the built-in download manager or drop a downloaded archive into the Archives tab. FOMOD archives get a full installer wizard.
+[*][b]Update[/b] — Check the Updates tab to see which mods have newer versions, then download with one click.
+[*][b]Toggle[/b] — Enable or disable any mod without uninstalling it.
+[*][b]Profiles[/b] — Save your current setup as a profile and switch between different mod loadouts. Export and share profiles as JSON.
+[*][b]Endorse & Track[/b] — Manage your Nexus endorsements and tracking directly from the app.
+[/list]
+
+[size=3][b]Requirements[/b][/size]
+
+[list]
+[*]Windows 10 or 11
+[*]A [url=https://www.nexusmods.com/]Nexus Mods[/url] account (free or premium)
+[*]An [url=https://platform.openai.com/api-keys]OpenAI API key[/url] (optional — only needed for AI Search and Chat features)
+[/list]
+
+[size=3][b]Your Data[/b][/size]
+
+RipperMod Manager stores all mod management data locally on your computer in a SQLite database. The app connects to Nexus Mods to retrieve mod metadata and handle downloads requested by you. If you enable AI features, mod names and descriptions are sent to OpenAI for embedding and chat queries — no personal data is shared.
+
+[size=3][b]Open Source[/b][/size]
+
+RipperMod Manager is free and open source under the GPL-3.0 license. Source code, bug reports, and contributions are welcome on [url=https://github.com/Y4rd13/rippermod-manager]GitHub[/url].
+
+[size=2][i]RipperMod Manager is an independent project and is not affiliated with or endorsed by Nexus Mods or CD PROJEKT RED.[/i][/size]
