@@ -49,15 +49,15 @@ async def list_archives(
     game = get_game_or_404(game_name, session)
     archives = list_available_archives(game)
 
-    installed_archives: set[str] = set()
+    installed_archives: dict[str, int] = {}
     rows = session.exec(
-        select(InstalledMod.source_archive).where(
+        select(InstalledMod.source_archive, InstalledMod.id).where(
             InstalledMod.game_id == game.id,
             InstalledMod.source_archive != "",
         )
     ).all()
-    for sa in rows:
-        installed_archives.add(sa)
+    for sa, mod_id in rows:
+        installed_archives[sa] = mod_id
 
     archive_names = {p.name for p in archives}
     dl_date_map = archive_download_dates(
@@ -80,6 +80,7 @@ async def list_archives(
                 parsed_name=parsed.name,
                 parsed_version=parsed.version,
                 is_installed=path.name in installed_archives,
+                installed_mod_id=installed_archives.get(path.name),
                 last_downloaded_at=dl_date,
             )
         )

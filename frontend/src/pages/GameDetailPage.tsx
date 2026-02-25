@@ -87,7 +87,17 @@ export function GameDetailPage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("installed");
   const [selectedModId, setSelectedModId] = useState<number | null>(null);
-  const [aiSearch, setAiSearch] = useState(false);
+  const [aiSearch, setAiSearch] = useState(() => {
+    try {
+      const stored = localStorage.getItem("ai-search-enabled");
+      if (stored !== null) return JSON.parse(stored) === true;
+    } catch { /* ignore */ }
+    return !!hasOpenaiKey;
+  });
+  const handleAiSearchChange = (v: boolean) => {
+    setAiSearch(v);
+    try { localStorage.setItem("ai-search-enabled", JSON.stringify(v)); } catch { /* ignore */ }
+  };
 
   const modalFlow = useInstallFlow(name, archives, downloadJobs);
 
@@ -359,7 +369,7 @@ export function GameDetailPage() {
             <Sparkles size={16} className={cn(aiSearch && hasOpenaiKey ? "text-accent" : "text-text-muted")} />
             <Switch
               checked={aiSearch}
-              onChange={setAiSearch}
+              onChange={handleAiSearchChange}
               label="AI Search"
               disabled={isScanning || !hasOpenaiKey}
             />

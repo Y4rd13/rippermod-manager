@@ -160,6 +160,7 @@ export function useUninstallMod() {
       api.delete(`/api/v1/games/${gameName}/install/installed/${modId}`),
     onSuccess: (_, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
       toast.success("Mod uninstalled");
     },
     onError: () => toast.error("Failed to uninstall mod"),
