@@ -1,4 +1,4 @@
-import { CheckCircle, ChevronDown, ChevronUp, Link2, Pencil, XCircle } from "lucide-react";
+import { CheckCircle, FileText, Link2, Pencil, X, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "@/stores/toast-store";
 
@@ -83,6 +83,7 @@ export function NexusMatchedGrid({
   const [sortKey, setSortKey] = useSessionState<SortKey>(`matched-sort-${gameName}`, "updated");
   const [chip, setChip] = useSessionState(`matched-chip-${gameName}`, "all");
   const [methodChip, setMethodChip] = useSessionState(`matched-method-${gameName}`, "all");
+  const [installChip, setInstallChip] = useSessionState(`matched-install-${gameName}`, "all");
 
   const flow = useInstallFlow(gameName, archives, downloadJobs);
   const { menuState, openMenu, closeMenu } = useContextMenu<ModGroup>();
@@ -111,6 +112,21 @@ export function NexusMatchedGrid({
     }
   }, [methodChips, methodChip, setMethodChip]);
 
+  const installChips = useMemo(() => {
+    let installedCount = 0;
+    let notInstalledCount = 0;
+    for (const m of mods) {
+      const nexusId = m.nexus_match?.nexus_mod_id;
+      if (nexusId != null && installedModIds.has(nexusId)) installedCount++;
+      else notInstalledCount++;
+    }
+    return [
+      { key: "all", label: "All" },
+      { key: "installed", label: "Installed", count: installedCount },
+      { key: "not-installed", label: "Not Installed", count: notInstalledCount },
+    ];
+  }, [mods, installedModIds]);
+
   const filtered = useMemo(() => {
     const q = filter.toLowerCase();
     let items = mods.filter((m) => {
@@ -134,6 +150,17 @@ export function NexusMatchedGrid({
     if (methodChip !== "all")
       items = items.filter((m) => m.nexus_match?.method === methodChip);
 
+    if (installChip === "installed")
+      items = items.filter((m) => {
+        const nexusId = m.nexus_match?.nexus_mod_id;
+        return nexusId != null && installedModIds.has(nexusId);
+      });
+    else if (installChip === "not-installed")
+      items = items.filter((m) => {
+        const nexusId = m.nexus_match?.nexus_mod_id;
+        return nexusId == null || !installedModIds.has(nexusId);
+      });
+
     items.sort((a, b) => {
       const ma = a.nexus_match;
       const mb = b.nexus_match;
@@ -153,13 +180,13 @@ export function NexusMatchedGrid({
     });
 
     return items;
-  }, [mods, filter, sortKey, chip, methodChip]);
+  }, [mods, filter, sortKey, chip, methodChip, installChip, installedModIds]);
 
   const confirmCorrelation = useConfirmCorrelation();
   const rejectCorrelation = useRejectCorrelation();
   const [reassignGroupId, setReassignGroupId] = useState<number | null>(null);
   const [rejectModId, setRejectModId] = useState<number | null>(null);
-  const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
+  const [filesModalGroupId, setFilesModalGroupId] = useState<number | null>(null);
 
   const contextMenuItems: ContextMenuItem[] = [
     { key: "view", label: "View Details" },
@@ -229,27 +256,16 @@ export function NexusMatchedGrid({
 
       <FilterChips chips={CONFIDENCE_CHIPS} active={chip} onChange={setChip} />
       <FilterChips chips={methodChips} active={methodChip} onChange={setMethodChip} />
+      <FilterChips chips={installChips} active={installChip} onChange={setInstallChip} />
 
       <VirtualCardGrid
         items={filtered}
-        remeasureDep={expandedCards.size}
         renderItem={(mod) => {
           const match = mod.nexus_match;
           if (!match) return null;
 
           const nexusModId = match.nexus_mod_id;
           const archive = nexusModId != null ? flow.archiveByModId.get(nexusModId) : undefined;
-
-          const isExpanded = expandedCards.has(mod.id);
-          const toggleExpand = (e: React.MouseEvent) => {
-            e.stopPropagation();
-            setExpandedCards((prev) => {
-              const next = new Set(prev);
-              if (next.has(mod.id)) next.delete(mod.id);
-              else next.add(mod.id);
-              return next;
-            });
-          };
 
           return (
             <div className="flex flex-col">
@@ -320,10 +336,13 @@ export function NexusMatchedGrid({
                       )}
                       {mod.files.length > 0 && (
                         <button
-                          onClick={toggleExpand}
-                          className="ml-auto flex items-center gap-0.5 text-xs text-accent hover:underline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFilesModalGroupId(mod.id);
+                          }}
+                          className="ml-auto flex items-center gap-1 text-xs text-accent hover:underline"
                         >
-                          {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          <FileText size={12} />
                           {mod.files.length} file{mod.files.length !== 1 ? "s" : ""}
                         </button>
                       )}
@@ -331,16 +350,6 @@ export function NexusMatchedGrid({
                   }
                 />
               </div>
-              {isExpanded && mod.files.length > 0 && (
-                <div className="shrink-0 rounded-b-xl border border-t-0 border-border bg-surface-2 px-4 py-2 -mt-1 space-y-0.5">
-                  {mod.files.map((f) => (
-                    <div key={f.id} className="flex justify-between text-xs gap-2">
-                      <span className="font-mono truncate text-text-secondary">{f.file_path}</span>
-                      <span className="text-text-muted shrink-0">{formatBytes(f.file_size)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           );
         }}
@@ -391,6 +400,50 @@ export function NexusMatchedGrid({
           onClose={() => setReassignGroupId(null)}
         />
       )}
+
+      {filesModalGroupId != null && (() => {
+        const group = mods.find((m) => m.id === filesModalGroupId);
+        if (!group) return null;
+        return (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+            onClick={() => setFilesModalGroupId(null)}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="files-dialog-title"
+              className="w-full max-w-lg rounded-xl border border-border bg-surface-1 p-6 animate-modal-in"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <h3 id="files-dialog-title" className="text-sm font-semibold text-text-primary truncate pr-4">
+                  {group.nexus_match?.mod_name ?? group.display_name}
+                </h3>
+                <button
+                  onClick={() => setFilesModalGroupId(null)}
+                  className="shrink-0 rounded-md p-1 text-text-muted hover:bg-surface-3 hover:text-text-primary"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <p className="mb-3 text-xs text-text-muted">
+                {group.files.length} file{group.files.length !== 1 ? "s" : ""}
+              </p>
+              <div className="max-h-64 overflow-y-auto rounded border border-border bg-surface-0 p-3 space-y-1">
+                {group.files.map((f) => (
+                  <div key={f.id} className="flex justify-between text-xs gap-2">
+                    <span className="font-mono truncate text-text-secondary" title={f.file_path}>
+                      {f.file_path}
+                    </span>
+                    <span className="text-text-muted shrink-0">{formatBytes(f.file_size)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
