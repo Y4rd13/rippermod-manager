@@ -258,6 +258,7 @@ export function ChatPanel() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const isResizing = useRef(false);
+  const resizeCleanup = useRef<(() => void) | null>(null);
   const widthBeforeCollapse = useRef(384);
 
   useEffect(() => {
@@ -267,6 +268,7 @@ export function ChatPanel() {
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
+      resizeCleanup.current?.();
     };
   }, []);
 
@@ -282,18 +284,20 @@ export function ChatPanel() {
       setPanelWidth(clamped);
     };
 
-    const onMouseUp = () => {
+    const cleanup = () => {
       isResizing.current = false;
+      resizeCleanup.current = null;
       document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
+      document.removeEventListener("mouseup", cleanup);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
 
+    resizeCleanup.current = cleanup;
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
+    document.addEventListener("mouseup", cleanup);
   }, [panelWidth]);
 
   const toggleCollapse = useCallback(() => {
