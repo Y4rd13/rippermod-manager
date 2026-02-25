@@ -413,7 +413,7 @@ export function NexusMatchedGrid({
               role="dialog"
               aria-modal="true"
               aria-labelledby="files-dialog-title"
-              className="w-full max-w-lg rounded-xl border border-border bg-surface-1 p-6 animate-modal-in"
+              className="w-full max-w-2xl rounded-xl border border-border bg-surface-1 p-6 animate-modal-in"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="mb-4 flex items-center justify-between">
@@ -430,10 +430,10 @@ export function NexusMatchedGrid({
               <p className="mb-3 text-xs text-text-muted">
                 {group.files.length} file{group.files.length !== 1 ? "s" : ""}
               </p>
-              <div className="max-h-64 overflow-y-auto rounded border border-border bg-surface-0 p-3 space-y-1">
+              <div className="max-h-80 overflow-y-auto rounded border border-border bg-surface-0 p-3 space-y-1">
                 {group.files.map((f) => (
                   <div key={f.id} className="flex justify-between text-xs gap-2">
-                    <span className="font-mono truncate text-text-secondary" title={f.file_path}>
+                    <span className="font-mono break-all text-text-secondary">
                       {f.file_path}
                     </span>
                     <span className="text-text-muted shrink-0">{formatBytes(f.file_size)}</span>
