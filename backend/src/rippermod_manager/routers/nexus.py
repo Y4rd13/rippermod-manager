@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, col, select
@@ -6,6 +6,9 @@ from sqlmodel import Session, col, select
 from rippermod_manager.database import get_session
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.settings import AppSetting
+
+if TYPE_CHECKING:
+    from rippermod_manager.models.nexus import NexusDownload
 from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.nexus import (
     ModActionResult,
@@ -194,7 +197,9 @@ async def mod_detail(
     )
 
 
-def _get_or_create_download(session: Session, game_id: int, mod_id: int, game_domain: str):
+def _get_or_create_download(
+    session: Session, game_id: int, mod_id: int, game_domain: str
+) -> "NexusDownload":
     from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 
     dl = session.exec(
@@ -228,11 +233,13 @@ async def endorse_mod(
 
     from httpx import HTTPStatusError
 
-    from rippermod_manager.nexus.client import NexusClient
+    from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
 
     try:
         async with NexusClient(api_key) as client:
             await client.endorse_mod(game.domain_name, mod_id)
+    except NexusRateLimitError as e:
+        raise HTTPException(429, f"Rate limited: {e}") from e
     except HTTPStatusError as e:
         raise HTTPException(e.response.status_code, f"Nexus API error: {e.response.text}") from e
 
@@ -253,11 +260,13 @@ async def abstain_mod(
 
     from httpx import HTTPStatusError
 
-    from rippermod_manager.nexus.client import NexusClient
+    from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
 
     try:
         async with NexusClient(api_key) as client:
             await client.abstain_mod(game.domain_name, mod_id)
+    except NexusRateLimitError as e:
+        raise HTTPException(429, f"Rate limited: {e}") from e
     except HTTPStatusError as e:
         raise HTTPException(e.response.status_code, f"Nexus API error: {e.response.text}") from e
 
@@ -278,11 +287,13 @@ async def track_mod(
 
     from httpx import HTTPStatusError
 
-    from rippermod_manager.nexus.client import NexusClient
+    from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
 
     try:
         async with NexusClient(api_key) as client:
             await client.track_mod(game.domain_name, mod_id)
+    except NexusRateLimitError as e:
+        raise HTTPException(429, f"Rate limited: {e}") from e
     except HTTPStatusError as e:
         raise HTTPException(e.response.status_code, f"Nexus API error: {e.response.text}") from e
 
@@ -303,11 +314,13 @@ async def untrack_mod(
 
     from httpx import HTTPStatusError
 
-    from rippermod_manager.nexus.client import NexusClient
+    from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
 
     try:
         async with NexusClient(api_key) as client:
             await client.untrack_mod(game.domain_name, mod_id)
+    except NexusRateLimitError as e:
+        raise HTTPException(429, f"Rate limited: {e}") from e
     except HTTPStatusError as e:
         raise HTTPException(e.response.status_code, f"Nexus API error: {e.response.text}") from e
 

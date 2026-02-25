@@ -7,7 +7,6 @@ interface Props {
   isTracked: boolean;
   modId: number;
   gameName: string;
-  version?: string;
 }
 
 export function ModQuickActions({ isEndorsed, isTracked, modId, gameName }: Props) {

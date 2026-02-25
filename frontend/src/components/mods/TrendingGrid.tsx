@@ -224,7 +224,6 @@ export function TrendingGrid({
               isTracked={mod.is_tracked}
               modId={nexusModId}
               gameName={gameName}
-              version={mod.version}
             />
           </div>
         }

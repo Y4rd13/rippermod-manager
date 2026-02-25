@@ -99,6 +99,7 @@ function AboutCard() {
                 type="button"
                 disabled={endorsePending}
                 onClick={() => {
+                  if (!gameName) return;
                   if (isEndorsed) abstainMod.mutate({ gameName, modId: RIPPERMOD_NEXUS_MOD_ID });
                   else endorseMod.mutate({ gameName, modId: RIPPERMOD_NEXUS_MOD_ID });
                 }}
@@ -125,6 +126,7 @@ function AboutCard() {
                 type="button"
                 disabled={trackPending}
                 onClick={() => {
+                  if (!gameName) return;
                   if (isTracked) untrackMod.mutate({ gameName, modId: RIPPERMOD_NEXUS_MOD_ID });
                   else trackMod.mutate({ gameName, modId: RIPPERMOD_NEXUS_MOD_ID });
                 }}
