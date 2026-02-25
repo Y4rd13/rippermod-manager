@@ -30,6 +30,8 @@ backend/build/
 # Docs (local strategy notes, except publishable files)
 docs/
 !docs/nexus-description.bbcode
+!docs/assets/
+!docs/assets/*
 
 # Temp
 temp/
