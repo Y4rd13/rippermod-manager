@@ -97,6 +97,12 @@ class NexusModFileOut(BaseModel):
     file_size: int
 
 
+class ModActionResult(BaseModel):
+    success: bool
+    is_endorsed: bool | None = None
+    is_tracked: bool | None = None
+
+
 class ModDetailOut(BaseModel):
     nexus_mod_id: int
     game_domain: str
@@ -114,6 +120,8 @@ class ModDetailOut(BaseModel):
     nexus_url: str
     changelogs: dict[str, list[str]]
     files: list[NexusModFileOut]
+    is_tracked: bool = False
+    is_endorsed: bool = False
 
 
 class SSOStartResult(BaseModel):

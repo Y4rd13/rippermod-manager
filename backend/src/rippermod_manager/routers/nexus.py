@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, col, select
@@ -6,7 +6,12 @@ from sqlmodel import Session, col, select
 from rippermod_manager.database import get_session
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.settings import AppSetting
+
+if TYPE_CHECKING:
+    from rippermod_manager.models.nexus import NexusDownload
+from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.nexus import (
+    ModActionResult,
     ModDetailOut,
     NexusDownloadBrief,
     NexusModEnrichedOut,
@@ -15,6 +20,7 @@ from rippermod_manager.schemas.nexus import (
     SSOPollResult,
     SSOStartResult,
 )
+from rippermod_manager.services.settings_helpers import get_setting
 
 router = APIRouter(prefix="/nexus", tags=["nexus"])
 
@@ -153,6 +159,18 @@ async def mod_detail(
 
     files = session.exec(select(NexusModFile).where(NexusModFile.nexus_mod_id == mod_id)).all()
 
+    from rippermod_manager.models.nexus import NexusDownload
+
+    game_for_dl = session.exec(select(Game).where(Game.domain_name == game_domain)).first()
+    dl = None
+    if game_for_dl:
+        dl = session.exec(
+            select(NexusDownload).where(
+                NexusDownload.nexus_mod_id == mod_id,
+                NexusDownload.game_id == game_for_dl.id,
+            )
+        ).first()
+
     nexus_url = f"https://www.nexusmods.com/{game_domain}/mods/{mod_id}"
 
     return ModDetailOut(
@@ -182,7 +200,142 @@ async def mod_detail(
             )
             for f in files
         ],
+        is_tracked=dl.is_tracked if dl else False,
+        is_endorsed=dl.is_endorsed if dl else False,
     )
+
+
+def _get_or_create_download(
+    session: Session, game_id: int, mod_id: int, game_domain: str
+) -> "NexusDownload":
+    from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
+
+    dl = session.exec(
+        select(NexusDownload).where(
+            NexusDownload.game_id == game_id, NexusDownload.nexus_mod_id == mod_id
+        )
+    ).first()
+    if dl:
+        return dl
+
+    meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
+    dl = NexusDownload(
+        game_id=game_id,
+        nexus_mod_id=mod_id,
+        mod_name=meta.name if meta else "",
+        nexus_url=f"https://www.nexusmods.com/{game_domain}/mods/{mod_id}",
+    )
+    session.add(dl)
+    session.flush()
+    return dl
+
+
+@router.post("/{game_name}/mods/{mod_id}/endorse", response_model=ModActionResult)
+async def endorse_mod(
+    game_name: str, mod_id: int, session: Session = Depends(get_session)
+) -> ModActionResult:
+    game = get_game_or_404(game_name, session)
+    api_key = get_setting(session, "nexus_api_key")
+    if not api_key:
+        raise HTTPException(400, "Nexus API key not configured")
+
+    from httpx import HTTPStatusError
+
+    from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
+
+    try:
+        async with NexusClient(api_key) as client:
+            await client.endorse_mod(game.domain_name, mod_id)
+    except NexusRateLimitError as e:
+        raise HTTPException(429, f"Rate limited: {e}") from e
+    except HTTPStatusError as e:
+        raise HTTPException(e.response.status_code, f"Nexus API error: {e.response.text}") from e
+
+    dl = _get_or_create_download(session, game.id, mod_id, game.domain_name)  # type: ignore[arg-type]
+    dl.is_endorsed = True
+    session.commit()
+    return ModActionResult(success=True, is_endorsed=True)
+
+
+@router.post("/{game_name}/mods/{mod_id}/abstain", response_model=ModActionResult)
+async def abstain_mod(
+    game_name: str, mod_id: int, session: Session = Depends(get_session)
+) -> ModActionResult:
+    game = get_game_or_404(game_name, session)
+    api_key = get_setting(session, "nexus_api_key")
+    if not api_key:
+        raise HTTPException(400, "Nexus API key not configured")
+
+    from httpx import HTTPStatusError
+
+    from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
+
+    try:
+        async with NexusClient(api_key) as client:
+            await client.abstain_mod(game.domain_name, mod_id)
+    except NexusRateLimitError as e:
+        raise HTTPException(429, f"Rate limited: {e}") from e
+    except HTTPStatusError as e:
+        raise HTTPException(e.response.status_code, f"Nexus API error: {e.response.text}") from e
+
+    dl = _get_or_create_download(session, game.id, mod_id, game.domain_name)  # type: ignore[arg-type]
+    dl.is_endorsed = False
+    session.commit()
+    return ModActionResult(success=True, is_endorsed=False)
+
+
+@router.post("/{game_name}/mods/{mod_id}/track", response_model=ModActionResult)
+async def track_mod(
+    game_name: str, mod_id: int, session: Session = Depends(get_session)
+) -> ModActionResult:
+    game = get_game_or_404(game_name, session)
+    api_key = get_setting(session, "nexus_api_key")
+    if not api_key:
+        raise HTTPException(400, "Nexus API key not configured")
+
+    from httpx import HTTPStatusError
+
+    from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
+
+    try:
+        async with NexusClient(api_key) as client:
+            await client.track_mod(game.domain_name, mod_id)
+    except NexusRateLimitError as e:
+        raise HTTPException(429, f"Rate limited: {e}") from e
+    except HTTPStatusError as e:
+        raise HTTPException(e.response.status_code, f"Nexus API error: {e.response.text}") from e
+
+    dl = _get_or_create_download(session, game.id, mod_id, game.domain_name)  # type: ignore[arg-type]
+    dl.is_tracked = True
+    session.commit()
+    return ModActionResult(success=True, is_tracked=True)
+
+
+@router.delete("/{game_name}/mods/{mod_id}/track", response_model=ModActionResult)
+async def untrack_mod(
+    game_name: str, mod_id: int, session: Session = Depends(get_session)
+) -> ModActionResult:
+    game = get_game_or_404(game_name, session)
+    api_key = get_setting(session, "nexus_api_key")
+    if not api_key:
+        raise HTTPException(400, "Nexus API key not configured")
+
+    from httpx import HTTPStatusError
+
+    from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
+
+    try:
+        async with NexusClient(api_key) as client:
+            await client.untrack_mod(game.domain_name, mod_id)
+    except NexusRateLimitError as e:
+        raise HTTPException(429, f"Rate limited: {e}") from e
+    except HTTPStatusError as e:
+        raise HTTPException(e.response.status_code, f"Nexus API error: {e.response.text}") from e
+
+    dl = _get_or_create_download(session, game.id, mod_id, game.domain_name)  # type: ignore[arg-type]
+    dl.is_tracked = False
+    session.commit()
+    return ModActionResult(success=True, is_tracked=False)
 
 
 @router.post("/sso/start", response_model=SSOStartResult)

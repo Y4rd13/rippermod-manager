@@ -35,6 +35,8 @@ class InstalledModOut(BaseModel):
     category: str | None = None
     last_downloaded_at: datetime | None = None
     nexus_url: str | None = None
+    is_tracked: bool = False
+    is_endorsed: bool = False
 
 
 class UninstallResult(BaseModel):

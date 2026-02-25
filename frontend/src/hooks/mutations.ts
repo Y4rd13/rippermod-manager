@@ -16,6 +16,7 @@ import type {
   GameCreate,
   InstallRequest,
   InstallResult,
+  ModActionResult,
   NexusSyncResult,
   OnboardingStatus,
   OrphanCleanupResult,
@@ -511,5 +512,69 @@ export function useFomodPreview() {
   return useMutation<FomodPreviewResult, Error, { gameName: string; data: FomodPreviewRequest }>({
     mutationFn: ({ gameName, data }) =>
       api.post(`/api/v1/games/${gameName}/install/fomod/preview`, data),
+  });
+}
+
+export function useEndorseMod() {
+  const qc = useQueryClient();
+  return useMutation<ModActionResult, Error, { gameName: string; modId: number }>({
+    mutationFn: ({ gameName, modId }) =>
+      api.post(`/api/v1/nexus/${gameName}/mods/${modId}/endorse`),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["trending", gameName] });
+      qc.invalidateQueries({ queryKey: ["nexus-downloads", gameName] });
+      qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      qc.invalidateQueries({ queryKey: ["mod-detail"] });
+      toast.success("Mod endorsed");
+    },
+    onError: () => toast.error("Failed to endorse mod"),
+  });
+}
+
+export function useAbstainMod() {
+  const qc = useQueryClient();
+  return useMutation<ModActionResult, Error, { gameName: string; modId: number }>({
+    mutationFn: ({ gameName, modId }) =>
+      api.post(`/api/v1/nexus/${gameName}/mods/${modId}/abstain`),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["trending", gameName] });
+      qc.invalidateQueries({ queryKey: ["nexus-downloads", gameName] });
+      qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      qc.invalidateQueries({ queryKey: ["mod-detail"] });
+      toast.success("Endorsement removed");
+    },
+    onError: () => toast.error("Failed to remove endorsement"),
+  });
+}
+
+export function useTrackMod() {
+  const qc = useQueryClient();
+  return useMutation<ModActionResult, Error, { gameName: string; modId: number }>({
+    mutationFn: ({ gameName, modId }) =>
+      api.post(`/api/v1/nexus/${gameName}/mods/${modId}/track`),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["trending", gameName] });
+      qc.invalidateQueries({ queryKey: ["nexus-downloads", gameName] });
+      qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      qc.invalidateQueries({ queryKey: ["mod-detail"] });
+      toast.success("Mod tracked");
+    },
+    onError: () => toast.error("Failed to track mod"),
+  });
+}
+
+export function useUntrackMod() {
+  const qc = useQueryClient();
+  return useMutation<ModActionResult, Error, { gameName: string; modId: number }>({
+    mutationFn: ({ gameName, modId }) =>
+      api.delete(`/api/v1/nexus/${gameName}/mods/${modId}/track`),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["trending", gameName] });
+      qc.invalidateQueries({ queryKey: ["nexus-downloads", gameName] });
+      qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      qc.invalidateQueries({ queryKey: ["mod-detail"] });
+      toast.success("Mod untracked");
+    },
+    onError: () => toast.error("Failed to untrack mod"),
   });
 }

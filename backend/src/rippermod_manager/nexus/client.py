@@ -78,6 +78,43 @@ class NexusClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def _post(
+        self,
+        path: str,
+        *,
+        data: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> Any:
+        resp = await self.client.post(path, data=data, params=params)
+        self._read_rate_limit_headers(resp)
+        if resp.status_code == 429:
+            raise NexusRateLimitError(
+                hourly_remaining=self.hourly_remaining or 0,
+                daily_remaining=self.daily_remaining or 0,
+                reset=resp.headers.get("X-RL-Hourly-Reset", ""),
+            )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        data: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> Any:
+        resp = await self.client.request(method, path, data=data, params=params)
+        self._read_rate_limit_headers(resp)
+        if resp.status_code == 429:
+            raise NexusRateLimitError(
+                hourly_remaining=self.hourly_remaining or 0,
+                daily_remaining=self.daily_remaining or 0,
+                reset=resp.headers.get("X-RL-Hourly-Reset", ""),
+            )
+        resp.raise_for_status()
+        return resp.json()
+
     async def validate_key(self) -> NexusKeyResult:
         try:
             data = await self._get("/v1/users/validate.json")
@@ -126,6 +163,33 @@ class NexusClient:
 
     async def md5_search(self, game_domain: str, md5_hash: str) -> list[dict[str, Any]]:
         return await self._get(f"/v1/games/{game_domain}/mods/md5_search/{md5_hash}.json")
+
+    async def endorse_mod(
+        self, game_domain: str, mod_id: int, *, version: str | None = None
+    ) -> dict[str, Any]:
+        data = {"version": version} if version else {}
+        return await self._post(f"/v1/games/{game_domain}/mods/{mod_id}/endorse.json", data=data)
+
+    async def abstain_mod(
+        self, game_domain: str, mod_id: int, *, version: str | None = None
+    ) -> dict[str, Any]:
+        data = {"version": version} if version else {}
+        return await self._post(f"/v1/games/{game_domain}/mods/{mod_id}/abstain.json", data=data)
+
+    async def track_mod(self, domain_name: str, mod_id: int) -> dict[str, Any]:
+        return await self._post(
+            "/v1/user/tracked_mods.json",
+            data={"mod_id": str(mod_id)},
+            params={"domain_name": domain_name},
+        )
+
+    async def untrack_mod(self, domain_name: str, mod_id: int) -> dict[str, Any]:
+        return await self._request(
+            "DELETE",
+            "/v1/user/tracked_mods.json",
+            data={"mod_id": str(mod_id)},
+            params={"domain_name": domain_name},
+        )
 
     async def get_download_links(
         self,
