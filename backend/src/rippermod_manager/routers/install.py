@@ -57,7 +57,8 @@ async def list_archives(
         )
     ).all()
     for sa, mod_id in rows:
-        installed_archives[sa] = mod_id
+        if sa not in installed_archives:
+            installed_archives[sa] = mod_id
 
     archive_names = {p.name for p in archives}
     dl_date_map = archive_download_dates(

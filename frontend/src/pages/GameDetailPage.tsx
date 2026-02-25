@@ -92,8 +92,13 @@ export function GameDetailPage() {
       const stored = localStorage.getItem("ai-search-enabled");
       if (stored !== null) return JSON.parse(stored) === true;
     } catch { /* ignore */ }
-    return !!hasOpenaiKey;
+    return false;
   });
+  useEffect(() => {
+    if (localStorage.getItem("ai-search-enabled") === null) {
+      setAiSearch(!!hasOpenaiKey);
+    }
+  }, [hasOpenaiKey]);
   const handleAiSearchChange = (v: boolean) => {
     setAiSearch(v);
     try { localStorage.setItem("ai-search-enabled", JSON.stringify(v)); } catch { /* ignore */ }

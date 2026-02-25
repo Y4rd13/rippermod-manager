@@ -367,7 +367,6 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                     <Button
                       variant="danger"
                       size="sm"
-                      loading={uninstallMod.isPending && confirmUninstall?.modId === a.installed_mod_id}
                       onClick={() => setConfirmUninstall({ filename: a.filename, modId: a.installed_mod_id! })}
                     >
                       <PackageMinus size={14} /> Uninstall
