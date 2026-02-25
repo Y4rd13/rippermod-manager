@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/lib/api-client";
 import type {
+  ArchiveContentsResult,
   AvailableArchive,
   DownloadJobOut,
   Game,
@@ -99,6 +100,17 @@ export function useSettings() {
 export function useHasOpenaiKey(): boolean {
   const { data: settings = [] } = useSettings();
   return settings.some((s) => s.key === "openai_api_key" && s.value);
+}
+
+export function useArchiveContents(gameName: string, filename: string | null) {
+  return useQuery<ArchiveContentsResult>({
+    queryKey: ["archive-contents", gameName, filename],
+    queryFn: () =>
+      api.get(
+        `/api/v1/games/${gameName}/install/archives/${encodeURIComponent(filename!)}/contents`,
+      ),
+    enabled: !!gameName && !!filename,
+  });
 }
 
 export function useAvailableArchives(gameName: string) {

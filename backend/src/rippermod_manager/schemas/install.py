@@ -83,3 +83,17 @@ class OrphanCleanupResult(BaseModel):
     deleted_count: int
     freed_bytes: int
     deleted_files: list[str]
+
+
+class ArchiveEntryOut(BaseModel):
+    name: str
+    is_dir: bool
+    size: int = 0
+    children: list["ArchiveEntryOut"] = []
+
+
+class ArchiveContentsResult(BaseModel):
+    filename: str
+    total_files: int
+    total_size: int
+    tree: list[ArchiveEntryOut]
