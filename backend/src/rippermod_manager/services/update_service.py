@@ -34,6 +34,7 @@ from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.models.mod import ModFile, ModGroup
 from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 from rippermod_manager.nexus.client import NexusClient
+from rippermod_manager.services.download_dates import archive_download_dates
 from rippermod_manager.services.nexus_helpers import match_local_to_nexus_file
 from rippermod_manager.services.settings_helpers import get_setting, set_setting
 from rippermod_manager.utils.paths import build_file_path, to_native_path
@@ -417,7 +418,9 @@ async def _resolve_file_ids(
                     update["nexus_file_id"] = best.get("file_id")
                     update["nexus_file_name"] = best.get("file_name", "")
                     update["nexus_version"] = best.get("version", update["nexus_version"])
-                    update["nexus_timestamp"] = best.get("uploaded_timestamp")
+                    # Store resolved file timestamp for the false-positive filter
+                    # (separate from nexus_timestamp which shows the mod's last update).
+                    update["_resolved_file_ts"] = best.get("uploaded_timestamp")
             except (httpx.HTTPError, ValueError, KeyError):
                 logger.warning(
                     "Failed to resolve file for mod %d",
@@ -587,11 +590,44 @@ async def check_all_updates(
     ).all()
     meta_map = {m.nexus_mod_id: m for m in meta_rows}
 
-    # Detect updates via TWO methods
+    # Compute download dates for accurate detection.
+    # User's rule: if Nexus updated AFTER download, always flag for update.
+    download_date_map: dict[int, int] = {}
+    archive_names = {m.source_archive for m in tracked.values() if m.source_archive}
+    if archive_names and install_path:
+        raw_dates = archive_download_dates(session, game_id, install_path, archive_names)
+        archive_epoch = {fn: int(dt.timestamp()) for fn, dt in raw_dates.items()}
+        for mid, mod in tracked.items():
+            if mod.source_archive and mod.source_archive in archive_epoch:
+                download_date_map[mid] = archive_epoch[mod.source_archive]
+
+    # Fallback: InstalledMod.installed_at for mods without archive download dates
+    remaining_installed = {
+        mod.installed_mod_id: mid
+        for mid, mod in tracked.items()
+        if mid not in download_date_map and mod.installed_mod_id is not None
+    }
+    if remaining_installed:
+        inst_rows = session.exec(
+            select(InstalledMod.id, InstalledMod.installed_at).where(
+                InstalledMod.id.in_(list(remaining_installed.keys()))
+            )
+        ).all()
+        for inst_id, inst_at in inst_rows:
+            if inst_at and inst_id in remaining_installed:
+                mid = remaining_installed[inst_id]
+                dt = inst_at.replace(tzinfo=UTC) if inst_at.tzinfo is None else inst_at
+                download_date_map[mid] = int(dt.timestamp())
+
+    dl_count = sum(1 for mid in tracked if mid in download_date_map)
+    logger.info("Download dates: obtained for %d/%d tracked mods", dl_count, len(tracked))
+
+    # Detect updates via THREE methods
     updates: list[dict[str, Any]] = []
     ts_detections = 0
     ver_detections = 0
     both_detections = 0
+    dl_detections = 0
 
     for mid, mod in tracked.items():
         meta = meta_map.get(mid)
@@ -625,14 +661,33 @@ async def check_all_updates(
             mod.local_version, meta.version
         )
 
+        # c) DOWNLOAD DATE comparison (user's rule: always flag if Nexus updated
+        # after the user downloaded the mod — regardless of version strings)
+        download_date = download_date_map.get(mid)
+        is_dl_newer = (
+            download_date is not None
+            and nexus_update_ts is not None
+            and nexus_update_ts > download_date
+        )
+
         # file_update_map entries come from Nexus get_updated_mods API
         # (latest_file_update) — only changes when a new file is uploaded.
         # meta.updated_at changes on any metadata edit — unreliable.
         # Only suppress same-version detections for the unreliable source.
         is_file_update = mid in file_update_map
 
-        if is_version_newer or (is_ts_flagged and (is_file_update or not is_version_equal)):
-            if is_ts_flagged and is_version_newer:
+        if (
+            is_version_newer
+            or is_dl_newer
+            or (is_ts_flagged and (is_file_update or not is_version_equal))
+        ):
+            if is_dl_newer and is_version_newer:
+                detection = "both"
+                both_detections += 1
+            elif is_dl_newer:
+                detection = "timestamp"
+                dl_detections += 1
+            elif is_ts_flagged and is_version_newer:
                 detection = "both"
                 both_detections += 1
             elif is_ts_flagged:
@@ -668,6 +723,7 @@ async def check_all_updates(
                     "nexus_version": meta.version,
                     "_initial_nexus_version": meta.version,
                     "_is_file_update": is_file_update,
+                    "_is_dl_newer": is_dl_newer,
                     "nexus_mod_id": mid,
                     "nexus_file_id": None,
                     "nexus_file_name": "",
@@ -676,7 +732,7 @@ async def check_all_updates(
                     "author": meta.author,
                     "source": mod.source,
                     "local_timestamp": mod.upload_timestamp,
-                    "nexus_timestamp": None,
+                    "nexus_timestamp": nexus_update_ts,
                     "detection_method": detection,
                     "source_archive": mod.source_archive,
                     "reason": reason,
@@ -691,10 +747,11 @@ async def check_all_updates(
             )
 
     logger.info(
-        "Update detection: %d by timestamp, %d by version, %d by both",
+        "Update detection: %d by timestamp, %d by version, %d by both, %d by download-date",
         ts_detections,
         ver_detections,
         both_detections,
+        dl_detections,
     )
 
     # Resolve file IDs for downloads, persist back to DB, and filter false positives
@@ -720,11 +777,19 @@ async def check_all_updates(
         # so we compare the *resolved* version + timestamp against local.
         filtered: list[dict[str, Any]] = []
         for u in updates:
+            # Download-date detections bypass the filter entirely.
+            # User's rule: if Nexus updated after download, always flag.
+            if u.get("_is_dl_newer"):
+                filtered.append(u)
+                continue
+
             resolved_nexus_v = u.get("nexus_version", "")
             local_v = u.get("local_version", "")
             is_file_upd = u.get("_is_file_update", False)
             mid = u["nexus_mod_id"]
-            nexus_file_ts = u.get("nexus_timestamp")
+            # Use the resolved file's upload timestamp (not nexus_timestamp
+            # which now holds the mod's last-updated time for display).
+            resolved_file_ts = u.get("_resolved_file_ts")
             local_mtime = tracked[mid].local_file_mtime
 
             if resolved_nexus_v and local_v and not is_newer_version(resolved_nexus_v, local_v):
@@ -740,28 +805,32 @@ async def check_all_updates(
                 # file upload) — but the resolved file may belong to a
                 # *different* edition.  Verify that the resolved file is
                 # actually newer than the local file before keeping.
-                #
-                # When no local timestamp is available (endorsed/tracked mods
-                # without local files), there is nothing to update locally.
-                if local_mtime is None:
-                    logger.debug(
-                        "Filtered (same-version, no local timestamp): %s",
-                        u["display_name"],
-                    )
-                    continue
-                if nexus_file_ts is not None and nexus_file_ts <= local_mtime:
+                if (
+                    resolved_file_ts is not None
+                    and local_mtime is not None
+                    and resolved_file_ts <= local_mtime
+                ):
                     logger.debug(
                         "Filtered (same-version, file not newer): %s — file_ts=%d <= local_ts=%d",
                         u["display_name"],
-                        nexus_file_ts,
+                        resolved_file_ts,
                         local_mtime,
                     )
                     continue
-                if nexus_file_ts is None:
+                # Endorsed/tracked mods without local files: nothing to update
+                # locally, even if Nexus has a new file with the same version.
+                if local_mtime is None and u.get("source") in ("endorsed", "tracked"):
                     logger.debug(
-                        "Kept (same-version, file-update signal, no resolved timestamp): %s",
+                        "Filtered (same-version, no local files): %s",
                         u["display_name"],
                     )
+                    continue
+                # Trust the file-update signal from get_updated_mods when
+                # timestamps are unavailable for precise comparison.
+                logger.debug(
+                    "Kept (file-update signal, same version): %s",
+                    u["display_name"],
+                )
 
             filtered.append(u)
         updates = filtered

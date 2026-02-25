@@ -6,6 +6,7 @@ from sqlmodel import Session
 
 from rippermod_manager.matching.variant_scorer import pick_best_file
 from rippermod_manager.models.correlation import ModNexusCorrelation
+from rippermod_manager.models.download import DownloadJob
 from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.models.mod import ModGroup
@@ -849,3 +850,79 @@ class TestCheckAllUpdates:
             assert len(result.updates) == 0, (
                 "Multi-edition mod should not flag installed edition as needing update"
             )
+
+    @pytest.mark.anyio
+    async def test_download_date_flags_update_same_version(self, engine):
+        """Mod downloaded 3 days ago, Nexus updated 12h ago → always flag (even same version).
+
+        User's rule: if Nexus updated AFTER the download date, always flag.
+        """
+        now_ts = int(datetime.now(UTC).timestamp())
+        dl_3d_ago = datetime.fromtimestamp(now_ts - 3 * 86400, tz=UTC)
+        nexus_12h_ago = now_ts - 12 * 3600
+
+        with Session(engine) as s:
+            game = Game(name="G", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+
+            inst = InstalledMod(
+                game_id=game.id,
+                name="Lizzie Braindances",
+                nexus_mod_id=42,
+                installed_version="1.0",
+                source_archive="Lizzie Braindances-42-1-0-1000.7z",
+                installed_at=dl_3d_ago,
+            )
+            s.add(inst)
+            s.add(
+                DownloadJob(
+                    game_id=game.id,
+                    nexus_mod_id=42,
+                    nexus_file_id=100,
+                    file_name="Lizzie Braindances-42-1-0-1000.7z",
+                    status="completed",
+                    completed_at=dl_3d_ago,
+                )
+            )
+            s.add(
+                NexusModMeta(
+                    nexus_mod_id=42,
+                    name="Lizzie Braindances",
+                    version="1.0",
+                    author="A",
+                    updated_at=datetime.fromtimestamp(1000, tz=UTC),
+                )
+            )
+            s.commit()
+
+            client = AsyncMock()
+            client.get_updated_mods.return_value = [
+                {"mod_id": 42, "latest_file_update": nexus_12h_ago},
+            ]
+            client.get_mod_info.return_value = {
+                "version": "1.0",
+                "updated_timestamp": nexus_12h_ago,
+                "name": "Lizzie Braindances",
+            }
+            client.get_mod_files.return_value = {
+                "files": [
+                    {
+                        "file_id": 200,
+                        "category_id": 1,
+                        "uploaded_timestamp": nexus_12h_ago,
+                        "version": "1.0",
+                    }
+                ],
+                "file_updates": [],
+            }
+
+            result = await check_all_updates(game.id, "g", client, s)
+
+            assert result.total_checked == 1
+            assert len(result.updates) == 1, (
+                "Same-version mod should be flagged when Nexus updated after download"
+            )
+            assert result.updates[0]["nexus_mod_id"] == 42
+            assert result.updates[0]["detection_method"] == "timestamp"
