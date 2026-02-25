@@ -85,6 +85,8 @@ def detect_layout(
             continue
 
         parts = PurePosixPath(normalised).parts
+        if not parts:
+            continue
 
         # Check for fomod/ModuleConfig.xml at any depth
         lower_parts = [p.lower() for p in parts]

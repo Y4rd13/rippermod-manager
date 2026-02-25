@@ -1,6 +1,7 @@
-import { Archive, Check, Copy, Download, PackageMinus, Trash2 } from "lucide-react";
+import { Archive, Check, Copy, Download, FolderTree, PackageMinus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { ArchiveTreeModal } from "@/components/mods/ArchiveTreeModal";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { FomodWizard } from "@/components/mods/FomodWizard";
 import { Badge } from "@/components/ui/Badge";
@@ -77,6 +78,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
   const [confirmCleanup, setConfirmCleanup] = useState(false);
   const [confirmDeleteFile, setConfirmDeleteFile] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [treeFilename, setTreeFilename] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useSessionState<ArchiveSortKey>(`archives-sort-${gameName}`, "name");
   const [sortDir, setSortDir] = useSessionState<"asc" | "desc">(`archives-dir-${gameName}`, "asc");
@@ -386,6 +388,15 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                   <Button
                     variant="ghost"
                     size="sm"
+                    onClick={() => setTreeFilename(a.filename)}
+                    title="View archive contents"
+                    aria-label="View contents"
+                  >
+                    <FolderTree size={14} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setConfirmDeleteFile(a.filename)}
                     title="Delete this archive file"
                     aria-label="Delete archive"
@@ -535,6 +546,14 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
           archiveFilename={fomodArchive}
           onDismiss={() => setFomodArchive(null)}
           onInstallComplete={() => setFomodArchive(null)}
+        />
+      )}
+
+      {treeFilename && (
+        <ArchiveTreeModal
+          gameName={gameName}
+          filename={treeFilename}
+          onClose={() => setTreeFilename(null)}
         />
       )}
 

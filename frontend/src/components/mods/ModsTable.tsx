@@ -3,12 +3,13 @@ import { useMemo, useState } from "react";
 
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { FileTreeView } from "@/components/ui/FileTreeView";
+import { buildFileTree } from "@/lib/file-tree";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { VirtualTable } from "@/components/ui/VirtualTable";
 import { ConfidenceBadge } from "@/components/ui/Badge";
-import { formatBytes } from "@/lib/format";
 import type { ModGroup } from "@/types/api";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useSessionState } from "@/hooks/use-session-state";
@@ -242,14 +243,7 @@ export function ModsTable({ mods, gameName, isLoading }: { mods: ModGroup[]; gam
               <tr>
                 <td colSpan={5} className="pb-3 pt-1 px-8">
                   <div className="rounded-lg bg-surface-2 p-3 space-y-1">
-                    {mod.files.map((f) => (
-                      <div key={f.id} className="flex items-center justify-between text-xs">
-                        <span className="text-text-secondary font-mono truncate max-w-[400px]">
-                          {f.file_path}
-                        </span>
-                        <span className="text-text-muted">{formatBytes(f.file_size)}</span>
-                      </div>
-                    ))}
+                    <FileTreeView tree={buildFileTree(mod.files)} />
                     {mod.nexus_match && (
                       <div className="mt-2 pt-2 border-t border-border flex items-center gap-2 text-xs">
                         <ExternalLink size={12} className="text-accent" />
