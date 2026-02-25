@@ -13,7 +13,7 @@ import { ScrollContainerContext } from "@/hooks/use-scroll-container";
 import { useUIStore } from "@/stores/ui-store";
 
 export function RootLayout() {
-  useAppUpdater();
+  useAppUpdater(); // Triggers auto-check on startup; UI lives in SettingsPage
   const toggleChatPanel = useUIStore((s) => s.toggleChatPanel);
   const setChatPanelOpen = useUIStore((s) => s.setChatPanelOpen);
   const hasOpenaiKey = useHasOpenaiKey();

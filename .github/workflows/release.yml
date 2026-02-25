@@ -72,15 +72,24 @@ jobs:
         shell: bash
         run: |
           NSIS_DIR="frontend/src-tauri/target/release/bundle/nsis"
-          SIG_FILE=$(ls ${NSIS_DIR}/*.nsis.zip.sig)
-          ZIP_FILE=$(ls ${NSIS_DIR}/*.nsis.zip)
+
+          shopt -s nullglob
+          sig_files=( ${NSIS_DIR}/*.nsis.zip.sig )
+          zip_files=( ${NSIS_DIR}/*.nsis.zip )
+          [[ ${#sig_files[@]} -eq 1 ]] || { echo "::error::Expected exactly 1 .nsis.zip.sig file, found ${#sig_files[@]}"; exit 1; }
+          [[ ${#zip_files[@]} -eq 1 ]] || { echo "::error::Expected exactly 1 .nsis.zip file, found ${#zip_files[@]}"; exit 1; }
+
+          SIG_FILE="${sig_files[0]}"
+          ZIP_FILE="${zip_files[0]}"
           ZIP_NAME=$(basename "$ZIP_FILE")
           SIGNATURE=$(cat "$SIG_FILE")
           DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          cat > "${NSIS_DIR}/latest.json" <<EOF
+          NOTES=$(git tag -l --format='%(contents)' "${GITHUB_REF_NAME}" | head -50 | jq -Rs .)
+
+          cat > "${NSIS_DIR}/latest.json" <<ENDJSON
           {
             "version": "${VERSION}",
-            "notes": "",
+            "notes": ${NOTES},
             "pub_date": "${DATE}",
             "platforms": {
               "windows-x86_64": {
@@ -89,7 +98,7 @@ jobs:
               }
             }
           }
-          EOF
+          ENDJSON
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

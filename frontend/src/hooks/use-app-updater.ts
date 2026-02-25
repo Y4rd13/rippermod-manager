@@ -1,9 +1,14 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect } from "react";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 
 import { toast } from "@/stores/toast-store";
 import { useUpdaterStore } from "@/stores/updater-store";
+
+// Module-scoped singletons shared across all hook instances.
+// Safe because there is only one concurrent update at a time.
+const updateRef: { current: Update | null } = { current: null };
+let hasChecked = false;
 
 export function useAppUpdater() {
   const {
@@ -16,8 +21,6 @@ export function useAppUpdater() {
     setError,
     setDownloadProgress,
   } = useUpdaterStore();
-
-  const updateRef = useRef<Update | null>(null);
 
   const checkForUpdate = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -99,14 +102,20 @@ export function useAppUpdater() {
   }, [setStatus, setError, setDownloadProgress]);
 
   const restartApp = useCallback(async () => {
-    await relaunch();
-  }, []);
+    try {
+      await relaunch();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to restart";
+      setError(msg);
+      setStatus("error");
+      toast.error("Restart failed", msg);
+    }
+  }, [setError, setStatus]);
 
-  const hasChecked = useRef(false);
   useEffect(() => {
-    if (hasChecked.current) return;
+    if (hasChecked) return;
     if (import.meta.env.DEV) return;
-    hasChecked.current = true;
+    hasChecked = true;
 
     const timer = setTimeout(() => {
       void checkForUpdate({ silent: true });
