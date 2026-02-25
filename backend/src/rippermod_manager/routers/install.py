@@ -104,7 +104,8 @@ async def list_installed(
         )
         .outerjoin(
             NexusDownload,
-            InstalledMod.nexus_mod_id == NexusDownload.nexus_mod_id,
+            (InstalledMod.nexus_mod_id == NexusDownload.nexus_mod_id)
+            & (NexusDownload.game_id == game.id),
         )
         .where(InstalledMod.game_id == game.id)
     ).all()

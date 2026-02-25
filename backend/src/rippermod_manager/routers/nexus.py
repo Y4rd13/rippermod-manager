@@ -161,7 +161,15 @@ async def mod_detail(
 
     from rippermod_manager.models.nexus import NexusDownload
 
-    dl = session.exec(select(NexusDownload).where(NexusDownload.nexus_mod_id == mod_id)).first()
+    game_for_dl = session.exec(select(Game).where(Game.domain_name == game_domain)).first()
+    dl = None
+    if game_for_dl:
+        dl = session.exec(
+            select(NexusDownload).where(
+                NexusDownload.nexus_mod_id == mod_id,
+                NexusDownload.game_id == game_for_dl.id,
+            )
+        ).first()
 
     nexus_url = f"https://www.nexusmods.com/{game_domain}/mods/{mod_id}"
 
