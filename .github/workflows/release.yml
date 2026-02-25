@@ -81,7 +81,7 @@ jobs:
 
           SIG_FILE="${sig_files[0]}"
           EXE_FILE="${exe_files[0]}"
-          EXE_NAME=$(basename "$EXE_FILE")
+          EXE_NAME=$(basename "$EXE_FILE" | tr ' ' '.')
           SIGNATURE=$(cat "$SIG_FILE")
           DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           NOTES=$(git tag -l --format='%(contents)' "${GITHUB_REF_NAME}" | head -50 | jq -Rs .)
