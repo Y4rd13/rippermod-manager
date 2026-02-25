@@ -24,6 +24,8 @@
     {
       "identifier": "shell:allow-spawn",
       "allow": [{ "name": "rmm-backend", "sidecar": true }]
-    }
+    },
+    "updater:default",
+    "process:allow-restart"
   ]
 }

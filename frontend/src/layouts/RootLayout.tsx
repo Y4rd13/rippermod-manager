@@ -7,11 +7,13 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Titlebar } from "@/components/layout/Titlebar";
 import { KeyboardShortcutsModal } from "@/components/ui/KeyboardShortcutsModal";
 import { ToastContainer } from "@/components/ui/Toast";
+import { useAppUpdater } from "@/hooks/use-app-updater";
 import { useHasOpenaiKey } from "@/hooks/queries";
 import { ScrollContainerContext } from "@/hooks/use-scroll-container";
 import { useUIStore } from "@/stores/ui-store";
 
 export function RootLayout() {
+  useAppUpdater();
   const toggleChatPanel = useUIStore((s) => s.toggleChatPanel);
   const setChatPanelOpen = useUIStore((s) => s.setChatPanelOpen);
   const hasOpenaiKey = useHasOpenaiKey();
