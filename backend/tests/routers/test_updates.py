@@ -217,14 +217,14 @@ class TestResolveFileIds:
             ]
         }
         updates = [
-            {"nexus_mod_id": 10, "nexus_file_id": None, "nexus_version": "2.0"},
+            {"nexus_mod_id": 10, "nexus_file_id": None, "nexus_version": "2.0", "nexus_timestamp": None},
         ]
         await _resolve_file_ids(mock_client, "g", updates)
 
         assert updates[0]["nexus_file_id"] == 2
         assert updates[0]["nexus_file_name"] == "new.zip"
         assert updates[0]["nexus_version"] == "2.0"
-        assert updates[0]["nexus_timestamp"] == 2000
+        assert updates[0]["_resolved_file_ts"] == 2000
 
     @pytest.mark.anyio
     async def test_skips_when_file_id_already_set(self):
