@@ -280,6 +280,20 @@ export interface ConflictCheckResult {
   is_fomod: boolean;
 }
 
+export interface ArchiveEntryNode {
+  name: string;
+  is_dir: boolean;
+  size: number;
+  children: ArchiveEntryNode[];
+}
+
+export interface ArchiveContentsResult {
+  filename: string;
+  total_files: number;
+  total_size: number;
+  tree: ArchiveEntryNode[];
+}
+
 // Profile feature types
 
 export interface ProfileModOut {

@@ -12,7 +12,9 @@ from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.install import (
+    ArchiveContentsResult,
     ArchiveDeleteResult,
+    ArchiveEntryOut,
     AvailableArchive,
     ConflictCheckResult,
     InstalledModOut,
@@ -262,3 +264,68 @@ async def cleanup_orphans(
     """Delete all archives not referenced by any installed mod or active download."""
     game = get_game_or_404(game_name, session)
     return delete_orphaned_archives(game, session)
+
+
+@router.get("/archives/{filename}/contents", response_model=ArchiveContentsResult)
+async def archive_contents(
+    game_name: str,
+    filename: str,
+    session: Session = Depends(get_session),
+) -> ArchiveContentsResult:
+    """List the hierarchical file tree inside an archive."""
+    from rippermod_manager.archive.handler import open_archive
+
+    game = get_game_or_404(game_name, session)
+    staging = Path(game.install_path) / "downloaded_mods"
+    archive_path = staging / filename
+    if not archive_path.resolve().is_relative_to(staging.resolve()):
+        raise HTTPException(400, "Invalid archive filename")
+    if not archive_path.is_file():
+        raise HTTPException(404, f"Archive not found: {filename}")
+
+    try:
+        with open_archive(archive_path) as archive:
+            entries = archive.list_entries()
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    total_files = sum(1 for e in entries if not e.is_dir)
+    total_size = sum(e.size for e in entries if not e.is_dir)
+
+    # Build nested dict tree from flat entries
+    root: dict = {}
+    for entry in entries:
+        parts = entry.filename.replace("\\", "/").strip("/").split("/")
+        node = root
+        for part in parts:
+            if part not in node:
+                node[part] = {}
+            node = node[part]
+        if not entry.is_dir:
+            node["\x00size"] = entry.size
+
+    def dict_to_tree(d: dict) -> list[ArchiveEntryOut]:
+        dirs: list[ArchiveEntryOut] = []
+        files: list[ArchiveEntryOut] = []
+        for name, value in d.items():
+            if name == "\x00size":
+                continue
+            is_dir = any(k != "\x00size" for k in value)
+            if is_dir:
+                dirs.append(ArchiveEntryOut(name=name, is_dir=True, children=dict_to_tree(value)))
+            else:
+                files.append(
+                    ArchiveEntryOut(name=name, is_dir=False, size=value.get("\x00size", 0))
+                )
+        dirs.sort(key=lambda x: x.name.lower())
+        files.sort(key=lambda x: x.name.lower())
+        return dirs + files
+
+    return ArchiveContentsResult(
+        filename=filename,
+        total_files=total_files,
+        total_size=total_size,
+        tree=dict_to_tree(root),
+    )
