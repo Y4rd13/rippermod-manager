@@ -214,14 +214,10 @@ def _extract_text(content: Any) -> str:
                 parts.append(block)
                 continue
             # Duck-type: support both dicts and LangChain content block objects
-            btype = (
-                block.get("type", "") if isinstance(block, dict) else getattr(block, "type", "")
-            )
+            btype = block.get("type", "") if isinstance(block, dict) else getattr(block, "type", "")
             if btype in ("reasoning", "function_call"):
                 continue
-            text = (
-                block.get("text", "") if isinstance(block, dict) else getattr(block, "text", "")
-            )
+            text = block.get("text", "") if isinstance(block, dict) else getattr(block, "text", "")
             if isinstance(text, str) and text:
                 parts.append(text)
         return "".join(parts)

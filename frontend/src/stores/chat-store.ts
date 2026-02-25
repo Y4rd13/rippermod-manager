@@ -69,11 +69,14 @@ export const useChatStore = create<ChatState>((set) => ({
       const msgs = [...s.messages];
       const last = msgs[msgs.length - 1];
       if (last && last.role === "assistant" && last.toolCalls) {
-        const calls = last.toolCalls.map((tc) =>
-          tc.name === name && tc.status === "running"
-            ? { ...tc, status: "done" as const }
-            : tc,
-        );
+        let resolved = false;
+        const calls = last.toolCalls.map((tc) => {
+          if (!resolved && tc.name === name && tc.status === "running") {
+            resolved = true;
+            return { ...tc, status: "done" as const };
+          }
+          return tc;
+        });
         msgs[msgs.length - 1] = { ...last, toolCalls: calls };
       }
       return { messages: msgs };
