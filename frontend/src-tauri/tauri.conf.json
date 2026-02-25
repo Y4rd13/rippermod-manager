@@ -36,7 +36,7 @@
       "endpoints": [
         "https://github.com/Y4rd13/rippermod-manager/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVGNDc2QzkzMDNBMjE5RDQKUldUVUdhSURrMnhINzhYNGRjWkhuUjZhTkwvWTRLaUx4KzZTMGMvRFVTVDJ4dUluRHcvOVBjcnAK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDA4MDMyOTk2MjAyMzJGOTgKUldTWUx5TWdsaWtEQ01XU3VYamxCMVVYTjhiMm5LcXhSWTMvaFIwb1VJRVZVMGprWVBuVmJGNjIK"
     }
   },
   "bundle": {
