@@ -1,4 +1,4 @@
-import { Archive, Check, Copy, Download, Trash2 } from "lucide-react";
+import { Archive, Check, Copy, Download, PackageMinus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -20,6 +20,7 @@ import {
   useCleanupOrphans,
   useDeleteArchive,
   useInstallMod,
+  useUninstallMod,
 } from "@/hooks/mutations";
 import { toast } from "@/stores/toast-store";
 import { useBulkSelect } from "@/hooks/use-bulk-select";
@@ -47,8 +48,14 @@ const ARCHIVE_SORT_OPTIONS: { value: ArchiveSortKey; label: string }[] = [
   { value: "version", label: "Version" },
 ];
 
-const ROW_CONTEXT_ITEMS: ContextMenuItem[] = [
+const ROW_CONTEXT_ITEMS_INSTALL: ContextMenuItem[] = [
   { key: "install", label: "Install", icon: Download },
+  { key: "copy", label: "Copy Filename", icon: Copy },
+  { key: "delete", label: "Delete Archive", icon: Trash2, variant: "danger" },
+];
+
+const ROW_CONTEXT_ITEMS_UNINSTALL: ContextMenuItem[] = [
+  { key: "uninstall", label: "Uninstall", icon: PackageMinus, variant: "danger" },
   { key: "copy", label: "Copy Filename", icon: Copy },
   { key: "delete", label: "Delete Archive", icon: Trash2, variant: "danger" },
 ];
@@ -59,10 +66,12 @@ const OVERFLOW_ITEMS: ContextMenuItem[] = [
 
 export function ArchivesList({ archives, gameName, isLoading }: Props) {
   const installMod = useInstallMod();
+  const uninstallMod = useUninstallMod();
   const checkConflicts = useCheckConflicts();
   const deleteArchive = useDeleteArchive();
   const cleanupOrphans = useCleanupOrphans();
   const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
+  const [confirmUninstall, setConfirmUninstall] = useState<{ filename: string; modId: number } | null>(null);
   const [fomodArchive, setFomodArchive] = useState<string | null>(null);
   const [selectedArchive, setSelectedArchive] = useState<string | null>(null);
   const [confirmCleanup, setConfirmCleanup] = useState(false);
@@ -198,7 +207,9 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
   const handleContextMenuSelect = (key: string) => {
     const archive = menuState.data;
     if (!archive) return;
-    if (key === "install") {
+    if (key === "uninstall" && archive.installed_mod_id) {
+      setConfirmUninstall({ filename: archive.filename, modId: archive.installed_mod_id });
+    } else if (key === "install") {
       handleCheckConflicts(archive.filename);
     } else if (key === "copy") {
       void navigator.clipboard.writeText(archive.filename).then(
@@ -352,16 +363,26 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
               </td>
               <td className="py-2 text-right">
                 <div className="flex items-center justify-end gap-1">
-                  <Button
-                    size="sm"
-                    loading={
-                      (checkConflicts.isPending || installMod.isPending) &&
-                      selectedArchive === a.filename
-                    }
-                    onClick={() => handleCheckConflicts(a.filename)}
-                  >
-                    <Download size={14} /> Install
-                  </Button>
+                  {a.is_installed && a.installed_mod_id ? (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => setConfirmUninstall({ filename: a.filename, modId: a.installed_mod_id! })}
+                    >
+                      <PackageMinus size={14} /> Uninstall
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      loading={
+                        (checkConflicts.isPending || installMod.isPending) &&
+                        selectedArchive === a.filename
+                      }
+                      onClick={() => handleCheckConflicts(a.filename)}
+                    >
+                      <Download size={14} /> Install
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -449,7 +470,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
 
       {menuState.visible && menuState.data && (
         <ContextMenu
-          items={ROW_CONTEXT_ITEMS}
+          items={menuState.data.is_installed && menuState.data.installed_mod_id ? ROW_CONTEXT_ITEMS_UNINSTALL : ROW_CONTEXT_ITEMS_INSTALL}
           position={menuState.position}
           onSelect={handleContextMenuSelect}
           onClose={closeMenu}
@@ -489,6 +510,22 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
             setConfirmBulkDelete(false);
           }}
           onCancel={() => setConfirmBulkDelete(false)}
+        />
+      )}
+
+      {confirmUninstall && (
+        <ConfirmDialog
+          title="Uninstall Mod?"
+          message={`Uninstall the mod installed from "${confirmUninstall.filename}"? Mod files will be removed from the game directory.`}
+          confirmLabel="Uninstall"
+          variant="danger"
+          icon={PackageMinus}
+          loading={uninstallMod.isPending}
+          onConfirm={async () => {
+            await uninstallMod.mutateAsync({ gameName, modId: confirmUninstall.modId });
+            setConfirmUninstall(null);
+          }}
+          onCancel={() => setConfirmUninstall(null)}
         />
       )}
 

@@ -19,6 +19,7 @@ function ApiKeyField({
   currentValue,
   value,
   onChange,
+  hint,
 }: {
   id: string;
   label: string;
@@ -26,6 +27,7 @@ function ApiKeyField({
   currentValue?: string;
   value: string;
   onChange: (value: string) => void;
+  hint?: string;
 }) {
   return (
     <div className="space-y-2">
@@ -37,6 +39,7 @@ function ApiKeyField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
+      {hint && <p className="text-xs text-text-muted">{hint}</p>}
       {currentValue && (
         <div className="flex items-center gap-2 rounded-md bg-surface-2 px-3 py-2">
           <CheckCircle size={14} className="shrink-0 text-success" />
@@ -102,6 +105,7 @@ export function SettingsPage() {
             currentValue={currentOpenai}
             value={openaiKey}
             onChange={setOpenaiKey}
+            hint="Required for AI Search and the chat agent. Get one at platform.openai.com."
           />
           <Button onClick={handleSave} loading={saveSettings.isPending} disabled={!openaiKey}>
             Save Changes
@@ -113,17 +117,21 @@ export function SettingsPage() {
         <h2 className="text-lg font-semibold text-text-primary mb-4">
           AI Search
         </h2>
+        <p className="text-xs text-text-muted mb-4">
+          Configure the OpenAI model used when AI Search is enabled during scans.
+        </p>
         <div className="space-y-4">
           <div className="space-y-2">
             <label className="text-sm font-medium text-text-secondary">Model</label>
             <div className="grid grid-cols-2 gap-3">
               {([
-                { value: "gpt-5-mini", label: "gpt-5-mini", desc: "Cost-optimized" },
-                { value: "gpt-5.2", label: "gpt-5.2", desc: "Best quality" },
+                { value: "gpt-5-mini", label: "gpt-5-mini", desc: "Cost-optimized", tip: "Faster and cheaper — good for most mod matching tasks" },
+                { value: "gpt-5.2", label: "gpt-5.2", desc: "Best quality", tip: "More accurate but slower and more expensive" },
               ] as const).map((opt) => (
                 <button
                   key={opt.value}
                   type="button"
+                  title={opt.tip}
                   onClick={() => setAiModel(opt.value)}
                   className={cn(
                     "rounded-lg border px-4 py-3 text-left transition-colors",
@@ -141,19 +149,24 @@ export function SettingsPage() {
           <div className="space-y-2">
             <label className="text-sm font-medium text-text-secondary">Reasoning Effort</label>
             <div className="flex gap-2">
-              {(["low", "medium", "high"] as const).map((level) => (
+              {([
+                { value: "low", tip: "Fastest — uses minimal reasoning tokens" },
+                { value: "medium", tip: "Balanced speed and accuracy" },
+                { value: "high", tip: "Most thorough — uses more tokens and takes longer" },
+              ] as const).map((opt) => (
                 <button
-                  key={level}
+                  key={opt.value}
                   type="button"
-                  onClick={() => setAiEffort(level)}
+                  title={opt.tip}
+                  onClick={() => setAiEffort(opt.value)}
                   className={cn(
                     "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
-                    currentAiEffort === level
+                    currentAiEffort === opt.value
                       ? "bg-accent text-white"
                       : "bg-surface-2 text-text-muted hover:text-text-secondary",
                   )}
                 >
-                  {level}
+                  {opt.value}
                 </button>
               ))}
             </div>
@@ -205,6 +218,7 @@ export function SettingsPage() {
               <Button
                 variant="danger"
                 size="sm"
+                title="Disconnect your Nexus Mods account from RipperMod Manager"
                 onClick={() => setShowDisconnectConfirm(true)}
               >
                 <LogOut className="h-3.5 w-3.5" />
@@ -214,7 +228,7 @@ export function SettingsPage() {
             {showDisconnectConfirm && (
               <ConfirmDialog
                 title="Disconnect Nexus Account"
-                message="This will remove your Nexus API key and return you to the onboarding screen to reconnect. Your games and mods will be preserved."
+                message="This will disconnect your Nexus Mods account and return you to the onboarding screen to reconnect. Your games and mods will be preserved."
                 confirmLabel="Disconnect"
                 icon={LogOut}
                 loading={disconnect.isPending}
@@ -234,6 +248,7 @@ export function SettingsPage() {
             </p>
             <Button
               variant="secondary"
+              title="Opens Nexus Mods in your browser for SSO authentication"
               onClick={() => sso.startSSO()}
               loading={sso.state === "connecting" || sso.state === "waiting"}
               disabled={sso.state === "connecting" || sso.state === "waiting"}
