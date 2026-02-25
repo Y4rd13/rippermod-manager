@@ -221,7 +221,7 @@ async def run_agent(
     }
     if use_reasoning:
         llm_kwargs["temperature"] = 1
-        llm_kwargs["model_kwargs"] = {"reasoning": {"effort": reasoning_effort}}
+        llm_kwargs["reasoning"] = {"effort": reasoning_effort}
     else:
         llm_kwargs["temperature"] = 0.3
 
