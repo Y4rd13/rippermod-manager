@@ -217,7 +217,12 @@ class TestResolveFileIds:
             ]
         }
         updates = [
-            {"nexus_mod_id": 10, "nexus_file_id": None, "nexus_version": "2.0", "nexus_timestamp": None},
+            {
+                "nexus_mod_id": 10,
+                "nexus_file_id": None,
+                "nexus_version": "2.0",
+                "nexus_timestamp": None,
+            },
         ]
         await _resolve_file_ids(mock_client, "g", updates)
 
