@@ -1,5 +1,7 @@
 import type { ArchiveEntryNode } from "@/types/api";
 
+const SIZE_KEY = "\0size";
+
 export function buildFileTree(
   files: { file_path: string; file_size: number }[],
 ): ArchiveEntryNode[] {
@@ -12,23 +14,23 @@ export function buildFileTree(
       if (!(part in node)) node[part] = {};
       node = node[part] as Record<string, unknown>;
     }
-    (node as Record<string, unknown>).__size__ = f.file_size;
+    node[SIZE_KEY] = f.file_size;
   }
 
   function toTree(d: Record<string, unknown>): ArchiveEntryNode[] {
     const dirs: ArchiveEntryNode[] = [];
     const leaves: ArchiveEntryNode[] = [];
     for (const [name, value] of Object.entries(d)) {
-      if (name === "__size__") continue;
+      if (name === SIZE_KEY) continue;
       const child = value as Record<string, unknown>;
-      const isDir = Object.keys(child).some((k) => k !== "__size__");
+      const isDir = Object.keys(child).some((k) => k !== SIZE_KEY);
       if (isDir) {
         dirs.push({ name, is_dir: true, size: 0, children: toTree(child) });
       } else {
         leaves.push({
           name,
           is_dir: false,
-          size: (child.__size__ as number) ?? 0,
+          size: (child[SIZE_KEY] as number) ?? 0,
           children: [],
         });
       }

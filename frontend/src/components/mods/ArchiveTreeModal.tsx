@@ -79,7 +79,7 @@ export function ArchiveTreeModal({ gameName, filename, onClose }: Props) {
             </p>
           )}
 
-          {data && <FileTreeView tree={data.tree} />}
+          {data && data.tree.length > 0 && <FileTreeView tree={data.tree} />}
 
           {data && data.tree.length === 0 && (
             <p className="text-sm text-text-muted py-4 text-center">

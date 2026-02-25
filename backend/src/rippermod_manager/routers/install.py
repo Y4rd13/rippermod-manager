@@ -283,8 +283,13 @@ async def archive_contents(
     if not archive_path.is_file():
         raise HTTPException(404, f"Archive not found: {filename}")
 
-    with open_archive(archive_path) as archive:
-        entries = archive.list_entries()
+    try:
+        with open_archive(archive_path) as archive:
+            entries = archive.list_entries()
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
     total_files = sum(1 for e in entries if not e.is_dir)
     total_size = sum(e.size for e in entries if not e.is_dir)
@@ -299,20 +304,20 @@ async def archive_contents(
                 node[part] = {}
             node = node[part]
         if not entry.is_dir:
-            node["__size__"] = entry.size
+            node["\x00size"] = entry.size
 
     def dict_to_tree(d: dict) -> list[ArchiveEntryOut]:
         dirs: list[ArchiveEntryOut] = []
         files: list[ArchiveEntryOut] = []
         for name, value in d.items():
-            if name == "__size__":
+            if name == "\x00size":
                 continue
-            is_dir = any(k != "__size__" for k in value)
+            is_dir = any(k != "\x00size" for k in value)
             if is_dir:
                 dirs.append(ArchiveEntryOut(name=name, is_dir=True, children=dict_to_tree(value)))
             else:
                 files.append(
-                    ArchiveEntryOut(name=name, is_dir=False, size=value.get("__size__", 0))
+                    ArchiveEntryOut(name=name, is_dir=False, size=value.get("\x00size", 0))
                 )
         dirs.sort(key=lambda x: x.name.lower())
         files.sort(key=lambda x: x.name.lower())

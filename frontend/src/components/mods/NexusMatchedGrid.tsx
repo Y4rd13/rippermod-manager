@@ -31,6 +31,41 @@ import type {
   ModGroup,
 } from "@/types/api";
 
+function FilesModal({ group, onClose }: { group: ModGroup; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="files-dialog-title"
+        className="w-full max-w-2xl rounded-xl border border-border bg-surface-1 p-6 animate-modal-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 id="files-dialog-title" className="text-sm font-semibold text-text-primary truncate pr-4">
+            {group.nexus_match?.mod_name ?? group.display_name}
+          </h3>
+          <button
+            onClick={onClose}
+            className="shrink-0 rounded-md p-1 text-text-muted hover:bg-surface-3 hover:text-text-primary"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <p className="mb-3 text-xs text-text-muted">
+          {group.files.length} file{group.files.length !== 1 ? "s" : ""}
+        </p>
+        <div className="max-h-80 overflow-y-auto rounded border border-border bg-surface-0 p-3">
+          <FileTreeView tree={buildFileTree(group.files)} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type SortKey = "score" | "name" | "endorsements" | "author" | "updated";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
@@ -405,39 +440,7 @@ export function NexusMatchedGrid({
 
       {filesModalGroupId != null && (() => {
         const group = mods.find((m) => m.id === filesModalGroupId);
-        if (!group) return null;
-        return (
-          <div
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
-            onClick={() => setFilesModalGroupId(null)}
-          >
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="files-dialog-title"
-              className="w-full max-w-2xl rounded-xl border border-border bg-surface-1 p-6 animate-modal-in"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="mb-4 flex items-center justify-between">
-                <h3 id="files-dialog-title" className="text-sm font-semibold text-text-primary truncate pr-4">
-                  {group.nexus_match?.mod_name ?? group.display_name}
-                </h3>
-                <button
-                  onClick={() => setFilesModalGroupId(null)}
-                  className="shrink-0 rounded-md p-1 text-text-muted hover:bg-surface-3 hover:text-text-primary"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-              <p className="mb-3 text-xs text-text-muted">
-                {group.files.length} file{group.files.length !== 1 ? "s" : ""}
-              </p>
-              <div className="max-h-80 overflow-y-auto rounded border border-border bg-surface-0 p-3">
-                <FileTreeView tree={buildFileTree(group.files)} />
-              </div>
-            </div>
-          </div>
-        );
+        return group ? <FilesModal group={group} onClose={() => setFilesModalGroupId(null)} /> : null;
       })()}
     </div>
   );
