@@ -77,18 +77,23 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {hasOpenaiKey && (
-        <div className="border-t border-border p-2">
-          <button
-            onClick={toggleChatPanel}
-            aria-label="Toggle chat panel"
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-text-secondary hover:bg-surface-2 hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            <MessageSquare size={18} />
-            {!sidebarCollapsed && <span>Chat</span>}
-          </button>
-        </div>
-      )}
+      <div className="border-t border-border p-2">
+        <button
+          onClick={hasOpenaiKey ? toggleChatPanel : undefined}
+          disabled={!hasOpenaiKey}
+          aria-label="Toggle chat panel"
+          title={hasOpenaiKey ? undefined : "Add an OpenAI API key in Settings to enable chat"}
+          className={cn(
+            "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+            hasOpenaiKey
+              ? "text-text-secondary hover:bg-surface-2 hover:text-text-primary"
+              : "text-text-muted/50 cursor-not-allowed",
+          )}
+        >
+          <MessageSquare size={18} />
+          {!sidebarCollapsed && <span>Chat</span>}
+        </button>
+      </div>
     </aside>
   );
 }
