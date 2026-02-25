@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { FomodWizard } from "@/components/mods/FomodWizard";
 import { ModCardAction } from "@/components/mods/ModCardAction";
+import { ModQuickActions } from "@/components/mods/ModQuickActions";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -15,7 +16,7 @@ import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { VirtualCardGrid } from "@/components/ui/VirtualCardGrid";
-import { useRefreshTrending } from "@/hooks/mutations";
+import { useAbstainMod, useEndorseMod, useRefreshTrending, useTrackMod, useUntrackMod } from "@/hooks/mutations";
 import { toast } from "@/stores/toast-store";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useInstallFlow } from "@/hooks/use-install-flow";
@@ -39,11 +40,24 @@ const FILTER_CHIPS: { key: ChipKey; label: string }[] = [
   { key: "not-installed", label: "Not Installed" },
 ];
 
-const CONTEXT_MENU_ITEMS: ContextMenuItem[] = [
-  { key: "view", label: "View Details", icon: Info },
-  { key: "nexus", label: "Open on Nexus", icon: ExternalLink },
-  { key: "copy", label: "Copy Name", icon: Copy },
-];
+function getContextMenuItems(mod: TrendingMod): ContextMenuItem[] {
+  return [
+    { key: "view", label: "View Details", icon: Info },
+    { key: "nexus", label: "Open on Nexus", icon: ExternalLink },
+    { key: "copy", label: "Copy Name", icon: Copy },
+    { key: "sep-actions", label: "", separator: true },
+    {
+      key: "endorse",
+      label: mod.is_endorsed ? "Remove Endorsement" : "Endorse",
+      icon: Heart,
+    },
+    {
+      key: "track",
+      label: mod.is_tracked ? "Untrack" : "Track",
+      icon: Eye,
+    },
+  ];
+}
 
 interface Props {
   trendingMods: TrendingMod[];
@@ -83,6 +97,10 @@ export function TrendingGrid({
 
   const flow = useInstallFlow(gameName, archives, downloadJobs);
   const refreshTrending = useRefreshTrending();
+  const endorseMod = useEndorseMod();
+  const abstainMod = useAbstainMod();
+  const trackMod = useTrackMod();
+  const untrackMod = useUntrackMod();
   const { menuState, openMenu, closeMenu } = useContextMenu<TrendingMod>();
 
   const installedModIds = useMemo(
@@ -147,6 +165,13 @@ export function TrendingGrid({
       () => toast.success("Copied to clipboard"),
       () => toast.error("Failed to copy"),
     );
+    else if (key === "endorse") {
+      if (mod.is_endorsed) abstainMod.mutate({ gameName, modId: mod.mod_id });
+      else endorseMod.mutate({ gameName, modId: mod.mod_id });
+    } else if (key === "track") {
+      if (mod.is_tracked) untrackMod.mutate({ gameName, modId: mod.mod_id });
+      else trackMod.mutate({ gameName, modId: mod.mod_id });
+    }
   };
 
   const renderModCard = (mod: TrendingMod) => {
@@ -194,6 +219,13 @@ export function TrendingGrid({
             {mod.updated_timestamp > 0 && (
               <span className="text-xs text-text-muted">{timeAgo(mod.updated_timestamp)}</span>
             )}
+            <ModQuickActions
+              isEndorsed={mod.is_endorsed}
+              isTracked={mod.is_tracked}
+              modId={nexusModId}
+              gameName={gameName}
+              version={mod.version}
+            />
           </div>
         }
         action={
@@ -220,7 +252,7 @@ export function TrendingGrid({
         }
         overflowMenu={
           <OverflowMenuButton
-            items={CONTEXT_MENU_ITEMS}
+            items={getContextMenuItems(mod)}
             onSelect={(key) => {
               if (key === "view") onModClick?.(nexusModId);
               else if (key === "nexus") window.open(mod.nexus_url, "_blank", "noopener,noreferrer");
@@ -228,6 +260,13 @@ export function TrendingGrid({
                 () => toast.success("Copied to clipboard"),
                 () => toast.error("Failed to copy"),
               );
+              else if (key === "endorse") {
+                if (mod.is_endorsed) abstainMod.mutate({ gameName, modId: nexusModId });
+                else endorseMod.mutate({ gameName, modId: nexusModId });
+              } else if (key === "track") {
+                if (mod.is_tracked) untrackMod.mutate({ gameName, modId: nexusModId });
+                else trackMod.mutate({ gameName, modId: nexusModId });
+              }
             }}
           />
         }
@@ -345,9 +384,9 @@ export function TrendingGrid({
       )}
 
       {/* Context menu rendered at document level to avoid clipping. */}
-      {menuState.visible && (
+      {menuState.visible && menuState.data && (
         <ContextMenu
-          items={CONTEXT_MENU_ITEMS}
+          items={getContextMenuItems(menuState.data)}
           position={menuState.position}
           onSelect={handleContextMenuSelect}
           onClose={closeMenu}

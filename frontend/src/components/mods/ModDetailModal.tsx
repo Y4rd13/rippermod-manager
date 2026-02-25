@@ -5,6 +5,8 @@ import {
   Clock,
   Download,
   ExternalLink,
+  Eye,
+  EyeOff,
   Heart,
   X,
 } from "lucide-react";
@@ -13,6 +15,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { useAbstainMod, useEndorseMod, useTrackMod, useUntrackMod } from "@/hooks/mutations";
 import { useModDetail } from "@/hooks/queries";
 import { bbcodeToHtml } from "@/lib/bbcode";
 import { formatBytes, formatCount, isoToEpoch, timeAgo } from "@/lib/format";
@@ -36,14 +39,19 @@ const PLACEHOLDER_BANNER =
 
 interface Props {
   gameDomain: string;
+  gameName?: string;
   modId: number;
   update?: ModUpdate;
   action?: ReactNode;
   onClose: () => void;
 }
 
-export function ModDetailModal({ gameDomain, modId, update, action, onClose }: Props) {
+export function ModDetailModal({ gameDomain, gameName, modId, update, action, onClose }: Props) {
   const { data: detail, isLoading } = useModDetail(gameDomain, modId);
+  const endorseMod = useEndorseMod();
+  const abstainMod = useAbstainMod();
+  const trackMod = useTrackMod();
+  const untrackMod = useUntrackMod();
   const [activeTab, setActiveTab] = useState<ModalTab>("about");
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
 
@@ -281,14 +289,46 @@ export function ModDetailModal({ gameDomain, modId, update, action, onClose }: P
 
             {/* Footer — sticky */}
             <div className="flex-shrink-0 border-t border-border px-5 py-3 flex items-center justify-between">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => openUrl(detail.nexus_url).catch(() => {})}
-              >
-                <ExternalLink size={14} />
-                View on Nexus
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => openUrl(detail.nexus_url).catch(() => {})}
+                >
+                  <ExternalLink size={14} />
+                  View on Nexus
+                </Button>
+                {gameName && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={endorseMod.isPending || abstainMod.isPending}
+                      onClick={() => {
+                        if (detail.is_endorsed) abstainMod.mutate({ gameName, modId });
+                        else endorseMod.mutate({ gameName, modId });
+                      }}
+                      className={detail.is_endorsed ? "text-danger" : ""}
+                    >
+                      <Heart size={14} fill={detail.is_endorsed ? "currentColor" : "none"} />
+                      {detail.is_endorsed ? "Endorsed" : "Endorse"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={trackMod.isPending || untrackMod.isPending}
+                      onClick={() => {
+                        if (detail.is_tracked) untrackMod.mutate({ gameName, modId });
+                        else trackMod.mutate({ gameName, modId });
+                      }}
+                      className={detail.is_tracked ? "text-accent" : ""}
+                    >
+                      {detail.is_tracked ? <EyeOff size={14} /> : <Eye size={14} />}
+                      {detail.is_tracked ? "Tracked" : "Track"}
+                    </Button>
+                  </>
+                )}
+              </div>
               {action && <div className="flex items-center gap-2">{action}</div>}
             </div>
           </>

@@ -1,7 +1,9 @@
 import {
   ArrowUp,
   Copy,
+  Eye,
   ExternalLink,
+  Heart,
   Package,
   Power,
   PowerOff,
@@ -31,7 +33,7 @@ import { VirtualCardGrid } from "@/components/ui/VirtualCardGrid";
 import { useBulkSelect } from "@/hooks/use-bulk-select";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useSessionState } from "@/hooks/use-session-state";
-import { useToggleMod, useUninstallMod } from "@/hooks/mutations";
+import { useAbstainMod, useEndorseMod, useToggleMod, useTrackMod, useUninstallMod, useUntrackMod } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { isoToEpoch, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -104,6 +106,10 @@ function ManagedModsGrid({
   const [confirmDeleteModId, setConfirmDeleteModId] = useState<number | null>(null);
   const toggleMod = useToggleMod();
   const uninstallMod = useUninstallMod();
+  const endorseMod = useEndorseMod();
+  const abstainMod = useAbstainMod();
+  const trackMod = useTrackMod();
+  const untrackMod = useUntrackMod();
 
   const sorted = useMemo(
     () =>
@@ -143,6 +149,19 @@ function ManagedModsGrid({
       items.push({ key: "nexus", label: "View on Nexus", icon: ExternalLink });
     }
     items.push({ key: "copy", label: "Copy Name", icon: Copy });
+    if (mod.nexus_mod_id) {
+      items.push({ key: "sep-actions", label: "", separator: true });
+      items.push({
+        key: "endorse",
+        label: mod.is_endorsed ? "Remove Endorsement" : "Endorse",
+        icon: Heart,
+      });
+      items.push({
+        key: "track",
+        label: mod.is_tracked ? "Untrack" : "Track",
+        icon: Eye,
+      });
+    }
     items.push({ key: "sep", label: "", separator: true });
     items.push({ key: "delete", label: "Delete", icon: Trash2, variant: "danger" });
     return items;
@@ -164,6 +183,18 @@ function ManagedModsGrid({
           () => toast.success("Copied to clipboard"),
           () => toast.error("Failed to copy"),
         );
+        break;
+      case "endorse":
+        if (mod.nexus_mod_id) {
+          if (mod.is_endorsed) abstainMod.mutate({ gameName, modId: mod.nexus_mod_id });
+          else endorseMod.mutate({ gameName, modId: mod.nexus_mod_id });
+        }
+        break;
+      case "track":
+        if (mod.nexus_mod_id) {
+          if (mod.is_tracked) untrackMod.mutate({ gameName, modId: mod.nexus_mod_id });
+          else trackMod.mutate({ gameName, modId: mod.nexus_mod_id });
+        }
         break;
       case "delete":
         setConfirmDeleteModId(mod.id);
@@ -338,6 +369,18 @@ function ManagedModsGrid({
                             () => toast.success("Copied to clipboard"),
                             () => toast.error("Failed to copy"),
                           );
+                          break;
+                        case "endorse":
+                          if (mod.nexus_mod_id) {
+                            if (mod.is_endorsed) abstainMod.mutate({ gameName, modId: mod.nexus_mod_id });
+                            else endorseMod.mutate({ gameName, modId: mod.nexus_mod_id });
+                          }
+                          break;
+                        case "track":
+                          if (mod.nexus_mod_id) {
+                            if (mod.is_tracked) untrackMod.mutate({ gameName, modId: mod.nexus_mod_id });
+                            else trackMod.mutate({ gameName, modId: mod.nexus_mod_id });
+                          }
                           break;
                         case "delete":
                           setConfirmDeleteModId(mod.id);

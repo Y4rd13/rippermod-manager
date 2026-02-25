@@ -240,6 +240,8 @@ export interface InstalledModOut {
   category: string | null;
   last_downloaded_at: string | null;
   nexus_url: string | null;
+  is_tracked: boolean;
+  is_endorsed: boolean;
 }
 
 export interface InstallRequest {
@@ -447,6 +449,12 @@ export interface NexusModFileDetail {
   file_size: number;
 }
 
+export interface ModActionResult {
+  success: boolean;
+  is_endorsed?: boolean;
+  is_tracked?: boolean;
+}
+
 export interface ModDetail {
   nexus_mod_id: number;
   game_domain: string;
@@ -464,6 +472,8 @@ export interface ModDetail {
   nexus_url: string;
   changelogs: Record<string, string[]>;
   files: NexusModFileDetail[];
+  is_tracked: boolean;
+  is_endorsed: boolean;
 }
 
 export interface TrendingResult {
