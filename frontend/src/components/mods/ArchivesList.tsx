@@ -87,6 +87,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [treeFilename, setTreeFilename] = useState<string | null>(null);
   const [previewFilename, setPreviewFilename] = useState<string | null>(null);
+  const [pendingRenames, setPendingRenames] = useState<Record<string, string>>({});
   const [splitMenuPos, setSplitMenuPos] = useState<{ top: number; left: number; filename: string } | null>(null);
   const [linkPopover, setLinkPopover] = useState<{ top: number; left: number; filename: string } | null>(null);
   const [linkInput, setLinkInput] = useState("");
@@ -218,18 +219,31 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
     if (!conflicts) return;
     installMod.mutate({
       gameName,
-      data: { archive_filename: conflicts.archive_filename, skip_conflicts: conflicts.conflicts.map((c) => c.file_path) },
+      data: {
+        archive_filename: conflicts.archive_filename,
+        skip_conflicts: conflicts.conflicts.map((c) => c.file_path),
+        ...(Object.keys(pendingRenames).length > 0 ? { file_renames: pendingRenames } : {}),
+      },
     });
     setConflicts(null);
     setSelectedArchive(null);
+    setPendingRenames({});
     processNextInQueue();
   };
 
   const handleInstallOverwrite = () => {
     if (!conflicts) return;
-    installMod.mutate({ gameName, data: { archive_filename: conflicts.archive_filename, skip_conflicts: [] } });
+    installMod.mutate({
+      gameName,
+      data: {
+        archive_filename: conflicts.archive_filename,
+        skip_conflicts: [],
+        ...(Object.keys(pendingRenames).length > 0 ? { file_renames: pendingRenames } : {}),
+      },
+    });
     setConflicts(null);
     setSelectedArchive(null);
+    setPendingRenames({});
     processNextInQueue();
   };
 
@@ -255,6 +269,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
       }
       if (result.conflicts.length > 0) {
         setConflicts(result);
+        setPendingRenames(fileRenames);
       } else {
         installMod.mutate({
           gameName,
