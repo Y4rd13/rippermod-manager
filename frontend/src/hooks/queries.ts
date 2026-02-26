@@ -4,6 +4,7 @@ import { api } from "@/lib/api-client";
 import type {
   ArchiveContentsResult,
   AvailableArchive,
+  ConflictGraphResult,
   DownloadJobOut,
   Game,
   GameVersion,
@@ -172,5 +173,14 @@ export function useSearchNexusDownloads(gameName: string, query: string) {
     queryFn: () =>
       api.get(`/api/v1/nexus/downloads/${gameName}/search?q=${encodeURIComponent(query)}`),
     enabled: !!gameName && query.length >= 2,
+  });
+}
+
+export function useConflictGraph(gameName: string, enabled = true) {
+  return useQuery<ConflictGraphResult>({
+    queryKey: ["conflict-graph", gameName],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/conflicts/graph`),
+    enabled: !!gameName && enabled,
+    staleTime: 60_000,
   });
 }
