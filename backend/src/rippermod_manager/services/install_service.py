@@ -268,6 +268,11 @@ def uninstall_mod(
                 except OSError:
                     logger.warning("Could not delete %s", disabled_path)
 
+    # Clean up archive entry index before deleting the mod record
+    from rippermod_manager.services.archive_index_service import remove_index_for_mod
+
+    remove_index_for_mod(session, installed_mod.id)  # type: ignore[arg-type]
+
     session.delete(installed_mod)
     session.commit()
 
