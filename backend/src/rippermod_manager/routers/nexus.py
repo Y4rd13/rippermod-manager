@@ -167,26 +167,57 @@ async def mod_detail(
 
     files = session.exec(select(NexusModFile).where(NexusModFile.nexus_mod_id == mod_id)).all()
 
-    # Backfill content_preview_link/description for existing rows missing them
-    needs_backfill = any(f.content_preview_link is None and f.description is None for f in files)
-    if needs_backfill and api_key:
-        try:
-            async with NexusClient(api_key) as client:
-                files_resp = await client.get_mod_files(
-                    game_domain, mod_id, category="main,update,optional,miscellaneous"
+    # Fetch and persist file rows if missing, or backfill metadata on existing ones
+    if api_key:
+        needs_insert = len(files) == 0
+        needs_backfill = not needs_insert and any(
+            f.content_preview_link is None and f.description is None for f in files
+        )
+        if needs_insert or needs_backfill:
+            try:
+                async with NexusClient(api_key) as client:
+                    files_resp = await client.get_mod_files(
+                        game_domain, mod_id, category="main,update,optional,miscellaneous"
+                    )
+                api_file_list = files_resp.get("files", [])
+
+                if needs_insert:
+                    for af in api_file_list:
+                        fid = af.get("file_id")
+                        if not fid:
+                            continue
+                        session.add(
+                            NexusModFile(
+                                nexus_mod_id=mod_id,
+                                file_id=fid,
+                                file_name=af.get("file_name", ""),
+                                version=af.get("version", ""),
+                                category_id=af.get("category_id"),
+                                uploaded_timestamp=af.get("uploaded_timestamp"),
+                                file_size=af.get("size_in_bytes") or af.get("file_size", 0),
+                                content_preview_link=af.get("content_preview_link"),
+                                description=af.get("description"),
+                            )
+                        )
+                    session.commit()
+                    files = session.exec(
+                        select(NexusModFile).where(NexusModFile.nexus_mod_id == mod_id)
+                    ).all()
+                else:
+                    api_files = {af["file_id"]: af for af in api_file_list if af.get("file_id")}
+                    for f in files:
+                        af = api_files.get(f.file_id)
+                        if af and f.content_preview_link is None:
+                            f.content_preview_link = af.get("content_preview_link")
+                        if af and f.description is None:
+                            f.description = af.get("description")
+                    session.commit()
+            except Exception:
+                logger.debug(
+                    "Failed to fetch/backfill file metadata for mod %d",
+                    mod_id,
+                    exc_info=True,
                 )
-            api_files = {
-                af["file_id"]: af for af in files_resp.get("files", []) if af.get("file_id")
-            }
-            for f in files:
-                af = api_files.get(f.file_id)
-                if af and f.content_preview_link is None:
-                    f.content_preview_link = af.get("content_preview_link")
-                if af and f.description is None:
-                    f.description = af.get("description")
-            session.commit()
-        except Exception:
-            logger.debug("Failed to backfill file metadata for mod %d", mod_id, exc_info=True)
 
     # Resolve category_id → name
     category_name = meta.category
