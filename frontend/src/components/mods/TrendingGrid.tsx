@@ -220,6 +220,9 @@ export function TrendingGrid({
               <Download size={11} />
               {formatCount(mod.mod_downloads)}
             </span>
+            {mod.category_name && (
+              <Badge variant="neutral">{mod.category_name}</Badge>
+            )}
             {mod.updated_timestamp > 0 && (
               <span className="text-xs text-text-muted">{timeAgo(mod.updated_timestamp)}</span>
             )}

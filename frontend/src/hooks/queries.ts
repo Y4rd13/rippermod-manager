@@ -207,6 +207,16 @@ export function useArchivePreview(gameName: string, archiveFilename: string | nu
   });
 }
 
+export function useFileContentsPreview(url: string | null) {
+  return useQuery<ArchiveContentsResult>({
+    queryKey: ["file-contents-preview", url],
+    queryFn: () =>
+      api.get(`/api/v1/nexus/file-contents-preview?url=${encodeURIComponent(url!)}`),
+    enabled: !!url,
+    staleTime: 30 * 60 * 1000,
+  });
+}
+
 export function useConflictGraph(gameName: string, enabled = true) {
   return useQuery<ConflictGraphResult>({
     queryKey: ["conflict-graph", gameName],

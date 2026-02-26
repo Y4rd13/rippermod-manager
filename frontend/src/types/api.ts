@@ -509,6 +509,7 @@ export interface TrendingMod {
   created_timestamp: number;
   updated_timestamp: number;
   category_id: number | null;
+  category_name: string;
   nexus_url: string;
   is_installed: boolean;
   is_tracked: boolean;
@@ -522,6 +523,8 @@ export interface NexusModFileDetail {
   category_id: number | null;
   uploaded_timestamp: number | null;
   file_size: number;
+  content_preview_link: string | null;
+  description: string | null;
 }
 
 export interface ModActionResult {

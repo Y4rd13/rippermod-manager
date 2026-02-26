@@ -50,3 +50,5 @@ class NexusModFile(SQLModel, table=True):
     category_id: int | None = None
     uploaded_timestamp: int | None = None
     file_size: int = 0
+    content_preview_link: str | None = None
+    description: str | None = None

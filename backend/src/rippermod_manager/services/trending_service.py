@@ -126,6 +126,7 @@ def _cross_reference(
     game_id: int,
     game_domain: str,
     session: Session,
+    categories: dict[int, str] | None = None,
 ) -> list[TrendingModOut]:
     mod_ids = [m["mod_id"] for m in mods_data if m.get("mod_id")]
 
@@ -176,6 +177,11 @@ def _cross_reference(
                 created_timestamp=m.get("created_timestamp", 0),
                 updated_timestamp=m.get("updated_timestamp", 0),
                 category_id=m.get("category_id"),
+                category_name=(
+                    categories.get(m["category_id"], "")
+                    if categories and m.get("category_id") is not None
+                    else ""
+                ),
                 nexus_url=f"{nexus_url_base}/{mid}",
                 is_installed=mid in installed_nexus_ids,
                 is_tracked=mid in tracked_ids,
@@ -193,12 +199,16 @@ async def fetch_trending_mods(
     *,
     force_refresh: bool = False,
 ) -> TrendingResult:
+    from rippermod_manager.services.nexus_helpers import get_game_categories
+
+    categories = await get_game_categories(game_domain, session, client=client)
+
     if not force_refresh:
         cached_trending = _load_cached("trending_cache", game_id, session)
         cached_latest = _load_cached("latest_updated_cache", game_id, session)
         if cached_trending is not None and cached_latest is not None:
-            trending = _cross_reference(cached_trending, game_id, game_domain, session)
-            latest = _cross_reference(cached_latest, game_id, game_domain, session)
+            trending = _cross_reference(cached_trending, game_id, game_domain, session, categories)
+            latest = _cross_reference(cached_latest, game_id, game_domain, session, categories)
             return TrendingResult(trending=trending, latest_updated=latest, cached=True)
 
     raw_trending, raw_latest = await asyncio.gather(
@@ -216,13 +226,15 @@ async def fetch_trending_mods(
     _save_cached("latest_updated_cache", game_id, normalized_latest, session)
     session.commit()
 
-    trending = _cross_reference(normalized_trending, game_id, game_domain, session)
-    latest = _cross_reference(normalized_latest, game_id, game_domain, session)
+    trending = _cross_reference(normalized_trending, game_id, game_domain, session, categories)
+    latest = _cross_reference(normalized_latest, game_id, game_domain, session, categories)
     return TrendingResult(trending=trending, latest_updated=latest, cached=False)
 
 
 def get_cached_trending(game_id: int, game_domain: str, session: Session) -> TrendingResult | None:
     """Serve stale cache (ignore TTL) for error-fallback paths."""
+    from rippermod_manager.services.nexus_helpers import get_cached_game_categories
+
     raw_trending = get_setting(session, f"trending_cache_{game_id}")
     raw_latest = get_setting(session, f"latest_updated_cache_{game_id}")
     if not raw_trending and not raw_latest:
@@ -232,6 +244,7 @@ def get_cached_trending(game_id: int, game_domain: str, session: Session) -> Tre
         latest_data = json.loads(raw_latest) if raw_latest else []
     except json.JSONDecodeError:
         return None
-    trending = _cross_reference(trending_data, game_id, game_domain, session)
-    latest = _cross_reference(latest_data, game_id, game_domain, session)
+    categories = get_cached_game_categories(game_domain, session)
+    trending = _cross_reference(trending_data, game_id, game_domain, session, categories)
+    latest = _cross_reference(latest_data, game_id, game_domain, session, categories)
     return TrendingResult(trending=trending, latest_updated=latest, cached=True)

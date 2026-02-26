@@ -140,6 +140,8 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
                         category_id=f.get("category_id"),
                         uploaded_timestamp=f.get("uploaded_timestamp"),
                         file_size=f.get("size_in_bytes") or f.get("file_size", 0),
+                        content_preview_link=f.get("content_preview_link"),
+                        description=f.get("description"),
                     )
                 )
 
