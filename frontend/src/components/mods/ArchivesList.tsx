@@ -1,4 +1,4 @@
-import { AlertTriangle, Archive, Check, ChevronDown, Copy, Download, ExternalLink, FolderOpen, FolderTree, PackageMinus, Settings2, Trash2 } from "lucide-react";
+import { AlertTriangle, Archive, Check, ChevronDown, Copy, Download, ExternalLink, FolderOpen, FolderTree, Link, PackageMinus, Settings2, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { openPath } from "@tauri-apps/plugin-opener";
@@ -24,6 +24,7 @@ import {
   useCleanupOrphans,
   useDeleteArchive,
   useInstallMod,
+  useLinkArchiveToNexus,
   useUninstallMod,
 } from "@/hooks/mutations";
 import { toast } from "@/stores/toast-store";
@@ -39,6 +40,7 @@ import type {
 interface Props {
   archives: AvailableArchive[];
   gameName: string;
+  gameDomain: string;
   installPath: string;
   isLoading?: boolean;
 }
@@ -53,34 +55,34 @@ const ARCHIVE_SORT_OPTIONS: { value: ArchiveSortKey; label: string }[] = [
   { value: "version", label: "Version" },
 ];
 
-const ROW_CONTEXT_ITEMS_INSTALL: ContextMenuItem[] = [
-  { key: "install", label: "Install", icon: Download },
-  { key: "copy", label: "Copy Filename", icon: Copy },
-  { key: "delete", label: "Delete Archive", icon: Trash2, variant: "danger" },
-];
-
-const ROW_CONTEXT_ITEMS_EMPTY: ContextMenuItem[] = [
-  { key: "nexus", label: "View on Nexus", icon: ExternalLink },
-  { key: "copy", label: "Copy Filename", icon: Copy },
-  { key: "delete", label: "Delete Archive", icon: Trash2, variant: "danger" },
-];
-
-const ROW_CONTEXT_ITEMS_UNINSTALL: ContextMenuItem[] = [
-  { key: "uninstall", label: "Uninstall", icon: PackageMinus, variant: "danger" },
-  { key: "copy", label: "Copy Filename", icon: Copy },
-  { key: "delete", label: "Delete Archive", icon: Trash2, variant: "danger" },
-];
+function buildContextItems(archive: AvailableArchive): ContextMenuItem[] {
+  const items: ContextMenuItem[] = [];
+  if (archive.is_empty && archive.nexus_mod_id) {
+    items.push({ key: "nexus", label: "View on Nexus", icon: ExternalLink });
+  } else if (archive.is_installed && archive.installed_mod_id) {
+    items.push({ key: "uninstall", label: "Uninstall", icon: PackageMinus, variant: "danger" });
+  } else {
+    items.push({ key: "install", label: "Install", icon: Download });
+  }
+  if (archive.nexus_mod_id && !archive.is_empty) {
+    items.push({ key: "nexus", label: "View on Nexus", icon: ExternalLink });
+  }
+  items.push({ key: "copy", label: "Copy Filename", icon: Copy });
+  items.push({ key: "delete", label: "Delete Archive", icon: Trash2, variant: "danger" });
+  return items;
+}
 
 const OVERFLOW_ITEMS: ContextMenuItem[] = [
   { key: "copy", label: "Copy Filename", icon: Copy },
 ];
 
-export function ArchivesList({ archives, gameName, installPath, isLoading }: Props) {
+export function ArchivesList({ archives, gameName, gameDomain, installPath, isLoading }: Props) {
   const installMod = useInstallMod();
   const uninstallMod = useUninstallMod();
   const checkConflicts = useCheckConflicts();
   const deleteArchive = useDeleteArchive();
   const cleanupOrphans = useCleanupOrphans();
+  const linkArchive = useLinkArchiveToNexus();
   const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
   const [confirmUninstall, setConfirmUninstall] = useState<{ filename: string; modId: number } | null>(null);
   const [fomodArchive, setFomodArchive] = useState<string | null>(null);
@@ -91,8 +93,11 @@ export function ArchivesList({ archives, gameName, installPath, isLoading }: Pro
   const [treeFilename, setTreeFilename] = useState<string | null>(null);
   const [previewFilename, setPreviewFilename] = useState<string | null>(null);
   const [splitMenuPos, setSplitMenuPos] = useState<{ top: number; left: number; filename: string } | null>(null);
+  const [linkPopover, setLinkPopover] = useState<{ top: number; left: number; filename: string } | null>(null);
+  const [linkInput, setLinkInput] = useState("");
   const splitChevronRef = useRef<HTMLButtonElement>(null);
   const splitMenuRef = useRef<HTMLDivElement>(null);
+  const linkPopoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!splitMenuPos) return;
@@ -104,6 +109,17 @@ export function ArchivesList({ archives, gameName, installPath, isLoading }: Pro
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [splitMenuPos]);
+
+  useEffect(() => {
+    if (!linkPopover) return;
+    const handleClick = (e: MouseEvent) => {
+      if (linkPopoverRef.current?.contains(e.target as Node)) return;
+      setLinkPopover(null);
+      setLinkInput("");
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [linkPopover]);
 
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useSessionState<ArchiveSortKey>(`archives-sort-${gameName}`, "name");
@@ -275,7 +291,7 @@ export function ArchivesList({ archives, gameName, installPath, isLoading }: Pro
         () => toast.error("Failed to copy"),
       );
     } else if (key === "nexus" && archive.nexus_mod_id) {
-      window.open(`https://www.nexusmods.com/cyberpunk2077/mods/${archive.nexus_mod_id}?tab=files`, "_blank");
+      window.open(`https://www.nexusmods.com/${gameDomain}/mods/${archive.nexus_mod_id}?tab=files`, "_blank");
     } else if (key === "delete") {
       setConfirmDeleteFile(archive.filename);
     }
@@ -472,14 +488,29 @@ export function ArchivesList({ archives, gameName, installPath, isLoading }: Pro
                       </button>
                     </div>
                   )}
-                  {a.is_empty && a.nexus_mod_id && (
+                  {a.nexus_mod_id ? (
                     <Button
-                      variant="secondary"
+                      variant="ghost"
                       size="sm"
-                      onClick={() => window.open(`https://www.nexusmods.com/cyberpunk2077/mods/${a.nexus_mod_id}?tab=files`, "_blank")}
-                      title="Re-download from Nexus Mods"
+                      onClick={() => window.open(`https://www.nexusmods.com/${gameDomain}/mods/${a.nexus_mod_id}?tab=files`, "_blank")}
+                      title={`View mod ${a.nexus_mod_id} on Nexus Mods`}
+                      aria-label="View on Nexus"
                     >
-                      <ExternalLink size={14} /> Nexus
+                      <ExternalLink size={14} />
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        setLinkPopover({ top: rect.bottom + 4, left: rect.right - 260, filename: a.filename });
+                        setLinkInput("");
+                      }}
+                      title="Link to a Nexus mod"
+                      aria-label="Link to Nexus"
+                    >
+                      <Link size={14} />
                     </Button>
                   )}
                   <Button
@@ -578,13 +609,7 @@ export function ArchivesList({ archives, gameName, installPath, isLoading }: Pro
 
       {menuState.visible && menuState.data && (
         <ContextMenu
-          items={
-            menuState.data.is_empty && menuState.data.nexus_mod_id
-              ? ROW_CONTEXT_ITEMS_EMPTY
-              : menuState.data.is_installed && menuState.data.installed_mod_id
-                ? ROW_CONTEXT_ITEMS_UNINSTALL
-                : ROW_CONTEXT_ITEMS_INSTALL
-          }
+          items={buildContextItems(menuState.data)}
           position={menuState.position}
           onSelect={handleContextMenuSelect}
           onClose={closeMenu}
@@ -698,6 +723,46 @@ export function ArchivesList({ archives, gameName, installPath, isLoading }: Pro
             <Settings2 size={12} />
             Install with Options
           </button>
+        </div>,
+        document.body,
+      )}
+
+      {linkPopover && createPortal(
+        <div
+          ref={linkPopoverRef}
+          className="fixed z-50 w-[260px] rounded-md border border-border bg-surface-1 p-3 shadow-lg"
+          style={{ top: linkPopover.top, left: linkPopover.left }}
+        >
+          <p className="text-xs text-text-muted mb-2">Enter a Nexus mod ID or URL</p>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const value = linkInput.trim();
+              if (!value) return;
+              const urlMatch = value.match(/nexusmods\.com\/[^/]+\/mods\/(\d+)/);
+              const modId = urlMatch ? parseInt(urlMatch[1], 10) : parseInt(value, 10);
+              if (!modId || isNaN(modId)) {
+                toast.error("Invalid mod ID", "Enter a number or a Nexus Mods URL");
+                return;
+              }
+              linkArchive.mutate({ gameName, filename: linkPopover.filename, nexusModId: modId });
+              setLinkPopover(null);
+              setLinkInput("");
+            }}
+            className="flex gap-1.5"
+          >
+            <input
+              type="text"
+              value={linkInput}
+              onChange={(e) => setLinkInput(e.target.value)}
+              placeholder="e.g. 1234 or nexusmods.com/..."
+              className="flex-1 rounded border border-border bg-surface-0 px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
+              autoFocus
+            />
+            <Button type="submit" size="sm" loading={linkArchive.isPending}>
+              Link
+            </Button>
+          </form>
         </div>,
         document.body,
       )}

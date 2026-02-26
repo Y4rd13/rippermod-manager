@@ -216,6 +216,11 @@ export interface ArchiveDeleteResult {
   message: string;
 }
 
+export interface NexusLinkResult {
+  filename: string;
+  nexus_mod_id: number;
+}
+
 export interface OrphanCleanupResult {
   deleted_count: number;
   freed_bytes: number;

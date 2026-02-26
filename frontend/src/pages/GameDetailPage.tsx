@@ -590,7 +590,7 @@ export function GameDetailPage() {
         />
       )}
       {tab === "archives" && (
-        <ArchivesList archives={archives} gameName={name} installPath={game.install_path} isLoading={archivesLoading} />
+        <ArchivesList archives={archives} gameName={name} gameDomain={game.domain_name} installPath={game.install_path} isLoading={archivesLoading} />
       )}
       {tab === "profiles" && (
         <ProfileManager profiles={profiles} gameName={name} isLoading={profilesLoading} installedCount={installedMods.length} recognizedCount={recognizedNotInstalled} />

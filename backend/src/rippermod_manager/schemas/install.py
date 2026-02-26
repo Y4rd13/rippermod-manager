@@ -101,6 +101,15 @@ class ArchiveContentsResult(BaseModel):
     tree: list[ArchiveEntryOut]
 
 
+class NexusLinkBody(BaseModel):
+    nexus_mod_id: int
+
+
+class NexusLinkResult(BaseModel):
+    filename: str
+    nexus_mod_id: int
+
+
 class ArchiveFileEntry(BaseModel):
     file_path: str
     size: int

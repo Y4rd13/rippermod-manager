@@ -17,6 +17,7 @@ import type {
   InstallRequest,
   InstallResult,
   ModActionResult,
+  NexusLinkResult,
   NexusSyncResult,
   OnboardingStatus,
   OrphanCleanupResult,
@@ -225,6 +226,37 @@ export function useCleanupOrphans() {
       }
     },
     onError: () => toast.error("Failed to clean orphan archives"),
+  });
+}
+
+export function useLinkArchiveToNexus() {
+  const qc = useQueryClient();
+  return useMutation<NexusLinkResult, Error, { gameName: string; filename: string; nexusModId: number }>({
+    mutationFn: ({ gameName, filename, nexusModId }) =>
+      api.put(
+        `/api/v1/games/${gameName}/install/archives/${encodeURIComponent(filename)}/nexus-link`,
+        { nexus_mod_id: nexusModId },
+      ),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
+      toast.success("Archive linked to Nexus");
+    },
+    onError: () => toast.error("Failed to link archive"),
+  });
+}
+
+export function useUnlinkArchiveFromNexus() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, { gameName: string; filename: string }>({
+    mutationFn: ({ gameName, filename }) =>
+      api.delete(
+        `/api/v1/games/${gameName}/install/archives/${encodeURIComponent(filename)}/nexus-link`,
+      ),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
+      toast.success("Nexus link removed");
+    },
+    onError: () => toast.error("Failed to unlink archive"),
   });
 }
 

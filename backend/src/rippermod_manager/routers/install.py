@@ -8,7 +8,8 @@ from sqlmodel import Session, select
 
 from rippermod_manager.database import get_session
 from rippermod_manager.matching.filename_parser import parse_mod_filename
-from rippermod_manager.models.install import InstalledMod
+from rippermod_manager.models.download import DownloadJob
+from rippermod_manager.models.install import ArchiveNexusLink, InstalledMod
 from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.install import (
@@ -22,6 +23,8 @@ from rippermod_manager.schemas.install import (
     InstalledModOut,
     InstallRequest,
     InstallResult,
+    NexusLinkBody,
+    NexusLinkResult,
     OrphanCleanupResult,
     ToggleResult,
     UninstallResult,
@@ -74,6 +77,26 @@ async def list_archives(
         archive_names,  # type: ignore[arg-type]
     )
 
+    # Build fallback map: ArchiveNexusLink → DownloadJob for archives without parsed IDs
+    link_rows = session.exec(
+        select(ArchiveNexusLink.filename, ArchiveNexusLink.nexus_mod_id).where(
+            ArchiveNexusLink.game_id == game.id,
+            ArchiveNexusLink.filename.in_(archive_names),  # type: ignore[union-attr]
+        )
+    ).all()
+    fallback_mod_ids: dict[str, int] = {fn: mid for fn, mid in link_rows}
+
+    dj_rows = session.exec(
+        select(DownloadJob.file_name, DownloadJob.nexus_mod_id).where(
+            DownloadJob.game_id == game.id,
+            DownloadJob.status == "completed",
+            DownloadJob.file_name.in_(archive_names),  # type: ignore[union-attr]
+        )
+    ).all()
+    for fn, mid in dj_rows:
+        if fn not in fallback_mod_ids:
+            fallback_mod_ids[fn] = mid
+
     result: list[AvailableArchive] = []
     for path in archives:
         parsed = parse_mod_filename(path.name)
@@ -83,7 +106,7 @@ async def list_archives(
             AvailableArchive(
                 filename=path.name,
                 size=stat.st_size,
-                nexus_mod_id=parsed.nexus_mod_id,
+                nexus_mod_id=parsed.nexus_mod_id or fallback_mod_ids.get(path.name),
                 parsed_name=parsed.name,
                 parsed_version=parsed.version,
                 is_installed=path.name in installed_archives,
@@ -314,6 +337,54 @@ async def delete_archive_endpoint(
     """Delete a single archive file from the staging folder."""
     game = get_game_or_404(game_name, session)
     return delete_archive(game.install_path, filename)
+
+
+@router.put("/archives/{filename}/nexus-link", response_model=NexusLinkResult)
+async def link_archive(
+    game_name: str,
+    filename: str,
+    body: NexusLinkBody,
+    session: Session = Depends(get_session),
+) -> NexusLinkResult:
+    """Manually link an archive to a Nexus mod ID."""
+    game = get_game_or_404(game_name, session)
+    existing = session.exec(
+        select(ArchiveNexusLink).where(
+            ArchiveNexusLink.game_id == game.id,
+            ArchiveNexusLink.filename == filename,
+        )
+    ).first()
+    if existing:
+        existing.nexus_mod_id = body.nexus_mod_id
+    else:
+        session.add(
+            ArchiveNexusLink(
+                game_id=game.id,  # type: ignore[arg-type]
+                filename=filename,
+                nexus_mod_id=body.nexus_mod_id,
+            )
+        )
+    session.commit()
+    return NexusLinkResult(filename=filename, nexus_mod_id=body.nexus_mod_id)
+
+
+@router.delete("/archives/{filename}/nexus-link", status_code=204)
+async def unlink_archive(
+    game_name: str,
+    filename: str,
+    session: Session = Depends(get_session),
+) -> None:
+    """Remove a manual Nexus link from an archive."""
+    game = get_game_or_404(game_name, session)
+    existing = session.exec(
+        select(ArchiveNexusLink).where(
+            ArchiveNexusLink.game_id == game.id,
+            ArchiveNexusLink.filename == filename,
+        )
+    ).first()
+    if existing:
+        session.delete(existing)
+        session.commit()
 
 
 @router.post("/archives/cleanup-orphans", response_model=OrphanCleanupResult)
