@@ -536,3 +536,29 @@ export interface TrendingResult {
   latest_updated: TrendingMod[];
   cached: boolean;
 }
+
+// Conflict graph types
+
+export interface ConflictGraphNode {
+  id: string;
+  label: string;
+  source_type: string;
+  file_count: number;
+  conflict_count: number;
+  disabled: boolean;
+  nexus_mod_id: number | null;
+  picture_url: string | null;
+}
+
+export interface ConflictGraphEdge {
+  source: string;
+  target: string;
+  shared_files: string[];
+  weight: number;
+}
+
+export interface ConflictGraphResult {
+  nodes: ConflictGraphNode[];
+  edges: ConflictGraphEdge[];
+  total_conflicts: number;
+}
