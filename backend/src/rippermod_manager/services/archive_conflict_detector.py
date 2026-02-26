@@ -2,11 +2,12 @@
 
 Queries the archive_entry_index table for resource hash collisions,
 determines winners by ASCII-alphabetical filename order (Cyberpunk 2077's
-archive load order), and emits ConflictEvidence domain objects.
+archive load order), and emits ConflictEvidence rows.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
@@ -15,7 +16,7 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 from rippermod_manager.models.archive_index import ArchiveEntryIndex
-from rippermod_manager.models.conflict import ConflictEvidence, ConflictSeverity, ConflictType
+from rippermod_manager.models.conflict import ConflictEvidence, ConflictKind, Severity
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ class ArchiveConflictSummary:
     winning_entries: int
     losing_entries: int
     conflicting_archives: tuple[str, ...]
-    severity: ConflictSeverity
+    severity: Severity
 
 
 def detect_archive_conflicts(
@@ -39,10 +40,10 @@ def detect_archive_conflicts(
 ) -> list[ConflictEvidence]:
     """Detect all resource hash collisions among indexed .archive files.
 
-    Returns one ``ConflictEvidence`` per (resource_hash, winner, loser)
-    triple, sorted deterministically by (resource_hash, winner, loser).
+    Returns one ``ConflictEvidence`` per conflicting resource hash,
+    sorted deterministically by key.  Each evidence records all
+    participating mod IDs and the winner.
     """
-    # Find hashes that appear in more than one distinct archive
     subq = (
         select(ArchiveEntryIndex.resource_hash)
         .where(ArchiveEntryIndex.game_id == game_id)
@@ -67,7 +68,6 @@ def detect_archive_conflicts(
     evidences: list[ConflictEvidence] = []
     for resource_hash in sorted(hash_groups):
         entries = hash_groups[resource_hash]
-        # Deduplicate by archive_filename
         seen: dict[str, ArchiveEntryIndex] = {}
         for entry in entries:
             if entry.archive_filename not in seen:
@@ -75,18 +75,28 @@ def detect_archive_conflicts(
 
         sorted_archives = sorted(seen.items(), key=lambda kv: kv[0])
         winner_name, winner_entry = sorted_archives[0]
+        loser_entries = sorted_archives[1:]
 
-        for loser_name, loser_entry in sorted_archives[1:]:
-            evidences.append(
-                ConflictEvidence(
-                    conflict_type=ConflictType.ARCHIVE_HASH,
-                    resource_hash=resource_hash,
-                    winner_archive=winner_name,
-                    loser_archive=loser_name,
-                    winner_installed_mod_id=winner_entry.installed_mod_id,
-                    loser_installed_mod_id=loser_entry.installed_mod_id,
-                )
+        all_mod_ids = [
+            e.installed_mod_id for _, e in sorted_archives if e.installed_mod_id is not None
+        ]
+
+        detail = {
+            "winner_archive": winner_name,
+            "loser_archives": [name for name, _ in loser_entries],
+        }
+
+        evidences.append(
+            ConflictEvidence(
+                game_id=game_id,
+                kind=ConflictKind.archive_entry,
+                severity=Severity.high,
+                key=hex(resource_hash),
+                mod_ids=",".join(str(mid) for mid in all_mod_ids),
+                winner_mod_id=winner_entry.installed_mod_id,
+                detail=json.dumps(detail),
             )
+        )
 
     return evidences
 
@@ -100,10 +110,9 @@ def summarize_conflicts(
     Severity is based on the ratio of losing entries to total entries
     for each archive:
 
-    * **CRITICAL** — all entries lose (mod has zero effect)
-    * **HIGH** — >50 % of entries lose
-    * **MODERATE** — 1-50 % of entries lose
-    * **INFO** — mod wins all conflicting entries
+    * **high** - >50% of entries lose (or all entries lose)
+    * **medium** - 1-50% of entries lose
+    * **low** - mod wins all conflicting entries
     """
     evidences = detect_archive_conflicts(session, game_id)
     if not evidences:
@@ -119,18 +128,23 @@ def summarize_conflicts(
     ).all()
     total_counts: dict[str, int] = {name: count for name, count in total_counts_rows}
 
-    wins: dict[str, set[int]] = defaultdict(set)
-    losses: dict[str, set[int]] = defaultdict(set)
+    wins: dict[str, set[str]] = defaultdict(set)
+    losses: dict[str, set[str]] = defaultdict(set)
     conflicts_with: dict[str, set[str]] = defaultdict(set)
     mod_ids: dict[str, int | None] = {}
 
     for ev in evidences:
-        wins[ev.winner_archive].add(ev.resource_hash)
-        losses[ev.loser_archive].add(ev.resource_hash)
-        conflicts_with[ev.winner_archive].add(ev.loser_archive)
-        conflicts_with[ev.loser_archive].add(ev.winner_archive)
-        mod_ids.setdefault(ev.winner_archive, ev.winner_installed_mod_id)
-        mod_ids.setdefault(ev.loser_archive, ev.loser_installed_mod_id)
+        detail = json.loads(ev.detail)
+        winner_archive = detail["winner_archive"]
+        loser_archives = detail["loser_archives"]
+
+        wins[winner_archive].add(ev.key)
+        for loser in loser_archives:
+            losses[loser].add(ev.key)
+            conflicts_with[winner_archive].add(loser)
+            conflicts_with[loser].add(winner_archive)
+
+        mod_ids.setdefault(winner_archive, ev.winner_mod_id)
 
     all_archives = set(wins) | set(losses)
     summaries: list[ArchiveConflictSummary] = []
@@ -140,13 +154,11 @@ def summarize_conflicts(
         n_losses = len(losses.get(archive, set()))
 
         if n_losses == 0:
-            severity = ConflictSeverity.INFO
-        elif total > 0 and n_losses >= total:
-            severity = ConflictSeverity.CRITICAL
+            severity = Severity.low
         elif total > 0 and n_losses > total * 0.5:
-            severity = ConflictSeverity.HIGH
+            severity = Severity.high
         else:
-            severity = ConflictSeverity.MODERATE
+            severity = Severity.medium
 
         summaries.append(
             ArchiveConflictSummary(
@@ -160,11 +172,6 @@ def summarize_conflicts(
             )
         )
 
-    severity_order = {
-        ConflictSeverity.CRITICAL: 0,
-        ConflictSeverity.HIGH: 1,
-        ConflictSeverity.MODERATE: 2,
-        ConflictSeverity.INFO: 3,
-    }
+    severity_order = {Severity.high: 0, Severity.medium: 1, Severity.low: 2}
     summaries.sort(key=lambda s: (severity_order[s.severity], s.archive_filename))
     return summaries

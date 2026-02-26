@@ -1,5 +1,6 @@
 from rippermod_manager.models.archive_index import ArchiveEntryIndex
 from rippermod_manager.models.chat import ChatMessage
+from rippermod_manager.models.conflict import ConflictEvidence
 from rippermod_manager.models.correlation import ModNexusCorrelation
 from rippermod_manager.models.download import DownloadJob
 from rippermod_manager.models.game import Game, GameModPath
@@ -13,6 +14,7 @@ __all__ = [
     "AppSetting",
     "ArchiveEntryIndex",
     "ChatMessage",
+    "ConflictEvidence",
     "DownloadJob",
     "Game",
     "GameModPath",

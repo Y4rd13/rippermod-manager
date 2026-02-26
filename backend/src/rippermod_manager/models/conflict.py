@@ -1,38 +1,44 @@
-"""Core conflict domain types for archive-level resource collision detection."""
+"""Persisted conflict evidence from the conflicts core engine.
+
+Stores the results of post-install conflict analysis across all installed mods.
+Each row represents a single conflict (e.g., two mods writing the same file).
+"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 
-
-class ConflictType(StrEnum):
-    """Classification of the conflict mechanism."""
-
-    ARCHIVE_HASH = "archive_hash"
+from sqlmodel import Column, Field, SQLModel, Text
 
 
-class ConflictSeverity(StrEnum):
-    """How impactful the conflict is for a given archive."""
+class ConflictKind(StrEnum):
+    """Category of conflict between mods."""
 
-    CRITICAL = "critical"  # All entries lose — mod has zero effect
-    HIGH = "high"  # >50% of entries lose
-    MODERATE = "moderate"  # 1-50% of entries lose
-    INFO = "info"  # Mod wins all conflicting entries
+    archive_entry = "archive_entry"
+    redscript_target = "redscript_target"
+    tweak_key = "tweak_key"
 
 
-@dataclass(frozen=True, slots=True)
-class ConflictEvidence:
-    """A single detected conflict between two archive files.
+class Severity(StrEnum):
+    """Conflict severity, determined by deterministic rules per ConflictKind."""
 
-    ``winner_archive`` and ``loser_archive`` are filenames (not full paths)
-    since ASCII-alphabetical filename order determines the winner in
-    Cyberpunk 2077's archive loading.
-    """
+    high = "high"
+    medium = "medium"
+    low = "low"
 
-    conflict_type: ConflictType
-    resource_hash: int
-    winner_archive: str
-    loser_archive: str
-    winner_installed_mod_id: int | None
-    loser_installed_mod_id: int | None
+
+class ConflictEvidence(SQLModel, table=True):
+    """A single detected conflict between two or more installed mods."""
+
+    __tablename__ = "conflict_evidence"
+
+    id: int | None = Field(default=None, primary_key=True)
+    game_id: int = Field(foreign_key="games.id", index=True)
+    kind: ConflictKind = Field(index=True)
+    severity: Severity = Field(index=True)
+    key: str = Field(index=True)
+    mod_ids: str = ""
+    winner_mod_id: int | None = None
+    detail: str = Field(default="{}", sa_column=Column(Text))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
