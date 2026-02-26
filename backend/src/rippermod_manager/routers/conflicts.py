@@ -18,6 +18,7 @@ from rippermod_manager.schemas.conflict import (
     ReindexResult,
 )
 from rippermod_manager.schemas.conflicts import (
+    ConflictGraphResult,
     ConflictSeverity,
     ConflictsOverview,
     InstalledConflictsResult,
@@ -26,6 +27,7 @@ from rippermod_manager.schemas.conflicts import (
     ResolveRequest,
     ResolveResult,
 )
+from rippermod_manager.services.conflict_graph_service import build_conflict_graph
 from rippermod_manager.services.conflict_service import (
     check_installed_conflicts,
     check_pairwise_conflict,
@@ -187,6 +189,19 @@ def inbox_resolve(
         raise HTTPException(400, str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
+
+
+# --- Conflict graph visualization ---
+
+
+@_engine_router.get("/graph", response_model=ConflictGraphResult)
+def conflict_graph(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> ConflictGraphResult:
+    """Build a conflict graph across all installed mods and uninstalled archives."""
+    game = get_game_or_404(game_name, session)
+    return build_conflict_graph(game, session)
 
 
 router.include_router(_engine_router)

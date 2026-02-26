@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Eye,
   FolderOpen,
+  GitBranch,
   Heart,
   Link2,
   Package,
@@ -16,7 +17,7 @@ import {
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { ArchivesList } from "@/components/mods/ArchivesList";
@@ -57,9 +58,16 @@ import { api } from "@/lib/api-client";
 import { parseSSE } from "@/lib/sse-parser";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
+import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import type { ModUpdate } from "@/types/api";
 
-type Tab = "installed" | "conflicts" | "updates" | "trending" | "endorsed" | "tracked" | "mods" | "matched" | "archives" | "profiles";
+const ConflictGraphTab = lazy(() =>
+  import("@/components/conflicts/ConflictGraphTab").then((m) => ({
+    default: m.ConflictGraphTab,
+  })),
+);
+
+type Tab = "installed" | "conflicts" | "conflict-graph" | "updates" | "trending" | "endorsed" | "tracked" | "mods" | "matched" | "archives" | "profiles";
 
 const TABS: { key: Tab; label: string; Icon: typeof Package; tooltip: string }[] = [
   { key: "installed", label: "Installed", Icon: UserCheck, tooltip: "Managed and recognized mods on your system" },
@@ -72,6 +80,7 @@ const TABS: { key: Tab; label: string; Icon: typeof Package; tooltip: string }[]
   { key: "matched", label: "Nexus Matched", Icon: Link2, tooltip: "Scanned mods matched to Nexus Mods entries" },
   { key: "archives", label: "Archives", Icon: Archive, tooltip: "Downloaded mod archives ready to install" },
   { key: "profiles", label: "Profiles", Icon: FolderOpen, tooltip: "Saved snapshots of your mod enabled/disabled states" },
+  { key: "conflict-graph", label: "Conflict Graph", Icon: GitBranch, tooltip: "Visualize file conflicts between mods and archives" },
 ];
 
 export function GameDetailPage() {
@@ -576,6 +585,11 @@ export function GameDetailPage() {
       )}
       {tab === "updates" && (
         <UpdatesTable gameName={name} updates={updates?.updates ?? []} isLoading={updatesLoading} />
+      )}
+      {tab === "conflict-graph" && (
+        <Suspense fallback={<SkeletonCardGrid count={3} />}>
+          <ConflictGraphTab gameName={name} />
+        </Suspense>
       )}
       </div>
 
