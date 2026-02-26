@@ -18,6 +18,7 @@ export function useInstallFlow(
   const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
   const [conflictModId, setConflictModId] = useState<number | null>(null);
   const [fomodArchive, setFomodArchive] = useState<string | null>(null);
+  const [fileSelectModId, setFileSelectModId] = useState<number | null>(null);
 
   const installMod = useInstallMod();
   const checkConflicts = useCheckConflicts();
@@ -189,15 +190,21 @@ export function useInstallFlow(
   }, []);
 
   const handleDownload = useCallback(
-    (nexusModId: number) => {
+    async (nexusModId: number) => {
       setDownloadingModId(nexusModId);
-      startModDownload.mutate(
-        { gameName, nexusModId },
-        { onSettled: () => setDownloadingModId(null) },
-      );
+      try {
+        const result = await startModDownload.mutateAsync({ gameName, nexusModId });
+        if (result.requires_file_selection) {
+          setFileSelectModId(nexusModId);
+        }
+      } finally {
+        setDownloadingModId(null);
+      }
     },
     [gameName, startModDownload],
   );
+
+  const dismissFileSelect = useCallback(() => setFileSelectModId(null), []);
 
   const handleCancelDownload = useCallback(
     (jobId: number) => {
@@ -212,6 +219,7 @@ export function useInstallFlow(
     downloadingModId,
     conflicts,
     fomodArchive,
+    fileSelectModId,
     activeDownloadByModId,
     completedDownloadByModId,
     handleInstall,
@@ -220,6 +228,7 @@ export function useInstallFlow(
     handleInstallOverwrite,
     dismissConflicts,
     dismissFomod,
+    dismissFileSelect,
     handleDownload,
     handleCancelDownload,
   };

@@ -431,6 +431,7 @@ export interface DownloadJobOut {
 export interface DownloadStartResult {
   job: DownloadJobOut | null;
   requires_nxm: boolean;
+  requires_file_selection: boolean;
 }
 
 // Trending feature types

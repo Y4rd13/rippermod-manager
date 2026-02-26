@@ -107,6 +107,8 @@ async def start_download_from_mod(
 
     # Prefer main files (category_id == 1), fallback to latest file
     main_files = [f for f in nexus_files if f.get("category_id") == 1]
+    if len(main_files) > 1:
+        return DownloadStartResult(requires_file_selection=True)
     target = main_files[-1] if main_files else nexus_files[-1]
     nexus_file_id = target.get("file_id")
     if not nexus_file_id:

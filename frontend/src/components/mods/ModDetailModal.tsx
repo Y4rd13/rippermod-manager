@@ -15,7 +15,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { useAbstainMod, useEndorseMod, useTrackMod, useUntrackMod } from "@/hooks/mutations";
+import { useAbstainMod, useEndorseMod, useStartDownload, useTrackMod, useUntrackMod } from "@/hooks/mutations";
 import { useModDetail } from "@/hooks/queries";
 import { bbcodeToHtml } from "@/lib/bbcode";
 import { formatBytes, formatCount, isoToEpoch, timeAgo } from "@/lib/format";
@@ -43,16 +43,18 @@ interface Props {
   modId: number;
   update?: ModUpdate;
   action?: ReactNode;
+  defaultTab?: ModalTab;
   onClose: () => void;
 }
 
-export function ModDetailModal({ gameDomain, gameName, modId, update, action, onClose }: Props) {
+export function ModDetailModal({ gameDomain, gameName, modId, update, action, defaultTab, onClose }: Props) {
   const { data: detail, isLoading } = useModDetail(gameDomain, modId);
   const endorseMod = useEndorseMod();
   const abstainMod = useAbstainMod();
   const trackMod = useTrackMod();
   const untrackMod = useUntrackMod();
-  const [activeTab, setActiveTab] = useState<ModalTab>("about");
+  const startDownload = useStartDownload();
+  const [activeTab, setActiveTab] = useState<ModalTab>(defaultTab ?? "about");
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
 
   const handleKeyDown = useCallback(
@@ -264,23 +266,41 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, on
                   {visibleFiles.map((f) => (
                     <div
                       key={f.file_id}
-                      className="rounded-lg border border-border bg-surface-1 p-3"
+                      className="rounded-lg border border-border bg-surface-1 p-3 flex items-start justify-between gap-2"
                     >
-                      <p className="text-sm text-text-primary font-medium truncate" title={f.file_name}>
-                        {f.file_name}
-                      </p>
-                      <div className="flex items-center gap-3 text-xs text-text-muted mt-1 flex-wrap">
-                        {f.version && <span>v{f.version}</span>}
-                        {f.category_id != null && (
-                          <Badge variant="neutral">
-                            {FILE_CATEGORY_LABELS[f.category_id] ?? `Cat ${f.category_id}`}
-                          </Badge>
-                        )}
-                        {f.file_size > 0 && <span>{formatBytes(f.file_size)}</span>}
-                        {f.uploaded_timestamp && (
-                          <span>{timeAgo(f.uploaded_timestamp)}</span>
-                        )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-text-primary font-medium truncate" title={f.file_name}>
+                          {f.file_name}
+                        </p>
+                        <div className="flex items-center gap-3 text-xs text-text-muted mt-1 flex-wrap">
+                          {f.version && <span>v{f.version}</span>}
+                          {f.category_id != null && (
+                            <Badge variant="neutral">
+                              {FILE_CATEGORY_LABELS[f.category_id] ?? `Cat ${f.category_id}`}
+                            </Badge>
+                          )}
+                          {f.file_size > 0 && <span>{formatBytes(f.file_size)}</span>}
+                          {f.uploaded_timestamp && (
+                            <span>{timeAgo(f.uploaded_timestamp)}</span>
+                          )}
+                        </div>
                       </div>
+                      {gameName && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="flex-shrink-0"
+                          onClick={() =>
+                            startDownload.mutate({
+                              gameName,
+                              data: { nexus_mod_id: modId, nexus_file_id: f.file_id },
+                            })
+                          }
+                          loading={startDownload.isPending}
+                        >
+                          <Download size={12} />
+                        </Button>
+                      )}
                     </div>
                   ))}
                 </div>
