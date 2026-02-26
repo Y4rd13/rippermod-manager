@@ -105,6 +105,7 @@ interface Props {
   downloadJobs?: DownloadJobOut[];
   isLoading?: boolean;
   onModClick?: (nexusModId: number) => void;
+  onFileSelect?: (nexusModId: number) => void;
 }
 
 export function NexusMatchedGrid({
@@ -115,6 +116,7 @@ export function NexusMatchedGrid({
   downloadJobs = [],
   isLoading,
   onModClick,
+  onFileSelect,
 }: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useSessionState<SortKey>(`matched-sort-${gameName}`, "updated");
@@ -122,7 +124,7 @@ export function NexusMatchedGrid({
   const [methodChip, setMethodChip] = useSessionState(`matched-method-${gameName}`, "all");
   const [installChip, setInstallChip] = useSessionState(`matched-install-${gameName}`, "all");
 
-  const flow = useInstallFlow(gameName, archives, downloadJobs);
+  const flow = useInstallFlow(gameName, archives, downloadJobs, onFileSelect);
   const { menuState, openMenu, closeMenu } = useContextMenu<ModGroup>();
 
   const installedModIds = useMemo(

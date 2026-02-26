@@ -69,6 +69,7 @@ interface Props {
   isLoading?: boolean;
   dataUpdatedAt?: number;
   onModClick?: (nexusModId: number) => void;
+  onFileSelect?: (nexusModId: number) => void;
 }
 
 export function TrendingGrid({
@@ -81,6 +82,7 @@ export function TrendingGrid({
   isLoading = false,
   dataUpdatedAt,
   onModClick,
+  onFileSelect,
 }: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useSessionState<SortKey>(`trending-sort-${gameName}`, "updated");
@@ -95,7 +97,7 @@ export function TrendingGrid({
     return () => clearInterval(timer);
   }, [dataUpdatedAt]);
 
-  const flow = useInstallFlow(gameName, archives, downloadJobs);
+  const flow = useInstallFlow(gameName, archives, downloadJobs, onFileSelect);
   const refreshTrending = useRefreshTrending();
   const endorseMod = useEndorseMod();
   const abstainMod = useAbstainMod();

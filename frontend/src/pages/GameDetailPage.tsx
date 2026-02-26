@@ -101,6 +101,7 @@ export function GameDetailPage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("installed");
   const [selectedModId, setSelectedModId] = useState<number | null>(null);
+  const [fileSelectModId, setFileSelectModId] = useState<number | null>(null);
   const [aiSearch, setAiSearch] = useState(() => {
     try {
       const stored = localStorage.getItem("ai-search-enabled");
@@ -119,6 +120,11 @@ export function GameDetailPage() {
   };
 
   const modalFlow = useInstallFlow(name, archives, downloadJobs);
+
+  const handleFileSelect = useCallback((modId: number) => {
+    setSelectedModId(modId);
+    setFileSelectModId(modId);
+  }, []);
 
   const installedModIds = useMemo(
     () => new Set(installedMods.filter((m) => m.nexus_mod_id != null).map((m) => m.nexus_mod_id!)),
@@ -516,6 +522,7 @@ export function GameDetailPage() {
           downloadJobs={downloadJobs}
           isLoading={modsLoading}
           onModClick={setSelectedModId}
+          onFileSelect={handleFileSelect}
         />
       )}
       {tab === "endorsed" && (
@@ -531,6 +538,7 @@ export function GameDetailPage() {
           isLoading={endorsedLoading}
           dataUpdatedAt={endorsedUpdatedAt}
           onModClick={setSelectedModId}
+          onFileSelect={handleFileSelect}
         />
       )}
       {tab === "tracked" && (
@@ -546,6 +554,7 @@ export function GameDetailPage() {
           isLoading={trackedLoading}
           dataUpdatedAt={trackedUpdatedAt}
           onModClick={setSelectedModId}
+          onFileSelect={handleFileSelect}
         />
       )}
       {tab === "trending" && (
@@ -559,6 +568,7 @@ export function GameDetailPage() {
           isLoading={trendingLoading}
           dataUpdatedAt={trendingUpdatedAt}
           onModClick={setSelectedModId}
+          onFileSelect={handleFileSelect}
         />
       )}
       {tab === "conflicts" && (
@@ -574,6 +584,7 @@ export function GameDetailPage() {
           updates={updates?.updates ?? []}
           isLoading={installedLoading}
           onModClick={setSelectedModId}
+          onFileSelect={handleFileSelect}
           onTabChange={(t) => setTab(t as Tab)}
         />
       )}
@@ -596,7 +607,7 @@ export function GameDetailPage() {
       {(() => {
         const effectiveModId = selectedModId ?? modalFlow.fileSelectModId;
         if (effectiveModId == null) return null;
-        const effectiveDefaultTab = modalFlow.fileSelectModId != null && selectedModId == null ? "files" as const : undefined;
+        const effectiveDefaultTab = fileSelectModId === effectiveModId ? "files" as const : undefined;
         const modUpdate = updateByNexusId.get(effectiveModId);
         const archive = modalFlow.archiveByModId.get(effectiveModId);
         return (
@@ -637,6 +648,7 @@ export function GameDetailPage() {
             }
             onClose={() => {
               setSelectedModId(null);
+              setFileSelectModId(null);
               modalFlow.dismissFileSelect();
             }}
           />

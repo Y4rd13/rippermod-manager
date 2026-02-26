@@ -49,6 +49,7 @@ interface Props {
   updates?: ModUpdate[];
   isLoading?: boolean;
   onModClick?: (nexusModId: number) => void;
+  onFileSelect?: (nexusModId: number) => void;
   onTabChange?: (tab: string) => void;
 }
 
@@ -445,6 +446,7 @@ function RecognizedModsGrid({
   downloadJobs,
   updateByNexusId,
   onModClick,
+  onFileSelect,
 }: {
   mods: ModGroup[];
   archives: AvailableArchive[];
@@ -453,8 +455,9 @@ function RecognizedModsGrid({
   downloadJobs: DownloadJobOut[];
   updateByNexusId: Map<number, ModUpdate>;
   onModClick?: (nexusModId: number) => void;
+  onFileSelect?: (nexusModId: number) => void;
 }) {
-  const flow = useInstallFlow(gameName, archives, downloadJobs);
+  const flow = useInstallFlow(gameName, archives, downloadJobs, onFileSelect);
 
   const modIds = useMemo(() => mods.map((m) => String(m.id)), [mods]);
   const bulk = useBulkSelect(modIds);
@@ -588,6 +591,7 @@ export function InstalledModsTable({
   updates = [],
   isLoading,
   onModClick,
+  onFileSelect,
   onTabChange,
 }: Props) {
   const [filter, setFilter] = useState("");
@@ -769,6 +773,7 @@ export function InstalledModsTable({
             downloadJobs={downloadJobs}
             updateByNexusId={updateByNexusId}
             onModClick={onModClick}
+            onFileSelect={onFileSelect}
           />
         </div>
       )}

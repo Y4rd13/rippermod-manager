@@ -66,6 +66,7 @@ interface Props {
   emptyMessage: string;
   downloadJobs?: DownloadJobOut[];
   onModClick?: (nexusModId: number) => void;
+  onFileSelect?: (nexusModId: number) => void;
   isLoading?: boolean;
   emptyIcon?: "heart" | "eye";
   emptyTitle?: string;
@@ -80,6 +81,7 @@ export function NexusAccountGrid({
   emptyMessage,
   downloadJobs = [],
   onModClick,
+  onFileSelect,
   isLoading = false,
   emptyIcon = "heart",
   emptyTitle = "No mods found",
@@ -99,7 +101,7 @@ export function NexusAccountGrid({
   const [sortKey, setSortKey] = useSessionState<SortKey>(`account-sort-${gameName}`, "updated");
   const [chip, setChip] = useSessionState(`account-chip-${gameName}`, "all");
 
-  const flow = useInstallFlow(gameName, archives, downloadJobs);
+  const flow = useInstallFlow(gameName, archives, downloadJobs, onFileSelect);
   const endorseMod = useEndorseMod();
   const abstainMod = useAbstainMod();
   const trackMod = useTrackMod();
