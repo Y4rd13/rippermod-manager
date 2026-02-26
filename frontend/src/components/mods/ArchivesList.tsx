@@ -13,7 +13,6 @@ import { BulkActionBar } from "@/components/ui/BulkActionBar";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { OverflowMenuButton } from "@/components/ui/OverflowMenuButton";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
@@ -71,10 +70,6 @@ function buildContextItems(archive: AvailableArchive): ContextMenuItem[] {
   items.push({ key: "delete", label: "Delete Archive", icon: Trash2, variant: "danger" });
   return items;
 }
-
-const OVERFLOW_ITEMS: ContextMenuItem[] = [
-  { key: "copy", label: "Copy Filename", icon: Copy },
-];
 
 export function ArchivesList({ archives, gameName, gameDomain, installPath, isLoading }: Props) {
   const installMod = useInstallMod();
@@ -388,8 +383,8 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
         <VirtualTable
           items={filtered}
           renderHead={() => (
-            <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted">
-              <th className="py-2 pr-4 w-8">
+            <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted text-xs">
+              <th className="py-2 pr-2 w-8">
                 <input
                   type="checkbox"
                   checked={bulk.isAllSelected}
@@ -397,14 +392,14 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
                   className="rounded border-border accent-accent"
                 />
               </th>
-              <th className="py-2 pr-4">Archive</th>
-              <th className="py-2 pr-4">Parsed Name</th>
-              <th className="py-2 pr-4">Version</th>
-              <th className="py-2 pr-4">Size</th>
-              <th className="py-2 pr-4">Nexus ID</th>
-              <th className="py-2 pr-4">Downloaded</th>
-              <th className="py-2 pr-4">Status</th>
-              <th className="py-2 text-right">Actions</th>
+              <th className="py-2 pr-3">Archive</th>
+              <th className="py-2 pr-3">Parsed Name</th>
+              <th className="py-2 pr-3 whitespace-nowrap">Version</th>
+              <th className="py-2 pr-3 whitespace-nowrap">Size</th>
+              <th className="py-2 pr-3 whitespace-nowrap">Nexus ID</th>
+              <th className="py-2 pr-3 whitespace-nowrap">Downloaded</th>
+              <th className="py-2 pr-2 whitespace-nowrap">Status</th>
+              <th className="py-2 pl-2 text-right whitespace-nowrap">Actions</th>
             </tr>
           )}
           renderRow={(a) => (
@@ -412,7 +407,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
               className="border-b border-border/50 hover:bg-surface-1/50 transition-colors"
               onContextMenu={(e) => openMenu(e, a)}
             >
-              <td className="py-2 pr-4">
+              <td className="py-2 pr-2">
                 <input
                   type="checkbox"
                   checked={bulk.isSelected(a.filename)}
@@ -420,25 +415,25 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
                   className="rounded border-border accent-accent"
                 />
               </td>
-              <td className="py-2 pr-4 font-mono text-xs text-text-primary max-w-[200px] truncate" title={a.filename}>
+              <td className="py-2 pr-3 font-mono text-xs text-text-primary max-w-[200px] truncate" title={a.filename}>
                 {a.filename}
               </td>
-              <td className="py-2 pr-4 text-text-secondary">
+              <td className="py-2 pr-3 text-text-secondary max-w-[180px] truncate" title={a.parsed_name}>
                 {a.parsed_name}
               </td>
-              <td className="py-2 pr-4 text-text-muted">
+              <td className="py-2 pr-3 text-text-muted whitespace-nowrap">
                 {a.parsed_version ?? "--"}
               </td>
-              <td className={`py-2 pr-4 ${a.is_empty ? "text-danger font-medium" : "text-text-muted"}`}>
+              <td className={`py-2 pr-3 whitespace-nowrap ${a.is_empty ? "text-danger font-medium" : "text-text-muted"}`}>
                 {formatBytes(a.size)}
               </td>
-              <td className="py-2 pr-4 text-text-muted">
+              <td className="py-2 pr-3 text-text-muted whitespace-nowrap">
                 {a.nexus_mod_id ?? "--"}
               </td>
-              <td className="py-2 pr-4 text-text-muted text-xs">
+              <td className="py-2 pr-3 text-text-muted text-xs whitespace-nowrap">
                 {a.last_downloaded_at ? timeAgo(isoToEpoch(a.last_downloaded_at)) : "--"}
               </td>
-              <td className="py-2 pr-4">
+              <td className="py-2 pr-2 whitespace-nowrap">
                 {a.is_empty ? (
                   <Badge variant="danger"><AlertTriangle size={10} /> Empty</Badge>
                 ) : a.is_installed ? (
@@ -447,8 +442,8 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
                   <Badge variant="neutral">Orphan</Badge>
                 )}
               </td>
-              <td className="py-2 text-right">
-                <div className="flex items-center justify-end gap-1">
+              <td className="py-2 pl-2 whitespace-nowrap text-right">
+                <div className="flex items-center justify-end gap-0.5">
                   {a.is_installed && a.installed_mod_id ? (
                     <Button
                       variant="danger"
@@ -531,17 +526,6 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
                   >
                     <Trash2 size={14} />
                   </Button>
-                  <OverflowMenuButton
-                    items={OVERFLOW_ITEMS}
-                    onSelect={(key) => {
-                      if (key === "copy") {
-                        void navigator.clipboard.writeText(a.filename).then(
-                          () => toast.success("Copied to clipboard"),
-                          () => toast.error("Failed to copy"),
-                        );
-                      }
-                    }}
-                  />
                 </div>
               </td>
             </tr>
