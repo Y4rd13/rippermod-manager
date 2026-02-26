@@ -490,6 +490,7 @@ function RecognizedModsGrid({
 
           const nexusModId = match.nexus_mod_id;
           const archive = nexusModId != null ? flow.archiveByModId.get(nexusModId) : undefined;
+          const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
           const update = nexusModId != null ? updateByNexusId.get(nexusModId) : undefined;
 
           return (
@@ -525,15 +526,20 @@ function RecognizedModsGrid({
                     updateVersion={update?.nexus_version}
                     onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
                     onInstallByFilename={() => {
-                      const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
                       if (nexusModId != null && dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
                     }}
                     onDownload={() => nexusModId != null && flow.handleDownload(nexusModId)}
                     onCancelDownload={() => {
-                      const dl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
-                      if (dl) flow.handleCancelDownload(dl.id);
+                      const activeDl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
+                      if (activeDl) flow.handleCancelDownload(activeDl.id);
                     }}
-                    onInstallWithPreview={nexusModId != null && archive ? () => flow.handleInstallWithPreview(nexusModId, archive) : undefined}
+                    onInstallWithPreview={
+                      nexusModId != null && dl
+                        ? () => flow.handleInstallWithPreviewByFilename(nexusModId, dl.file_name)
+                        : nexusModId != null && archive
+                          ? () => flow.handleInstallWithPreview(nexusModId, archive)
+                          : undefined
+                    }
                   />
                 }
                 footer={

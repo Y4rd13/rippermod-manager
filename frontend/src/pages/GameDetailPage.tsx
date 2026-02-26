@@ -24,6 +24,7 @@ import { ArchivesList } from "@/components/mods/ArchivesList";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { ConflictsInbox } from "@/components/mods/ConflictsInbox";
 import { FomodWizard } from "@/components/mods/FomodWizard";
+import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { InstalledModsTable } from "@/components/mods/InstalledModsTable";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { ModDetailModal } from "@/components/mods/ModDetailModal";
@@ -610,6 +611,7 @@ export function GameDetailPage() {
         const effectiveDefaultTab = fileSelectModId === effectiveModId ? "files" as const : undefined;
         const modUpdate = updateByNexusId.get(effectiveModId);
         const archive = modalFlow.archiveByModId.get(effectiveModId);
+        const dl = modalFlow.completedDownloadByModId.get(effectiveModId);
         return (
           <ModDetailModal
             gameDomain={game.domain_name}
@@ -629,20 +631,26 @@ export function GameDetailPage() {
                   isInstalled={installedModIds.has(effectiveModId)}
                   isInstalling={modalFlow.installingModIds.has(effectiveModId)}
                   activeDownload={modalFlow.activeDownloadByModId.get(effectiveModId)}
-                  completedDownload={modalFlow.completedDownloadByModId.get(effectiveModId)}
+                  completedDownload={dl}
                   archive={archive}
                   hasConflicts={modalFlow.conflicts != null}
                   isDownloading={modalFlow.downloadingModId === effectiveModId}
                   onInstall={() => archive && modalFlow.handleInstall(effectiveModId, archive)}
                   onInstallByFilename={() => {
-                    const dl = modalFlow.completedDownloadByModId.get(effectiveModId);
                     if (dl) modalFlow.handleInstallByFilename(effectiveModId, dl.file_name);
                   }}
                   onDownload={() => modalFlow.handleDownload(effectiveModId)}
                   onCancelDownload={() => {
-                    const dl = modalFlow.activeDownloadByModId.get(effectiveModId);
-                    if (dl) modalFlow.handleCancelDownload(dl.id);
+                    const activeDl = modalFlow.activeDownloadByModId.get(effectiveModId);
+                    if (activeDl) modalFlow.handleCancelDownload(activeDl.id);
                   }}
+                  onInstallWithPreview={
+                    dl
+                      ? () => modalFlow.handleInstallWithPreviewByFilename(effectiveModId, dl.file_name)
+                      : archive
+                        ? () => modalFlow.handleInstallWithPreview(effectiveModId, archive)
+                        : undefined
+                  }
                 />
               )
             }
@@ -654,6 +662,15 @@ export function GameDetailPage() {
           />
         );
       })()}
+
+      {modalFlow.previewArchive && (
+        <PreInstallPreview
+          gameName={name}
+          archiveFilename={modalFlow.previewArchive.filename}
+          onConfirm={(renames) => modalFlow.confirmPreviewInstall(renames)}
+          onCancel={modalFlow.dismissPreview}
+        />
+      )}
 
       {modalFlow.fomodArchive && (
         <FomodWizard

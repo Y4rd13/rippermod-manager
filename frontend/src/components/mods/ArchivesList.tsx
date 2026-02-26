@@ -1,9 +1,10 @@
-import { AlertTriangle, Archive, Check, Copy, Download, ExternalLink, FolderTree, PackageMinus, Trash2 } from "lucide-react";
+import { AlertTriangle, Archive, Check, Copy, Download, ExternalLink, FolderTree, PackageMinus, Settings2, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ArchiveTreeModal } from "@/components/mods/ArchiveTreeModal";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { FomodWizard } from "@/components/mods/FomodWizard";
+import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { BulkActionBar } from "@/components/ui/BulkActionBar";
@@ -85,6 +86,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
   const [confirmDeleteFile, setConfirmDeleteFile] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [treeFilename, setTreeFilename] = useState<string | null>(null);
+  const [previewFilename, setPreviewFilename] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useSessionState<ArchiveSortKey>(`archives-sort-${gameName}`, "name");
   const [sortDir, setSortDir] = useSessionState<"asc" | "desc">(`archives-dir-${gameName}`, "asc");
@@ -210,6 +212,36 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
     setQueueProgress({ current: 0, total: items.length });
     bulk.deselectAll();
     processNextInQueue();
+  };
+
+  const handleInstallWithRenames = async (fileRenames: Record<string, string>) => {
+    if (!previewFilename) return;
+    const filename = previewFilename;
+    setPreviewFilename(null);
+    setSelectedArchive(filename);
+    try {
+      const result = await checkConflicts.mutateAsync({ gameName, archiveFilename: filename });
+      if (result.is_fomod) {
+        setFomodArchive(filename);
+        setSelectedArchive(null);
+        return;
+      }
+      if (result.conflicts.length > 0) {
+        setConflicts(result);
+      } else {
+        installMod.mutate({
+          gameName,
+          data: {
+            archive_filename: filename,
+            skip_conflicts: [],
+            ...(Object.keys(fileRenames).length > 0 ? { file_renames: fileRenames } : {}),
+          },
+        });
+        setSelectedArchive(null);
+      }
+    } catch {
+      setSelectedArchive(null);
+    }
   };
 
   const handleContextMenuSelect = (key: string) => {
@@ -384,18 +416,30 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                       <PackageMinus size={14} /> Uninstall
                     </Button>
                   ) : (
-                    <Button
-                      size="sm"
-                      disabled={a.is_empty}
-                      title={a.is_empty ? "Archive is empty — re-download from Nexus" : undefined}
-                      loading={
-                        (checkConflicts.isPending || installMod.isPending) &&
-                        selectedArchive === a.filename
-                      }
-                      onClick={() => handleCheckConflicts(a.filename)}
-                    >
-                      <Download size={14} /> Install
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        disabled={a.is_empty}
+                        title={a.is_empty ? "Archive is empty — re-download from Nexus" : undefined}
+                        loading={
+                          (checkConflicts.isPending || installMod.isPending) &&
+                          selectedArchive === a.filename
+                        }
+                        onClick={() => handleCheckConflicts(a.filename)}
+                      >
+                        <Download size={14} /> Install
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={a.is_empty}
+                        onClick={() => setPreviewFilename(a.filename)}
+                        title="Install with file rename options"
+                        aria-label="Install with options"
+                      >
+                        <Settings2 size={14} />
+                      </Button>
+                    </>
                   )}
                   {a.is_empty && a.nexus_mod_id && (
                     <Button
@@ -582,6 +626,15 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
           gameName={gameName}
           filename={treeFilename}
           onClose={() => setTreeFilename(null)}
+        />
+      )}
+
+      {previewFilename && (
+        <PreInstallPreview
+          gameName={gameName}
+          archiveFilename={previewFilename}
+          onConfirm={handleInstallWithRenames}
+          onCancel={() => setPreviewFilename(null)}
         />
       )}
 

@@ -225,6 +225,7 @@ export function NexusAccountGrid({
         renderItem={(mod) => {
           const nexusModId = mod.nexus_mod_id;
           const archive = flow.archiveByModId.get(nexusModId);
+          const dl = flow.completedDownloadByModId.get(nexusModId);
 
           return (
             <NexusModCard
@@ -283,7 +284,6 @@ export function NexusAccountGrid({
                   isDownloading={flow.downloadingModId === nexusModId}
                   onInstall={() => archive && flow.handleInstall(nexusModId, archive)}
                   onInstallByFilename={() => {
-                    const dl = flow.completedDownloadByModId.get(nexusModId);
                     if (dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
                   }}
                   onDownload={() => flow.handleDownload(nexusModId)}
@@ -291,7 +291,13 @@ export function NexusAccountGrid({
                     const dl = flow.activeDownloadByModId.get(nexusModId);
                     if (dl) flow.handleCancelDownload(dl.id);
                   }}
-                  onInstallWithPreview={archive ? () => flow.handleInstallWithPreview(nexusModId, archive) : undefined}
+                  onInstallWithPreview={
+                    dl
+                      ? () => flow.handleInstallWithPreviewByFilename(nexusModId, dl.file_name)
+                      : archive
+                        ? () => flow.handleInstallWithPreview(nexusModId, archive)
+                        : undefined
+                  }
                 />
               }
               overflowMenu={

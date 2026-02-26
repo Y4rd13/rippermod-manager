@@ -180,6 +180,7 @@ export function TrendingGrid({
   const renderModCard = (mod: TrendingMod) => {
     const nexusModId = mod.mod_id;
     const archive = flow.archiveByModId.get(nexusModId);
+    const dl = flow.completedDownloadByModId.get(nexusModId);
     const isInstalled = mod.is_installed || installedModIds.has(nexusModId);
 
     return (
@@ -242,7 +243,6 @@ export function TrendingGrid({
             isDownloading={flow.downloadingModId === nexusModId}
             onInstall={() => archive && flow.handleInstall(nexusModId, archive)}
             onInstallByFilename={() => {
-              const dl = flow.completedDownloadByModId.get(nexusModId);
               if (dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
             }}
             onDownload={() => flow.handleDownload(nexusModId)}
@@ -250,7 +250,13 @@ export function TrendingGrid({
               const dl = flow.activeDownloadByModId.get(nexusModId);
               if (dl) flow.handleCancelDownload(dl.id);
             }}
-            onInstallWithPreview={archive ? () => flow.handleInstallWithPreview(nexusModId, archive) : undefined}
+            onInstallWithPreview={
+              dl
+                ? () => flow.handleInstallWithPreviewByFilename(nexusModId, dl.file_name)
+                : archive
+                  ? () => flow.handleInstallWithPreview(nexusModId, archive)
+                  : undefined
+            }
           />
         }
         overflowMenu={

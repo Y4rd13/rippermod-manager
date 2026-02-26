@@ -9,6 +9,7 @@ import {
   Settings2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Badge } from "@/components/ui/Badge";
@@ -51,19 +52,56 @@ export function ModCardAction({
   onInstallWithPreview,
 }: Props) {
   const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const chevronRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const handleChevronClick = () => {
+    if (menuPos) {
+      setMenuPos(null);
+      return;
+    }
+    const rect = chevronRef.current?.getBoundingClientRect();
+    if (rect) {
+      setMenuPos({ top: rect.bottom + 4, left: rect.right - 160 });
+    }
+  };
 
   useEffect(() => {
-    if (!dropdownOpen) return;
+    if (!menuPos) return;
     const handleClick = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
+      if (
+        wrapperRef.current?.contains(e.target as Node) ||
+        menuRef.current?.contains(e.target as Node)
+      ) return;
+      setMenuPos(null);
     };
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [dropdownOpen]);
+  }, [menuPos]);
+
+  const dropdownMenu = menuPos && onInstallWithPreview
+    ? createPortal(
+        <div
+          ref={menuRef}
+          className="fixed z-50 min-w-[160px] rounded-md border border-border bg-surface-1 py-1 shadow-lg"
+          style={{ top: menuPos.top, left: menuPos.left }}
+        >
+          <button
+            onClick={() => {
+              setMenuPos(null);
+              onInstallWithPreview();
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-2 hover:text-text-primary"
+          >
+            <Settings2 size={12} />
+            Install with Options
+          </button>
+        </div>,
+        document.body,
+      )
+    : null;
 
   if (isInstalled) {
     return (
@@ -92,15 +130,33 @@ export function ModCardAction({
   }
 
   if (completedDownload) {
+    const showSplit = !!onInstallWithPreview;
+
     return (
-      <button
-        onClick={(e) => { e.stopPropagation(); onInstallByFilename(); }}
-        title={isUpdate ? `Install update${updateVersion ? ` v${updateVersion}` : ""} from: ${completedDownload.file_name}` : `Install from downloaded file: ${completedDownload.file_name}`}
-        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-white hover:opacity-80 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
-      >
-        {isUpdate ? <ArrowUpCircle size={12} /> : <Package size={12} />}
-        {isUpdate ? "Install Update" : "Install"}
-      </button>
+      <>
+        <div className="inline-flex items-center" ref={wrapperRef} onClick={stopPropagation}>
+          <button
+            onClick={onInstallByFilename}
+            title={isUpdate ? `Install update${updateVersion ? ` v${updateVersion}` : ""} from: ${completedDownload.file_name}` : `Install from downloaded file: ${completedDownload.file_name}`}
+            className={`inline-flex items-center gap-1 ${showSplit ? "rounded-l-md" : "rounded-md"} px-2 py-1 text-xs font-medium text-white hover:opacity-80 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
+          >
+            {isUpdate ? <ArrowUpCircle size={12} /> : <Package size={12} />}
+            {isUpdate ? "Install Update" : "Install"}
+          </button>
+          {showSplit && (
+            <button
+              ref={chevronRef}
+              onClick={handleChevronClick}
+              className={`inline-flex items-center self-stretch rounded-r-md border-l border-white/20 px-1 text-xs font-medium text-white hover:opacity-80 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
+              title="Install options"
+              aria-label="Install options"
+            >
+              <ChevronDown size={12} />
+            </button>
+          )}
+        </div>
+        {dropdownMenu}
+      </>
     );
   }
 
@@ -108,44 +164,32 @@ export function ModCardAction({
     const showSplit = !!onInstallWithPreview;
 
     return (
-      <div className="relative inline-flex items-center" ref={dropdownRef} onClick={stopPropagation}>
-        <button
-          onClick={onInstall}
-          disabled={hasConflicts}
-          className={`inline-flex items-center gap-1 ${showSplit ? "rounded-l-md" : "rounded-md"} px-2 py-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
-          title={isUpdate ? `Install update${updateVersion ? ` v${updateVersion}` : ""} from ${archive.filename}` : `Install from ${archive.filename}`}
-        >
-          {isUpdate ? <ArrowUpCircle size={12} /> : <Download size={12} />}
-          {isUpdate ? "Install Update" : "Install"}
-        </button>
-        {showSplit && (
-          <>
+      <>
+        <div className="inline-flex items-center" ref={wrapperRef} onClick={stopPropagation}>
+          <button
+            onClick={onInstall}
+            disabled={hasConflicts}
+            className={`inline-flex items-center gap-1 ${showSplit ? "rounded-l-md" : "rounded-md"} px-2 py-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
+            title={isUpdate ? `Install update${updateVersion ? ` v${updateVersion}` : ""} from ${archive.filename}` : `Install from ${archive.filename}`}
+          >
+            {isUpdate ? <ArrowUpCircle size={12} /> : <Download size={12} />}
+            {isUpdate ? "Install Update" : "Install"}
+          </button>
+          {showSplit && (
             <button
-              onClick={() => setDropdownOpen((prev) => !prev)}
+              ref={chevronRef}
+              onClick={handleChevronClick}
               disabled={hasConflicts}
-              className={`inline-flex items-center rounded-r-md border-l border-white/20 px-1 py-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
+              className={`inline-flex items-center self-stretch rounded-r-md border-l border-white/20 px-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
               title="Install options"
               aria-label="Install options"
             >
               <ChevronDown size={12} />
             </button>
-            {dropdownOpen && (
-              <div className="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-md border border-border bg-surface-1 py-1 shadow-lg">
-                <button
-                  onClick={() => {
-                    setDropdownOpen(false);
-                    onInstallWithPreview();
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-2 hover:text-text-primary"
-                >
-                  <Settings2 size={12} />
-                  Install with Options
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+          )}
+        </div>
+        {dropdownMenu}
+      </>
     );
   }
 

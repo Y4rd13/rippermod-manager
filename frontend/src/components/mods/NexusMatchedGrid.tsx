@@ -306,6 +306,7 @@ export function NexusMatchedGrid({
 
           const nexusModId = match.nexus_mod_id;
           const archive = nexusModId != null ? flow.archiveByModId.get(nexusModId) : undefined;
+          const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
 
           return (
             <div className="flex flex-col">
@@ -324,22 +325,27 @@ export function NexusMatchedGrid({
                       isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
                       isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
                       activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
-                      completedDownload={nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined}
+                      completedDownload={dl}
                       archive={archive}
                       nexusUrl={match.nexus_url}
                       hasConflicts={flow.conflicts != null}
                       isDownloading={flow.downloadingModId === nexusModId}
                       onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
                       onInstallByFilename={() => {
-                        const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
                         if (nexusModId != null && dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
                       }}
                       onDownload={() => nexusModId != null && flow.handleDownload(nexusModId)}
                       onCancelDownload={() => {
-                        const dl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
-                        if (dl) flow.handleCancelDownload(dl.id);
+                        const activeDl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
+                        if (activeDl) flow.handleCancelDownload(activeDl.id);
                       }}
-                      onInstallWithPreview={nexusModId != null && archive ? () => flow.handleInstallWithPreview(nexusModId, archive) : undefined}
+                      onInstallWithPreview={
+                        nexusModId != null && dl
+                          ? () => flow.handleInstallWithPreviewByFilename(nexusModId, dl.file_name)
+                          : nexusModId != null && archive
+                            ? () => flow.handleInstallWithPreview(nexusModId, archive)
+                            : undefined
+                      }
                     />
                   }
                   overflowMenu={

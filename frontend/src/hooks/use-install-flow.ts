@@ -213,6 +213,13 @@ export function useInstallFlow(
     [],
   );
 
+  const handleInstallWithPreviewByFilename = useCallback(
+    (nexusModId: number, filename: string) => {
+      setPreviewArchive({ filename, nexusModId });
+    },
+    [],
+  );
+
   const confirmPreviewInstall = useCallback(
     async (fileRenames: Record<string, string>) => {
       if (!previewArchive) return;
@@ -289,6 +296,7 @@ export function useInstallFlow(
     handleInstallWithSkip,
     handleInstallOverwrite,
     handleInstallWithPreview,
+    handleInstallWithPreviewByFilename,
     confirmPreviewInstall,
     dismissConflicts,
     dismissFomod,
