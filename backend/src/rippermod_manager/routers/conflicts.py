@@ -146,7 +146,7 @@ def reindex_conflicts(
 
 
 @_engine_router.get("/inbox", response_model=ConflictsOverview)
-async def inbox_overview(
+def inbox_overview(
     game_name: str,
     session: Session = Depends(get_session),
 ) -> ConflictsOverview:
@@ -156,7 +156,7 @@ async def inbox_overview(
 
 
 @_engine_router.get("/inbox/{mod_id}", response_model=ModConflictDetail)
-async def inbox_detail(
+def inbox_detail(
     game_name: str,
     mod_id: int,
     session: Session = Depends(get_session),
@@ -170,7 +170,7 @@ async def inbox_detail(
 
 
 @_engine_router.post("/inbox/{mod_id}/resolve", response_model=ResolveResult)
-async def inbox_resolve(
+def inbox_resolve(
     game_name: str,
     mod_id: int,
     data: ResolveRequest,
