@@ -92,7 +92,7 @@ Items.SomeRecord.someArray:
     def test_boolean_value_stringified(self):
         content = b"Items.Foo.isHidden: true"
         entries = parse_yaml_tweaks(content, "test.yaml", "mod-a")
-        assert entries[0].value == "True"
+        assert entries[0].value == "true"
 
     def test_null_value_stringified(self):
         content = b"Items.Foo.removed: null"

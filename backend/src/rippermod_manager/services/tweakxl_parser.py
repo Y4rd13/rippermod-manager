@@ -55,10 +55,18 @@ class _TweakXLLoader(yaml.SafeLoader):
 
 
 def _append_constructor(loader: yaml.Loader, node: yaml.Node) -> _AppendMarker:
+    if not isinstance(node, yaml.ScalarNode):
+        raise yaml.constructor.ConstructorError(
+            None, None, f"expected a scalar for !append, got {node.id}", node.start_mark
+        )
     return _AppendMarker(loader.construct_scalar(node))  # type: ignore[arg-type]
 
 
 def _remove_constructor(loader: yaml.Loader, node: yaml.Node) -> _RemoveMarker:
+    if not isinstance(node, yaml.ScalarNode):
+        raise yaml.constructor.ConstructorError(
+            None, None, f"expected a scalar for !remove, got {node.id}", node.start_mark
+        )
     return _RemoveMarker(loader.construct_scalar(node))  # type: ignore[arg-type]
 
 
@@ -77,7 +85,7 @@ def _normalize_value(value: object) -> str:
     if value is None:
         return "null"
     if isinstance(value, bool):
-        return str(value)
+        return str(value).lower()
     if isinstance(value, (int, float)):
         return str(value)
     if isinstance(value, str):
