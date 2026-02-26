@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 from rippermod_manager.database import engine
 from rippermod_manager.models.chat import ChatMessage
 from rippermod_manager.models.game import Game
+from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.models.mod import ModGroup
 from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 from rippermod_manager.models.settings import AppSetting
@@ -27,11 +28,12 @@ Capabilities:
 - Query Nexus Mods metadata (get_nexus_mod_info, list_nexus_downloads)
 - List configured games (list_all_games)
 - Rebuild search index (reindex_vector_store)
+- Detect file conflicts between installed mods (check_mod_conflicts)
 
 Instructions:
 1. For broad questions, use semantic_mod_search first, then refine with exact lookups.
 2. Reference specific mod names, versions, and authors when available.
-3. For conflict or load order questions, provide actionable advice.
+3. For conflict or load order questions, use check_mod_conflicts to get concrete data.
 4. Be concise. Avoid repeating the user's question back to them.
 """
 
@@ -187,6 +189,84 @@ def reindex_vector_store(game_name: str = "") -> str:
     )
 
 
+@tool
+def check_mod_conflicts(game_name: str, mod_a_name: str = "", mod_b_name: str = "") -> str:
+    """Detect file conflicts between installed mods.
+
+    Without mod names: scans all installed mods and reports every conflict pair.
+    With two mod names: checks only that specific pair for overlapping files.
+    """
+    from rippermod_manager.services.conflict_service import (
+        check_installed_conflicts,
+        check_pairwise_conflict,
+    )
+
+    with Session(engine) as session:
+        game = session.exec(select(Game).where(Game.name == game_name)).first()
+        if not game:
+            return f"Game '{game_name}' not found"
+
+        if mod_a_name and mod_b_name:
+            mod_a = session.exec(
+                select(InstalledMod).where(
+                    InstalledMod.game_id == game.id,
+                    InstalledMod.name.contains(mod_a_name),  # type: ignore[arg-type]
+                )
+            ).first()
+            if not mod_a:
+                return f"Installed mod matching '{mod_a_name}' not found"
+            mod_b = session.exec(
+                select(InstalledMod).where(
+                    InstalledMod.game_id == game.id,
+                    InstalledMod.name.contains(mod_b_name),  # type: ignore[arg-type]
+                )
+            ).first()
+            if not mod_b:
+                return f"Installed mod matching '{mod_b_name}' not found"
+
+            try:
+                result = check_pairwise_conflict(game, mod_a, mod_b)
+            except ValueError as exc:
+                return str(exc)
+            if not result.conflicting_files:
+                return f"No conflicts between '{mod_a.name}' and '{mod_b.name}'"
+            lines = [
+                f"Conflicts between '{mod_a.name}' and '{mod_b.name}' "
+                f"({len(result.conflicting_files)} files, severity: {result.severity}):",
+                f"Winner (installed later): {result.winner}",
+                "Conflicting files:",
+            ]
+            for f in result.conflicting_files[:20]:
+                lines.append(f"  - {f}")
+            if len(result.conflicting_files) > 20:
+                lines.append(f"  ... and {len(result.conflicting_files) - 20} more")
+            return "\n".join(lines)
+
+        result = check_installed_conflicts(game, session)
+        if not result.conflict_pairs:
+            msg = "No conflicts detected between installed mods."
+            if result.skipped_mods:
+                msg += f" ({len(result.skipped_mods)} mods skipped — archives unavailable)"
+            return msg
+
+        # Sort by severity (HIGH first)
+        severity_order = {"high": 0, "medium": 1, "low": 2}
+        pairs = sorted(result.conflict_pairs, key=lambda p: severity_order.get(p.severity, 3))
+        lines = [f"Found {len(pairs)} conflict pairs among {result.total_mods_checked} mods:"]
+        for p in pairs[:15]:
+            lines.append(
+                f"  [{p.severity.upper()}] {p.mod_a_name} vs {p.mod_b_name} "
+                f"({len(p.conflicting_files)} files, winner: {p.winner})"
+            )
+        if len(pairs) > 15:
+            lines.append(f"  ... and {len(pairs) - 15} more pairs")
+        if result.skipped_mods:
+            lines.append(f"\n{len(result.skipped_mods)} mods skipped (archives unavailable):")
+            for s in result.skipped_mods[:5]:
+                lines.append(f"  - {s.mod_name}: {s.reason}")
+        return "\n".join(lines)
+
+
 TOOLS = [
     search_local_mods,
     get_mod_details,
@@ -195,6 +275,7 @@ TOOLS = [
     list_nexus_downloads,
     semantic_mod_search,
     reindex_vector_store,
+    check_mod_conflicts,
 ]
 
 
