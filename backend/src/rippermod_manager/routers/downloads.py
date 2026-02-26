@@ -100,16 +100,25 @@ async def start_download_from_mod(
 
     async with NexusClient(api_key) as client:
         key_result = await client.validate_key()
-        files_resp = await client.get_mod_files(game.domain_name, body.nexus_mod_id)
+        files_resp = await client.get_mod_files(
+            game.domain_name, body.nexus_mod_id, category="main",
+        )
+        nexus_files = files_resp.get("files", [])
 
-    nexus_files = files_resp.get("files", [])
+        # Fallback: if no main files, broaden to include optional
+        if not nexus_files:
+            files_resp = await client.get_mod_files(
+                game.domain_name, body.nexus_mod_id, category="main,optional",
+            )
+            nexus_files = files_resp.get("files", [])
+
     if not nexus_files:
         raise HTTPException(404, "No files found for this mod")
 
-    # Prefer main files (category_id == 1), fallback to latest file
-    main_files = [f for f in nexus_files if f.get("category_id") == 1]
-    if len(main_files) > 1:
+    # All files are already main (category_id == 1) from the filtered request
+    if len(nexus_files) > 1 and all(f.get("category_id") == 1 for f in nexus_files):
         return DownloadStartResult(requires_file_selection=True)
+    main_files = [f for f in nexus_files if f.get("category_id") == 1]
     target = main_files[-1] if main_files else nexus_files[-1]
     nexus_file_id = target.get("file_id")
     if not nexus_file_id:

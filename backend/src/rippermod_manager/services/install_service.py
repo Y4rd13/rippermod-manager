@@ -352,7 +352,11 @@ async def resolve_installed_file_id(
 
     try:
         async with NexusClient(api_key) as client:
-            files_resp = await client.get_mod_files(game_domain, nexus_mod_id)
+            files_resp = await client.get_mod_files(
+                game_domain,
+                nexus_mod_id,
+                category="main,update,optional,miscellaneous",
+            )
     except Exception:
         logger.debug("Could not fetch files for mod %d", nexus_mod_id)
         return
