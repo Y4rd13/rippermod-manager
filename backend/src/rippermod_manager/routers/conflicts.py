@@ -1,4 +1,4 @@
-"""Endpoints for conflict detection: persisted engine + on-the-fly archive comparison."""
+"""Endpoints for conflict detection: persisted engine + on-the-fly archive comparison + inbox."""
 
 import json
 import logging
@@ -19,14 +19,23 @@ from rippermod_manager.schemas.conflict import (
 )
 from rippermod_manager.schemas.conflicts import (
     ConflictSeverity,
+    ConflictsOverview,
     InstalledConflictsResult,
+    ModConflictDetail,
     PairwiseConflictResult,
+    ResolveRequest,
+    ResolveResult,
 )
 from rippermod_manager.services.conflict_service import (
     check_installed_conflicts,
     check_pairwise_conflict,
 )
 from rippermod_manager.services.conflicts.engine import ConflictEngine
+from rippermod_manager.services.conflicts_inbox_service import (
+    get_conflicts_overview,
+    get_mod_conflict_detail,
+    resolve_conflict,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +140,53 @@ def reindex_conflicts(
         by_kind=by_kind,
         duration_ms=elapsed_ms,
     )
+
+
+# --- Inbox endpoints (global post-install conflict visibility) ---
+
+
+@_engine_router.get("/inbox", response_model=ConflictsOverview)
+def inbox_overview(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> ConflictsOverview:
+    """List all file conflict summaries across installed mods."""
+    game = get_game_or_404(game_name, session)
+    return get_conflicts_overview(game, session)
+
+
+@_engine_router.get("/inbox/{mod_id}", response_model=ModConflictDetail)
+def inbox_detail(
+    game_name: str,
+    mod_id: int,
+    session: Session = Depends(get_session),
+) -> ModConflictDetail:
+    """Get detailed conflict evidence for a single mod."""
+    game = get_game_or_404(game_name, session)
+    mod = session.get(InstalledMod, mod_id)
+    if not mod or mod.game_id != game.id:
+        raise HTTPException(404, "Installed mod not found")
+    return get_mod_conflict_detail(game, mod, session)
+
+
+@_engine_router.post("/inbox/{mod_id}/resolve", response_model=ResolveResult)
+def inbox_resolve(
+    game_name: str,
+    mod_id: int,
+    data: ResolveRequest,
+    session: Session = Depends(get_session),
+) -> ResolveResult:
+    """Resolve conflicts by reinstalling a mod to reclaim its files."""
+    game = get_game_or_404(game_name, session)
+    mod = session.get(InstalledMod, mod_id)
+    if not mod or mod.game_id != game.id:
+        raise HTTPException(404, "Installed mod not found")
+    try:
+        return resolve_conflict(game, mod, session, action=data.action)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
 
 
 router.include_router(_engine_router)
