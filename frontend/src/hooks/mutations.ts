@@ -387,6 +387,9 @@ export function useStartModDownload() {
     mutationFn: ({ gameName, nexusModId }) =>
       api.post(`/api/v1/games/${gameName}/downloads/from-mod`, { nexus_mod_id: nexusModId }),
     onSuccess: (result, { gameName }) => {
+      if (result.requires_file_selection) {
+        return;
+      }
       if (result.requires_nxm) {
         toast.warning("Premium required", "Open the mod on Nexus to download manually");
         return;
