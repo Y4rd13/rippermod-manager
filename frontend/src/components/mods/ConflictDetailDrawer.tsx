@@ -27,6 +27,10 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, onClo
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
+  useEffect(() => {
+    if (resolve.isSuccess) onClose();
+  }, [resolve.isSuccess, onClose]);
+
   const grouped = useMemo(() => {
     if (!detail?.evidence.length) return [];
     const map = new Map<string, { winnerId: number; files: string[] }>();
@@ -43,7 +47,7 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, onClo
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} role="presentation" aria-hidden="true" />
 
       <div className="relative w-full max-w-lg bg-surface-0 border-l border-border flex flex-col animate-slide-in-right">
         {/* Header */}
