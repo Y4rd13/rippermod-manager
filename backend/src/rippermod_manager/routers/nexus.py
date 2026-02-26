@@ -167,13 +167,20 @@ async def mod_detail(
 
     files = session.exec(select(NexusModFile).where(NexusModFile.nexus_mod_id == mod_id)).all()
 
-    # Fetch and persist file rows if missing, or backfill metadata on existing ones
+    # Fetch file rows if missing or stale (mod updated since last file fetch),
+    # or backfill metadata fields on existing ones
     if api_key:
         needs_insert = len(files) == 0
-        needs_backfill = not needs_insert and any(
-            f.content_preview_link is None and f.description is None for f in files
+        needs_refresh = not needs_insert and (
+            meta.updated_at is not None
+            and (meta.files_updated_at is None or meta.updated_at > meta.files_updated_at)
         )
-        if needs_insert or needs_backfill:
+        needs_backfill = (
+            not needs_insert
+            and not needs_refresh
+            and any(f.content_preview_link is None and f.description is None for f in files)
+        )
+        if needs_insert or needs_refresh or needs_backfill:
             try:
                 async with NexusClient(api_key) as client:
                     files_resp = await client.get_mod_files(
@@ -181,10 +188,11 @@ async def mod_detail(
                     )
                 api_file_list = files_resp.get("files", [])
 
-                if needs_insert:
+                if needs_insert or needs_refresh:
+                    existing_file_ids = {f.file_id for f in files}
                     for af in api_file_list:
                         fid = af.get("file_id")
-                        if not fid:
+                        if not fid or fid in existing_file_ids:
                             continue
                         session.add(
                             NexusModFile(
@@ -199,6 +207,7 @@ async def mod_detail(
                                 description=af.get("description"),
                             )
                         )
+                    meta.files_updated_at = meta.updated_at
                     session.commit()
                     files = session.exec(
                         select(NexusModFile).where(NexusModFile.nexus_mod_id == mod_id)

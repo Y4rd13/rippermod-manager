@@ -145,6 +145,13 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
                     )
                 )
 
+            # Mark files as up-to-date so mod_detail skips redundant re-fetch
+            sync_meta = session.exec(
+                select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)
+            ).first()
+            if sync_meta:
+                sync_meta.files_updated_at = sync_meta.updated_at
+
         session.commit()
 
     total = session.exec(select(NexusDownload).where(NexusDownload.game_id == game.id)).all()
