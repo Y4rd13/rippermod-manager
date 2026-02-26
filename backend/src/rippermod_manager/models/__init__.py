@@ -1,3 +1,4 @@
+from rippermod_manager.models.archive_index import ArchiveEntryIndex
 from rippermod_manager.models.chat import ChatMessage
 from rippermod_manager.models.conflict import ConflictEvidence
 from rippermod_manager.models.correlation import ModNexusCorrelation
@@ -11,6 +12,7 @@ from rippermod_manager.models.settings import AppSetting, PCSpecs
 
 __all__ = [
     "AppSetting",
+    "ArchiveEntryIndex",
     "ChatMessage",
     "ConflictEvidence",
     "DownloadJob",
