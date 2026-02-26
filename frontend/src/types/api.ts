@@ -294,6 +294,46 @@ export interface ArchiveContentsResult {
   tree: ArchiveEntryNode[];
 }
 
+// Conflicts inbox types
+
+export type ConflictSeverity = "critical" | "warning" | "info";
+
+export interface ConflictEvidence {
+  file_path: string;
+  winner_mod_id: number;
+  winner_mod_name: string;
+}
+
+export interface ModConflictSummary {
+  mod_id: number;
+  mod_name: string;
+  source_archive: string;
+  total_archive_files: number;
+  conflict_count: number;
+  severity: ConflictSeverity;
+  conflicting_mod_names: string[];
+}
+
+export interface ModConflictDetail {
+  mod_id: number;
+  mod_name: string;
+  source_archive: string;
+  total_archive_files: number;
+  evidence: ConflictEvidence[];
+}
+
+export interface ConflictsOverview {
+  total_conflicts: number;
+  mods_affected: number;
+  summaries: ModConflictSummary[];
+}
+
+export interface ResolveResult {
+  installed_mod_id: number;
+  files_extracted: number;
+  files_reclaimed: number;
+}
+
 // Profile feature types
 
 export interface ProfileModOut {
