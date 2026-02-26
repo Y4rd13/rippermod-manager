@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
 from rippermod_manager.database import get_session
+from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.load_order import (
@@ -24,7 +25,7 @@ def _get_mod_pair(
     game_name: str,
     data: PreferModRequest,
     session: Session,
-) -> tuple:
+) -> tuple[Game, InstalledMod, InstalledMod]:
     """Validate and return ``(game, winner_mod, loser_mod)``."""
     game = get_game_or_404(game_name, session)
 

@@ -125,7 +125,9 @@ def get_archive_load_order(game: Game, session: Session) -> LoadOrderResult:
     for norm_path, owners in path_owners.items():
         if len(owners) < 2:
             continue
-        # Sort owners by archive filename to determine winner (last loaded wins)
+        # Sort owners by archive filename to determine winner (last loaded wins).
+        # NOTE: when two mods share the exact same filename, the winner is
+        # ambiguous (one physically overwrites the other during install).
         sorted_owners = sorted(owners, key=lambda o: o[0].lower())
         winner_filename, winner_mod = sorted_owners[-1]
         for loser_filename, loser_mod in sorted_owners[:-1]:
@@ -180,9 +182,12 @@ def generate_prefer_renames(
 
     prefix = _compute_prefix(max(loser_filenames, key=lambda fn: fn.lower()))
 
-    # Collect all existing archive filenames (for collision detection)
+    # Collect all existing archive filenames for this game (collision detection)
     all_archive_files = session.exec(
-        select(InstalledModFile).where(
+        select(InstalledModFile)
+        .join(InstalledMod)
+        .where(
+            InstalledMod.game_id == game.id,
             InstalledModFile.relative_path.like("archive/pc/mod/%"),  # type: ignore[union-attr]
         )
     ).all()
@@ -295,19 +300,37 @@ def apply_prefer_mod(
             rollback_performed=rollback_ok,
         )
 
-    # Update DB paths
-    for r in renames:
-        file_record = session.exec(
-            select(InstalledModFile).where(
-                InstalledModFile.installed_mod_id == r.owning_mod_id,
-                InstalledModFile.relative_path == r.old_relative_path,
-            )
-        ).first()
-        if file_record:
-            file_record.relative_path = r.new_relative_path
-            session.add(file_record)
+    # Update DB paths — rollback filesystem if DB commit fails
+    try:
+        for r in renames:
+            file_record = session.exec(
+                select(InstalledModFile).where(
+                    InstalledModFile.installed_mod_id == r.owning_mod_id,
+                    InstalledModFile.relative_path == r.old_relative_path,
+                )
+            ).first()
+            if file_record:
+                file_record.relative_path = r.new_relative_path
+                session.add(file_record)
+            else:
+                logger.warning(
+                    "DB record not found for %s (mod_id=%s); filesystem renamed but DB not updated",
+                    r.old_relative_path,
+                    r.owning_mod_id,
+                )
 
-    session.commit()
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        logger.error("DB update failed after renames: %s — rolling back filesystem", exc)
+        _rollback_renames(completed)
+        return PreferModResult(
+            success=False,
+            renames=renames,
+            dry_run=False,
+            message=f"DB update failed after filesystem renames: {exc}",
+            rollback_performed=True,
+        )
 
     return PreferModResult(
         success=True,

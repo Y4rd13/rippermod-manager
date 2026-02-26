@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
 import pytest
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
@@ -26,9 +26,7 @@ def game_setup(tmp_path, client, engine):
 def _add_mod(engine, game_name, mod_name, archive_filenames, *, game_dir=None, disabled=False):
     """Insert an InstalledMod with archive files via a fresh session."""
     with Session(engine) as s:
-        g = s.exec(
-            __import__("sqlmodel", fromlist=["select"]).select(Game).where(Game.name == game_name)
-        ).one()
+        g = s.exec(select(Game).where(Game.name == game_name)).one()
         mod = InstalledMod(
             game_id=g.id,
             name=mod_name,
