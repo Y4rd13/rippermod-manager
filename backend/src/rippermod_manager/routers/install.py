@@ -24,6 +24,7 @@ from rippermod_manager.schemas.install import (
     ToggleResult,
     UninstallResult,
 )
+from rippermod_manager.schemas.redscript import RedscriptConflictResult
 from rippermod_manager.services.conflict_service import check_conflicts
 from rippermod_manager.services.download_dates import archive_download_dates
 from rippermod_manager.services.install_service import (
@@ -35,6 +36,7 @@ from rippermod_manager.services.install_service import (
     toggle_mod,
     uninstall_mod,
 )
+from rippermod_manager.services.redscript_analysis import check_redscript_conflicts
 from rippermod_manager.services.settings_helpers import get_setting
 
 logger = logging.getLogger(__name__)
@@ -329,3 +331,13 @@ async def archive_contents(
         total_size=total_size,
         tree=dict_to_tree(root),
     )
+
+
+@router.get("/redscript-conflicts", response_model=RedscriptConflictResult)
+async def redscript_conflicts(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> RedscriptConflictResult:
+    """Analyze installed redscript mods for annotation-level conflicts."""
+    game = get_game_or_404(game_name, session)
+    return check_redscript_conflicts(game, session)
