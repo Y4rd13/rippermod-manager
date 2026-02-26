@@ -19,6 +19,7 @@ dependencies = [
     "py7zr>=0.22.0",
     "defusedxml>=0.7.0",
     "pefile>=2024.8.26",
+    "pyyaml>=6.0",
     "websockets>=14.0",
     "openai>=1.60.0",
 ]
