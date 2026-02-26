@@ -91,8 +91,9 @@ export function ConflictGraphTab({ gameName }: ConflictGraphTabProps) {
   // Convert to React Flow format
   const rfNodes: Node[] = useMemo(() => {
     if (!filteredData) return [];
+    const posMap = new Map(layoutNodes.map((p) => [p.id, p]));
     return filteredData.nodes.map((n) => {
-      const pos = layoutNodes.find((p) => p.id === n.id);
+      const pos = posMap.get(n.id);
       return {
         id: n.id,
         type: "conflict",

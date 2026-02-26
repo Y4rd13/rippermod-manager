@@ -18,8 +18,13 @@ export function ConflictDetailDrawer({
       <div
         className="fixed inset-0 z-40 bg-black/50"
         onClick={onClose}
+        aria-hidden="true"
       />
-      <div className="fixed right-0 top-0 bottom-0 z-50 w-[400px] max-w-[90vw] bg-surface-1 border-l border-border shadow-xl animate-slide-in-right flex flex-col">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="fixed right-0 top-0 bottom-0 z-50 w-[400px] max-w-[90vw] bg-surface-1 border-l border-border shadow-xl animate-slide-in-right flex flex-col"
+      >
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-text-primary truncate">

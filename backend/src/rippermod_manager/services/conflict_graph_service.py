@@ -1,7 +1,6 @@
 import logging
 from collections import defaultdict
 from itertools import combinations
-from pathlib import Path
 
 from sqlmodel import Session
 
@@ -61,10 +60,18 @@ def build_conflict_graph(game: Game, session: Session) -> ConflictGraphResult:
     archives = list_available_archives(game)
     known_roots = known_roots_for_game(game.domain_name)
 
+    # Pre-compute installed archive names for O(1) lookup
+    installed_archive_names: set[str] = set()
+    seen_for_names: set[int] = set()
+    for mod in ownership.values():
+        if mod.id not in seen_for_names:
+            seen_for_names.add(mod.id)
+            if mod.source_archive:
+                installed_archive_names.add(mod.source_archive.lower())
+
     for archive_path in archives:
         parsed = parse_mod_filename(archive_path.name)
-        # Skip archives that are already installed
-        if _is_archive_installed(archive_path, ownership):
+        if archive_path.name.lower() in installed_archive_names:
             continue
 
         try:
@@ -157,15 +164,3 @@ def build_conflict_graph(game: Game, session: Session) -> ConflictGraphResult:
         edges=edges,
         total_conflicts=sum(e.weight for e in edges),
     )
-
-
-def _is_archive_installed(archive_path: Path, ownership: dict) -> bool:
-    """Check if any installed mod was sourced from this archive."""
-    archive_name = archive_path.name.lower()
-    seen: set[int] = set()
-    for mod in ownership.values():
-        if mod.id not in seen:
-            seen.add(mod.id)
-            if mod.source_archive and mod.source_archive.lower() == archive_name:
-                return True
-    return False

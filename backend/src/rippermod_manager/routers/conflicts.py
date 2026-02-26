@@ -12,7 +12,7 @@ router = APIRouter(prefix="/games/{game_name}/conflicts", tags=["conflicts"])
 
 
 @router.get("/graph", response_model=ConflictGraphResult)
-async def conflict_graph(
+def conflict_graph(
     game_name: str,
     session: Session = Depends(get_session),
 ) -> ConflictGraphResult:

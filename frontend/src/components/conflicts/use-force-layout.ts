@@ -94,12 +94,18 @@ export function useForceLayout(
       }
 
       // Apply velocities with damping
+      let maxV = 0;
       for (const p of positions) {
         p.vx *= DAMPING;
         p.vy *= DAMPING;
         p.x += p.vx * cooling;
         p.y += p.vy * cooling;
+        const v = p.vx * p.vx + p.vy * p.vy;
+        if (v > maxV) maxV = v;
       }
+
+      // Early termination when layout has stabilized
+      if (maxV < 0.01) break;
     }
 
     return positions.map((p) => ({ id: p.id, x: p.x, y: p.y }));
