@@ -5,10 +5,12 @@ import type {
   ArchiveContentsResult,
   AvailableArchive,
   ConflictGraphResult,
+  ConflictsOverview,
   DownloadJobOut,
   Game,
   GameVersion,
   InstalledModOut,
+  ModConflictDetail,
   ModDetail,
   ModGroup,
   NexusDownload,
@@ -164,6 +166,23 @@ export function useTrendingMods(gameName: string) {
     queryFn: () => api.get(`/api/v1/games/${gameName}/trending/`),
     enabled: !!gameName,
     staleTime: 15 * 60 * 1000,
+  });
+}
+
+export function useConflictsOverview(gameName: string) {
+  return useQuery<ConflictsOverview>({
+    queryKey: ["conflicts", gameName],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/conflicts/inbox`),
+    enabled: !!gameName,
+    staleTime: 60_000,
+  });
+}
+
+export function useModConflicts(gameName: string, modId: number | null) {
+  return useQuery<ModConflictDetail>({
+    queryKey: ["conflicts", gameName, modId],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/conflicts/inbox/${modId}`),
+    enabled: !!gameName && modId != null,
   });
 }
 

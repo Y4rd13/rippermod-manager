@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Archive,
   ChevronRight,
   Eye,
@@ -21,6 +22,7 @@ import { Link, useParams } from "react-router";
 
 import { ArchivesList } from "@/components/mods/ArchivesList";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
+import { ConflictsInbox } from "@/components/mods/ConflictsInbox";
 import { FomodWizard } from "@/components/mods/FomodWizard";
 import { InstalledModsTable } from "@/components/mods/InstalledModsTable";
 import { ModCardAction } from "@/components/mods/ModCardAction";
@@ -39,6 +41,7 @@ import { Switch } from "@/components/ui/Switch";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import {
   useAvailableArchives,
+  useConflictsOverview,
   useDownloadJobs,
   useEndorsedMods,
   useGame,
@@ -64,10 +67,11 @@ const ConflictGraphTab = lazy(() =>
   })),
 );
 
-type Tab = "installed" | "updates" | "trending" | "endorsed" | "tracked" | "mods" | "matched" | "archives" | "profiles" | "conflicts";
+type Tab = "installed" | "conflicts" | "conflict-graph" | "updates" | "trending" | "endorsed" | "tracked" | "mods" | "matched" | "archives" | "profiles";
 
 const TABS: { key: Tab; label: string; Icon: typeof Package; tooltip: string }[] = [
   { key: "installed", label: "Installed", Icon: UserCheck, tooltip: "Managed and recognized mods on your system" },
+  { key: "conflicts", label: "Conflicts", Icon: AlertTriangle, tooltip: "File conflicts between installed mods" },
   { key: "updates", label: "Updates", Icon: RefreshCw, tooltip: "Mods with newer versions available on Nexus" },
   { key: "trending", label: "Trending", Icon: TrendingUp, tooltip: "Popular and recently updated mods on Nexus" },
   { key: "endorsed", label: "Endorsed", Icon: Heart, tooltip: "Mods you've endorsed on your Nexus account" },
@@ -76,7 +80,7 @@ const TABS: { key: Tab; label: string; Icon: typeof Package; tooltip: string }[]
   { key: "matched", label: "Nexus Matched", Icon: Link2, tooltip: "Scanned mods matched to Nexus Mods entries" },
   { key: "archives", label: "Archives", Icon: Archive, tooltip: "Downloaded mod archives ready to install" },
   { key: "profiles", label: "Profiles", Icon: FolderOpen, tooltip: "Saved snapshots of your mod enabled/disabled states" },
-  { key: "conflicts", label: "Conflicts", Icon: GitBranch, tooltip: "Visualize file conflicts between mods and archives" },
+  { key: "conflict-graph", label: "Conflict Graph", Icon: GitBranch, tooltip: "Visualize file conflicts between mods and archives" },
 ];
 
 export function GameDetailPage() {
@@ -91,6 +95,7 @@ export function GameDetailPage() {
   const { data: trackedMods = [], isLoading: trackedLoading, dataUpdatedAt: trackedUpdatedAt } = useTrackedMods(name);
   const { data: trendingResult, isLoading: trendingLoading, dataUpdatedAt: trendingUpdatedAt } = useTrendingMods(name);
   const { data: updates, isLoading: updatesLoading } = useUpdates(name);
+  const { data: conflictsOverview, isLoading: conflictsLoading } = useConflictsOverview(name);
   const { data: downloadJobs = [] } = useDownloadJobs(name);
   const hasOpenaiKey = useHasOpenaiKey();
   const queryClient = useQueryClient();
@@ -263,6 +268,7 @@ export function GameDetailPage() {
 
   const tabCounts = useMemo<Partial<Record<Tab, number>>>(() => ({
     installed: installedLoading ? undefined : installedMods.length + recognizedNotInstalled,
+    conflicts: conflictsLoading ? undefined : conflictsOverview?.mods_affected,
     updates: updatesLoading ? undefined : updates?.updates_available,
     trending: trendingLoading ? undefined : (trendingResult?.trending.length ?? 0) + (trendingResult?.latest_updated.length ?? 0),
     endorsed: endorsedLoading ? undefined : endorsedMods.length,
@@ -273,6 +279,7 @@ export function GameDetailPage() {
     profiles: profilesLoading ? undefined : profiles.length,
   }), [
     installedMods.length, installedLoading, recognizedNotInstalled,
+    conflictsOverview?.mods_affected, conflictsLoading,
     updates?.updates_available, updatesLoading,
     trendingResult, trendingLoading,
     endorsedMods.length, endorsedLoading,
@@ -484,6 +491,9 @@ export function GameDetailPage() {
                   {tabCounts[key]}
                 </span>
               )}
+              {key === "conflicts" && (conflictsOverview?.mods_affected ?? 0) > 0 && (
+                <span className="h-1.5 w-1.5 rounded-full bg-danger inline-block" />
+              )}
               {key === "updates" && (updates?.updates_available ?? 0) > 0 && (
                 <span className="h-1.5 w-1.5 rounded-full bg-warning inline-block" />
               )}
@@ -551,6 +561,9 @@ export function GameDetailPage() {
           onModClick={setSelectedModId}
         />
       )}
+      {tab === "conflicts" && (
+        <ConflictsInbox gameName={name} />
+      )}
       {tab === "installed" && (
         <InstalledModsTable
           mods={installedMods}
@@ -573,7 +586,7 @@ export function GameDetailPage() {
       {tab === "updates" && (
         <UpdatesTable gameName={name} updates={updates?.updates ?? []} isLoading={updatesLoading} />
       )}
-      {tab === "conflicts" && (
+      {tab === "conflict-graph" && (
         <Suspense fallback={<SkeletonCardGrid count={3} />}>
           <ConflictGraphTab gameName={name} />
         </Suspense>

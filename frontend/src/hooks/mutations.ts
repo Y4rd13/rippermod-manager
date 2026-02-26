@@ -29,6 +29,7 @@ import type {
   ProfileLoadResult,
   ProfileOut,
   ProfileUpdate,
+  ResolveResult,
   ScanResult,
   Setting,
   ToggleResult,
@@ -479,6 +480,20 @@ export function useReassignCorrelation() {
       toast.success("Match reassigned");
     },
     onError: () => toast.error("Failed to reassign match"),
+  });
+}
+
+export function useResolveConflict() {
+  const qc = useQueryClient();
+  return useMutation<ResolveResult, Error, { gameName: string; modId: number }>({
+    mutationFn: ({ gameName, modId }) =>
+      api.post(`/api/v1/games/${gameName}/conflicts/inbox/${modId}/resolve`, { action: "reinstall" }),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["conflicts", gameName] });
+      qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      toast.success("Conflict resolved", "Mod reinstalled to reclaim files");
+    },
+    onError: () => toast.error("Failed to resolve conflict"),
   });
 }
 
