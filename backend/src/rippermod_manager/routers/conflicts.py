@@ -40,7 +40,7 @@ _engine_router = APIRouter(prefix="/games/{game_name}/conflicts")
 
 
 @_engine_router.get("/summary", response_model=ConflictSummary)
-async def conflict_summary(
+def conflict_summary(
     game_name: str,
     kind: ConflictKind | None = None,
     severity: Severity | None = None,
@@ -110,7 +110,7 @@ async def conflict_summary(
 
 
 @_engine_router.post("/reindex", response_model=ReindexResult)
-async def reindex_conflicts(
+def reindex_conflicts(
     game_name: str,
     session: Session = Depends(get_session),
 ) -> ReindexResult:
