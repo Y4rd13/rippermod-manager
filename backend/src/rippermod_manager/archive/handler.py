@@ -6,8 +6,6 @@ mod archives regardless of format.
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 import tempfile
 import zipfile
 from abc import ABC, abstractmethod
@@ -135,96 +133,35 @@ class SevenZipHandler(ArchiveHandler):
         self._archive.close()
 
 
-def _find_7zip() -> str | None:
-    """Locate the 7-Zip CLI executable."""
-    common = [
-        r"C:\Program Files\7-Zip\7z.exe",
-        r"C:\Program Files (x86)\7-Zip\7z.exe",
-    ]
-    for p in common:
-        if Path(p).exists():
-            return p
-    return shutil.which("7z")
-
-
 class RarHandler(ArchiveHandler):
-    """Handler for .rar archives using 7-Zip CLI.
-
-    RAR extraction requires 7-Zip to be installed on the system.
-    """
+    """Handler for .rar archives using the rarfile library."""
 
     def __init__(self, path: str | Path) -> None:
-        self._exe = _find_7zip()
-        if not self._exe:
-            raise FileNotFoundError(
-                "RAR extraction requires 7-Zip. Install via: winget install 7zip.7zip"
-            )
-        self._path = str(path)
-        self._tmpdir: tempfile.TemporaryDirectory[str] | None = None
+        try:
+            import rarfile
+        except ImportError as exc:
+            raise ImportError(
+                "rarfile is required for .rar support: pip install rarfile"
+            ) from exc
+        self._rf = rarfile.RarFile(str(path), "r")
 
     def list_entries(self) -> list[ArchiveEntry]:
-        result = subprocess.run(
-            [self._exe, "l", "-slt", self._path],  # type: ignore[list-item]
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"7z list failed (exit {result.returncode}): {result.stderr}")
-
         entries: list[ArchiveEntry] = []
-        current_path = ""
-        current_size = 0
-        current_is_dir = False
-
-        for line in result.stdout.splitlines():
-            line = line.strip()
-            if line.startswith("Path = "):
-                if current_path:
-                    entries.append(
-                        ArchiveEntry(
-                            filename=current_path,
-                            is_dir=current_is_dir,
-                            size=current_size,
-                        )
-                    )
-                current_path = line[7:]
-                current_size = 0
-                current_is_dir = False
-            elif line.startswith("Size = "):
-                try:
-                    current_size = int(line[7:])
-                except ValueError:
-                    current_size = 0
-            elif line.startswith("Folder = +"):
-                current_is_dir = True
-
-        if current_path:
+        for info in self._rf.infolist():
             entries.append(
                 ArchiveEntry(
-                    filename=current_path,
-                    is_dir=current_is_dir,
-                    size=current_size,
+                    filename=info.filename,
+                    is_dir=info.is_dir(),
+                    size=info.file_size,
                 )
             )
-
         return entries
 
     def read_file(self, entry: ArchiveEntry) -> bytes:
-        result = subprocess.run(
-            [self._exe, "e", "-so", self._path, entry.filename],  # type: ignore[list-item]
-            capture_output=True,
-            timeout=120,
-        )
-        if result.returncode != 0:
-            stderr = result.stderr.decode(errors="replace")
-            raise RuntimeError(f"7z extract failed (exit {result.returncode}): {stderr}")
-        return result.stdout
+        return self._rf.read(entry.filename)
 
     def close(self) -> None:
-        if self._tmpdir:
-            self._tmpdir.cleanup()
-            self._tmpdir = None
+        self._rf.close()
 
 
 def open_archive(path: str | Path) -> ArchiveHandler:
@@ -232,7 +169,6 @@ def open_archive(path: str | Path) -> ArchiveHandler:
 
     Raises:
         ValueError: If the file extension is not supported.
-        FileNotFoundError: For RAR files when 7-Zip is not installed.
         zipfile.BadZipFile: If a ZIP file is corrupt.
     """
     path = Path(path)
