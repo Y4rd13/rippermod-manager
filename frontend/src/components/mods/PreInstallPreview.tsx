@@ -1,10 +1,21 @@
-import { Check, Loader2, Pencil, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  File,
+  Folder,
+  FolderOpen,
+  Loader2,
+  Pencil,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { useArchivePreview } from "@/hooks/queries";
+import { buildFileTree } from "@/lib/file-tree";
 import { formatBytes } from "@/lib/format";
-import type { ArchiveFileEntry } from "@/types/api";
+import type { ArchiveEntryNode } from "@/types/api";
 
 interface Props {
   gameName: string;
@@ -13,100 +24,143 @@ interface Props {
   onCancel: () => void;
 }
 
-function EditableRow({
-  file,
-  renamedPath,
+function PreviewTreeNode({
+  node,
+  depth,
+  parentPath,
+  renames,
   onRename,
 }: {
-  file: ArchiveFileEntry;
-  renamedPath: string | undefined;
+  node: ArchiveEntryNode;
+  depth: number;
+  parentPath: string;
+  renames: Record<string, string>;
   onRename: (original: string, newPath: string | null) => void;
 }) {
+  const [open, setOpen] = useState(true);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const displayPath = renamedPath ?? file.file_path;
-  const isRenamed = renamedPath != null;
-
-  const startEditing = useCallback(() => {
-    setDraft(displayPath);
-    setEditing(true);
-  }, [displayPath]);
+  const fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
 
   useEffect(() => {
     if (editing) inputRef.current?.focus();
   }, [editing]);
 
-  const commitEdit = useCallback(() => {
+  if (node.is_dir) {
+    return (
+      <div>
+        <button
+          type="button"
+          className="flex w-full items-center gap-1.5 py-0.5 hover:bg-surface-2/50 rounded pr-2 text-left"
+          style={{ paddingLeft: `${depth * 1.25}rem` }}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? (
+            <ChevronDown size={14} className="shrink-0 text-text-muted" />
+          ) : (
+            <ChevronRight size={14} className="shrink-0 text-text-muted" />
+          )}
+          {open ? (
+            <FolderOpen size={14} className="shrink-0 text-accent" />
+          ) : (
+            <Folder size={14} className="shrink-0 text-accent" />
+          )}
+          <span className="font-mono text-xs text-text-primary truncate">
+            {node.name}
+          </span>
+        </button>
+        {open &&
+          node.children.map((child) => (
+            <PreviewTreeNode
+              key={child.name}
+              node={child}
+              depth={depth + 1}
+              parentPath={fullPath}
+              renames={renames}
+              onRename={onRename}
+            />
+          ))}
+      </div>
+    );
+  }
+
+  const renamedPath = renames[fullPath];
+  const isRenamed = renamedPath != null;
+  const displayName = isRenamed ? renamedPath.split("/").pop() ?? renamedPath : node.name;
+
+  const startEditing = () => {
+    setDraft(renamedPath ?? fullPath);
+    setEditing(true);
+  };
+
+  const commitEdit = () => {
     setEditing(false);
     const trimmed = draft.trim();
-    if (!trimmed || trimmed === file.file_path) {
-      onRename(file.file_path, null);
-    } else if (trimmed !== file.file_path) {
-      onRename(file.file_path, trimmed);
+    if (!trimmed || trimmed === fullPath) {
+      onRename(fullPath, null);
+    } else {
+      onRename(fullPath, trimmed);
     }
-  }, [draft, file.file_path, onRename]);
+  };
 
-  const cancelEdit = useCallback(() => {
-    setEditing(false);
-  }, []);
+  const cancelEdit = () => setEditing(false);
+
+  if (editing) {
+    return (
+      <div
+        className="flex items-center gap-1.5 py-0.5 pr-2"
+        style={{ paddingLeft: `${depth * 1.25}rem` }}
+      >
+        <File size={14} className="shrink-0 text-text-muted" />
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commitEdit();
+            if (e.key === "Escape") cancelEdit();
+          }}
+          onBlur={commitEdit}
+          className="min-w-0 flex-1 rounded border border-accent bg-surface-0 px-2 py-0.5 font-mono text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="group flex items-center gap-2 py-1.5 px-2 rounded hover:bg-surface-2/50">
-      <div className="min-w-0 flex-1">
-        {editing ? (
-          <div className="flex items-center gap-1">
-            <input
-              ref={inputRef}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") commitEdit();
-                if (e.key === "Escape") cancelEdit();
-              }}
-              onBlur={commitEdit}
-              className="w-full rounded border border-accent bg-surface-0 px-2 py-0.5 font-mono text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-          </div>
-        ) : (
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`font-mono text-xs truncate ${isRenamed ? "text-accent font-medium" : "text-text-primary"}`}
-              title={displayPath}
-            >
-              {displayPath}
-            </span>
-            {isRenamed && (
-              <span className="shrink-0 text-[10px] text-accent bg-accent/10 px-1 rounded">
-                renamed
-              </span>
-            )}
-          </div>
-        )}
-        {isRenamed && !editing && (
-          <span className="font-mono text-[10px] text-text-muted line-through truncate block" title={file.file_path}>
-            {file.file_path}
-          </span>
-        )}
-      </div>
-      <span className="shrink-0 text-[10px] text-text-muted tabular-nums">
-        {formatBytes(file.size)}
+    <div
+      className="group flex items-center gap-1.5 py-0.5 hover:bg-surface-2/50 rounded pr-2"
+      style={{ paddingLeft: `${depth * 1.25}rem` }}
+    >
+      <File size={14} className="shrink-0 text-text-muted" />
+      <span
+        className={`font-mono text-xs truncate ${isRenamed ? "text-accent font-medium" : "text-text-secondary"}`}
+        title={isRenamed ? renamedPath : fullPath}
+      >
+        {displayName}
       </span>
-      {!editing && (
-        <button
-          onClick={(e) => { e.stopPropagation(); startEditing(); }}
-          title="Rename file"
-          className="shrink-0 rounded p-1 text-text-muted opacity-0 group-hover:opacity-100 hover:text-accent hover:bg-accent/10 transition-all"
-        >
-          <Pencil size={12} />
-        </button>
+      {isRenamed && (
+        <span className="shrink-0 text-[10px] text-accent bg-accent/10 px-1 rounded">
+          renamed
+        </span>
       )}
-      {isRenamed && !editing && (
+      <span className="ml-auto shrink-0 font-mono text-xs text-text-muted whitespace-nowrap">
+        {formatBytes(node.size)}
+      </span>
+      <button
+        onClick={(e) => { e.stopPropagation(); startEditing(); }}
+        title="Rename file"
+        className="shrink-0 rounded p-0.5 text-text-muted opacity-0 group-hover:opacity-100 hover:text-accent hover:bg-accent/10 transition-all"
+      >
+        <Pencil size={12} />
+      </button>
+      {isRenamed && (
         <button
-          onClick={(e) => { e.stopPropagation(); onRename(file.file_path, null); }}
+          onClick={(e) => { e.stopPropagation(); onRename(fullPath, null); }}
           title="Revert rename"
-          className="shrink-0 rounded p-1 text-text-muted opacity-0 group-hover:opacity-100 hover:text-warning hover:bg-warning/10 transition-all"
+          className="shrink-0 rounded p-0.5 text-text-muted opacity-0 group-hover:opacity-100 hover:text-warning hover:bg-warning/10 transition-all"
         >
           <X size={12} />
         </button>
@@ -118,6 +172,14 @@ function EditableRow({
 export function PreInstallPreview({ gameName, archiveFilename, onConfirm, onCancel }: Props) {
   const { data: preview, isLoading, error } = useArchivePreview(gameName, archiveFilename);
   const [renames, setRenames] = useState<Record<string, string>>({});
+
+  const tree = useMemo(() => {
+    if (!preview) return [];
+    const files = preview.files
+      .filter((f) => !f.is_dir)
+      .map((f) => ({ file_path: f.file_path, file_size: f.size }));
+    return buildFileTree(files);
+  }, [preview]);
 
   const handleRename = useCallback((original: string, newPath: string | null) => {
     setRenames((prev) => {
@@ -196,11 +258,13 @@ export function PreInstallPreview({ gameName, archiveFilename, onConfirm, onCanc
             </p>
 
             <div className="max-h-80 overflow-y-auto rounded border border-border bg-surface-0 p-1">
-              {preview.files.map((file) => (
-                <EditableRow
-                  key={file.file_path}
-                  file={file}
-                  renamedPath={renames[file.file_path]}
+              {tree.map((node) => (
+                <PreviewTreeNode
+                  key={node.name}
+                  node={node}
+                  depth={0}
+                  parentPath=""
+                  renames={renames}
                   onRename={handleRename}
                 />
               ))}
