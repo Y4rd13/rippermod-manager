@@ -75,6 +75,8 @@ def check_conflicts(
 
         if normalised_lower in ownership:
             mod = ownership[normalised_lower]
+            if mod.source_archive == archive_path.name:
+                continue
             conflicts.append(
                 FileConflict(
                     file_path=normalised,
