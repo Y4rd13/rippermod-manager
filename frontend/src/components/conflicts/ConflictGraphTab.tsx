@@ -111,8 +111,8 @@ export function ConflictGraphTab({ gameName }: ConflictGraphTabProps) {
 
   const rfEdges: Edge[] = useMemo(() => {
     if (!filteredData) return [];
-    return filteredData.edges.map((e, i) => ({
-      id: `e-${i}`,
+    return filteredData.edges.map((e) => ({
+      id: `${e.source}--${e.target}`,
       source: e.source,
       target: e.target,
       type: "conflict",
@@ -180,7 +180,7 @@ export function ConflictGraphTab({ gameName }: ConflictGraphTabProps) {
             fitView
             minZoom={0.2}
             maxZoom={2}
-            proOptions={{ hideAttribution: true }}
+            proOptions={{ hideAttribution: false }}
           >
             <Background color="var(--color-border)" gap={20} />
             <Controls

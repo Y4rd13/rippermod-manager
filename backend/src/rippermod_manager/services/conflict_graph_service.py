@@ -128,11 +128,12 @@ def build_conflict_graph(game: Game, session: Session) -> ConflictGraphResult:
     for (src, tgt), files in edge_map.items():
         conflict_node_ids.add(src)
         conflict_node_ids.add(tgt)
+        sorted_files = sorted(files)
         edges.append(
             ConflictGraphEdge(
                 source=src,
                 target=tgt,
-                shared_files=sorted(files),
+                shared_files=sorted_files[:200],
                 weight=len(files),
             )
         )

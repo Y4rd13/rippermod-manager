@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { useEffect } from "react";
 
 interface ConflictDetailDrawerProps {
   sourceName: string;
@@ -13,6 +14,14 @@ export function ConflictDetailDrawer({
   sharedFiles,
   onClose,
 }: ConflictDetailDrawerProps) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
   return (
     <>
       <div
