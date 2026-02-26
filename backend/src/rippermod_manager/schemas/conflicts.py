@@ -1,10 +1,13 @@
-"""Response models for installed-vs-installed conflict detection."""
+"""Response models for conflict detection and the conflicts inbox."""
 
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel
+
+# --- Installed-vs-installed conflict detection (persisted engine) ---
 
 
 class ConflictSeverity(StrEnum):
@@ -44,3 +47,52 @@ class PairwiseConflictResult(BaseModel):
     conflicting_files: list[str]
     severity: ConflictSeverity | None
     winner: str | None
+
+
+# --- Conflicts inbox (global post-install conflict visibility) ---
+
+
+class InboxSeverity(StrEnum):
+    critical = "critical"
+    warning = "warning"
+    info = "info"
+
+
+class ConflictEvidence(BaseModel):
+    file_path: str
+    winner_mod_id: int
+    winner_mod_name: str
+
+
+class ModConflictSummary(BaseModel):
+    mod_id: int
+    mod_name: str
+    source_archive: str
+    total_archive_files: int
+    conflict_count: int
+    severity: InboxSeverity
+    conflicting_mod_names: list[str]
+
+
+class ModConflictDetail(BaseModel):
+    mod_id: int
+    mod_name: str
+    source_archive: str
+    total_archive_files: int
+    evidence: list[ConflictEvidence]
+
+
+class ConflictsOverview(BaseModel):
+    total_conflicts: int
+    mods_affected: int
+    summaries: list[ModConflictSummary]
+
+
+class ResolveRequest(BaseModel):
+    action: Literal["reinstall"]
+
+
+class ResolveResult(BaseModel):
+    installed_mod_id: int
+    files_extracted: int
+    files_reclaimed: int
