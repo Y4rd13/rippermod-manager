@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import re
 from typing import TYPE_CHECKING, Literal
@@ -158,17 +159,8 @@ async def mod_detail(
     from rippermod_manager.services.nexus_helpers import get_game_categories
 
     changelogs: dict[str, list[str]] = {}
-    if api_key:
-        try:
-            async with NexusClient(api_key) as client:
-                changelogs = await client.get_changelogs(game_domain, mod_id)
-        except Exception:
-            pass
-
     files = session.exec(select(NexusModFile).where(NexusModFile.nexus_mod_id == mod_id)).all()
 
-    # Fetch file rows if missing or stale (mod updated since last file fetch),
-    # or backfill metadata fields on existing ones
     if api_key:
         needs_insert = len(files) == 0
         needs_refresh = not needs_insert and (
@@ -178,55 +170,60 @@ async def mod_detail(
         needs_backfill = (
             not needs_insert
             and not needs_refresh
-            and any(f.content_preview_link is None and f.description is None for f in files)
+            and any(f.content_preview_link is None or f.description is None for f in files)
         )
-        if needs_insert or needs_refresh or needs_backfill:
-            try:
-                async with NexusClient(api_key) as client:
+
+        # Single client for all API calls: changelogs + file fetch/backfill
+        try:
+            async with NexusClient(api_key) as client:
+                with contextlib.suppress(Exception):
+                    changelogs = await client.get_changelogs(game_domain, mod_id)
+
+                if needs_insert or needs_refresh or needs_backfill:
                     files_resp = await client.get_mod_files(
                         game_domain, mod_id, category="main,update,optional,miscellaneous"
                     )
-                api_file_list = files_resp.get("files", [])
+                    api_file_list = files_resp.get("files", [])
 
-                if needs_insert or needs_refresh:
-                    existing_file_ids = {f.file_id for f in files}
-                    for af in api_file_list:
-                        fid = af.get("file_id")
-                        if not fid or fid in existing_file_ids:
-                            continue
-                        session.add(
-                            NexusModFile(
-                                nexus_mod_id=mod_id,
-                                file_id=fid,
-                                file_name=af.get("file_name", ""),
-                                version=af.get("version", ""),
-                                category_id=af.get("category_id"),
-                                uploaded_timestamp=af.get("uploaded_timestamp"),
-                                file_size=af.get("size_in_bytes") or af.get("file_size", 0),
-                                content_preview_link=af.get("content_preview_link"),
-                                description=af.get("description"),
+                    if needs_insert or needs_refresh:
+                        existing_file_ids = {f.file_id for f in files}
+                        for af in api_file_list:
+                            fid = af.get("file_id")
+                            if not fid or fid in existing_file_ids:
+                                continue
+                            session.add(
+                                NexusModFile(
+                                    nexus_mod_id=mod_id,
+                                    file_id=fid,
+                                    file_name=af.get("file_name", ""),
+                                    version=af.get("version", ""),
+                                    category_id=af.get("category_id"),
+                                    uploaded_timestamp=af.get("uploaded_timestamp"),
+                                    file_size=af.get("size_in_bytes") or af.get("file_size", 0),
+                                    content_preview_link=af.get("content_preview_link"),
+                                    description=af.get("description"),
+                                )
                             )
-                        )
-                    meta.files_updated_at = meta.updated_at
-                    session.commit()
-                    files = session.exec(
-                        select(NexusModFile).where(NexusModFile.nexus_mod_id == mod_id)
-                    ).all()
-                else:
-                    api_files = {af["file_id"]: af for af in api_file_list if af.get("file_id")}
-                    for f in files:
-                        af = api_files.get(f.file_id)
-                        if af and f.content_preview_link is None:
-                            f.content_preview_link = af.get("content_preview_link")
-                        if af and f.description is None:
-                            f.description = af.get("description")
-                    session.commit()
-            except Exception:
-                logger.debug(
-                    "Failed to fetch/backfill file metadata for mod %d",
-                    mod_id,
-                    exc_info=True,
-                )
+                        meta.files_updated_at = meta.updated_at
+                        session.commit()
+                        files = session.exec(
+                            select(NexusModFile).where(NexusModFile.nexus_mod_id == mod_id)
+                        ).all()
+                    else:
+                        api_files = {af["file_id"]: af for af in api_file_list if af.get("file_id")}
+                        for f in files:
+                            af = api_files.get(f.file_id)
+                            if af and f.content_preview_link is None:
+                                f.content_preview_link = af.get("content_preview_link")
+                            if af and f.description is None:
+                                f.description = af.get("description")
+                        session.commit()
+        except Exception:
+            logger.debug(
+                "Failed to fetch/backfill file metadata for mod %d",
+                mod_id,
+                exc_info=True,
+            )
 
     # Resolve category_id → name
     category_name = meta.category
@@ -298,14 +295,20 @@ def _parse_human_size(s: str) -> int:
     return int(float(m.group(1)) * _SIZE_UNITS.get(m.group(2), 1))
 
 
-def _nexus_tree_to_entries(children: list[dict], path: str = "") -> list[ArchiveEntryOut]:
+def _nexus_tree_to_entries(
+    children: list[dict], path: str = "", depth: int = 0
+) -> list[ArchiveEntryOut]:
     """Convert Nexus content_preview JSON tree to ArchiveEntryOut list."""
+    if depth > 50:
+        return []
     entries: list[ArchiveEntryOut] = []
     for item in children:
         name = item.get("name", "")
         is_dir = item.get("type") == "directory"
         size = _parse_human_size(item.get("size", "0 B")) if not is_dir else 0
-        child_entries = _nexus_tree_to_entries(item.get("children", []), f"{path}/{name}")
+        child_entries = _nexus_tree_to_entries(
+            item.get("children", []), f"{path}/{name}", depth + 1
+        )
         entries.append(ArchiveEntryOut(name=name, is_dir=is_dir, size=size, children=child_entries))
     return entries
 
@@ -324,7 +327,7 @@ async def file_contents_preview(url: str = Query(...)) -> ArchiveContentsResult:
     except httpx.HTTPStatusError as e:
         raise HTTPException(e.response.status_code, "Failed to fetch content preview") from e
     except Exception as e:
-        raise HTTPException(502, f"Failed to fetch content preview: {e}") from e
+        raise HTTPException(502, "Failed to fetch content preview") from e
 
     children = data.get("children", [])
     tree = _nexus_tree_to_entries(children)

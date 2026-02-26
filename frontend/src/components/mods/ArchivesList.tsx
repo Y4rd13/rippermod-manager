@@ -90,7 +90,6 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
   const [splitMenuPos, setSplitMenuPos] = useState<{ top: number; left: number; filename: string } | null>(null);
   const [linkPopover, setLinkPopover] = useState<{ top: number; left: number; filename: string } | null>(null);
   const [linkInput, setLinkInput] = useState("");
-  const splitChevronRef = useRef<HTMLButtonElement>(null);
   const splitMenuRef = useRef<HTMLDivElement>(null);
   const linkPopoverRef = useRef<HTMLDivElement>(null);
 
@@ -98,7 +97,6 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
     if (!splitMenuPos) return;
     const handleClick = (e: MouseEvent) => {
       if (splitMenuRef.current?.contains(e.target as Node)) return;
-      if (splitChevronRef.current?.contains(e.target as Node)) return;
       setSplitMenuPos(null);
     };
     document.addEventListener("mousedown", handleClick);
@@ -463,17 +461,14 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
                         <Download size={14} /> Install
                       </button>
                       <button
-                        ref={splitChevronRef}
                         disabled={a.is_empty}
-                        onClick={() => {
+                        onClick={(e) => {
                           if (splitMenuPos?.filename === a.filename) {
                             setSplitMenuPos(null);
                             return;
                           }
-                          const rect = splitChevronRef.current?.getBoundingClientRect();
-                          if (rect) {
-                            setSplitMenuPos({ top: rect.bottom + 4, left: rect.right - 160, filename: a.filename });
-                          }
+                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                          setSplitMenuPos({ top: rect.bottom + 4, left: rect.right - 160, filename: a.filename });
                         }}
                         className="inline-flex items-center self-stretch rounded-r-md border-l border-white/20 bg-accent px-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50"
                         title="Install options"

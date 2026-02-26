@@ -25,6 +25,7 @@ export function useInstallFlow(
     filename: string;
     nexusModId: number;
   } | null>(null);
+  const [pendingRenames, setPendingRenames] = useState<Record<string, string>>({});
 
   const installMod = useInstallMod();
   const checkConflicts = useCheckConflicts();
@@ -179,27 +180,31 @@ export function useInstallFlow(
         conflicts.archive_filename,
         conflicts.conflicts.map((c) => c.file_path),
         conflictModId,
+        pendingRenames,
       );
     } finally {
       setConflicts(null);
       setConflictModId(null);
+      setPendingRenames({});
     }
-  }, [conflicts, conflictModId, doInstall]);
+  }, [conflicts, conflictModId, pendingRenames, doInstall]);
 
   const handleInstallOverwrite = useCallback(async () => {
     if (!conflicts || conflictModId == null) return;
     try {
-      await doInstall(conflicts.archive_filename, [], conflictModId);
+      await doInstall(conflicts.archive_filename, [], conflictModId, pendingRenames);
     } finally {
       setConflicts(null);
       setConflictModId(null);
+      setPendingRenames({});
     }
-  }, [conflicts, conflictModId, doInstall]);
+  }, [conflicts, conflictModId, pendingRenames, doInstall]);
 
   const dismissConflicts = useCallback(() => {
     if (conflictModId != null) removeInstalling(conflictModId);
     setConflicts(null);
     setConflictModId(null);
+    setPendingRenames({});
   }, [conflictModId, removeInstalling]);
 
   const dismissFomod = useCallback(() => {
@@ -241,6 +246,7 @@ export function useInstallFlow(
         if (result.conflicts.length > 0) {
           setConflicts(result);
           setConflictModId(nexusModId);
+          setPendingRenames(fileRenames);
         } else {
           await doInstall(filename, [], nexusModId, fileRenames);
         }
