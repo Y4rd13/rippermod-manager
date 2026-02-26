@@ -101,14 +101,18 @@ async def start_download_from_mod(
     async with NexusClient(api_key) as client:
         key_result = await client.validate_key()
         files_resp = await client.get_mod_files(
-            game.domain_name, body.nexus_mod_id, category="main",
+            game.domain_name,
+            body.nexus_mod_id,
+            category="main",
         )
         nexus_files = files_resp.get("files", [])
 
         # Fallback: if no main files, broaden to include optional
         if not nexus_files:
             files_resp = await client.get_mod_files(
-                game.domain_name, body.nexus_mod_id, category="main,optional",
+                game.domain_name,
+                body.nexus_mod_id,
+                category="main,optional",
             )
             nexus_files = files_resp.get("files", [])
 

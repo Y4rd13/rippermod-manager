@@ -140,9 +140,7 @@ class RarHandler(ArchiveHandler):
         try:
             import rarfile
         except ImportError as exc:
-            raise ImportError(
-                "rarfile is required for .rar support: pip install rarfile"
-            ) from exc
+            raise ImportError("rarfile is required for .rar support: pip install rarfile") from exc
         self._rf = rarfile.RarFile(str(path), "r")
 
     def list_entries(self) -> list[ArchiveEntry]:
