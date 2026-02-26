@@ -1,6 +1,7 @@
-import { AlertTriangle, Archive, Check, ChevronDown, Copy, Download, ExternalLink, FolderTree, PackageMinus, Settings2, Trash2 } from "lucide-react";
+import { AlertTriangle, Archive, Check, ChevronDown, Copy, Download, ExternalLink, FolderOpen, FolderTree, PackageMinus, Settings2, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { openPath } from "@tauri-apps/plugin-opener";
 
 import { ArchiveTreeModal } from "@/components/mods/ArchiveTreeModal";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -38,6 +39,7 @@ import type {
 interface Props {
   archives: AvailableArchive[];
   gameName: string;
+  installPath: string;
   isLoading?: boolean;
 }
 
@@ -73,7 +75,7 @@ const OVERFLOW_ITEMS: ContextMenuItem[] = [
   { key: "copy", label: "Copy Filename", icon: Copy },
 ];
 
-export function ArchivesList({ archives, gameName, isLoading }: Props) {
+export function ArchivesList({ archives, gameName, installPath, isLoading }: Props) {
   const installMod = useInstallMod();
   const uninstallMod = useUninstallMod();
   const checkConflicts = useCheckConflicts();
@@ -331,6 +333,14 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
           <span className="text-xs text-text-muted">
             {filtered.length} archive{filtered.length !== 1 ? "s" : ""}
           </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => openPath(`${installPath}/downloaded_mods`).catch(() => {})}
+            title="Open downloaded_mods folder in file explorer"
+          >
+            <FolderOpen size={14} /> Open Folder
+          </Button>
           {orphanCount > 0 && !confirmCleanup && (
             <Button
               variant="secondary"
