@@ -6,6 +6,7 @@ import {
   useInstallMod,
   useStartModDownload,
 } from "@/hooks/mutations";
+import { toast } from "@/stores/toast-store";
 import type { AvailableArchive, ConflictCheckResult, DownloadJobOut } from "@/types/api";
 
 export function useInstallFlow(
@@ -196,6 +197,7 @@ export function useInstallFlow(
         const result = await startModDownload.mutateAsync({ gameName, nexusModId });
         if (result.requires_file_selection) {
           setFileSelectModId(nexusModId);
+          toast.info("Multiple files available", "Choose the file you want to download");
         }
       } finally {
         setDownloadingModId(null);

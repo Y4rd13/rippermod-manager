@@ -56,6 +56,7 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
   const startDownload = useStartDownload();
   const [activeTab, setActiveTab] = useState<ModalTab>(defaultTab ?? "about");
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
+  const [downloadingFileId, setDownloadingFileId] = useState<number | null>(null);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -290,13 +291,17 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                           variant="ghost"
                           size="sm"
                           className="flex-shrink-0"
-                          onClick={() =>
-                            startDownload.mutate({
-                              gameName,
-                              data: { nexus_mod_id: modId, nexus_file_id: f.file_id },
-                            })
-                          }
-                          loading={startDownload.isPending}
+                          onClick={() => {
+                            setDownloadingFileId(f.file_id);
+                            startDownload.mutate(
+                              {
+                                gameName,
+                                data: { nexus_mod_id: modId, nexus_file_id: f.file_id },
+                              },
+                              { onSettled: () => setDownloadingFileId(null) },
+                            );
+                          }}
+                          loading={downloadingFileId === f.file_id}
                         >
                           <Download size={12} />
                         </Button>
