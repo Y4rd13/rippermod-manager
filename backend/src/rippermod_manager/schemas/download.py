@@ -36,4 +36,5 @@ class DownloadJobOut(BaseModel):
 
 class DownloadStartResult(BaseModel):
     job: DownloadJobOut | None = None
-    requires_nxm: bool
+    requires_nxm: bool = False
+    requires_file_selection: bool = False

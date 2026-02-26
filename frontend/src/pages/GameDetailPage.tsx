@@ -566,15 +566,19 @@ export function GameDetailPage() {
       )}
       </div>
 
-      {selectedModId != null && (() => {
-        const modUpdate = updateByNexusId.get(selectedModId);
-        const archive = modalFlow.archiveByModId.get(selectedModId);
+      {(() => {
+        const effectiveModId = selectedModId ?? modalFlow.fileSelectModId;
+        if (effectiveModId == null) return null;
+        const effectiveDefaultTab = modalFlow.fileSelectModId != null && selectedModId == null ? "files" as const : undefined;
+        const modUpdate = updateByNexusId.get(effectiveModId);
+        const archive = modalFlow.archiveByModId.get(effectiveModId);
         return (
           <ModDetailModal
             gameDomain={game.domain_name}
             gameName={name}
-            modId={selectedModId}
+            modId={effectiveModId}
             update={modUpdate}
+            defaultTab={effectiveDefaultTab}
             action={
               modUpdate ? (
                 <UpdateDownloadCell
@@ -584,27 +588,30 @@ export function GameDetailPage() {
                 />
               ) : (
                 <ModCardAction
-                  isInstalled={installedModIds.has(selectedModId)}
-                  isInstalling={modalFlow.installingModIds.has(selectedModId)}
-                  activeDownload={modalFlow.activeDownloadByModId.get(selectedModId)}
-                  completedDownload={modalFlow.completedDownloadByModId.get(selectedModId)}
+                  isInstalled={installedModIds.has(effectiveModId)}
+                  isInstalling={modalFlow.installingModIds.has(effectiveModId)}
+                  activeDownload={modalFlow.activeDownloadByModId.get(effectiveModId)}
+                  completedDownload={modalFlow.completedDownloadByModId.get(effectiveModId)}
                   archive={archive}
                   hasConflicts={modalFlow.conflicts != null}
-                  isDownloading={modalFlow.downloadingModId === selectedModId}
-                  onInstall={() => archive && modalFlow.handleInstall(selectedModId, archive)}
+                  isDownloading={modalFlow.downloadingModId === effectiveModId}
+                  onInstall={() => archive && modalFlow.handleInstall(effectiveModId, archive)}
                   onInstallByFilename={() => {
-                    const dl = modalFlow.completedDownloadByModId.get(selectedModId);
-                    if (dl) modalFlow.handleInstallByFilename(selectedModId, dl.file_name);
+                    const dl = modalFlow.completedDownloadByModId.get(effectiveModId);
+                    if (dl) modalFlow.handleInstallByFilename(effectiveModId, dl.file_name);
                   }}
-                  onDownload={() => modalFlow.handleDownload(selectedModId)}
+                  onDownload={() => modalFlow.handleDownload(effectiveModId)}
                   onCancelDownload={() => {
-                    const dl = modalFlow.activeDownloadByModId.get(selectedModId);
+                    const dl = modalFlow.activeDownloadByModId.get(effectiveModId);
                     if (dl) modalFlow.handleCancelDownload(dl.id);
                   }}
                 />
               )
             }
-            onClose={() => setSelectedModId(null)}
+            onClose={() => {
+              setSelectedModId(null);
+              modalFlow.dismissFileSelect();
+            }}
           />
         );
       })()}
