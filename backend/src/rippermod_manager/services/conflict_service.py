@@ -235,15 +235,7 @@ def check_pairwise_conflict(
             missing.append(mod_a.name)
         if files_b is None:
             missing.append(mod_b.name)
-        return PairwiseConflictResult(
-            mod_a_id=mod_a_id,
-            mod_a_name=mod_a.name,
-            mod_b_id=mod_b_id,
-            mod_b_name=mod_b.name,
-            conflicting_files=[],
-            severity=None,
-            winner=None,
-        )
+        raise ValueError(f"Source archive unreadable for: {', '.join(missing)}")
 
     overlap = sorted(files_a & files_b)
     if not overlap:

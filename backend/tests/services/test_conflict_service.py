@@ -1,6 +1,8 @@
 import zipfile
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
 from rippermod_manager.schemas.conflicts import ConflictSeverity
@@ -350,7 +352,7 @@ class TestCheckPairwiseConflict:
         assert "mods/shared.txt" in result.conflicting_files
         assert result.winner == "B"
 
-    def test_missing_archive(self, session, tmp_path):
+    def test_missing_archive_raises(self, session, tmp_path):
         game, _, staging = self._setup_game(session, tmp_path)
         mod_a = self._add_mod(session, game, staging, "A", "A.zip", {"mods/a.txt": b"a"})
         # mod_b has archive name but no file on disk
@@ -362,6 +364,5 @@ class TestCheckPairwiseConflict:
         session.add(mod_b)
         session.commit()
         session.refresh(mod_b)
-        result = check_pairwise_conflict(game, mod_a, mod_b)
-        assert result.conflicting_files == []
-        assert result.severity is None
+        with pytest.raises(ValueError, match="unreadable"):
+            check_pairwise_conflict(game, mod_a, mod_b)

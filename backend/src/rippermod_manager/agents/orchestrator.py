@@ -224,7 +224,10 @@ def check_mod_conflicts(game_name: str, mod_a_name: str = "", mod_b_name: str = 
             if not mod_b:
                 return f"Installed mod matching '{mod_b_name}' not found"
 
-            result = check_pairwise_conflict(game, mod_a, mod_b)
+            try:
+                result = check_pairwise_conflict(game, mod_a, mod_b)
+            except ValueError as exc:
+                return str(exc)
             if not result.conflicting_files:
                 return f"No conflicts between '{mod_a.name}' and '{mod_b.name}'"
             lines = [

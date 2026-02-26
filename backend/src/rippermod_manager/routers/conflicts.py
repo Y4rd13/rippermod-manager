@@ -20,7 +20,7 @@ router = APIRouter(prefix="/conflicts", tags=["conflicts"])
 
 
 @router.get("/", response_model=InstalledConflictsResult)
-async def list_conflicts(
+def list_conflicts(
     game_name: str,
     severity: ConflictSeverity | None = None,
     session: Session = Depends(get_session),
@@ -31,7 +31,7 @@ async def list_conflicts(
 
 
 @router.get("/between", response_model=PairwiseConflictResult)
-async def between_conflicts(
+def between_conflicts(
     game_name: str,
     mod_a: int,
     mod_b: int,
@@ -58,4 +58,7 @@ async def between_conflicts(
             f"Source archive unavailable for: {', '.join(missing)}",
         )
 
-    return check_pairwise_conflict(game, installed_a, installed_b)
+    try:
+        return check_pairwise_conflict(game, installed_a, installed_b)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc

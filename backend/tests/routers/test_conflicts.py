@@ -236,3 +236,25 @@ class TestBetweenConflicts:
             params={"game_name": game_name, "mod_a": id_a, "mod_b": id_b},
         )
         assert r.status_code == 422
+
+    def test_corrupt_archive_returns_422(self, client, game_setup, engine):
+        game_name, _, staging, game_id = game_setup
+        # mod_a has a valid archive, mod_b has a corrupt file on disk
+        id_a = _install_mod(engine, game_id, "ModA", "ModA.zip", staging, {"mods/a.txt": b"a"})
+        (staging / "Corrupt.zip").write_bytes(b"not a zip")
+        with Session(engine) as s:
+            mod_b = InstalledMod(
+                game_id=game_id,
+                name="CorruptMod",
+                source_archive="Corrupt.zip",
+            )
+            s.add(mod_b)
+            s.commit()
+            id_b = mod_b.id
+
+        r = client.get(
+            "/api/v1/conflicts/between",
+            params={"game_name": game_name, "mod_a": id_a, "mod_b": id_b},
+        )
+        assert r.status_code == 422
+        assert "unreadable" in r.json()["detail"].lower()
