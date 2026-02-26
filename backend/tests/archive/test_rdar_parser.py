@@ -102,6 +102,25 @@ class TestParseRdarToc:
         assert toc.header.version == 12
         assert toc.header.archive_id == 1
 
+    def test_table_offset_exceeds_file_size_raises(self, tmp_path):
+        header = struct.pack("<4sIQQQQ", RDAR_MAGIC, 12, 99999, 0, 0, 100)
+        archive = tmp_path / "bad_offset.archive"
+        archive.write_bytes(header)
+
+        with pytest.raises(ValueError, match=r"table_offset.*exceeds.*file_size"):
+            parse_rdar_toc(archive)
+
+    def test_unreasonable_num_files_raises(self, tmp_path):
+        table_offset = HEADER_SIZE
+        file_size = HEADER_SIZE + TOC_PREAMBLE_SIZE + 100
+        header = struct.pack("<4sIQQQQ", RDAR_MAGIC, 12, table_offset, 0, 0, file_size)
+        toc_meta = struct.pack("<IIIIIQ", 0, 0, 2**31, 0, 0, 0)
+        archive = tmp_path / "huge.archive"
+        archive.write_bytes(header + toc_meta)
+
+        with pytest.raises(ValueError, match="Unreasonable hash table size"):
+            parse_rdar_toc(archive)
+
     def test_corrupt_toc_raises(self, tmp_path):
         header = struct.pack("<4sIQQQQ", RDAR_MAGIC, 12, HEADER_SIZE, 0, 0, 100)
         archive = tmp_path / "corrupt.archive"

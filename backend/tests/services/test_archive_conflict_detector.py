@@ -192,7 +192,7 @@ class TestSummarizeConflicts:
 
         summaries = summarize_conflicts(session, game.id)
         a = next(s for s in summaries if s.archive_filename == "a.archive")
-        assert sorted(a.conflicting_archives) == ["b.archive", "c.archive"]
+        assert a.conflicting_archives == ("b.archive", "c.archive")
 
     def test_empty_returns_empty(self, session, make_game):
         game = make_game()

@@ -29,7 +29,7 @@ class ArchiveConflictSummary:
     total_entries: int
     winning_entries: int
     losing_entries: int
-    conflicting_archives: list[str]
+    conflicting_archives: tuple[str, ...]
     severity: ConflictSeverity
 
 
@@ -155,7 +155,7 @@ def summarize_conflicts(
                 total_entries=total,
                 winning_entries=n_wins,
                 losing_entries=n_losses,
-                conflicting_archives=sorted(conflicts_with.get(archive, set())),
+                conflicting_archives=tuple(sorted(conflicts_with.get(archive, set()))),
                 severity=severity,
             )
         )

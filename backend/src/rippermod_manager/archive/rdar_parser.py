@@ -18,6 +18,7 @@ RDAR_MAGIC = b"RDAR"
 HEADER_SIZE = 0x28  # 40 bytes
 TOC_PREAMBLE_SIZE = 28  # 5x uint32 + 1x uint64
 HASH_ENTRY_SIZE = 0x38  # 56 bytes
+MAX_HASH_TABLE_BYTES = 512 * 1024 * 1024  # 512 MB sanity limit
 
 # struct formats (little-endian)
 _HEADER_FMT = "<4sIQQQQ"
@@ -79,6 +80,11 @@ def parse_rdar_toc(file_path: str | Path) -> RdarToc:
         header_bytes = f.read(HEADER_SIZE)
         header = parse_rdar_header(header_bytes)
 
+        if header.table_offset > header.file_size:
+            raise ValueError(
+                f"table_offset ({header.table_offset}) exceeds file_size ({header.file_size})"
+            )
+
         f.seek(header.table_offset)
         toc_meta = f.read(TOC_PREAMBLE_SIZE)
         if len(toc_meta) < TOC_PREAMBLE_SIZE:
@@ -89,6 +95,11 @@ def parse_rdar_toc(file_path: str | Path) -> RdarToc:
         )
 
         hash_data_size = num_files * HASH_ENTRY_SIZE
+        if hash_data_size > MAX_HASH_TABLE_BYTES:
+            raise ValueError(
+                f"Unreasonable hash table size: {num_files} entries "
+                f"({hash_data_size} bytes) — file likely corrupt"
+            )
         hash_data = f.read(hash_data_size)
         if len(hash_data) < hash_data_size:
             raise ValueError(

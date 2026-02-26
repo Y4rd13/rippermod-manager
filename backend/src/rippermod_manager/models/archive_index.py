@@ -8,11 +8,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from sqlalchemy import Index
 from sqlmodel import Field, SQLModel
 
 
 class ArchiveEntryIndex(SQLModel, table=True):
     __tablename__ = "archive_entry_index"
+    __table_args__ = (Index("ix_archive_entry_game_resource", "game_id", "resource_hash"),)
 
     id: int | None = Field(default=None, primary_key=True)
     game_id: int = Field(foreign_key="games.id", index=True)

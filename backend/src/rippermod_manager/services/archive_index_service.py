@@ -128,6 +128,8 @@ def index_game_archives(
             )
             new_entries += 1
 
+        session.flush()  # flush per archive to bound memory usage
+
         on_progress(
             "archive-index",
             f"Indexed: {filename} ({len(toc.hash_entries)} entries)",
