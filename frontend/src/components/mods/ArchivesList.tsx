@@ -1,5 +1,6 @@
-import { AlertTriangle, Archive, Check, Copy, Download, ExternalLink, FolderTree, PackageMinus, Settings2, Trash2 } from "lucide-react";
+import { AlertTriangle, Archive, Check, ChevronDown, Copy, Download, ExternalLink, FolderTree, PackageMinus, Settings2, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { ArchiveTreeModal } from "@/components/mods/ArchiveTreeModal";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -87,6 +88,21 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [treeFilename, setTreeFilename] = useState<string | null>(null);
   const [previewFilename, setPreviewFilename] = useState<string | null>(null);
+  const [splitMenuPos, setSplitMenuPos] = useState<{ top: number; left: number; filename: string } | null>(null);
+  const splitChevronRef = useRef<HTMLButtonElement>(null);
+  const splitMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!splitMenuPos) return;
+    const handleClick = (e: MouseEvent) => {
+      if (splitMenuRef.current?.contains(e.target as Node)) return;
+      if (splitChevronRef.current?.contains(e.target as Node)) return;
+      setSplitMenuPos(null);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [splitMenuPos]);
+
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useSessionState<ArchiveSortKey>(`archives-sort-${gameName}`, "name");
   const [sortDir, setSortDir] = useSessionState<"asc" | "desc">(`archives-dir-${gameName}`, "asc");
@@ -416,30 +432,35 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                       <PackageMinus size={14} /> Uninstall
                     </Button>
                   ) : (
-                    <>
-                      <Button
-                        size="sm"
-                        disabled={a.is_empty}
+                    <div className="inline-flex items-center">
+                      <button
+                        disabled={a.is_empty || ((checkConflicts.isPending || installMod.isPending) && selectedArchive === a.filename)}
                         title={a.is_empty ? "Archive is empty — re-download from Nexus" : undefined}
-                        loading={
-                          (checkConflicts.isPending || installMod.isPending) &&
-                          selectedArchive === a.filename
-                        }
                         onClick={() => handleCheckConflicts(a.filename)}
+                        className="inline-flex items-center gap-1 rounded-l-md bg-accent px-2 py-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50"
                       >
                         <Download size={14} /> Install
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                      </button>
+                      <button
+                        ref={splitChevronRef}
                         disabled={a.is_empty}
-                        onClick={() => setPreviewFilename(a.filename)}
-                        title="Install with file rename options"
-                        aria-label="Install with options"
+                        onClick={() => {
+                          if (splitMenuPos?.filename === a.filename) {
+                            setSplitMenuPos(null);
+                            return;
+                          }
+                          const rect = splitChevronRef.current?.getBoundingClientRect();
+                          if (rect) {
+                            setSplitMenuPos({ top: rect.bottom + 4, left: rect.right - 160, filename: a.filename });
+                          }
+                        }}
+                        className="inline-flex items-center self-stretch rounded-r-md border-l border-white/20 bg-accent px-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50"
+                        title="Install options"
+                        aria-label="Install options"
                       >
-                        <Settings2 size={14} />
-                      </Button>
-                    </>
+                        <ChevronDown size={12} />
+                      </button>
+                    </div>
                   )}
                   {a.is_empty && a.nexus_mod_id && (
                     <Button
@@ -649,6 +670,26 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
           onSkip={handleInstallWithSkip}
           onOverwrite={handleInstallOverwrite}
         />
+      )}
+
+      {splitMenuPos && createPortal(
+        <div
+          ref={splitMenuRef}
+          className="fixed z-50 min-w-[160px] rounded-md border border-border bg-surface-1 py-1 shadow-lg"
+          style={{ top: splitMenuPos.top, left: splitMenuPos.left }}
+        >
+          <button
+            onClick={() => {
+              setPreviewFilename(splitMenuPos.filename);
+              setSplitMenuPos(null);
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-2 hover:text-text-primary"
+          >
+            <Settings2 size={12} />
+            Install with Options
+          </button>
+        </div>,
+        document.body,
       )}
     </>
   );
