@@ -1,4 +1,4 @@
-import { Archive, Check, Copy, Download, FolderTree, PackageMinus, Trash2 } from "lucide-react";
+import { AlertTriangle, Archive, Check, Copy, Download, ExternalLink, FolderTree, PackageMinus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ArchiveTreeModal } from "@/components/mods/ArchiveTreeModal";
@@ -51,6 +51,12 @@ const ARCHIVE_SORT_OPTIONS: { value: ArchiveSortKey; label: string }[] = [
 
 const ROW_CONTEXT_ITEMS_INSTALL: ContextMenuItem[] = [
   { key: "install", label: "Install", icon: Download },
+  { key: "copy", label: "Copy Filename", icon: Copy },
+  { key: "delete", label: "Delete Archive", icon: Trash2, variant: "danger" },
+];
+
+const ROW_CONTEXT_ITEMS_EMPTY: ContextMenuItem[] = [
+  { key: "nexus", label: "View on Nexus", icon: ExternalLink },
   { key: "copy", label: "Copy Filename", icon: Copy },
   { key: "delete", label: "Delete Archive", icon: Trash2, variant: "danger" },
 ];
@@ -218,6 +224,8 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
         () => toast.success("Copied to clipboard"),
         () => toast.error("Failed to copy"),
       );
+    } else if (key === "nexus" && archive.nexus_mod_id) {
+      window.open(`https://www.nexusmods.com/cyberpunk2077/mods/${archive.nexus_mod_id}?tab=files`, "_blank");
     } else if (key === "delete") {
       setConfirmDeleteFile(archive.filename);
     }
@@ -347,7 +355,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
               <td className="py-2 pr-4 text-text-muted">
                 {a.parsed_version ?? "--"}
               </td>
-              <td className="py-2 pr-4 text-text-muted">
+              <td className={`py-2 pr-4 ${a.is_empty ? "text-danger font-medium" : "text-text-muted"}`}>
                 {formatBytes(a.size)}
               </td>
               <td className="py-2 pr-4 text-text-muted">
@@ -357,7 +365,9 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                 {a.last_downloaded_at ? timeAgo(isoToEpoch(a.last_downloaded_at)) : "--"}
               </td>
               <td className="py-2 pr-4">
-                {a.is_installed ? (
+                {a.is_empty ? (
+                  <Badge variant="danger"><AlertTriangle size={10} /> Empty</Badge>
+                ) : a.is_installed ? (
                   <Badge variant="success"><Check size={10} /> Installed</Badge>
                 ) : (
                   <Badge variant="neutral">Orphan</Badge>
@@ -376,6 +386,8 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                   ) : (
                     <Button
                       size="sm"
+                      disabled={a.is_empty}
+                      title={a.is_empty ? "Archive is empty — re-download from Nexus" : undefined}
                       loading={
                         (checkConflicts.isPending || installMod.isPending) &&
                         selectedArchive === a.filename
@@ -383,6 +395,16 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                       onClick={() => handleCheckConflicts(a.filename)}
                     >
                       <Download size={14} /> Install
+                    </Button>
+                  )}
+                  {a.is_empty && a.nexus_mod_id && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => window.open(`https://www.nexusmods.com/cyberpunk2077/mods/${a.nexus_mod_id}?tab=files`, "_blank")}
+                      title="Re-download from Nexus Mods"
+                    >
+                      <ExternalLink size={14} /> Nexus
                     </Button>
                   )}
                   <Button
@@ -481,7 +503,13 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
 
       {menuState.visible && menuState.data && (
         <ContextMenu
-          items={menuState.data.is_installed && menuState.data.installed_mod_id ? ROW_CONTEXT_ITEMS_UNINSTALL : ROW_CONTEXT_ITEMS_INSTALL}
+          items={
+            menuState.data.is_empty && menuState.data.nexus_mod_id
+              ? ROW_CONTEXT_ITEMS_EMPTY
+              : menuState.data.is_installed && menuState.data.installed_mod_id
+                ? ROW_CONTEXT_ITEMS_UNINSTALL
+                : ROW_CONTEXT_ITEMS_INSTALL
+          }
           position={menuState.position}
           onSelect={handleContextMenuSelect}
           onClose={closeMenu}

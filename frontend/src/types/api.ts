@@ -207,6 +207,7 @@ export interface AvailableArchive {
   is_installed: boolean;
   installed_mod_id: number | null;
   last_downloaded_at: string | null;
+  is_empty: boolean;
 }
 
 export interface ArchiveDeleteResult {

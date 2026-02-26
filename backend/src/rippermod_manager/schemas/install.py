@@ -71,6 +71,7 @@ class AvailableArchive(BaseModel):
     is_installed: bool = False
     installed_mod_id: int | None = None
     last_downloaded_at: datetime | None = None
+    is_empty: bool = False
 
 
 class ArchiveDeleteResult(BaseModel):

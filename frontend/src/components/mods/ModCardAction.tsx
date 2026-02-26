@@ -86,7 +86,7 @@ export function ModCardAction({
     );
   }
 
-  if (archive) {
+  if (archive && !archive.is_empty) {
     return (
       <button
         onClick={(e) => { e.stopPropagation(); onInstall(); }}

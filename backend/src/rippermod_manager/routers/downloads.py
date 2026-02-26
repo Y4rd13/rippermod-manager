@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
@@ -134,7 +135,15 @@ def list_downloads(
 ) -> list[DownloadJobOut]:
     game = get_game_or_404(game_name, session)
     jobs = download_service.list_jobs(game.id, session)  # type: ignore[arg-type]
-    return [_job_to_out(j) for j in jobs]
+
+    # Exclude completed jobs whose archive no longer exists on disk
+    staging = Path(game.install_path) / "downloaded_mods"
+    result: list[DownloadJobOut] = []
+    for j in jobs:
+        if j.status == "completed" and not (staging / j.file_name).is_file():
+            continue
+        result.append(_job_to_out(j))
+    return result
 
 
 @router.get("/{job_id}", response_model=DownloadJobOut)

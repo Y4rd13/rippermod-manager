@@ -29,7 +29,7 @@ export function useInstallFlow(
   const archiveByModId = useMemo(() => {
     const map = new Map<number, AvailableArchive>();
     for (const a of archives) {
-      if (a.nexus_mod_id == null) continue;
+      if (a.nexus_mod_id == null || a.is_empty) continue;
       const existing = map.get(a.nexus_mod_id);
       if (!existing || a.size > existing.size) {
         map.set(a.nexus_mod_id, a);

@@ -87,6 +87,7 @@ async def list_archives(
                 is_installed=path.name in installed_archives,
                 installed_mod_id=installed_archives.get(path.name),
                 last_downloaded_at=dl_date,
+                is_empty=stat.st_size == 0,
             )
         )
     return result
