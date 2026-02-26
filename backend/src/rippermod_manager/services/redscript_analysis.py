@@ -12,6 +12,7 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from rippermod_manager.models.game import Game
@@ -38,7 +39,7 @@ _FUNC_SIG_RE = re.compile(
     r"(?:cb\s+)?"
     r"func\s+"
     r"(\w+)"
-    r"\s*\(([^)]*)\)"
+    r"\s*\(([^)]*)\)"  # NOTE: won't handle types with nested parens like Callback(Bool)
     r"(?:\s*->\s*(\S[^{;]*))?",
 )
 
@@ -149,11 +150,12 @@ def _collect_reds_files_for_mod(
 ) -> list[tuple[Path, str]]:
     """Collect .reds files belonging to an installed mod."""
     result: list[tuple[Path, str]] = []
+    resolved_base = game_install_path.resolve()
     for f in mod.files:
         rel = f.relative_path.replace("\\", "/")
         if rel.lower().endswith(".reds"):
             abs_path = game_install_path / rel
-            if abs_path.is_file():
+            if abs_path.resolve().is_relative_to(resolved_base) and abs_path.is_file():
                 result.append((abs_path, rel))
     return result
 
@@ -171,15 +173,14 @@ def check_redscript_conflicts(
     game_path = Path(game.install_path)
     mods = list(
         session.exec(
-            select(InstalledMod).where(
+            select(InstalledMod)
+            .where(
                 InstalledMod.game_id == game.id,
                 InstalledMod.disabled == False,  # noqa: E712
             )
+            .options(selectinload(InstalledMod.files))  # type: ignore[arg-type]
         ).all()
     )
-
-    for mod in mods:
-        _ = mod.files
 
     replace_targets: dict[str, list[RedscriptModEntry]] = defaultdict(list)
     wrap_targets: dict[str, list[RedscriptModEntry]] = defaultdict(list)

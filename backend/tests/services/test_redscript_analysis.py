@@ -451,6 +451,19 @@ public func MethodB(y: Float) -> Void {
         result = check_redscript_conflicts(game, session)
         assert result.conflicts == []
 
+    def test_conflict_three_mods_replace_same_target(self, session, tmp_path):
+        game = self._setup(session, tmp_path)
+        for name in ("ModA", "ModB", "ModC"):
+            self._install_mod_with_reds(
+                session,
+                game,
+                name,
+                {f"r6/scripts/{name}/main.reds": REPLACE_METHOD_SIMPLE},
+            )
+        result = check_redscript_conflicts(game, session)
+        assert len(result.conflicts) == 1
+        assert len(result.conflicts[0].mods) == 3
+
     def test_same_mod_multiple_replaces_no_conflict(self, session, tmp_path):
         game = self._setup(session, tmp_path)
         content = REPLACE_METHOD_SIMPLE + "\n" + REPLACE_METHOD_SIMPLE
