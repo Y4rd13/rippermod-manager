@@ -79,16 +79,12 @@ class TestConflictSummary:
         _add_conflicting_mods(engine, game_name, ["shared.txt"])
         client.post(f"/api/v1/games/{game_name}/conflicts/reindex")
 
-        r = client.get(
-            f"/api/v1/games/{game_name}/conflicts/summary?kind=archive_entry"
-        )
+        r = client.get(f"/api/v1/games/{game_name}/conflicts/summary?kind=archive_entry")
         assert r.status_code == 200
         data = r.json()
         assert data["total_conflicts"] >= 1
 
-        r2 = client.get(
-            f"/api/v1/games/{game_name}/conflicts/summary?kind=redscript_target"
-        )
+        r2 = client.get(f"/api/v1/games/{game_name}/conflicts/summary?kind=redscript_target")
         assert r2.status_code == 200
         assert r2.json()["total_conflicts"] == 0
 
@@ -97,9 +93,7 @@ class TestConflictSummary:
         _add_conflicting_mods(engine, game_name, ["readme.txt"])
         client.post(f"/api/v1/games/{game_name}/conflicts/reindex")
 
-        r = client.get(
-            f"/api/v1/games/{game_name}/conflicts/summary?severity=low"
-        )
+        r = client.get(f"/api/v1/games/{game_name}/conflicts/summary?severity=low")
         assert r.status_code == 200
         assert r.json()["total_conflicts"] >= 1
 

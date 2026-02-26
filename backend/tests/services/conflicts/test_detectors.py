@@ -165,9 +165,7 @@ class TestRedscriptTargetDetector:
 
         dir_b = scripts / "mod_b"
         dir_b.mkdir(parents=True)
-        (dir_b / "main.reds").write_text(
-            "@wrapMethod(PlayerPuppet)\npublic func OnAction() {\n}\n"
-        )
+        (dir_b / "main.reds").write_text("@wrapMethod(PlayerPuppet)\npublic func OnAction() {\n}\n")
         mod_b = _add_mod(session, game, "ScriptB", ["r6/scripts/mod_b/main.reds"])
 
         detector = RedscriptTargetDetector()

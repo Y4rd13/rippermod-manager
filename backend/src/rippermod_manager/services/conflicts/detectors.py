@@ -43,7 +43,8 @@ _DETECTORS: list[type[ConflictDetector]] = []
 
 def register_detector(cls: type[ConflictDetector]) -> type[ConflictDetector]:
     """Class decorator that adds a detector to the global registry."""
-    _DETECTORS.append(cls)
+    if cls not in _DETECTORS:
+        _DETECTORS.append(cls)
     return cls
 
 
@@ -120,9 +121,7 @@ _WRAP_RE = re.compile(r"@wrapMethod\s*\(\s*(\w+)\s*\)", re.IGNORECASE)
 _REPLACE_RE = re.compile(r"@replaceMethod\s*\(\s*(\w+)\s*\)", re.IGNORECASE)
 _ADD_METHOD_RE = re.compile(r"@addMethod\s*\(\s*(\w+)\s*\)", re.IGNORECASE)
 _ADD_FIELD_RE = re.compile(r"@addField\s*\(\s*(\w+)\s*\)", re.IGNORECASE)
-_FUNC_RE = re.compile(
-    r"(?:public|private|protected)?\s*(?:static\s+)?(?:func|cb\s+func)\s+(\w+)"
-)
+_FUNC_RE = re.compile(r"(?:public|private|protected)?\s*(?:static\s+)?(?:func|cb\s+func)\s+(\w+)")
 
 
 @register_detector
@@ -197,7 +196,7 @@ class RedscriptTargetDetector:
                     continue
                 class_name = m.group(1)
                 func_name = "unknown"
-                for j in range(i + 1, min(i + 5, len(lines))):
+                for j in range(i + 1, min(i + 10, len(lines))):
                     fm = _FUNC_RE.search(lines[j])
                     if fm:
                         func_name = fm.group(1)

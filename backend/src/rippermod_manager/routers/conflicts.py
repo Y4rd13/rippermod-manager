@@ -67,6 +67,10 @@ async def conflict_summary(
 
     for row in rows:
         mod_ids = [int(m) for m in row.mod_ids.split(",") if m]
+        try:
+            detail = json.loads(row.detail) if row.detail else {}
+        except json.JSONDecodeError:
+            detail = {}
         evidence_out.append(
             ConflictEvidenceOut(
                 id=row.id,  # type: ignore[arg-type]
@@ -75,7 +79,7 @@ async def conflict_summary(
                 key=row.key,
                 mods=[_mod_ref(m) for m in mod_ids],
                 winner=_mod_ref(row.winner_mod_id) if row.winner_mod_id else None,
-                detail=json.loads(row.detail) if row.detail else {},
+                detail=detail,
             )
         )
         by_severity[row.severity] += 1
