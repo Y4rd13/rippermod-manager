@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
 import type {
   ArchiveContentsResult,
+  ArchivePreviewResult,
   AvailableArchive,
   ConflictGraphResult,
   ConflictsOverview,
@@ -192,6 +193,17 @@ export function useSearchNexusDownloads(gameName: string, query: string) {
     queryFn: () =>
       api.get(`/api/v1/nexus/downloads/${gameName}/search?q=${encodeURIComponent(query)}`),
     enabled: !!gameName && query.length >= 2,
+  });
+}
+
+export function useArchivePreview(gameName: string, archiveFilename: string | null) {
+  return useQuery<ArchivePreviewResult>({
+    queryKey: ["archive-preview", gameName, archiveFilename],
+    queryFn: () =>
+      api.get(
+        `/api/v1/games/${gameName}/install/preview?archive_filename=${encodeURIComponent(archiveFilename!)}`,
+      ),
+    enabled: !!gameName && !!archiveFilename,
   });
 }
 

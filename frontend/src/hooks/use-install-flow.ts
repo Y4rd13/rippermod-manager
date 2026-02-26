@@ -21,6 +21,10 @@ export function useInstallFlow(
   const [conflictModId, setConflictModId] = useState<number | null>(null);
   const [fomodArchive, setFomodArchive] = useState<string | null>(null);
   const [fileSelectModId, setFileSelectModId] = useState<number | null>(null);
+  const [previewArchive, setPreviewArchive] = useState<{
+    filename: string;
+    nexusModId: number;
+  } | null>(null);
 
   const installMod = useInstallMod();
   const checkConflicts = useCheckConflicts();
@@ -88,11 +92,22 @@ export function useInstallFlow(
   }, [conflicts, conflictModId, removeInstalling]);
 
   const doInstall = useCallback(
-    async (fileName: string, skipConflicts: string[], nexusModId: number) => {
+    async (
+      fileName: string,
+      skipConflicts: string[],
+      nexusModId: number,
+      fileRenames?: Record<string, string>,
+    ) => {
       try {
         await installMod.mutateAsync({
           gameName,
-          data: { archive_filename: fileName, skip_conflicts: skipConflicts },
+          data: {
+            archive_filename: fileName,
+            skip_conflicts: skipConflicts,
+            ...(fileRenames && Object.keys(fileRenames).length > 0
+              ? { file_renames: fileRenames }
+              : {}),
+          },
         });
       } finally {
         removeInstalling(nexusModId);
@@ -191,6 +206,48 @@ export function useInstallFlow(
     setFomodArchive(null);
   }, []);
 
+  const handleInstallWithPreview = useCallback(
+    (nexusModId: number, archive: AvailableArchive) => {
+      setPreviewArchive({ filename: archive.filename, nexusModId });
+    },
+    [],
+  );
+
+  const confirmPreviewInstall = useCallback(
+    async (fileRenames: Record<string, string>) => {
+      if (!previewArchive) return;
+      const { filename, nexusModId } = previewArchive;
+      setPreviewArchive(null);
+      addInstalling(nexusModId);
+      try {
+        const result = await checkConflicts.mutateAsync({
+          gameName,
+          archiveFilename: filename,
+        });
+
+        if (result.is_fomod) {
+          setFomodArchive(filename);
+          removeInstalling(nexusModId);
+          return;
+        }
+
+        if (result.conflicts.length > 0) {
+          setConflicts(result);
+          setConflictModId(nexusModId);
+        } else {
+          await doInstall(filename, [], nexusModId, fileRenames);
+        }
+      } catch {
+        removeInstalling(nexusModId);
+      }
+    },
+    [previewArchive, gameName, addInstalling, removeInstalling, checkConflicts, doInstall],
+  );
+
+  const dismissPreview = useCallback(() => {
+    setPreviewArchive(null);
+  }, []);
+
   const handleDownload = useCallback(
     async (nexusModId: number) => {
       setDownloadingModId(nexusModId);
@@ -224,14 +281,18 @@ export function useInstallFlow(
     conflicts,
     fomodArchive,
     fileSelectModId,
+    previewArchive,
     activeDownloadByModId,
     completedDownloadByModId,
     handleInstall,
     handleInstallByFilename,
     handleInstallWithSkip,
     handleInstallOverwrite,
+    handleInstallWithPreview,
+    confirmPreviewInstall,
     dismissConflicts,
     dismissFomod,
+    dismissPreview,
     dismissFileSelect,
     handleDownload,
     handleCancelDownload,

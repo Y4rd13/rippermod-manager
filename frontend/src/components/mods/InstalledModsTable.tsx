@@ -14,6 +14,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { FomodWizard } from "@/components/mods/FomodWizard";
+import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { CorrelationActions } from "@/components/mods/CorrelationActions";
 import { InstalledModCardAction } from "@/components/mods/InstalledModCardAction";
 import { ModCardAction } from "@/components/mods/ModCardAction";
@@ -532,6 +533,7 @@ function RecognizedModsGrid({
                       const dl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
                       if (dl) flow.handleCancelDownload(dl.id);
                     }}
+                    onInstallWithPreview={nexusModId != null && archive ? () => flow.handleInstallWithPreview(nexusModId, archive) : undefined}
                   />
                 }
                 footer={
@@ -565,6 +567,15 @@ function RecognizedModsGrid({
           Install {bulk.selectedCount} Selected
         </Button>
       </BulkActionBar>
+
+      {flow.previewArchive && (
+        <PreInstallPreview
+          gameName={gameName}
+          archiveFilename={flow.previewArchive.filename}
+          onConfirm={(renames) => flow.confirmPreviewInstall(renames)}
+          onCancel={flow.dismissPreview}
+        />
+      )}
 
       {flow.fomodArchive && (
         <FomodWizard gameName={gameName} archiveFilename={flow.fomodArchive} onDismiss={flow.dismissFomod} onInstallComplete={flow.dismissFomod} />

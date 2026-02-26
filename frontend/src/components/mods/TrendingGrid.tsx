@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { FomodWizard } from "@/components/mods/FomodWizard";
 import { ModCardAction } from "@/components/mods/ModCardAction";
+import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { ModQuickActions } from "@/components/mods/ModQuickActions";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge } from "@/components/ui/Badge";
@@ -249,6 +250,7 @@ export function TrendingGrid({
               const dl = flow.activeDownloadByModId.get(nexusModId);
               if (dl) flow.handleCancelDownload(dl.id);
             }}
+            onInstallWithPreview={archive ? () => flow.handleInstallWithPreview(nexusModId, archive) : undefined}
           />
         }
         overflowMenu={
@@ -368,6 +370,15 @@ export function TrendingGrid({
           icon={TrendingUp}
           title="No Trending Data"
           description="No mods match the current filter. Try changing the filter or search term."
+        />
+      )}
+
+      {flow.previewArchive && (
+        <PreInstallPreview
+          gameName={gameName}
+          archiveFilename={flow.previewArchive.filename}
+          onConfirm={(renames) => flow.confirmPreviewInstall(renames)}
+          onCancel={flow.dismissPreview}
         />
       )}
 

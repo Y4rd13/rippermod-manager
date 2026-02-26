@@ -1,11 +1,14 @@
 import {
   ArrowUpCircle,
   Check,
+  ChevronDown,
   Download,
   ExternalLink,
   Loader2,
   Package,
+  Settings2,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Badge } from "@/components/ui/Badge";
@@ -27,6 +30,7 @@ interface Props {
   onInstallByFilename: () => void;
   onDownload: () => void;
   onCancelDownload: () => void;
+  onInstallWithPreview?: () => void;
 }
 
 export function ModCardAction({
@@ -44,8 +48,22 @@ export function ModCardAction({
   onInstallByFilename,
   onDownload,
   onCancelDownload,
+  onInstallWithPreview,
 }: Props) {
   const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [dropdownOpen]);
 
   if (isInstalled) {
     return (
@@ -87,16 +105,47 @@ export function ModCardAction({
   }
 
   if (archive && !archive.is_empty) {
+    const showSplit = !!onInstallWithPreview;
+
     return (
-      <button
-        onClick={(e) => { e.stopPropagation(); onInstall(); }}
-        disabled={hasConflicts}
-        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
-        title={isUpdate ? `Install update${updateVersion ? ` v${updateVersion}` : ""} from ${archive.filename}` : `Install from ${archive.filename}`}
-      >
-        {isUpdate ? <ArrowUpCircle size={12} /> : <Download size={12} />}
-        {isUpdate ? "Install Update" : "Install"}
-      </button>
+      <div className="relative inline-flex items-center" ref={dropdownRef} onClick={stopPropagation}>
+        <button
+          onClick={onInstall}
+          disabled={hasConflicts}
+          className={`inline-flex items-center gap-1 ${showSplit ? "rounded-l-md" : "rounded-md"} px-2 py-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
+          title={isUpdate ? `Install update${updateVersion ? ` v${updateVersion}` : ""} from ${archive.filename}` : `Install from ${archive.filename}`}
+        >
+          {isUpdate ? <ArrowUpCircle size={12} /> : <Download size={12} />}
+          {isUpdate ? "Install Update" : "Install"}
+        </button>
+        {showSplit && (
+          <>
+            <button
+              onClick={() => setDropdownOpen((prev) => !prev)}
+              disabled={hasConflicts}
+              className={`inline-flex items-center rounded-r-md border-l border-white/20 px-1 py-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
+              title="Install options"
+              aria-label="Install options"
+            >
+              <ChevronDown size={12} />
+            </button>
+            {dropdownOpen && (
+              <div className="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-md border border-border bg-surface-1 py-1 shadow-lg">
+                <button
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    onInstallWithPreview();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-2 hover:text-text-primary"
+                >
+                  <Settings2 size={12} />
+                  Install with Options
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     );
   }
 

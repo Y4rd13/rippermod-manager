@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class InstallRequest(BaseModel):
     archive_filename: str
     skip_conflicts: list[str] = []
+    file_renames: dict[str, str] = {}
 
 
 class InstallResult(BaseModel):
@@ -98,3 +99,16 @@ class ArchiveContentsResult(BaseModel):
     total_files: int
     total_size: int
     tree: list[ArchiveEntryOut]
+
+
+class ArchiveFileEntry(BaseModel):
+    file_path: str
+    size: int
+    is_dir: bool
+
+
+class ArchivePreviewResult(BaseModel):
+    archive_filename: str
+    total_files: int
+    is_fomod: bool
+    files: list[ArchiveFileEntry]

@@ -5,6 +5,7 @@ import { useNavigate } from "react-router";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { FomodWizard } from "@/components/mods/FomodWizard";
 import { ModCardAction } from "@/components/mods/ModCardAction";
+import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { ModQuickActions } from "@/components/mods/ModQuickActions";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge } from "@/components/ui/Badge";
@@ -290,6 +291,7 @@ export function NexusAccountGrid({
                     const dl = flow.activeDownloadByModId.get(nexusModId);
                     if (dl) flow.handleCancelDownload(dl.id);
                   }}
+                  onInstallWithPreview={archive ? () => flow.handleInstallWithPreview(nexusModId, archive) : undefined}
                 />
               }
               overflowMenu={
@@ -316,6 +318,15 @@ export function NexusAccountGrid({
           );
         }}
       />
+
+      {flow.previewArchive && (
+        <PreInstallPreview
+          gameName={gameName}
+          archiveFilename={flow.previewArchive.filename}
+          onConfirm={(renames) => flow.confirmPreviewInstall(renames)}
+          onCancel={flow.dismissPreview}
+        />
+      )}
 
       {flow.fomodArchive && (
         <FomodWizard gameName={gameName} archiveFilename={flow.fomodArchive} onDismiss={flow.dismissFomod} onInstallComplete={flow.dismissFomod} />

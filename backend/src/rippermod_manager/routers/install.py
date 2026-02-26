@@ -15,6 +15,8 @@ from rippermod_manager.schemas.install import (
     ArchiveContentsResult,
     ArchiveDeleteResult,
     ArchiveEntryOut,
+    ArchiveFileEntry,
+    ArchivePreviewResult,
     AvailableArchive,
     ConflictCheckResult,
     InstalledModOut,
@@ -180,7 +182,7 @@ async def install(
         raise HTTPException(404, f"Archive not found: {data.archive_filename}")
 
     try:
-        result = install_mod(game, archive_path, session, data.skip_conflicts)
+        result = install_mod(game, archive_path, session, data.skip_conflicts, data.file_renames)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     except FileNotFoundError as exc:
@@ -229,6 +231,61 @@ async def toggle(
     if not mod or mod.game_id != game.id:
         raise HTTPException(404, "Installed mod not found")
     return toggle_mod(mod, game, session)
+
+
+@router.get("/preview", response_model=ArchivePreviewResult)
+async def preview_archive(
+    game_name: str,
+    archive_filename: str,
+    session: Session = Depends(get_session),
+) -> ArchivePreviewResult:
+    """List the processed files that would be extracted from an archive."""
+    from rippermod_manager.archive.handler import open_archive
+    from rippermod_manager.services.archive_layout import (
+        ArchiveLayout,
+        detect_layout,
+        known_roots_for_game,
+    )
+
+    game = get_game_or_404(game_name, session)
+    staging = Path(game.install_path) / "downloaded_mods"
+    archive_path = staging / archive_filename
+    if not archive_path.resolve().is_relative_to(staging.resolve()):
+        raise HTTPException(400, "Invalid archive filename")
+    if not archive_path.is_file():
+        raise HTTPException(404, f"Archive not found: {archive_filename}")
+
+    try:
+        with open_archive(archive_path) as archive:
+            all_entries = archive.list_entries()
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    known_roots = known_roots_for_game(game.domain_name)
+    layout_result = detect_layout(all_entries, known_roots)
+    is_fomod = layout_result.layout == ArchiveLayout.FOMOD
+    strip_prefix = layout_result.strip_prefix
+
+    files: list[ArchiveFileEntry] = []
+    for entry in all_entries:
+        if entry.is_dir:
+            continue
+        normalised = entry.filename.replace("\\", "/")
+        if strip_prefix:
+            if normalised.startswith(strip_prefix + "/"):
+                normalised = normalised[len(strip_prefix) + 1 :]
+            else:
+                continue
+        files.append(ArchiveFileEntry(file_path=normalised, size=entry.size, is_dir=False))
+
+    return ArchivePreviewResult(
+        archive_filename=archive_filename,
+        total_files=len(files),
+        is_fomod=is_fomod,
+        files=files,
+    )
 
 
 @router.get("/conflicts", response_model=ConflictCheckResult)

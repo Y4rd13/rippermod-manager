@@ -4,6 +4,7 @@ import { toast } from "@/stores/toast-store";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { FomodWizard } from "@/components/mods/FomodWizard";
+import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { CorrelationActions } from "@/components/mods/CorrelationActions";
 import { ReassignDialog } from "@/components/mods/ReassignDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
@@ -338,6 +339,7 @@ export function NexusMatchedGrid({
                         const dl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
                         if (dl) flow.handleCancelDownload(dl.id);
                       }}
+                      onInstallWithPreview={nexusModId != null && archive ? () => flow.handleInstallWithPreview(nexusModId, archive) : undefined}
                     />
                   }
                   overflowMenu={
@@ -393,6 +395,15 @@ export function NexusMatchedGrid({
           );
         }}
       />
+
+      {flow.previewArchive && (
+        <PreInstallPreview
+          gameName={gameName}
+          archiveFilename={flow.previewArchive.filename}
+          onConfirm={(renames) => flow.confirmPreviewInstall(renames)}
+          onCancel={flow.dismissPreview}
+        />
+      )}
 
       {flow.fomodArchive && (
         <FomodWizard gameName={gameName} archiveFilename={flow.fomodArchive} onDismiss={flow.dismissFomod} onInstallComplete={flow.dismissFomod} />

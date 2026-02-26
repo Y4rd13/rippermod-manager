@@ -248,6 +248,20 @@ export interface InstalledModOut {
 export interface InstallRequest {
   archive_filename: string;
   skip_conflicts: string[];
+  file_renames?: Record<string, string>;
+}
+
+export interface ArchiveFileEntry {
+  file_path: string;
+  size: number;
+  is_dir: boolean;
+}
+
+export interface ArchivePreviewResult {
+  archive_filename: string;
+  total_files: number;
+  is_fomod: boolean;
+  files: ArchiveFileEntry[];
 }
 
 export interface InstallResult {
