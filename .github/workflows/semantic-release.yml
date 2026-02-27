@@ -45,7 +45,7 @@ jobs:
   build:
     name: Build Windows Installer
     needs: [release]
-    if: always() && (needs.release.outputs.new_release_version != '' || github.event_name == 'workflow_dispatch')
+    if: "!cancelled() && (needs.release.outputs.new_release_version != '' || github.event_name == 'workflow_dispatch')"
     runs-on: windows-latest
     permissions:
       contents: write
@@ -53,6 +53,8 @@ jobs:
       VERSION: ${{ needs.release.outputs.new_release_version || github.event.inputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', github.event.inputs.version) || '' }}
 
       - uses: actions/setup-node@v4
         with:
