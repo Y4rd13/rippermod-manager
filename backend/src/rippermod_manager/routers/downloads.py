@@ -119,10 +119,10 @@ async def start_download_from_mod(
     if not nexus_files:
         raise HTTPException(404, "No files found for this mod")
 
-    # All files are already main (category_id == 1) from the filtered request
-    if len(nexus_files) > 1 and all(f.get("category_id") == 1 for f in nexus_files):
-        return DownloadStartResult(requires_file_selection=True)
     main_files = [f for f in nexus_files if f.get("category_id") == 1]
+    # Multiple main files → let user choose; also trigger for mixed results with >1 main
+    if len(main_files) > 1:
+        return DownloadStartResult(requires_file_selection=True)
     target = main_files[-1] if main_files else nexus_files[-1]
     nexus_file_id = target.get("file_id")
     if not nexus_file_id:

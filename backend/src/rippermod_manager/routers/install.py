@@ -336,6 +336,9 @@ async def delete_archive_endpoint(
 ) -> ArchiveDeleteResult:
     """Delete a single archive file from the staging folder."""
     game = get_game_or_404(game_name, session)
+    staging = Path(game.install_path) / "downloaded_mods"
+    if not (staging / filename).resolve().is_relative_to(staging.resolve()):
+        raise HTTPException(400, "Invalid archive filename")
     return delete_archive(game.install_path, filename)
 
 
@@ -348,6 +351,9 @@ async def link_archive(
 ) -> NexusLinkResult:
     """Manually link an archive to a Nexus mod ID."""
     game = get_game_or_404(game_name, session)
+    staging = Path(game.install_path) / "downloaded_mods"
+    if not (staging / filename).resolve().is_relative_to(staging.resolve()):
+        raise HTTPException(400, "Invalid archive filename")
     existing = session.exec(
         select(ArchiveNexusLink).where(
             ArchiveNexusLink.game_id == game.id,
@@ -376,6 +382,9 @@ async def unlink_archive(
 ) -> None:
     """Remove a manual Nexus link from an archive."""
     game = get_game_or_404(game_name, session)
+    staging = Path(game.install_path) / "downloaded_mods"
+    if not (staging / filename).resolve().is_relative_to(staging.resolve()):
+        raise HTTPException(400, "Invalid archive filename")
     existing = session.exec(
         select(ArchiveNexusLink).where(
             ArchiveNexusLink.game_id == game.id,

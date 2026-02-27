@@ -9,7 +9,7 @@ import {
   Pencil,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { useArchivePreview } from "@/hooks/queries";
@@ -24,7 +24,7 @@ interface Props {
   onCancel: () => void;
 }
 
-function PreviewTreeNode({
+const PreviewTreeNode = memo(function PreviewTreeNode({
   node,
   depth,
   parentPath,
@@ -167,7 +167,7 @@ function PreviewTreeNode({
       )}
     </div>
   );
-}
+});
 
 export function PreInstallPreview({ gameName, archiveFilename, onConfirm, onCancel }: Props) {
   const { data: preview, isLoading, error } = useArchivePreview(gameName, archiveFilename);

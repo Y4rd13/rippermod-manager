@@ -227,7 +227,7 @@ async def get_game_categories(
                 f"game_categories_{game_domain}",
                 json.dumps({str(k): v for k, v in categories.items()}),
             )
-            session.commit()
+            session.flush()
         return categories
     except Exception:
         logger.warning("Failed to fetch game categories for %s", game_domain, exc_info=True)

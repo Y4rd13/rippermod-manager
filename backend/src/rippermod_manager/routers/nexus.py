@@ -1,4 +1,3 @@
-import contextlib
 import logging
 import re
 from typing import TYPE_CHECKING, Literal
@@ -177,8 +176,10 @@ async def mod_detail(
         # Single client for all API calls: changelogs + file fetch/backfill
         try:
             async with NexusClient(api_key) as client:
-                with contextlib.suppress(Exception):
+                try:
                     changelogs = await client.get_changelogs(game_domain, mod_id)
+                except Exception:
+                    logger.debug("Failed to fetch changelogs for mod %d", mod_id, exc_info=True)
 
                 if needs_insert or needs_refresh or needs_backfill:
                     files_resp = await client.get_mod_files(
@@ -213,6 +214,8 @@ async def mod_detail(
                     else:
                         api_files = {af["file_id"]: af for af in api_file_list if af.get("file_id")}
                         for f in files:
+                            if not f.file_id:
+                                continue
                             af = api_files.get(f.file_id)
                             if af and f.content_preview_link is None:
                                 f.content_preview_link = af.get("content_preview_link")
@@ -334,12 +337,14 @@ async def file_contents_preview(url: str = Query(...)) -> ArchiveContentsResult:
     children = data.get("children", [])
     tree = _nexus_tree_to_entries(children)
 
-    def _count_files(nodes: list[ArchiveEntryOut]) -> tuple[int, int]:
+    def _count_files(nodes: list[ArchiveEntryOut], depth: int = 0) -> tuple[int, int]:
+        if depth > 50:
+            return 0, 0
         count = 0
         total_size = 0
         for n in nodes:
             if n.is_dir:
-                c, s = _count_files(n.children)
+                c, s = _count_files(n.children, depth + 1)
                 count += c
                 total_size += s
             else:
@@ -350,7 +355,7 @@ async def file_contents_preview(url: str = Query(...)) -> ArchiveContentsResult:
     total_files, total_size = _count_files(tree)
 
     return ArchiveContentsResult(
-        filename=url.split("/")[-1] if "/" in url else "preview",
+        filename="preview",
         total_files=total_files,
         total_size=total_size,
         tree=tree,

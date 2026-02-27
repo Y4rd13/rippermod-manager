@@ -299,7 +299,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
         () => toast.error("Failed to copy"),
       );
     } else if (key === "nexus" && archive.nexus_mod_id) {
-      window.open(`https://www.nexusmods.com/${gameDomain}/mods/${archive.nexus_mod_id}?tab=files`, "_blank");
+      window.open(`https://www.nexusmods.com/${gameDomain}/mods/${archive.nexus_mod_id}?tab=files`, "_blank", "noopener,noreferrer");
     } else if (key === "delete") {
       setConfirmDeleteFile(archive.filename);
     }
@@ -497,7 +497,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => window.open(`https://www.nexusmods.com/${gameDomain}/mods/${a.nexus_mod_id}?tab=files`, "_blank")}
+                      onClick={() => window.open(`https://www.nexusmods.com/${gameDomain}/mods/${a.nexus_mod_id}?tab=files`, "_blank", "noopener,noreferrer")}
                       title={`View mod ${a.nexus_mod_id} on Nexus Mods`}
                       aria-label="View on Nexus"
                     >
