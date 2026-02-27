@@ -1,0 +1,18 @@
+{
+  "name": "rippermod-manager",
+  "version": "0.5.0",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Y4rd13/rippermod-manager.git"
+  },
+  "scripts": {
+    "semantic-release": "semantic-release"
+  },
+  "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/exec": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "semantic-release": "^24.2.3"
+  }
+}

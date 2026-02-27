@@ -40,7 +40,7 @@ jobs:
               fix:   → patch (x.y.Z)
               feat!: → major (X.y.z)
 
-            Types that do NOT trigger a release:
+            Types that do NOT trigger a release (documentation/maintenance only):
               chore, ci, docs, refactor, test, style, build, perf, revert
 
             Examples:
