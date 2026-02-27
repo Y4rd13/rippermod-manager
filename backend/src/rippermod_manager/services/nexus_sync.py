@@ -140,8 +140,17 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
                         category_id=f.get("category_id"),
                         uploaded_timestamp=f.get("uploaded_timestamp"),
                         file_size=f.get("size_in_bytes") or f.get("file_size", 0),
+                        content_preview_link=f.get("content_preview_link"),
+                        description=f.get("description"),
                     )
                 )
+
+            # Mark files as up-to-date so mod_detail skips redundant re-fetch
+            sync_meta = session.exec(
+                select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)
+            ).first()
+            if sync_meta:
+                sync_meta.files_updated_at = sync_meta.updated_at
 
         session.commit()
 

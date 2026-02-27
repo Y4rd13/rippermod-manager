@@ -4,6 +4,7 @@ import { toast } from "@/stores/toast-store";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { FomodWizard } from "@/components/mods/FomodWizard";
+import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { CorrelationActions } from "@/components/mods/CorrelationActions";
 import { ReassignDialog } from "@/components/mods/ReassignDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
@@ -32,6 +33,14 @@ import type {
 } from "@/types/api";
 
 function FilesModal({ group, onClose }: { group: ModGroup; onClose: () => void }) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
@@ -105,6 +114,7 @@ interface Props {
   downloadJobs?: DownloadJobOut[];
   isLoading?: boolean;
   onModClick?: (nexusModId: number) => void;
+  onFileSelect?: (nexusModId: number) => void;
 }
 
 export function NexusMatchedGrid({
@@ -115,6 +125,7 @@ export function NexusMatchedGrid({
   downloadJobs = [],
   isLoading,
   onModClick,
+  onFileSelect,
 }: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useSessionState<SortKey>(`matched-sort-${gameName}`, "updated");
@@ -122,7 +133,7 @@ export function NexusMatchedGrid({
   const [methodChip, setMethodChip] = useSessionState(`matched-method-${gameName}`, "all");
   const [installChip, setInstallChip] = useSessionState(`matched-install-${gameName}`, "all");
 
-  const flow = useInstallFlow(gameName, archives, downloadJobs);
+  const flow = useInstallFlow(gameName, archives, downloadJobs, onFileSelect);
   const { menuState, openMenu, closeMenu } = useContextMenu<ModGroup>();
 
   const installedModIds = useMemo(
@@ -303,6 +314,7 @@ export function NexusMatchedGrid({
 
           const nexusModId = match.nexus_mod_id;
           const archive = nexusModId != null ? flow.archiveByModId.get(nexusModId) : undefined;
+          const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
 
           return (
             <div className="flex flex-col">
@@ -321,21 +333,27 @@ export function NexusMatchedGrid({
                       isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
                       isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
                       activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
-                      completedDownload={nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined}
+                      completedDownload={dl}
                       archive={archive}
                       nexusUrl={match.nexus_url}
                       hasConflicts={flow.conflicts != null}
                       isDownloading={flow.downloadingModId === nexusModId}
                       onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
                       onInstallByFilename={() => {
-                        const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
                         if (nexusModId != null && dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
                       }}
                       onDownload={() => nexusModId != null && flow.handleDownload(nexusModId)}
                       onCancelDownload={() => {
-                        const dl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
-                        if (dl) flow.handleCancelDownload(dl.id);
+                        const activeDl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
+                        if (activeDl) flow.handleCancelDownload(activeDl.id);
                       }}
+                      onInstallWithPreview={
+                        nexusModId != null && dl
+                          ? () => flow.handleInstallWithPreviewByFilename(nexusModId, dl.file_name)
+                          : nexusModId != null && archive
+                            ? () => flow.handleInstallWithPreview(nexusModId, archive)
+                            : undefined
+                      }
                     />
                   }
                   overflowMenu={
@@ -391,6 +409,15 @@ export function NexusMatchedGrid({
           );
         }}
       />
+
+      {flow.previewArchive && (
+        <PreInstallPreview
+          gameName={gameName}
+          archiveFilename={flow.previewArchive.filename}
+          onConfirm={(renames) => flow.confirmPreviewInstall(renames)}
+          onCancel={flow.dismissPreview}
+        />
+      )}
 
       {flow.fomodArchive && (
         <FomodWizard gameName={gameName} archiveFilename={flow.fomodArchive} onDismiss={flow.dismissFomod} onInstallComplete={flow.dismissFomod} />

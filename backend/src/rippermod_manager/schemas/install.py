@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class InstallRequest(BaseModel):
     archive_filename: str
     skip_conflicts: list[str] = []
+    file_renames: dict[str, str] = {}
 
 
 class InstallResult(BaseModel):
@@ -71,6 +72,7 @@ class AvailableArchive(BaseModel):
     is_installed: bool = False
     installed_mod_id: int | None = None
     last_downloaded_at: datetime | None = None
+    is_empty: bool = False
 
 
 class ArchiveDeleteResult(BaseModel):
@@ -97,3 +99,25 @@ class ArchiveContentsResult(BaseModel):
     total_files: int
     total_size: int
     tree: list[ArchiveEntryOut]
+
+
+class NexusLinkBody(BaseModel):
+    nexus_mod_id: int
+
+
+class NexusLinkResult(BaseModel):
+    filename: str
+    nexus_mod_id: int
+
+
+class ArchiveFileEntry(BaseModel):
+    file_path: str
+    size: int
+    is_dir: bool
+
+
+class ArchivePreviewResult(BaseModel):
+    archive_filename: str
+    total_files: int
+    is_fomod: bool
+    files: list[ArchiveFileEntry]

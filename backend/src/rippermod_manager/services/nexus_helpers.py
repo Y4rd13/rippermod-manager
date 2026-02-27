@@ -1,12 +1,22 @@
 """Shared helpers for creating/updating Nexus mod records."""
 
+from __future__ import annotations
+
+import json
+import logging
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlmodel import Session, select
 
 from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
+from rippermod_manager.services.settings_helpers import get_setting, set_setting
+
+if TYPE_CHECKING:
+    from rippermod_manager.nexus.client import NexusClient
+
+logger = logging.getLogger(__name__)
 
 
 def match_local_to_nexus_file(
@@ -163,3 +173,62 @@ def upsert_nexus_mod(
             existing_meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)
 
     return dl
+
+
+def get_cached_game_categories(game_domain: str, session: Session) -> dict[int, str]:
+    """Read cached game categories from AppSetting. Returns empty dict if not cached."""
+    raw = get_setting(session, f"game_categories_{game_domain}")
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+        return {int(k): v for k, v in data.items()}
+    except (json.JSONDecodeError, ValueError):
+        return {}
+
+
+async def get_game_categories(
+    game_domain: str,
+    session: Session,
+    *,
+    client: NexusClient | None = None,
+    api_key: str = "",
+) -> dict[int, str]:
+    """Fetch game categories, caching in AppSetting. Returns {category_id: name}."""
+    from rippermod_manager.nexus.client import NexusClient
+
+    cached = get_cached_game_categories(game_domain, session)
+    if cached:
+        return cached
+
+    if not client and not api_key:
+        return {}
+
+    def _parse_categories(cats: list[dict[str, Any]]) -> dict[int, str]:
+        result: dict[int, str] = {}
+        for cat in cats:
+            cid = cat.get("category_id")
+            name = cat.get("name", "")
+            if cid is not None and name:
+                result[int(cid)] = name
+        return result
+
+    try:
+        if client:
+            info = await client.get_game_info(game_domain)
+        else:
+            async with NexusClient(api_key) as c:
+                info = await c.get_game_info(game_domain)
+
+        categories = _parse_categories(info.get("categories", []))
+        if categories:
+            set_setting(
+                session,
+                f"game_categories_{game_domain}",
+                json.dumps({str(k): v for k, v in categories.items()}),
+            )
+            session.flush()
+        return categories
+    except Exception:
+        logger.warning("Failed to fetch game categories for %s", game_domain, exc_info=True)
+        return {}

@@ -207,12 +207,18 @@ export interface AvailableArchive {
   is_installed: boolean;
   installed_mod_id: number | null;
   last_downloaded_at: string | null;
+  is_empty: boolean;
 }
 
 export interface ArchiveDeleteResult {
   filename: string;
   deleted: boolean;
   message: string;
+}
+
+export interface NexusLinkResult {
+  filename: string;
+  nexus_mod_id: number;
 }
 
 export interface OrphanCleanupResult {
@@ -247,6 +253,20 @@ export interface InstalledModOut {
 export interface InstallRequest {
   archive_filename: string;
   skip_conflicts: string[];
+  file_renames?: Record<string, string>;
+}
+
+export interface ArchiveFileEntry {
+  file_path: string;
+  size: number;
+  is_dir: boolean;
+}
+
+export interface ArchivePreviewResult {
+  archive_filename: string;
+  total_files: number;
+  is_fomod: boolean;
+  files: ArchiveFileEntry[];
 }
 
 export interface InstallResult {
@@ -489,6 +509,7 @@ export interface TrendingMod {
   created_timestamp: number;
   updated_timestamp: number;
   category_id: number | null;
+  category_name: string;
   nexus_url: string;
   is_installed: boolean;
   is_tracked: boolean;
@@ -502,6 +523,8 @@ export interface NexusModFileDetail {
   category_id: number | null;
   uploaded_timestamp: number | null;
   file_size: number;
+  content_preview_link: string | null;
+  description: string | null;
 }
 
 export interface ModActionResult {

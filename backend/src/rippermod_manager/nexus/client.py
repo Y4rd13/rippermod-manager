@@ -39,7 +39,7 @@ class NexusClient:
         self._client = httpx.AsyncClient(
             base_url=BASE_URL,
             headers={"APIKEY": self._api_key, "Accept": "application/json"},
-            timeout=30.0,
+            timeout=90.0,
         )
         return self
 
@@ -133,6 +133,9 @@ class NexusClient:
 
     async def get_endorsements(self) -> list[dict[str, Any]]:
         return await self._get("/v1/user/endorsements.json")
+
+    async def get_game_info(self, game_domain: str) -> dict[str, Any]:
+        return await self._get(f"/v1/games/{game_domain}.json")
 
     async def get_mod_info(self, game_domain: str, mod_id: int) -> dict[str, Any]:
         return await self._get(f"/v1/games/{game_domain}/mods/{mod_id}.json")

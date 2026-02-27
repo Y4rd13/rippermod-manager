@@ -14,6 +14,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { FomodWizard } from "@/components/mods/FomodWizard";
+import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { CorrelationActions } from "@/components/mods/CorrelationActions";
 import { InstalledModCardAction } from "@/components/mods/InstalledModCardAction";
 import { ModCardAction } from "@/components/mods/ModCardAction";
@@ -49,6 +50,7 @@ interface Props {
   updates?: ModUpdate[];
   isLoading?: boolean;
   onModClick?: (nexusModId: number) => void;
+  onFileSelect?: (nexusModId: number) => void;
   onTabChange?: (tab: string) => void;
 }
 
@@ -445,6 +447,7 @@ function RecognizedModsGrid({
   downloadJobs,
   updateByNexusId,
   onModClick,
+  onFileSelect,
 }: {
   mods: ModGroup[];
   archives: AvailableArchive[];
@@ -453,8 +456,9 @@ function RecognizedModsGrid({
   downloadJobs: DownloadJobOut[];
   updateByNexusId: Map<number, ModUpdate>;
   onModClick?: (nexusModId: number) => void;
+  onFileSelect?: (nexusModId: number) => void;
 }) {
-  const flow = useInstallFlow(gameName, archives, downloadJobs);
+  const flow = useInstallFlow(gameName, archives, downloadJobs, onFileSelect);
 
   const modIds = useMemo(() => mods.map((m) => String(m.id)), [mods]);
   const bulk = useBulkSelect(modIds);
@@ -486,6 +490,7 @@ function RecognizedModsGrid({
 
           const nexusModId = match.nexus_mod_id;
           const archive = nexusModId != null ? flow.archiveByModId.get(nexusModId) : undefined;
+          const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
           const update = nexusModId != null ? updateByNexusId.get(nexusModId) : undefined;
 
           return (
@@ -521,14 +526,20 @@ function RecognizedModsGrid({
                     updateVersion={update?.nexus_version}
                     onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
                     onInstallByFilename={() => {
-                      const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
                       if (nexusModId != null && dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
                     }}
                     onDownload={() => nexusModId != null && flow.handleDownload(nexusModId)}
                     onCancelDownload={() => {
-                      const dl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
-                      if (dl) flow.handleCancelDownload(dl.id);
+                      const activeDl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
+                      if (activeDl) flow.handleCancelDownload(activeDl.id);
                     }}
+                    onInstallWithPreview={
+                      nexusModId != null && dl
+                        ? () => flow.handleInstallWithPreviewByFilename(nexusModId, dl.file_name)
+                        : nexusModId != null && archive
+                          ? () => flow.handleInstallWithPreview(nexusModId, archive)
+                          : undefined
+                    }
                   />
                 }
                 footer={
@@ -563,6 +574,15 @@ function RecognizedModsGrid({
         </Button>
       </BulkActionBar>
 
+      {flow.previewArchive && (
+        <PreInstallPreview
+          gameName={gameName}
+          archiveFilename={flow.previewArchive.filename}
+          onConfirm={(renames) => flow.confirmPreviewInstall(renames)}
+          onCancel={flow.dismissPreview}
+        />
+      )}
+
       {flow.fomodArchive && (
         <FomodWizard gameName={gameName} archiveFilename={flow.fomodArchive} onDismiss={flow.dismissFomod} onInstallComplete={flow.dismissFomod} />
       )}
@@ -588,6 +608,7 @@ export function InstalledModsTable({
   updates = [],
   isLoading,
   onModClick,
+  onFileSelect,
   onTabChange,
 }: Props) {
   const [filter, setFilter] = useState("");
@@ -769,6 +790,7 @@ export function InstalledModsTable({
             downloadJobs={downloadJobs}
             updateByNexusId={updateByNexusId}
             onModClick={onModClick}
+            onFileSelect={onFileSelect}
           />
         </div>
       )}

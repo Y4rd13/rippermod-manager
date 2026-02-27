@@ -13,6 +13,7 @@ export function useInstallFlow(
   gameName: string,
   archives: AvailableArchive[],
   downloadJobs: DownloadJobOut[] = [],
+  onFileSelect?: (nexusModId: number) => void,
 ) {
   const [installingModIds, setInstallingModIds] = useState<Set<number>>(new Set());
   const [downloadingModId, setDownloadingModId] = useState<number | null>(null);
@@ -20,6 +21,11 @@ export function useInstallFlow(
   const [conflictModId, setConflictModId] = useState<number | null>(null);
   const [fomodArchive, setFomodArchive] = useState<string | null>(null);
   const [fileSelectModId, setFileSelectModId] = useState<number | null>(null);
+  const [previewArchive, setPreviewArchive] = useState<{
+    filename: string;
+    nexusModId: number;
+  } | null>(null);
+  const [pendingRenames, setPendingRenames] = useState<Record<string, string>>({});
 
   const installMod = useInstallMod();
   const checkConflicts = useCheckConflicts();
@@ -29,7 +35,7 @@ export function useInstallFlow(
   const archiveByModId = useMemo(() => {
     const map = new Map<number, AvailableArchive>();
     for (const a of archives) {
-      if (a.nexus_mod_id == null) continue;
+      if (a.nexus_mod_id == null || a.is_empty) continue;
       const existing = map.get(a.nexus_mod_id);
       if (!existing || a.size > existing.size) {
         map.set(a.nexus_mod_id, a);
@@ -87,11 +93,22 @@ export function useInstallFlow(
   }, [conflicts, conflictModId, removeInstalling]);
 
   const doInstall = useCallback(
-    async (fileName: string, skipConflicts: string[], nexusModId: number) => {
+    async (
+      fileName: string,
+      skipConflicts: string[],
+      nexusModId: number,
+      fileRenames?: Record<string, string>,
+    ) => {
       try {
         await installMod.mutateAsync({
           gameName,
-          data: { archive_filename: fileName, skip_conflicts: skipConflicts },
+          data: {
+            archive_filename: fileName,
+            skip_conflicts: skipConflicts,
+            ...(fileRenames && Object.keys(fileRenames).length > 0
+              ? { file_renames: fileRenames }
+              : {}),
+          },
         });
       } finally {
         removeInstalling(nexusModId);
@@ -163,31 +180,85 @@ export function useInstallFlow(
         conflicts.archive_filename,
         conflicts.conflicts.map((c) => c.file_path),
         conflictModId,
+        pendingRenames,
       );
     } finally {
       setConflicts(null);
       setConflictModId(null);
+      setPendingRenames({});
     }
-  }, [conflicts, conflictModId, doInstall]);
+  }, [conflicts, conflictModId, pendingRenames, doInstall]);
 
   const handleInstallOverwrite = useCallback(async () => {
     if (!conflicts || conflictModId == null) return;
     try {
-      await doInstall(conflicts.archive_filename, [], conflictModId);
+      await doInstall(conflicts.archive_filename, [], conflictModId, pendingRenames);
     } finally {
       setConflicts(null);
       setConflictModId(null);
+      setPendingRenames({});
     }
-  }, [conflicts, conflictModId, doInstall]);
+  }, [conflicts, conflictModId, pendingRenames, doInstall]);
 
   const dismissConflicts = useCallback(() => {
     if (conflictModId != null) removeInstalling(conflictModId);
     setConflicts(null);
     setConflictModId(null);
+    setPendingRenames({});
   }, [conflictModId, removeInstalling]);
 
   const dismissFomod = useCallback(() => {
     setFomodArchive(null);
+  }, []);
+
+  const handleInstallWithPreview = useCallback(
+    (nexusModId: number, archive: AvailableArchive) => {
+      setPreviewArchive({ filename: archive.filename, nexusModId });
+    },
+    [],
+  );
+
+  const handleInstallWithPreviewByFilename = useCallback(
+    (nexusModId: number, filename: string) => {
+      setPreviewArchive({ filename, nexusModId });
+    },
+    [],
+  );
+
+  const confirmPreviewInstall = useCallback(
+    async (fileRenames: Record<string, string>) => {
+      if (!previewArchive) return;
+      const { filename, nexusModId } = previewArchive;
+      setPreviewArchive(null);
+      addInstalling(nexusModId);
+      try {
+        const result = await checkConflicts.mutateAsync({
+          gameName,
+          archiveFilename: filename,
+        });
+
+        if (result.is_fomod) {
+          setFomodArchive(filename);
+          removeInstalling(nexusModId);
+          return;
+        }
+
+        if (result.conflicts.length > 0) {
+          setConflicts(result);
+          setConflictModId(nexusModId);
+          setPendingRenames(fileRenames);
+        } else {
+          await doInstall(filename, [], nexusModId, fileRenames);
+        }
+      } catch {
+        removeInstalling(nexusModId);
+      }
+    },
+    [previewArchive, gameName, addInstalling, removeInstalling, checkConflicts, doInstall],
+  );
+
+  const dismissPreview = useCallback(() => {
+    setPreviewArchive(null);
   }, []);
 
   const handleDownload = useCallback(
@@ -197,13 +268,14 @@ export function useInstallFlow(
         const result = await startModDownload.mutateAsync({ gameName, nexusModId });
         if (result.requires_file_selection) {
           setFileSelectModId(nexusModId);
+          onFileSelect?.(nexusModId);
           toast.info("Multiple files available", "Choose the file you want to download");
         }
       } finally {
         setDownloadingModId(null);
       }
     },
-    [gameName, startModDownload],
+    [gameName, startModDownload, onFileSelect],
   );
 
   const dismissFileSelect = useCallback(() => setFileSelectModId(null), []);
@@ -222,14 +294,19 @@ export function useInstallFlow(
     conflicts,
     fomodArchive,
     fileSelectModId,
+    previewArchive,
     activeDownloadByModId,
     completedDownloadByModId,
     handleInstall,
     handleInstallByFilename,
     handleInstallWithSkip,
     handleInstallOverwrite,
+    handleInstallWithPreview,
+    handleInstallWithPreviewByFilename,
+    confirmPreviewInstall,
     dismissConflicts,
     dismissFomod,
+    dismissPreview,
     dismissFileSelect,
     handleDownload,
     handleCancelDownload,

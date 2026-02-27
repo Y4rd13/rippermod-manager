@@ -1,16 +1,18 @@
-import { Archive, Check, Copy, Download, FolderTree, PackageMinus, Trash2 } from "lucide-react";
+import { AlertTriangle, Archive, Check, ChevronDown, Copy, Download, ExternalLink, FolderOpen, FolderTree, Link, PackageMinus, Settings2, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { openPath } from "@tauri-apps/plugin-opener";
 
 import { ArchiveTreeModal } from "@/components/mods/ArchiveTreeModal";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { FomodWizard } from "@/components/mods/FomodWizard";
+import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { BulkActionBar } from "@/components/ui/BulkActionBar";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { OverflowMenuButton } from "@/components/ui/OverflowMenuButton";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
@@ -21,6 +23,7 @@ import {
   useCleanupOrphans,
   useDeleteArchive,
   useInstallMod,
+  useLinkArchiveToNexus,
   useUninstallMod,
 } from "@/hooks/mutations";
 import { toast } from "@/stores/toast-store";
@@ -36,6 +39,8 @@ import type {
 interface Props {
   archives: AvailableArchive[];
   gameName: string;
+  gameDomain: string;
+  installPath: string;
   isLoading?: boolean;
 }
 
@@ -49,28 +54,30 @@ const ARCHIVE_SORT_OPTIONS: { value: ArchiveSortKey; label: string }[] = [
   { value: "version", label: "Version" },
 ];
 
-const ROW_CONTEXT_ITEMS_INSTALL: ContextMenuItem[] = [
-  { key: "install", label: "Install", icon: Download },
-  { key: "copy", label: "Copy Filename", icon: Copy },
-  { key: "delete", label: "Delete Archive", icon: Trash2, variant: "danger" },
-];
+function buildContextItems(archive: AvailableArchive): ContextMenuItem[] {
+  const items: ContextMenuItem[] = [];
+  if (archive.is_empty && archive.nexus_mod_id) {
+    items.push({ key: "nexus", label: "View on Nexus", icon: ExternalLink });
+  } else if (archive.is_installed && archive.installed_mod_id) {
+    items.push({ key: "uninstall", label: "Uninstall", icon: PackageMinus, variant: "danger" });
+  } else {
+    items.push({ key: "install", label: "Install", icon: Download });
+  }
+  if (archive.nexus_mod_id && !archive.is_empty) {
+    items.push({ key: "nexus", label: "View on Nexus", icon: ExternalLink });
+  }
+  items.push({ key: "copy", label: "Copy Filename", icon: Copy });
+  items.push({ key: "delete", label: "Delete Archive", icon: Trash2, variant: "danger" });
+  return items;
+}
 
-const ROW_CONTEXT_ITEMS_UNINSTALL: ContextMenuItem[] = [
-  { key: "uninstall", label: "Uninstall", icon: PackageMinus, variant: "danger" },
-  { key: "copy", label: "Copy Filename", icon: Copy },
-  { key: "delete", label: "Delete Archive", icon: Trash2, variant: "danger" },
-];
-
-const OVERFLOW_ITEMS: ContextMenuItem[] = [
-  { key: "copy", label: "Copy Filename", icon: Copy },
-];
-
-export function ArchivesList({ archives, gameName, isLoading }: Props) {
+export function ArchivesList({ archives, gameName, gameDomain, installPath, isLoading }: Props) {
   const installMod = useInstallMod();
   const uninstallMod = useUninstallMod();
   const checkConflicts = useCheckConflicts();
   const deleteArchive = useDeleteArchive();
   const cleanupOrphans = useCleanupOrphans();
+  const linkArchive = useLinkArchiveToNexus();
   const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
   const [confirmUninstall, setConfirmUninstall] = useState<{ filename: string; modId: number } | null>(null);
   const [fomodArchive, setFomodArchive] = useState<string | null>(null);
@@ -79,6 +86,35 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
   const [confirmDeleteFile, setConfirmDeleteFile] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [treeFilename, setTreeFilename] = useState<string | null>(null);
+  const [previewFilename, setPreviewFilename] = useState<string | null>(null);
+  const [pendingRenames, setPendingRenames] = useState<Record<string, string>>({});
+  const [splitMenuPos, setSplitMenuPos] = useState<{ top: number; left: number; filename: string } | null>(null);
+  const [linkPopover, setLinkPopover] = useState<{ top: number; left: number; filename: string } | null>(null);
+  const [linkInput, setLinkInput] = useState("");
+  const splitMenuRef = useRef<HTMLDivElement>(null);
+  const linkPopoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!splitMenuPos) return;
+    const handleClick = (e: MouseEvent) => {
+      if (splitMenuRef.current?.contains(e.target as Node)) return;
+      setSplitMenuPos(null);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [splitMenuPos]);
+
+  useEffect(() => {
+    if (!linkPopover) return;
+    const handleClick = (e: MouseEvent) => {
+      if (linkPopoverRef.current?.contains(e.target as Node)) return;
+      setLinkPopover(null);
+      setLinkInput("");
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [linkPopover]);
+
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useSessionState<ArchiveSortKey>(`archives-sort-${gameName}`, "name");
   const [sortDir, setSortDir] = useSessionState<"asc" | "desc">(`archives-dir-${gameName}`, "asc");
@@ -183,18 +219,31 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
     if (!conflicts) return;
     installMod.mutate({
       gameName,
-      data: { archive_filename: conflicts.archive_filename, skip_conflicts: conflicts.conflicts.map((c) => c.file_path) },
+      data: {
+        archive_filename: conflicts.archive_filename,
+        skip_conflicts: conflicts.conflicts.map((c) => c.file_path),
+        ...(Object.keys(pendingRenames).length > 0 ? { file_renames: pendingRenames } : {}),
+      },
     });
     setConflicts(null);
     setSelectedArchive(null);
+    setPendingRenames({});
     processNextInQueue();
   };
 
   const handleInstallOverwrite = () => {
     if (!conflicts) return;
-    installMod.mutate({ gameName, data: { archive_filename: conflicts.archive_filename, skip_conflicts: [] } });
+    installMod.mutate({
+      gameName,
+      data: {
+        archive_filename: conflicts.archive_filename,
+        skip_conflicts: [],
+        ...(Object.keys(pendingRenames).length > 0 ? { file_renames: pendingRenames } : {}),
+      },
+    });
     setConflicts(null);
     setSelectedArchive(null);
+    setPendingRenames({});
     processNextInQueue();
   };
 
@@ -204,6 +253,37 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
     setQueueProgress({ current: 0, total: items.length });
     bulk.deselectAll();
     processNextInQueue();
+  };
+
+  const handleInstallWithRenames = async (fileRenames: Record<string, string>) => {
+    if (!previewFilename) return;
+    const filename = previewFilename;
+    setPreviewFilename(null);
+    setSelectedArchive(filename);
+    try {
+      const result = await checkConflicts.mutateAsync({ gameName, archiveFilename: filename });
+      if (result.is_fomod) {
+        setFomodArchive(filename);
+        setSelectedArchive(null);
+        return;
+      }
+      if (result.conflicts.length > 0) {
+        setConflicts(result);
+        setPendingRenames(fileRenames);
+      } else {
+        installMod.mutate({
+          gameName,
+          data: {
+            archive_filename: filename,
+            skip_conflicts: [],
+            ...(Object.keys(fileRenames).length > 0 ? { file_renames: fileRenames } : {}),
+          },
+        });
+        setSelectedArchive(null);
+      }
+    } catch {
+      setSelectedArchive(null);
+    }
   };
 
   const handleContextMenuSelect = (key: string) => {
@@ -218,6 +298,8 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
         () => toast.success("Copied to clipboard"),
         () => toast.error("Failed to copy"),
       );
+    } else if (key === "nexus" && archive.nexus_mod_id) {
+      window.open(`https://www.nexusmods.com/${gameDomain}/mods/${archive.nexus_mod_id}?tab=files`, "_blank", "noopener,noreferrer");
     } else if (key === "delete") {
       setConfirmDeleteFile(archive.filename);
     }
@@ -275,6 +357,14 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
           <span className="text-xs text-text-muted">
             {filtered.length} archive{filtered.length !== 1 ? "s" : ""}
           </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => openPath(`${installPath}/downloaded_mods`).catch(() => {})}
+            title="Open downloaded_mods folder in file explorer"
+          >
+            <FolderOpen size={14} /> Open Folder
+          </Button>
           {orphanCount > 0 && !confirmCleanup && (
             <Button
               variant="secondary"
@@ -306,8 +396,8 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
         <VirtualTable
           items={filtered}
           renderHead={() => (
-            <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted">
-              <th className="py-2 pr-4 w-8">
+            <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted text-xs">
+              <th className="py-2 pr-2 w-8">
                 <input
                   type="checkbox"
                   checked={bulk.isAllSelected}
@@ -315,14 +405,14 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                   className="rounded border-border accent-accent"
                 />
               </th>
-              <th className="py-2 pr-4">Archive</th>
-              <th className="py-2 pr-4">Parsed Name</th>
-              <th className="py-2 pr-4">Version</th>
-              <th className="py-2 pr-4">Size</th>
-              <th className="py-2 pr-4">Nexus ID</th>
-              <th className="py-2 pr-4">Downloaded</th>
-              <th className="py-2 pr-4">Status</th>
-              <th className="py-2 text-right">Actions</th>
+              <th className="py-2 pr-3">Archive</th>
+              <th className="py-2 pr-3">Parsed Name</th>
+              <th className="py-2 pr-3 whitespace-nowrap">Version</th>
+              <th className="py-2 pr-3 whitespace-nowrap">Size</th>
+              <th className="py-2 pr-3 whitespace-nowrap">Nexus ID</th>
+              <th className="py-2 pr-3 whitespace-nowrap">Downloaded</th>
+              <th className="py-2 pr-2 whitespace-nowrap">Status</th>
+              <th className="py-2 pl-2 text-right whitespace-nowrap">Actions</th>
             </tr>
           )}
           renderRow={(a) => (
@@ -330,7 +420,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
               className="border-b border-border/50 hover:bg-surface-1/50 transition-colors"
               onContextMenu={(e) => openMenu(e, a)}
             >
-              <td className="py-2 pr-4">
+              <td className="py-2 pr-2">
                 <input
                   type="checkbox"
                   checked={bulk.isSelected(a.filename)}
@@ -338,33 +428,35 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                   className="rounded border-border accent-accent"
                 />
               </td>
-              <td className="py-2 pr-4 font-mono text-xs text-text-primary max-w-[200px] truncate" title={a.filename}>
+              <td className="py-2 pr-3 font-mono text-xs text-text-primary max-w-[200px] truncate" title={a.filename}>
                 {a.filename}
               </td>
-              <td className="py-2 pr-4 text-text-secondary">
+              <td className="py-2 pr-3 text-text-secondary max-w-[180px] truncate" title={a.parsed_name}>
                 {a.parsed_name}
               </td>
-              <td className="py-2 pr-4 text-text-muted">
+              <td className="py-2 pr-3 text-text-muted whitespace-nowrap">
                 {a.parsed_version ?? "--"}
               </td>
-              <td className="py-2 pr-4 text-text-muted">
+              <td className={`py-2 pr-3 whitespace-nowrap ${a.is_empty ? "text-danger font-medium" : "text-text-muted"}`}>
                 {formatBytes(a.size)}
               </td>
-              <td className="py-2 pr-4 text-text-muted">
+              <td className="py-2 pr-3 text-text-muted whitespace-nowrap">
                 {a.nexus_mod_id ?? "--"}
               </td>
-              <td className="py-2 pr-4 text-text-muted text-xs">
+              <td className="py-2 pr-3 text-text-muted text-xs whitespace-nowrap">
                 {a.last_downloaded_at ? timeAgo(isoToEpoch(a.last_downloaded_at)) : "--"}
               </td>
-              <td className="py-2 pr-4">
-                {a.is_installed ? (
+              <td className="py-2 pr-2 whitespace-nowrap">
+                {a.is_empty ? (
+                  <Badge variant="danger"><AlertTriangle size={10} /> Empty</Badge>
+                ) : a.is_installed ? (
                   <Badge variant="success"><Check size={10} /> Installed</Badge>
                 ) : (
                   <Badge variant="neutral">Orphan</Badge>
                 )}
               </td>
-              <td className="py-2 text-right">
-                <div className="flex items-center justify-end gap-1">
+              <td className="py-2 pl-2 whitespace-nowrap text-right">
+                <div className="flex items-center justify-end gap-0.5">
                   {a.is_installed && a.installed_mod_id ? (
                     <Button
                       variant="danger"
@@ -374,15 +466,56 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                       <PackageMinus size={14} /> Uninstall
                     </Button>
                   ) : (
+                    <div className="inline-flex items-center">
+                      <button
+                        disabled={a.is_empty || ((checkConflicts.isPending || installMod.isPending) && selectedArchive === a.filename)}
+                        title={a.is_empty ? "Archive is empty — re-download from Nexus" : undefined}
+                        onClick={() => handleCheckConflicts(a.filename)}
+                        className="inline-flex items-center gap-1 rounded-l-md bg-accent px-2 py-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50"
+                      >
+                        <Download size={14} /> Install
+                      </button>
+                      <button
+                        disabled={a.is_empty}
+                        onClick={(e) => {
+                          if (splitMenuPos?.filename === a.filename) {
+                            setSplitMenuPos(null);
+                            return;
+                          }
+                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                          setSplitMenuPos({ top: rect.bottom + 4, left: rect.right - 160, filename: a.filename });
+                        }}
+                        className="inline-flex items-center self-stretch rounded-r-md border-l border-white/20 bg-accent px-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50"
+                        title="Install options"
+                        aria-label="Install options"
+                      >
+                        <ChevronDown size={12} />
+                      </button>
+                    </div>
+                  )}
+                  {a.nexus_mod_id ? (
                     <Button
+                      variant="ghost"
                       size="sm"
-                      loading={
-                        (checkConflicts.isPending || installMod.isPending) &&
-                        selectedArchive === a.filename
-                      }
-                      onClick={() => handleCheckConflicts(a.filename)}
+                      onClick={() => window.open(`https://www.nexusmods.com/${gameDomain}/mods/${a.nexus_mod_id}?tab=files`, "_blank", "noopener,noreferrer")}
+                      title={`View mod ${a.nexus_mod_id} on Nexus Mods`}
+                      aria-label="View on Nexus"
                     >
-                      <Download size={14} /> Install
+                      <ExternalLink size={14} />
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        setLinkPopover({ top: rect.bottom + 4, left: rect.right - 260, filename: a.filename });
+                        setLinkInput("");
+                      }}
+                      title="Link to a Nexus mod"
+                      aria-label="Link to Nexus"
+                    >
+                      <Link size={14} />
                     </Button>
                   )}
                   <Button
@@ -403,17 +536,6 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
                   >
                     <Trash2 size={14} />
                   </Button>
-                  <OverflowMenuButton
-                    items={OVERFLOW_ITEMS}
-                    onSelect={(key) => {
-                      if (key === "copy") {
-                        void navigator.clipboard.writeText(a.filename).then(
-                          () => toast.success("Copied to clipboard"),
-                          () => toast.error("Failed to copy"),
-                        );
-                      }
-                    }}
-                  />
                 </div>
               </td>
             </tr>
@@ -481,7 +603,7 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
 
       {menuState.visible && menuState.data && (
         <ContextMenu
-          items={menuState.data.is_installed && menuState.data.installed_mod_id ? ROW_CONTEXT_ITEMS_UNINSTALL : ROW_CONTEXT_ITEMS_INSTALL}
+          items={buildContextItems(menuState.data)}
           position={menuState.position}
           onSelect={handleContextMenuSelect}
           onClose={closeMenu}
@@ -557,6 +679,15 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
         />
       )}
 
+      {previewFilename && (
+        <PreInstallPreview
+          gameName={gameName}
+          archiveFilename={previewFilename}
+          onConfirm={handleInstallWithRenames}
+          onCancel={() => setPreviewFilename(null)}
+        />
+      )}
+
       {conflicts && (
         <ConflictDialog
           conflicts={conflicts}
@@ -568,6 +699,66 @@ export function ArchivesList({ archives, gameName, isLoading }: Props) {
           onSkip={handleInstallWithSkip}
           onOverwrite={handleInstallOverwrite}
         />
+      )}
+
+      {splitMenuPos && createPortal(
+        <div
+          ref={splitMenuRef}
+          className="fixed z-50 min-w-[160px] rounded-md border border-border bg-surface-1 py-1 shadow-lg"
+          style={{ top: splitMenuPos.top, left: splitMenuPos.left }}
+        >
+          <button
+            onClick={() => {
+              setPreviewFilename(splitMenuPos.filename);
+              setSplitMenuPos(null);
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-2 hover:text-text-primary"
+          >
+            <Settings2 size={12} />
+            Install with Options
+          </button>
+        </div>,
+        document.body,
+      )}
+
+      {linkPopover && createPortal(
+        <div
+          ref={linkPopoverRef}
+          className="fixed z-50 w-[260px] rounded-md border border-border bg-surface-1 p-3 shadow-lg"
+          style={{ top: linkPopover.top, left: linkPopover.left }}
+        >
+          <p className="text-xs text-text-muted mb-2">Enter a Nexus mod ID or URL</p>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const value = linkInput.trim();
+              if (!value) return;
+              const urlMatch = value.match(/nexusmods\.com\/[^/]+\/mods\/(\d+)/);
+              const modId = urlMatch ? parseInt(urlMatch[1], 10) : parseInt(value, 10);
+              if (!modId || isNaN(modId)) {
+                toast.error("Invalid mod ID", "Enter a number or a Nexus Mods URL");
+                return;
+              }
+              linkArchive.mutate({ gameName, filename: linkPopover.filename, nexusModId: modId });
+              setLinkPopover(null);
+              setLinkInput("");
+            }}
+            className="flex gap-1.5"
+          >
+            <input
+              type="text"
+              value={linkInput}
+              onChange={(e) => setLinkInput(e.target.value)}
+              placeholder="e.g. 1234 or nexusmods.com/..."
+              className="flex-1 rounded border border-border bg-surface-0 px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
+              autoFocus
+            />
+            <Button type="submit" size="sm" loading={linkArchive.isPending}>
+              Link
+            </Button>
+          </form>
+        </div>,
+        document.body,
       )}
     </>
   );

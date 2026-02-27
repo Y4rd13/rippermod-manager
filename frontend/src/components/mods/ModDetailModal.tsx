@@ -7,16 +7,19 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  FolderOpen,
   Heart,
+  Loader2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { FileTreeView } from "@/components/ui/FileTreeView";
 import { useAbstainMod, useEndorseMod, useStartDownload, useTrackMod, useUntrackMod } from "@/hooks/mutations";
-import { useModDetail } from "@/hooks/queries";
+import { useFileContentsPreview, useModDetail } from "@/hooks/queries";
 import { bbcodeToHtml } from "@/lib/bbcode";
 import { formatBytes, formatCount, isoToEpoch, timeAgo } from "@/lib/format";
 import type { ModUpdate } from "@/types/api";
@@ -57,6 +60,8 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
   const [activeTab, setActiveTab] = useState<ModalTab>(defaultTab ?? "about");
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
   const [downloadingFileId, setDownloadingFileId] = useState<number | null>(null);
+  const [previewFileId, setPreviewFileId] = useState<number | null>(null);
+  const [expandedDescriptions, setExpandedDescriptions] = useState<Set<number>>(new Set());
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -98,9 +103,19 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
     });
   };
 
-  const visibleFiles = detail?.files
-    ?.filter((f) => f.category_id !== 7)
-    .sort((a, b) => (b.uploaded_timestamp ?? 0) - (a.uploaded_timestamp ?? 0));
+  const previewUrl = previewFileId != null
+    ? detail?.files?.find((f) => f.file_id === previewFileId)?.content_preview_link ?? null
+    : null;
+  const { data: previewData, isLoading: previewLoading } = useFileContentsPreview(previewUrl);
+
+  const isNumericCategory = detail?.category != null && /^\d+$/.test(detail.category);
+
+  const visibleFiles = useMemo(
+    () => detail?.files
+      ?.filter((f) => f.category_id !== 7)
+      .sort((a, b) => (b.uploaded_timestamp ?? 0) - (a.uploaded_timestamp ?? 0)),
+    [detail?.files],
+  );
 
   const tabs: { key: ModalTab; label: string; show: boolean }[] = [
     { key: "about", label: "About", show: true },
@@ -184,6 +199,9 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                     {timeAgo(isoToEpoch(detail.updated_at))}
                   </span>
                 )}
+                {detail.category && !isNumericCategory && (
+                  <Badge variant="neutral">{detail.category}</Badge>
+                )}
               </div>
 
               {/* Tab bar */}
@@ -263,51 +281,120 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
 
               {/* Files tab */}
               {activeTab === "files" && visibleFiles && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {visibleFiles.map((f) => (
-                    <div
-                      key={f.file_id}
-                      className="rounded-lg border border-border bg-surface-1 p-3 flex items-start justify-between gap-2"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm text-text-primary font-medium truncate" title={f.file_name}>
-                          {f.file_name}
-                        </p>
-                        <div className="flex items-center gap-3 text-xs text-text-muted mt-1 flex-wrap">
-                          {f.version && <span>v{f.version}</span>}
-                          {f.category_id != null && (
-                            <Badge variant="neutral">
-                              {FILE_CATEGORY_LABELS[f.category_id] ?? `Cat ${f.category_id}`}
-                            </Badge>
-                          )}
-                          {f.file_size > 0 && <span>{formatBytes(f.file_size)}</span>}
-                          {f.uploaded_timestamp && (
-                            <span>{timeAgo(f.uploaded_timestamp)}</span>
-                          )}
+                <div className="space-y-2">
+                  {visibleFiles.map((f) => {
+                    const descText = f.description
+                      ? f.description.replace(/<[^>]*>/g, "").trim()
+                      : "";
+                    const isDescExpanded = expandedDescriptions.has(f.file_id);
+                    const isPreviewOpen = previewFileId === f.file_id;
+
+                    return (
+                      <div
+                        key={f.file_id}
+                        className="rounded-lg border border-border bg-surface-1 p-3"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm text-text-primary font-medium truncate" title={f.file_name}>
+                              {f.file_name}
+                            </p>
+                            <div className="flex items-center gap-3 text-xs text-text-muted mt-1 flex-wrap">
+                              {f.version && <span>v{f.version}</span>}
+                              {f.category_id != null && (
+                                <Badge variant="neutral">
+                                  {FILE_CATEGORY_LABELS[f.category_id] ?? `Cat ${f.category_id}`}
+                                </Badge>
+                              )}
+                              {f.file_size > 0 && <span>{formatBytes(f.file_size)}</span>}
+                              {f.uploaded_timestamp && (
+                                <span>{timeAgo(f.uploaded_timestamp)}</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {f.content_preview_link && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  setPreviewFileId(isPreviewOpen ? null : f.file_id)
+                                }
+                                title="Preview contents"
+                                className={isPreviewOpen ? "text-accent" : ""}
+                              >
+                                <FolderOpen size={12} />
+                              </Button>
+                            )}
+                            {gameName && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setDownloadingFileId(f.file_id);
+                                  startDownload.mutate(
+                                    {
+                                      gameName,
+                                      data: { nexus_mod_id: modId, nexus_file_id: f.file_id },
+                                    },
+                                    { onSettled: () => setDownloadingFileId(null) },
+                                  );
+                                }}
+                                loading={downloadingFileId === f.file_id}
+                              >
+                                <Download size={12} />
+                              </Button>
+                            )}
+                          </div>
                         </div>
+
+                        {descText && (
+                          <div className="mt-1.5">
+                            <p
+                              className={`text-xs text-text-muted ${!isDescExpanded ? "line-clamp-2" : ""}`}
+                            >
+                              {descText}
+                            </p>
+                            {descText.length > 120 && (
+                              <button
+                                className="text-xs text-accent hover:text-accent-hover mt-0.5"
+                                onClick={() =>
+                                  setExpandedDescriptions((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(f.file_id)) next.delete(f.file_id);
+                                    else next.add(f.file_id);
+                                    return next;
+                                  })
+                                }
+                              >
+                                {isDescExpanded ? "Show less" : "Show more"}
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {isPreviewOpen && (
+                          <div className="mt-2 border-t border-border pt-2">
+                            {previewLoading && (
+                              <div className="flex items-center gap-2 text-xs text-text-muted py-2">
+                                <Loader2 size={14} className="animate-spin" />
+                                Loading preview...
+                              </div>
+                            )}
+                            {previewData && (
+                              <div className="max-h-60 overflow-y-auto">
+                                <div className="flex items-center gap-2 text-xs text-text-muted mb-1">
+                                  <span>{previewData.total_files} files</span>
+                                  <span>{formatBytes(previewData.total_size)}</span>
+                                </div>
+                                <FileTreeView tree={previewData.tree} />
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      {gameName && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="flex-shrink-0"
-                          onClick={() => {
-                            setDownloadingFileId(f.file_id);
-                            startDownload.mutate(
-                              {
-                                gameName,
-                                data: { nexus_mod_id: modId, nexus_file_id: f.file_id },
-                              },
-                              { onSettled: () => setDownloadingFileId(null) },
-                            );
-                          }}
-                          loading={downloadingFileId === f.file_id}
-                        >
-                          <Download size={12} />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -55,6 +55,9 @@ def _archive_files_for_mod(
     if not archive_path.is_file():
         return None
 
+    if archive_path.stat().st_size == 0:
+        return None
+
     try:
         with open_archive(archive_path) as archive:
             all_entries = archive.list_entries()

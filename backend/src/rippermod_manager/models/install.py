@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -32,3 +33,13 @@ class InstalledModFile(SQLModel, table=True):
     relative_path: str = Field(index=True)
 
     installed_mod: InstalledMod | None = Relationship(back_populates="files")
+
+
+class ArchiveNexusLink(SQLModel, table=True):
+    __tablename__ = "archive_nexus_links"
+    __table_args__ = (UniqueConstraint("game_id", "filename"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    game_id: int = Field(foreign_key="games.id", index=True)
+    filename: str = Field(index=True)
+    nexus_mod_id: int

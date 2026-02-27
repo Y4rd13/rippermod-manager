@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
@@ -99,14 +100,27 @@ async def start_download_from_mod(
 
     async with NexusClient(api_key) as client:
         key_result = await client.validate_key()
-        files_resp = await client.get_mod_files(game.domain_name, body.nexus_mod_id)
+        files_resp = await client.get_mod_files(
+            game.domain_name,
+            body.nexus_mod_id,
+            category="main",
+        )
+        nexus_files = files_resp.get("files", [])
 
-    nexus_files = files_resp.get("files", [])
+        # Fallback: if no main files, broaden to include optional
+        if not nexus_files:
+            files_resp = await client.get_mod_files(
+                game.domain_name,
+                body.nexus_mod_id,
+                category="main,optional",
+            )
+            nexus_files = files_resp.get("files", [])
+
     if not nexus_files:
         raise HTTPException(404, "No files found for this mod")
 
-    # Prefer main files (category_id == 1), fallback to latest file
     main_files = [f for f in nexus_files if f.get("category_id") == 1]
+    # Multiple main files → let user choose; also trigger for mixed results with >1 main
     if len(main_files) > 1:
         return DownloadStartResult(requires_file_selection=True)
     target = main_files[-1] if main_files else nexus_files[-1]
@@ -134,7 +148,15 @@ def list_downloads(
 ) -> list[DownloadJobOut]:
     game = get_game_or_404(game_name, session)
     jobs = download_service.list_jobs(game.id, session)  # type: ignore[arg-type]
-    return [_job_to_out(j) for j in jobs]
+
+    # Exclude completed jobs whose archive no longer exists on disk
+    staging = Path(game.install_path) / "downloaded_mods"
+    result: list[DownloadJobOut] = []
+    for j in jobs:
+        if j.status == "completed" and not (staging / j.file_name).is_file():
+            continue
+        result.append(_job_to_out(j))
+    return result
 
 
 @router.get("/{job_id}", response_model=DownloadJobOut)
