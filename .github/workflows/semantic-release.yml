@@ -1,22 +1,29 @@
-name: Semantic Release
+name: Release
 
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (e.g. 1.0.0, without v prefix)"
+        required: true
 
 concurrency:
-  group: semantic-release
+  group: release
   cancel-in-progress: false
 
 jobs:
   release:
-    name: Release
+    name: Semantic Release
     runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    if: github.event_name == 'push' && !contains(github.event.head_commit.message, '[skip ci]')
     permissions:
       contents: write
       issues: write
       pull-requests: write
+    outputs:
+      new_release_version: ${{ steps.sr.outputs.new_release_version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,6 +37,106 @@ jobs:
       - run: npm ci
 
       - name: Run semantic-release
+        id: sr
         run: npx semantic-release
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    name: Build Windows Installer
+    needs: [release]
+    if: always() && (needs.release.outputs.new_release_version != '' || github.event_name == 'workflow_dispatch')
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.release.outputs.new_release_version || github.event.inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: frontend/src-tauri -> target
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.9.x"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build backend (PyInstaller)
+        working-directory: backend
+        run: |
+          uv sync --extra build
+          uv run pyinstaller rmm-backend.spec --clean --noconfirm
+
+      - name: Copy sidecar binary
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path frontend\src-tauri\binaries
+          Copy-Item backend\dist\rmm-backend.exe frontend\src-tauri\binaries\rmm-backend-x86_64-pc-windows-msvc.exe
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build Tauri installer
+        working-directory: frontend
+        run: npx tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Generate latest.json for updater
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NSIS_DIR="frontend/src-tauri/target/release/bundle/nsis"
+
+          shopt -s nullglob
+          sig_files=( ${NSIS_DIR}/*-setup.exe.sig )
+          exe_files=( ${NSIS_DIR}/*-setup.exe )
+          [[ ${#sig_files[@]} -eq 1 ]] || { echo "::error::Expected exactly 1 .exe.sig file, found ${#sig_files[@]}"; exit 1; }
+          [[ ${#exe_files[@]} -eq 1 ]] || { echo "::error::Expected exactly 1 setup .exe file, found ${#exe_files[@]}"; exit 1; }
+
+          SIG_FILE="${sig_files[0]}"
+          EXE_FILE="${exe_files[0]}"
+          EXE_NAME=$(basename "$EXE_FILE" | tr ' ' '.')
+          SIGNATURE=$(cat "$SIG_FILE")
+          DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          NOTES=$(gh release view "v${VERSION}" --json body -q .body 2>/dev/null | head -50 | jq -Rs . || echo '""')
+
+          cat > "${NSIS_DIR}/latest.json" <<ENDJSON
+          {
+            "version": "${VERSION}",
+            "notes": ${NOTES},
+            "pub_date": "${DATE}",
+            "platforms": {
+              "windows-x86_64": {
+                "signature": "${SIGNATURE}",
+                "url": "https://github.com/Y4rd13/rippermod-manager/releases/download/v${VERSION}/${EXE_NAME}"
+              }
+            }
+          }
+          ENDJSON
+
+      - name: Upload release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "v${VERSION}" --clobber \
+            frontend/src-tauri/target/release/bundle/nsis/*-setup.exe \
+            frontend/src-tauri/target/release/bundle/nsis/*-setup.exe.sig \
+            frontend/src-tauri/target/release/bundle/nsis/latest.json

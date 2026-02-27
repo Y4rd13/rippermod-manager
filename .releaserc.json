@@ -12,7 +12,8 @@
     "@semantic-release/release-notes-generator",
     ["@semantic-release/changelog", { "changelogFile": "CHANGELOG.md" }],
     ["@semantic-release/exec", {
-      "prepareCmd": "bash scripts/bump-version.sh ${nextRelease.version}"
+      "prepareCmd": "bash scripts/bump-version.sh ${nextRelease.version}",
+      "successCmd": "echo \"new_release_version=${nextRelease.version}\" >> $GITHUB_OUTPUT"
     }],
     ["@semantic-release/npm", { "npmPublish": false }],
     ["@semantic-release/git", {
