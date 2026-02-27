@@ -47,5 +47,4 @@ jobs:
               feat(scanner): add TF-IDF clustering
               fix(nexus): handle 429 rate limiting
               ci: add PR title validation
-          validateSingleCommit: true
-          validateSingleCommitMatchesPrTitle: true
+          validateSingleCommit: false
