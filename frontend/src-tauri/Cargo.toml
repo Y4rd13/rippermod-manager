@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.4.0"
+version = "0.5.0"
 description = "AI-powered mod manager for PC games with Nexus Mods integration"
 authors = ["Y4rd13"]
 license = "GPL-3.0-only"

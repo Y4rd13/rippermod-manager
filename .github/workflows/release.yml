@@ -37,13 +37,9 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Sync version from tag
+      - name: Read version from tag
         shell: bash
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          cd frontend/src-tauri
-          jq --arg v "$VERSION" '.version = $v' tauri.conf.json > tmp.json && mv tmp.json tauri.conf.json
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
       - name: Build backend (PyInstaller)
         working-directory: backend
@@ -70,6 +66,8 @@ jobs:
 
       - name: Generate latest.json for updater
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           NSIS_DIR="frontend/src-tauri/target/release/bundle/nsis"
 
@@ -84,7 +82,7 @@ jobs:
           EXE_NAME=$(basename "$EXE_FILE" | tr ' ' '.')
           SIGNATURE=$(cat "$SIG_FILE")
           DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          NOTES=$(git tag -l --format='%(contents)' "${GITHUB_REF_NAME}" | head -50 | jq -Rs .)
+          NOTES=$(gh release view "${GITHUB_REF_NAME}" --json body -q .body 2>/dev/null | head -50 | jq -Rs . || echo '""')
 
           cat > "${NSIS_DIR}/latest.json" <<ENDJSON
           {
@@ -100,12 +98,12 @@ jobs:
           }
           ENDJSON
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: true
-          generate_release_notes: true
-          files: |
-            frontend/src-tauri/target/release/bundle/nsis/*-setup.exe
-            frontend/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
+      - name: Upload release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" --clobber \
+            frontend/src-tauri/target/release/bundle/nsis/*-setup.exe \
+            frontend/src-tauri/target/release/bundle/nsis/*-setup.exe.sig \
             frontend/src-tauri/target/release/bundle/nsis/latest.json
