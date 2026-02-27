@@ -100,6 +100,8 @@ const PreviewTreeNode = memo(function PreviewTreeNode({
     const trimmed = draft.trim();
     if (!trimmed || trimmed === fullPath) {
       onRename(fullPath, null);
+    } else if (trimmed.includes("..") || trimmed.startsWith("/")) {
+      onRename(fullPath, null);
     } else {
       onRename(fullPath, trimmed);
     }

@@ -317,6 +317,23 @@ def _nexus_tree_to_entries(
     return entries
 
 
+def _count_files(nodes: list[ArchiveEntryOut], depth: int = 0) -> tuple[int, int]:
+    """Count files and total size in a tree of ArchiveEntryOut nodes."""
+    if depth > 50:
+        return 0, 0
+    count = 0
+    total_size = 0
+    for n in nodes:
+        if n.is_dir:
+            c, s = _count_files(n.children, depth + 1)
+            count += c
+            total_size += s
+        else:
+            count += 1
+            total_size += n.size
+    return count, total_size
+
+
 @router.get("/file-contents-preview", response_model=ArchiveContentsResult)
 async def file_contents_preview(url: str = Query(...)) -> ArchiveContentsResult:
     """Proxy a Nexus file content preview URL and return as ArchiveContentsResult."""
@@ -336,22 +353,6 @@ async def file_contents_preview(url: str = Query(...)) -> ArchiveContentsResult:
 
     children = data.get("children", [])
     tree = _nexus_tree_to_entries(children)
-
-    def _count_files(nodes: list[ArchiveEntryOut], depth: int = 0) -> tuple[int, int]:
-        if depth > 50:
-            return 0, 0
-        count = 0
-        total_size = 0
-        for n in nodes:
-            if n.is_dir:
-                c, s = _count_files(n.children, depth + 1)
-                count += c
-                total_size += s
-            else:
-                count += 1
-                total_size += n.size
-        return count, total_size
-
     total_files, total_size = _count_files(tree)
 
     return ArchiveContentsResult(

@@ -12,7 +12,7 @@ import {
   Loader2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Badge } from "@/components/ui/Badge";
@@ -110,9 +110,12 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
 
   const isNumericCategory = detail?.category != null && /^\d+$/.test(detail.category);
 
-  const visibleFiles = detail?.files
-    ?.filter((f) => f.category_id !== 7)
-    .sort((a, b) => (b.uploaded_timestamp ?? 0) - (a.uploaded_timestamp ?? 0));
+  const visibleFiles = useMemo(
+    () => detail?.files
+      ?.filter((f) => f.category_id !== 7)
+      .sort((a, b) => (b.uploaded_timestamp ?? 0) - (a.uploaded_timestamp ?? 0)),
+    [detail?.files],
+  );
 
   const tabs: { key: ModalTab; label: string; show: boolean }[] = [
     { key: "about", label: "About", show: true },
