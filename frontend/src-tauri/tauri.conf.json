@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "RipperMod Manager",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "identifier": "com.rippermod.app",
   "build": {
     "frontendDist": "../dist",
@@ -29,7 +29,9 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["nxm"]
+        "schemes": [
+          "nxm"
+        ]
       }
     },
     "updater": {
@@ -42,7 +44,9 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -50,7 +54,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["binaries/rmm-backend"],
+    "externalBin": [
+      "binaries/rmm-backend"
+    ],
     "shortDescription": "AI-powered mod manager for PC games",
     "longDescription": "RipperMod Manager combines a chat agent with Nexus Mods integration to scan, group, correlate, and manage game mods.",
     "copyright": "Copyright (c) 2025 Y4rd13",
@@ -62,7 +68,9 @@
         "installerHooks": "./nsis-hooks.nsi",
         "installerIcon": "icons/icon.ico",
         "installMode": "currentUser",
-        "languages": ["English"]
+        "languages": [
+          "English"
+        ]
       },
       "certificateThumbprint": null,
       "timestampUrl": null
