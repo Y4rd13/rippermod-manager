@@ -24,6 +24,7 @@
         "frontend/package-lock.json",
         "frontend/src-tauri/tauri.conf.json",
         "frontend/src-tauri/Cargo.toml",
+        "frontend/src-tauri/Cargo.lock",
         "backend/pyproject.toml"
       ],
       "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"

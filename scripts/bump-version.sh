@@ -23,6 +23,14 @@ jq --arg v "$VERSION" '.version = $v' frontend/src-tauri/tauri.conf.json > front
 # frontend/src-tauri/Cargo.toml
 sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" frontend/src-tauri/Cargo.toml
 
+# frontend/src-tauri/Cargo.lock (update the "app" package version without requiring Rust)
+awk -v ver="$VERSION" '
+  /^name = "app"$/ { found=1; print; next }
+  found && /^version = / { print "version = \"" ver "\""; found=0; next }
+  { found=0; print }
+' frontend/src-tauri/Cargo.lock > frontend/src-tauri/Cargo.lock.tmp \
+  && mv frontend/src-tauri/Cargo.lock.tmp frontend/src-tauri/Cargo.lock
+
 # backend/pyproject.toml
 sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" backend/pyproject.toml
 
