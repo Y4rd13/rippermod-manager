@@ -245,9 +245,16 @@ export function PreInstallPreview({ gameName, archiveFilename, onConfirm, onCanc
         )}
 
         {preview && (preview.is_fomod ? (
-          <div className="py-8 text-center text-sm text-warning">
-            This archive is a FOMOD installer. Use the FOMOD wizard instead.
-          </div>
+          <>
+            <div className="py-8 text-center text-sm text-warning">
+              This archive is a FOMOD installer. Use the FOMOD wizard instead.
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Button variant="secondary" size="sm" onClick={onCancel}>
+                Close
+              </Button>
+            </div>
+          </>
         ) : (
           <>
             <p className="mb-3 text-xs text-text-secondary">
@@ -285,14 +292,6 @@ export function PreInstallPreview({ gameName, archiveFilename, onConfirm, onCanc
             </div>
           </>
         ))}
-
-        {preview && preview.is_fomod && (
-          <div className="mt-4 flex justify-end">
-            <Button variant="secondary" size="sm" onClick={onCancel}>
-              Close
-            </Button>
-          </div>
-        )}
       </div>
     </div>
   );
