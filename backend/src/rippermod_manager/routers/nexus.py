@@ -2,6 +2,7 @@ import contextlib
 import logging
 import re
 from typing import TYPE_CHECKING, Literal
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -316,7 +317,8 @@ def _nexus_tree_to_entries(
 @router.get("/file-contents-preview", response_model=ArchiveContentsResult)
 async def file_contents_preview(url: str = Query(...)) -> ArchiveContentsResult:
     """Proxy a Nexus file content preview URL and return as ArchiveContentsResult."""
-    if not url.startswith("https://file-metadata.nexusmods.com/"):
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname != "file-metadata.nexusmods.com":
         raise HTTPException(400, "Invalid content preview URL")
 
     try:
