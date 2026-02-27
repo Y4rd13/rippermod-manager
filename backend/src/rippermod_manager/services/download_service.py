@@ -64,7 +64,8 @@ async def create_and_start_download(
     assert job_id is not None
 
     async with NexusClient(api_key) as client:
-        # Fetch file metadata to get the filename
+        # Fetch file metadata to get the filename and size
+        file_size = 0
         try:
             files_resp = await client.get_mod_files(game_domain, nexus_mod_id)
             nexus_files = files_resp.get("files", [])
@@ -74,6 +75,8 @@ async def create_and_start_download(
                 if target_file
                 else f"{nexus_mod_id}-{nexus_file_id}.zip"
             )
+            if target_file:
+                file_size = target_file.get("size_in_bytes") or 0
         except Exception:
             logger.warning("Could not fetch file metadata for %d/%d", nexus_mod_id, nexus_file_id)
             file_name = f"{nexus_mod_id}-{nexus_file_id}.zip"
@@ -112,6 +115,8 @@ async def create_and_start_download(
 
     # Update job with metadata, set to downloading
     job.file_name = file_name
+    if file_size:
+        job.total_bytes = file_size
     job.status = "downloading"
     session.add(job)
     session.commit()

@@ -2176,6 +2176,15 @@ wheels = [
 ]
 
 [[package]]
+name = "rarfile"
+version = "4.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/26/3f/3118a797444e7e30e784921c4bfafb6500fb288a0c84cb8c32ed15853c16/rarfile-4.2.tar.gz", hash = "sha256:8e1c8e72d0845ad2b32a47ab11a719bc2e41165ec101fd4d3fe9e92aa3f469ef", size = 153476, upload-time = "2024-04-03T17:10:53.798Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/62/fc/ab37559419ca36dd8dd317c3a98395ed4dcee2beeb28bf6059b972906727/rarfile-4.2-py3-none-any.whl", hash = "sha256:8757e1e3757e32962e229cab2432efc1f15f210823cc96ccba0f6a39d17370c9", size = 29052, upload-time = "2024-04-03T17:10:52.632Z" },
+]
+
+[[package]]
 name = "referencing"
 version = "0.37.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2359,6 +2368,7 @@ dependencies = [
     { name = "py7zr" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
+    { name = "rarfile" },
     { name = "scikit-learn" },
     { name = "sqlmodel" },
     { name = "sse-starlette" },
@@ -2400,6 +2410,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.24" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "rarfile", specifier = ">=4.2" },
     { name = "respx", marker = "extra == 'test'", specifier = ">=0.22" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
     { name = "scikit-learn", specifier = ">=1.6.0" },

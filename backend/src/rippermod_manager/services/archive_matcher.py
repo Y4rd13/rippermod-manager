@@ -8,9 +8,10 @@ import hashlib
 import logging
 from pathlib import Path
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from rippermod_manager.models.game import Game
+from rippermod_manager.models.install import ArchiveNexusLink
 from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
 from rippermod_manager.schemas.mod import ArchiveMatchResult
 from rippermod_manager.services.install_service import list_available_archives
@@ -116,6 +117,24 @@ async def match_archives_by_md5(
                 file_name=file_name,
                 file_id=file_id,
             )
+
+            # Store local filename → mod_id so list_archives can surface it
+            existing_link = session.exec(
+                select(ArchiveNexusLink).where(
+                    ArchiveNexusLink.game_id == game.id,
+                    ArchiveNexusLink.filename == archive_path.name,
+                )
+            ).first()
+            if existing_link:
+                existing_link.nexus_mod_id = mod_id
+            else:
+                session.add(
+                    ArchiveNexusLink(
+                        game_id=game.id,  # type: ignore[arg-type]
+                        filename=archive_path.name,
+                        nexus_mod_id=mod_id,
+                    )
+                )
 
             matched += 1
             pct = 93 + int((i + 1) / len(archive_hashes) * 2)  # 93-95%

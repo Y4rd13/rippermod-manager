@@ -5,6 +5,7 @@ import { useNavigate } from "react-router";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { FomodWizard } from "@/components/mods/FomodWizard";
 import { ModCardAction } from "@/components/mods/ModCardAction";
+import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { ModQuickActions } from "@/components/mods/ModQuickActions";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge } from "@/components/ui/Badge";
@@ -66,6 +67,7 @@ interface Props {
   emptyMessage: string;
   downloadJobs?: DownloadJobOut[];
   onModClick?: (nexusModId: number) => void;
+  onFileSelect?: (nexusModId: number) => void;
   isLoading?: boolean;
   emptyIcon?: "heart" | "eye";
   emptyTitle?: string;
@@ -80,6 +82,7 @@ export function NexusAccountGrid({
   emptyMessage,
   downloadJobs = [],
   onModClick,
+  onFileSelect,
   isLoading = false,
   emptyIcon = "heart",
   emptyTitle = "No mods found",
@@ -99,7 +102,7 @@ export function NexusAccountGrid({
   const [sortKey, setSortKey] = useSessionState<SortKey>(`account-sort-${gameName}`, "updated");
   const [chip, setChip] = useSessionState(`account-chip-${gameName}`, "all");
 
-  const flow = useInstallFlow(gameName, archives, downloadJobs);
+  const flow = useInstallFlow(gameName, archives, downloadJobs, onFileSelect);
   const endorseMod = useEndorseMod();
   const abstainMod = useAbstainMod();
   const trackMod = useTrackMod();
@@ -222,6 +225,7 @@ export function NexusAccountGrid({
         renderItem={(mod) => {
           const nexusModId = mod.nexus_mod_id;
           const archive = flow.archiveByModId.get(nexusModId);
+          const dl = flow.completedDownloadByModId.get(nexusModId);
 
           return (
             <NexusModCard
@@ -280,7 +284,6 @@ export function NexusAccountGrid({
                   isDownloading={flow.downloadingModId === nexusModId}
                   onInstall={() => archive && flow.handleInstall(nexusModId, archive)}
                   onInstallByFilename={() => {
-                    const dl = flow.completedDownloadByModId.get(nexusModId);
                     if (dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
                   }}
                   onDownload={() => flow.handleDownload(nexusModId)}
@@ -288,6 +291,13 @@ export function NexusAccountGrid({
                     const dl = flow.activeDownloadByModId.get(nexusModId);
                     if (dl) flow.handleCancelDownload(dl.id);
                   }}
+                  onInstallWithPreview={
+                    dl
+                      ? () => flow.handleInstallWithPreviewByFilename(nexusModId, dl.file_name)
+                      : archive
+                        ? () => flow.handleInstallWithPreview(nexusModId, archive)
+                        : undefined
+                  }
                 />
               }
               overflowMenu={
@@ -314,6 +324,15 @@ export function NexusAccountGrid({
           );
         }}
       />
+
+      {flow.previewArchive && (
+        <PreInstallPreview
+          gameName={gameName}
+          archiveFilename={flow.previewArchive.filename}
+          onConfirm={(renames) => flow.confirmPreviewInstall(renames)}
+          onCancel={flow.dismissPreview}
+        />
+      )}
 
       {flow.fomodArchive && (
         <FomodWizard gameName={gameName} archiveFilename={flow.fomodArchive} onDismiss={flow.dismissFomod} onInstallComplete={flow.dismissFomod} />

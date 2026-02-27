@@ -368,7 +368,11 @@ async def _resolve_file_ids(
             return
         async with sem:
             try:
-                files_resp = await client.get_mod_files(game_domain, update["nexus_mod_id"])
+                files_resp = await client.get_mod_files(
+                    game_domain,
+                    update["nexus_mod_id"],
+                    category="main,update,optional,miscellaneous",
+                )
                 nexus_files = files_resp.get("files", [])
                 file_updates = files_resp.get("file_updates", [])
 

@@ -37,6 +37,7 @@ class NexusModMeta(SQLModel, table=True):
     mod_downloads: int = 0
     category: str = ""
     picture_url: str = ""
+    files_updated_at: datetime | None = None
 
 
 class NexusModFile(SQLModel, table=True):
@@ -50,3 +51,5 @@ class NexusModFile(SQLModel, table=True):
     category_id: int | None = None
     uploaded_timestamp: int | None = None
     file_size: int = 0
+    content_preview_link: str | None = None
+    description: str | None = None

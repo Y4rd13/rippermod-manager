@@ -1,5 +1,9 @@
+import logging
+import re
 from typing import TYPE_CHECKING, Literal
+from urllib.parse import urlparse
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, col, select
 
@@ -10,6 +14,7 @@ from rippermod_manager.models.settings import AppSetting
 if TYPE_CHECKING:
     from rippermod_manager.models.nexus import NexusDownload
 from rippermod_manager.routers.deps import get_game_or_404
+from rippermod_manager.schemas.install import ArchiveContentsResult, ArchiveEntryOut
 from rippermod_manager.schemas.nexus import (
     ModActionResult,
     ModDetailOut,
@@ -21,6 +26,8 @@ from rippermod_manager.schemas.nexus import (
     SSOStartResult,
 )
 from rippermod_manager.services.settings_helpers import get_setting
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/nexus", tags=["nexus"])
 
@@ -149,15 +156,88 @@ async def mod_detail(
     if not meta:
         raise HTTPException(404, "Mod metadata not found")
 
+    from rippermod_manager.services.nexus_helpers import get_game_categories
+
     changelogs: dict[str, list[str]] = {}
+    files = session.exec(select(NexusModFile).where(NexusModFile.nexus_mod_id == mod_id)).all()
+
     if api_key:
+        needs_insert = len(files) == 0
+        needs_refresh = not needs_insert and (
+            meta.updated_at is not None
+            and (meta.files_updated_at is None or meta.updated_at > meta.files_updated_at)
+        )
+        needs_backfill = (
+            not needs_insert
+            and not needs_refresh
+            and any(f.content_preview_link is None or f.description is None for f in files)
+        )
+
+        # Single client for all API calls: changelogs + file fetch/backfill
         try:
             async with NexusClient(api_key) as client:
-                changelogs = await client.get_changelogs(game_domain, mod_id)
-        except Exception:
-            pass
+                try:
+                    changelogs = await client.get_changelogs(game_domain, mod_id)
+                except Exception:
+                    logger.debug("Failed to fetch changelogs for mod %d", mod_id, exc_info=True)
 
-    files = session.exec(select(NexusModFile).where(NexusModFile.nexus_mod_id == mod_id)).all()
+                if needs_insert or needs_refresh or needs_backfill:
+                    files_resp = await client.get_mod_files(
+                        game_domain, mod_id, category="main,update,optional,miscellaneous"
+                    )
+                    api_file_list = files_resp.get("files", [])
+
+                    if needs_insert or needs_refresh:
+                        existing_file_ids = {f.file_id for f in files}
+                        for af in api_file_list:
+                            fid = af.get("file_id")
+                            if not fid or fid in existing_file_ids:
+                                continue
+                            session.add(
+                                NexusModFile(
+                                    nexus_mod_id=mod_id,
+                                    file_id=fid,
+                                    file_name=af.get("file_name", ""),
+                                    version=af.get("version", ""),
+                                    category_id=af.get("category_id"),
+                                    uploaded_timestamp=af.get("uploaded_timestamp"),
+                                    file_size=af.get("size_in_bytes") or af.get("file_size", 0),
+                                    content_preview_link=af.get("content_preview_link"),
+                                    description=af.get("description"),
+                                )
+                            )
+                        meta.files_updated_at = meta.updated_at
+                        session.commit()
+                        files = session.exec(
+                            select(NexusModFile).where(NexusModFile.nexus_mod_id == mod_id)
+                        ).all()
+                    else:
+                        api_files = {af["file_id"]: af for af in api_file_list if af.get("file_id")}
+                        for f in files:
+                            if not f.file_id:
+                                continue
+                            af = api_files.get(f.file_id)
+                            if af and f.content_preview_link is None:
+                                f.content_preview_link = af.get("content_preview_link")
+                            if af and f.description is None:
+                                f.description = af.get("description")
+                        session.commit()
+        except Exception:
+            logger.debug(
+                "Failed to fetch/backfill file metadata for mod %d",
+                mod_id,
+                exc_info=True,
+            )
+
+    # Resolve category_id → name
+    category_name = meta.category
+    try:
+        cat_id = int(meta.category)
+        categories = await get_game_categories(game_domain, session, api_key=api_key)
+        if cat_id in categories:
+            category_name = categories[cat_id]
+    except (ValueError, TypeError):
+        pass
 
     from rippermod_manager.models.nexus import NexusDownload
 
@@ -185,7 +265,7 @@ async def mod_detail(
         updated_at=meta.updated_at,
         endorsement_count=meta.endorsement_count,
         mod_downloads=meta.mod_downloads,
-        category=meta.category,
+        category=category_name,
         picture_url=meta.picture_url,
         nexus_url=nexus_url,
         changelogs=changelogs,
@@ -197,11 +277,89 @@ async def mod_detail(
                 category_id=f.category_id,
                 uploaded_timestamp=f.uploaded_timestamp,
                 file_size=f.file_size,
+                content_preview_link=f.content_preview_link,
+                description=f.description,
             )
             for f in files
         ],
         is_tracked=dl.is_tracked if dl else False,
         is_endorsed=dl.is_endorsed if dl else False,
+    )
+
+
+_SIZE_RE = re.compile(r"^([\d.]+)\s*(B|kB|MB|GB|TB)$")
+_SIZE_UNITS = {"B": 1, "kB": 1_000, "MB": 1_000_000, "GB": 1_000_000_000, "TB": 1_000_000_000_000}
+
+
+def _parse_human_size(s: str) -> int:
+    """Parse human-readable size like '222.4 MB' → bytes."""
+    m = _SIZE_RE.match(s.strip())
+    if not m:
+        return 0
+    return int(float(m.group(1)) * _SIZE_UNITS.get(m.group(2), 1))
+
+
+def _nexus_tree_to_entries(
+    children: list[dict], path: str = "", depth: int = 0
+) -> list[ArchiveEntryOut]:
+    """Convert Nexus content_preview JSON tree to ArchiveEntryOut list."""
+    if depth > 50:
+        return []
+    entries: list[ArchiveEntryOut] = []
+    for item in children:
+        name = item.get("name", "")
+        is_dir = item.get("type") == "directory"
+        size = _parse_human_size(item.get("size", "0 B")) if not is_dir else 0
+        child_entries = _nexus_tree_to_entries(
+            item.get("children", []), f"{path}/{name}", depth + 1
+        )
+        entries.append(ArchiveEntryOut(name=name, is_dir=is_dir, size=size, children=child_entries))
+    return entries
+
+
+def _count_files(nodes: list[ArchiveEntryOut], depth: int = 0) -> tuple[int, int]:
+    """Count files and total size in a tree of ArchiveEntryOut nodes."""
+    if depth > 50:
+        return 0, 0
+    count = 0
+    total_size = 0
+    for n in nodes:
+        if n.is_dir:
+            c, s = _count_files(n.children, depth + 1)
+            count += c
+            total_size += s
+        else:
+            count += 1
+            total_size += n.size
+    return count, total_size
+
+
+@router.get("/file-contents-preview", response_model=ArchiveContentsResult)
+async def file_contents_preview(url: str = Query(...)) -> ArchiveContentsResult:
+    """Proxy a Nexus file content preview URL and return as ArchiveContentsResult."""
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname != "file-metadata.nexusmods.com":
+        raise HTTPException(400, "Invalid content preview URL")
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(e.response.status_code, "Failed to fetch content preview") from e
+    except Exception as e:
+        raise HTTPException(502, "Failed to fetch content preview") from e
+
+    children = data.get("children", [])
+    tree = _nexus_tree_to_entries(children)
+    total_files, total_size = _count_files(tree)
+
+    return ArchiveContentsResult(
+        filename="preview",
+        total_files=total_files,
+        total_size=total_size,
+        tree=tree,
     )
 
 

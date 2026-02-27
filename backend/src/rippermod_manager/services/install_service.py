@@ -64,6 +64,7 @@ def install_mod(
     archive_path: Path,
     session: Session,
     skip_conflicts: list[str] | None = None,
+    file_renames: dict[str, str] | None = None,
 ) -> InstallResult:
     """Extract an archive to the game directory and record ownership.
 
@@ -94,6 +95,10 @@ def install_mod(
     skip_set: set[str] = set()
     if skip_conflicts:
         skip_set = {f.replace("\\", "/").lower() for f in skip_conflicts}
+
+    rename_map: dict[str, str] = {}
+    if file_renames:
+        rename_map = {k.replace("\\", "/"): v.replace("\\", "/") for k, v in file_renames.items()}
 
     ownership = get_file_ownership_map(session, game.id)  # type: ignore[arg-type]
 
@@ -129,6 +134,9 @@ def install_mod(
                     logger.debug("Skipping entry outside wrapper: %s", entry.filename)
                     skipped += 1
                     continue
+
+            if normalised in rename_map:
+                normalised = rename_map[normalised]
 
             normalised_lower = normalised.lower()
             if normalised_lower in skip_set:
@@ -344,7 +352,11 @@ async def resolve_installed_file_id(
 
     try:
         async with NexusClient(api_key) as client:
-            files_resp = await client.get_mod_files(game_domain, nexus_mod_id)
+            files_resp = await client.get_mod_files(
+                game_domain,
+                nexus_mod_id,
+                category="main,update,optional,miscellaneous",
+            )
     except Exception:
         logger.debug("Could not fetch files for mod %d", nexus_mod_id)
         return

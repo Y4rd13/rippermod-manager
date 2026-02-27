@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { FomodWizard } from "@/components/mods/FomodWizard";
 import { ModCardAction } from "@/components/mods/ModCardAction";
+import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { ModQuickActions } from "@/components/mods/ModQuickActions";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge } from "@/components/ui/Badge";
@@ -69,6 +70,7 @@ interface Props {
   isLoading?: boolean;
   dataUpdatedAt?: number;
   onModClick?: (nexusModId: number) => void;
+  onFileSelect?: (nexusModId: number) => void;
 }
 
 export function TrendingGrid({
@@ -81,6 +83,7 @@ export function TrendingGrid({
   isLoading = false,
   dataUpdatedAt,
   onModClick,
+  onFileSelect,
 }: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useSessionState<SortKey>(`trending-sort-${gameName}`, "updated");
@@ -95,7 +98,7 @@ export function TrendingGrid({
     return () => clearInterval(timer);
   }, [dataUpdatedAt]);
 
-  const flow = useInstallFlow(gameName, archives, downloadJobs);
+  const flow = useInstallFlow(gameName, archives, downloadJobs, onFileSelect);
   const refreshTrending = useRefreshTrending();
   const endorseMod = useEndorseMod();
   const abstainMod = useAbstainMod();
@@ -177,6 +180,7 @@ export function TrendingGrid({
   const renderModCard = (mod: TrendingMod) => {
     const nexusModId = mod.mod_id;
     const archive = flow.archiveByModId.get(nexusModId);
+    const dl = flow.completedDownloadByModId.get(nexusModId);
     const isInstalled = mod.is_installed || installedModIds.has(nexusModId);
 
     return (
@@ -216,6 +220,9 @@ export function TrendingGrid({
               <Download size={11} />
               {formatCount(mod.mod_downloads)}
             </span>
+            {mod.category_name && (
+              <Badge variant="neutral">{mod.category_name}</Badge>
+            )}
             {mod.updated_timestamp > 0 && (
               <span className="text-xs text-text-muted">{timeAgo(mod.updated_timestamp)}</span>
             )}
@@ -239,7 +246,6 @@ export function TrendingGrid({
             isDownloading={flow.downloadingModId === nexusModId}
             onInstall={() => archive && flow.handleInstall(nexusModId, archive)}
             onInstallByFilename={() => {
-              const dl = flow.completedDownloadByModId.get(nexusModId);
               if (dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
             }}
             onDownload={() => flow.handleDownload(nexusModId)}
@@ -247,6 +253,13 @@ export function TrendingGrid({
               const dl = flow.activeDownloadByModId.get(nexusModId);
               if (dl) flow.handleCancelDownload(dl.id);
             }}
+            onInstallWithPreview={
+              dl
+                ? () => flow.handleInstallWithPreviewByFilename(nexusModId, dl.file_name)
+                : archive
+                  ? () => flow.handleInstallWithPreview(nexusModId, archive)
+                  : undefined
+            }
           />
         }
         overflowMenu={
@@ -366,6 +379,15 @@ export function TrendingGrid({
           icon={TrendingUp}
           title="No Trending Data"
           description="No mods match the current filter. Try changing the filter or search term."
+        />
+      )}
+
+      {flow.previewArchive && (
+        <PreInstallPreview
+          gameName={gameName}
+          archiveFilename={flow.previewArchive.filename}
+          onConfirm={(renames) => flow.confirmPreviewInstall(renames)}
+          onCancel={flow.dismissPreview}
         />
       )}
 

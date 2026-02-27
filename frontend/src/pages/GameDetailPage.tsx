@@ -24,6 +24,7 @@ import { ArchivesList } from "@/components/mods/ArchivesList";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { ConflictsInbox } from "@/components/mods/ConflictsInbox";
 import { FomodWizard } from "@/components/mods/FomodWizard";
+import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { InstalledModsTable } from "@/components/mods/InstalledModsTable";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { ModDetailModal } from "@/components/mods/ModDetailModal";
@@ -101,6 +102,7 @@ export function GameDetailPage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("installed");
   const [selectedModId, setSelectedModId] = useState<number | null>(null);
+  const [fileSelectModId, setFileSelectModId] = useState<number | null>(null);
   const [aiSearch, setAiSearch] = useState(() => {
     try {
       const stored = localStorage.getItem("ai-search-enabled");
@@ -119,6 +121,11 @@ export function GameDetailPage() {
   };
 
   const modalFlow = useInstallFlow(name, archives, downloadJobs);
+
+  const handleFileSelect = useCallback((modId: number) => {
+    setSelectedModId(modId);
+    setFileSelectModId(modId);
+  }, []);
 
   const installedModIds = useMemo(
     () => new Set(installedMods.filter((m) => m.nexus_mod_id != null).map((m) => m.nexus_mod_id!)),
@@ -516,6 +523,7 @@ export function GameDetailPage() {
           downloadJobs={downloadJobs}
           isLoading={modsLoading}
           onModClick={setSelectedModId}
+          onFileSelect={handleFileSelect}
         />
       )}
       {tab === "endorsed" && (
@@ -531,6 +539,7 @@ export function GameDetailPage() {
           isLoading={endorsedLoading}
           dataUpdatedAt={endorsedUpdatedAt}
           onModClick={setSelectedModId}
+          onFileSelect={handleFileSelect}
         />
       )}
       {tab === "tracked" && (
@@ -546,6 +555,7 @@ export function GameDetailPage() {
           isLoading={trackedLoading}
           dataUpdatedAt={trackedUpdatedAt}
           onModClick={setSelectedModId}
+          onFileSelect={handleFileSelect}
         />
       )}
       {tab === "trending" && (
@@ -559,6 +569,7 @@ export function GameDetailPage() {
           isLoading={trendingLoading}
           dataUpdatedAt={trendingUpdatedAt}
           onModClick={setSelectedModId}
+          onFileSelect={handleFileSelect}
         />
       )}
       {tab === "conflicts" && (
@@ -574,11 +585,12 @@ export function GameDetailPage() {
           updates={updates?.updates ?? []}
           isLoading={installedLoading}
           onModClick={setSelectedModId}
+          onFileSelect={handleFileSelect}
           onTabChange={(t) => setTab(t as Tab)}
         />
       )}
       {tab === "archives" && (
-        <ArchivesList archives={archives} gameName={name} isLoading={archivesLoading} />
+        <ArchivesList archives={archives} gameName={name} gameDomain={game.domain_name} installPath={game.install_path} isLoading={archivesLoading} />
       )}
       {tab === "profiles" && (
         <ProfileManager profiles={profiles} gameName={name} isLoading={profilesLoading} installedCount={installedMods.length} recognizedCount={recognizedNotInstalled} />
@@ -596,9 +608,10 @@ export function GameDetailPage() {
       {(() => {
         const effectiveModId = selectedModId ?? modalFlow.fileSelectModId;
         if (effectiveModId == null) return null;
-        const effectiveDefaultTab = modalFlow.fileSelectModId != null && selectedModId == null ? "files" as const : undefined;
+        const effectiveDefaultTab = fileSelectModId === effectiveModId ? "files" as const : undefined;
         const modUpdate = updateByNexusId.get(effectiveModId);
         const archive = modalFlow.archiveByModId.get(effectiveModId);
+        const dl = modalFlow.completedDownloadByModId.get(effectiveModId);
         return (
           <ModDetailModal
             gameDomain={game.domain_name}
@@ -618,30 +631,46 @@ export function GameDetailPage() {
                   isInstalled={installedModIds.has(effectiveModId)}
                   isInstalling={modalFlow.installingModIds.has(effectiveModId)}
                   activeDownload={modalFlow.activeDownloadByModId.get(effectiveModId)}
-                  completedDownload={modalFlow.completedDownloadByModId.get(effectiveModId)}
+                  completedDownload={dl}
                   archive={archive}
                   hasConflicts={modalFlow.conflicts != null}
                   isDownloading={modalFlow.downloadingModId === effectiveModId}
                   onInstall={() => archive && modalFlow.handleInstall(effectiveModId, archive)}
                   onInstallByFilename={() => {
-                    const dl = modalFlow.completedDownloadByModId.get(effectiveModId);
                     if (dl) modalFlow.handleInstallByFilename(effectiveModId, dl.file_name);
                   }}
                   onDownload={() => modalFlow.handleDownload(effectiveModId)}
                   onCancelDownload={() => {
-                    const dl = modalFlow.activeDownloadByModId.get(effectiveModId);
-                    if (dl) modalFlow.handleCancelDownload(dl.id);
+                    const activeDl = modalFlow.activeDownloadByModId.get(effectiveModId);
+                    if (activeDl) modalFlow.handleCancelDownload(activeDl.id);
                   }}
+                  onInstallWithPreview={
+                    dl
+                      ? () => modalFlow.handleInstallWithPreviewByFilename(effectiveModId, dl.file_name)
+                      : archive
+                        ? () => modalFlow.handleInstallWithPreview(effectiveModId, archive)
+                        : undefined
+                  }
                 />
               )
             }
             onClose={() => {
               setSelectedModId(null);
+              setFileSelectModId(null);
               modalFlow.dismissFileSelect();
             }}
           />
         );
       })()}
+
+      {modalFlow.previewArchive && (
+        <PreInstallPreview
+          gameName={name}
+          archiveFilename={modalFlow.previewArchive.filename}
+          onConfirm={(renames) => modalFlow.confirmPreviewInstall(renames)}
+          onCancel={modalFlow.dismissPreview}
+        />
+      )}
 
       {modalFlow.fomodArchive && (
         <FomodWizard

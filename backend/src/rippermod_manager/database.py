@@ -64,6 +64,21 @@ def _migrate_missing_columns() -> None:
             "active_profile_id",
             "ALTER TABLE games ADD COLUMN active_profile_id INTEGER",
         ),
+        (
+            "nexus_mod_files",
+            "content_preview_link",
+            "ALTER TABLE nexus_mod_files ADD COLUMN content_preview_link TEXT",
+        ),
+        (
+            "nexus_mod_files",
+            "description",
+            "ALTER TABLE nexus_mod_files ADD COLUMN description TEXT",
+        ),
+        (
+            "nexus_mod_meta",
+            "files_updated_at",
+            "ALTER TABLE nexus_mod_meta ADD COLUMN files_updated_at TIMESTAMP",
+        ),
     ]
     with Session(engine) as session:
         for table, column, ddl in migrations:

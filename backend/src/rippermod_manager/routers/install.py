@@ -8,18 +8,23 @@ from sqlmodel import Session, select
 
 from rippermod_manager.database import get_session
 from rippermod_manager.matching.filename_parser import parse_mod_filename
-from rippermod_manager.models.install import InstalledMod
+from rippermod_manager.models.download import DownloadJob
+from rippermod_manager.models.install import ArchiveNexusLink, InstalledMod
 from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.install import (
     ArchiveContentsResult,
     ArchiveDeleteResult,
     ArchiveEntryOut,
+    ArchiveFileEntry,
+    ArchivePreviewResult,
     AvailableArchive,
     ConflictCheckResult,
     InstalledModOut,
     InstallRequest,
     InstallResult,
+    NexusLinkBody,
+    NexusLinkResult,
     OrphanCleanupResult,
     ToggleResult,
     UninstallResult,
@@ -72,6 +77,26 @@ async def list_archives(
         archive_names,  # type: ignore[arg-type]
     )
 
+    # Build fallback map: ArchiveNexusLink → DownloadJob for archives without parsed IDs
+    link_rows = session.exec(
+        select(ArchiveNexusLink.filename, ArchiveNexusLink.nexus_mod_id).where(
+            ArchiveNexusLink.game_id == game.id,
+            ArchiveNexusLink.filename.in_(archive_names),  # type: ignore[union-attr]
+        )
+    ).all()
+    fallback_mod_ids: dict[str, int] = {fn: mid for fn, mid in link_rows}
+
+    dj_rows = session.exec(
+        select(DownloadJob.file_name, DownloadJob.nexus_mod_id).where(
+            DownloadJob.game_id == game.id,
+            DownloadJob.status == "completed",
+            DownloadJob.file_name.in_(archive_names),  # type: ignore[union-attr]
+        )
+    ).all()
+    for fn, mid in dj_rows:
+        if fn not in fallback_mod_ids:
+            fallback_mod_ids[fn] = mid
+
     result: list[AvailableArchive] = []
     for path in archives:
         parsed = parse_mod_filename(path.name)
@@ -81,12 +106,13 @@ async def list_archives(
             AvailableArchive(
                 filename=path.name,
                 size=stat.st_size,
-                nexus_mod_id=parsed.nexus_mod_id,
+                nexus_mod_id=parsed.nexus_mod_id or fallback_mod_ids.get(path.name),
                 parsed_name=parsed.name,
                 parsed_version=parsed.version,
                 is_installed=path.name in installed_archives,
                 installed_mod_id=installed_archives.get(path.name),
                 last_downloaded_at=dl_date,
+                is_empty=stat.st_size == 0,
             )
         )
     return result
@@ -179,7 +205,7 @@ async def install(
         raise HTTPException(404, f"Archive not found: {data.archive_filename}")
 
     try:
-        result = install_mod(game, archive_path, session, data.skip_conflicts)
+        result = install_mod(game, archive_path, session, data.skip_conflicts, data.file_renames)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     except FileNotFoundError as exc:
@@ -230,6 +256,61 @@ async def toggle(
     return toggle_mod(mod, game, session)
 
 
+@router.get("/preview", response_model=ArchivePreviewResult)
+async def preview_archive(
+    game_name: str,
+    archive_filename: str,
+    session: Session = Depends(get_session),
+) -> ArchivePreviewResult:
+    """List the processed files that would be extracted from an archive."""
+    from rippermod_manager.archive.handler import open_archive
+    from rippermod_manager.services.archive_layout import (
+        ArchiveLayout,
+        detect_layout,
+        known_roots_for_game,
+    )
+
+    game = get_game_or_404(game_name, session)
+    staging = Path(game.install_path) / "downloaded_mods"
+    archive_path = staging / archive_filename
+    if not archive_path.resolve().is_relative_to(staging.resolve()):
+        raise HTTPException(400, "Invalid archive filename")
+    if not archive_path.is_file():
+        raise HTTPException(404, f"Archive not found: {archive_filename}")
+
+    try:
+        with open_archive(archive_path) as archive:
+            all_entries = archive.list_entries()
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    known_roots = known_roots_for_game(game.domain_name)
+    layout_result = detect_layout(all_entries, known_roots)
+    is_fomod = layout_result.layout == ArchiveLayout.FOMOD
+    strip_prefix = layout_result.strip_prefix
+
+    files: list[ArchiveFileEntry] = []
+    for entry in all_entries:
+        if entry.is_dir:
+            continue
+        normalised = entry.filename.replace("\\", "/")
+        if strip_prefix:
+            if normalised.startswith(strip_prefix + "/"):
+                normalised = normalised[len(strip_prefix) + 1 :]
+            else:
+                continue
+        files.append(ArchiveFileEntry(file_path=normalised, size=entry.size, is_dir=False))
+
+    return ArchivePreviewResult(
+        archive_filename=archive_filename,
+        total_files=len(files),
+        is_fomod=is_fomod,
+        files=files,
+    )
+
+
 @router.get("/conflicts", response_model=ConflictCheckResult)
 async def conflicts(
     game_name: str,
@@ -255,7 +336,64 @@ async def delete_archive_endpoint(
 ) -> ArchiveDeleteResult:
     """Delete a single archive file from the staging folder."""
     game = get_game_or_404(game_name, session)
+    staging = Path(game.install_path) / "downloaded_mods"
+    if not (staging / filename).resolve().is_relative_to(staging.resolve()):
+        raise HTTPException(400, "Invalid archive filename")
     return delete_archive(game.install_path, filename)
+
+
+@router.put("/archives/{filename}/nexus-link", response_model=NexusLinkResult)
+async def link_archive(
+    game_name: str,
+    filename: str,
+    body: NexusLinkBody,
+    session: Session = Depends(get_session),
+) -> NexusLinkResult:
+    """Manually link an archive to a Nexus mod ID."""
+    game = get_game_or_404(game_name, session)
+    staging = Path(game.install_path) / "downloaded_mods"
+    if not (staging / filename).resolve().is_relative_to(staging.resolve()):
+        raise HTTPException(400, "Invalid archive filename")
+    existing = session.exec(
+        select(ArchiveNexusLink).where(
+            ArchiveNexusLink.game_id == game.id,
+            ArchiveNexusLink.filename == filename,
+        )
+    ).first()
+    if existing:
+        existing.nexus_mod_id = body.nexus_mod_id
+    else:
+        session.add(
+            ArchiveNexusLink(
+                game_id=game.id,  # type: ignore[arg-type]
+                filename=filename,
+                nexus_mod_id=body.nexus_mod_id,
+            )
+        )
+    session.commit()
+    return NexusLinkResult(filename=filename, nexus_mod_id=body.nexus_mod_id)
+
+
+@router.delete("/archives/{filename}/nexus-link", status_code=204)
+async def unlink_archive(
+    game_name: str,
+    filename: str,
+    session: Session = Depends(get_session),
+) -> None:
+    """Remove a manual Nexus link from an archive."""
+    game = get_game_or_404(game_name, session)
+    staging = Path(game.install_path) / "downloaded_mods"
+    if not (staging / filename).resolve().is_relative_to(staging.resolve()):
+        raise HTTPException(400, "Invalid archive filename")
+    existing = session.exec(
+        select(ArchiveNexusLink).where(
+            ArchiveNexusLink.game_id == game.id,
+            ArchiveNexusLink.filename == filename,
+        )
+    ).first()
+    if existing:
+        session.delete(existing)
+        session.commit()
 
 
 @router.post("/archives/cleanup-orphans", response_model=OrphanCleanupResult)

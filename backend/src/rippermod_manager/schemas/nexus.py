@@ -76,6 +76,7 @@ class TrendingModOut(BaseModel):
     created_timestamp: int = 0
     updated_timestamp: int = 0
     category_id: int | None = None
+    category_name: str = ""
     nexus_url: str = ""
     is_installed: bool = False
     is_tracked: bool = False
@@ -95,6 +96,8 @@ class NexusModFileOut(BaseModel):
     category_id: int | None
     uploaded_timestamp: int | None
     file_size: int
+    content_preview_link: str | None = None
+    description: str | None = None
 
 
 class ModActionResult(BaseModel):
