@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Bump version in all project manifests.
-# Called by semantic-release via @semantic-release/exec.
+# Called by the build job in CI before building the Tauri installer.
 # Usage: bash scripts/bump-version.sh <version>
 set -euo pipefail
 
