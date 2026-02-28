@@ -28,7 +28,7 @@ export function bbcodeToHtml(bbcode: string): string {
   let s = bbcode.replace(/<br\s*\/?>/gi, "\n");
 
   // Strip inline font-size from raw HTML — Nexus authors use tiny sizes (e.g. 8px)
-  // that break readability. Let our container typography govern sizing.
+  // that break readability. Must run before escapeHtml — only strips, never injects.
   s = s.replace(/font-size\s*:\s*[^;"']+;?/gi, "");
 
   s = escapeHtml(s);
