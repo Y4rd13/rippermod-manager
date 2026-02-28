@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://localhost:8425 https://api.nexusmods.com; img-src 'self' https://staticdelivery.nexusmods.com data:; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; connect-src 'self' http://localhost:8425 https://api.nexusmods.com; img-src 'self' https://staticdelivery.nexusmods.com https://img.youtube.com data:; style-src 'self' 'unsafe-inline'; frame-src https://www.youtube.com"
     }
   },
   "plugins": {

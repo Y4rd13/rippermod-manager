@@ -540,6 +540,7 @@ export function GameDetailPage() {
           dataUpdatedAt={endorsedUpdatedAt}
           onModClick={setSelectedModId}
           onFileSelect={handleFileSelect}
+          hideBadges={["endorsed", "installed"]}
         />
       )}
       {tab === "tracked" && (
@@ -556,6 +557,7 @@ export function GameDetailPage() {
           dataUpdatedAt={trackedUpdatedAt}
           onModClick={setSelectedModId}
           onFileSelect={handleFileSelect}
+          hideBadges={["tracked", "installed", "endorsed"]}
         />
       )}
       {tab === "trending" && (

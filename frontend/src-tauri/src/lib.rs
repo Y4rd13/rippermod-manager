@@ -465,6 +465,14 @@ pub fn run() {
         }));
     }
 
+    #[cfg(debug_assertions)]
+    {
+        builder = builder.plugin(tauri_plugin_mcp::init_with_config(
+            tauri_plugin_mcp::PluginConfig::new("rippermod-manager".to_string())
+                .tcp_localhost(9777),
+        ));
+    }
+
     builder
         .manage(Mutex::new(BackendProcess { child: None }))
         .invoke_handler(tauri::generate_handler![detect_game_paths, launch_game, prepare_update])

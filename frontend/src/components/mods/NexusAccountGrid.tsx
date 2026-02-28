@@ -72,6 +72,7 @@ interface Props {
   emptyIcon?: "heart" | "eye";
   emptyTitle?: string;
   dataUpdatedAt?: number;
+  hideBadges?: Array<"installed" | "tracked" | "endorsed">;
 }
 
 export function NexusAccountGrid({
@@ -87,6 +88,7 @@ export function NexusAccountGrid({
   emptyIcon = "heart",
   emptyTitle = "No mods found",
   dataUpdatedAt,
+  hideBadges = [],
 }: Props) {
   const navigate = useNavigate();
   const [filter, setFilter] = useState("");
@@ -238,26 +240,32 @@ export function NexusAccountGrid({
               onClick={() => onModClick?.(nexusModId)}
               onContextMenu={(e) => openMenu(e, mod)}
               badge={
-                (installedModIds.has(nexusModId) || mod.is_tracked || mod.is_endorsed) ? (
-                  <div className="flex items-center gap-1">
-                    {installedModIds.has(nexusModId) && (
-                      <Badge variant="success">
-                        <Check size={10} className="mr-0.5" />
-                        Installed
-                      </Badge>
-                    )}
-                    {mod.is_tracked && (
-                      <Badge variant="neutral">
-                        <Eye size={10} className="mr-0.5" /> Tracked
-                      </Badge>
-                    )}
-                    {mod.is_endorsed && (
-                      <Badge variant="success">
-                        <Heart size={10} className="mr-0.5" /> Endorsed
-                      </Badge>
-                    )}
-                  </div>
-                ) : undefined
+                (() => {
+                  const showInstalled = installedModIds.has(nexusModId) && !hideBadges.includes("installed");
+                  const showTracked = mod.is_tracked && !hideBadges.includes("tracked");
+                  const showEndorsed = mod.is_endorsed && !hideBadges.includes("endorsed");
+                  if (!showInstalled && !showTracked && !showEndorsed) return undefined;
+                  return (
+                    <div className="flex items-center gap-1">
+                      {showInstalled && (
+                        <Badge variant="success">
+                          <Check size={10} className="mr-0.5" />
+                          Installed
+                        </Badge>
+                      )}
+                      {showTracked && (
+                        <Badge variant="neutral">
+                          <Eye size={10} className="mr-0.5" /> Tracked
+                        </Badge>
+                      )}
+                      {showEndorsed && (
+                        <Badge variant="success">
+                          <Heart size={10} className="mr-0.5" /> Endorsed
+                        </Badge>
+                      )}
+                    </div>
+                  );
+                })()
               }
               footer={
                 <div className="flex items-center gap-2">
