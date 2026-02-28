@@ -3,32 +3,10 @@
   "tagFormat": "v${version}",
   "branches": ["main"],
   "plugins": [
-    ["@semantic-release/commit-analyzer", {
-      "releaseRules": [
-        { "type": "perf", "release": false },
-        { "type": "revert", "release": false }
-      ]
-    }],
+    "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
-    ["@semantic-release/changelog", { "changelogFile": "CHANGELOG.md" }],
     ["@semantic-release/exec", {
-      "prepareCmd": "bash scripts/bump-version.sh ${nextRelease.version}",
       "successCmd": "echo \"new_release_version=${nextRelease.version}\" >> $GITHUB_OUTPUT"
-    }],
-    ["@semantic-release/npm", { "npmPublish": false }],
-    ["@semantic-release/git", {
-      "assets": [
-        "CHANGELOG.md",
-        "package.json",
-        "package-lock.json",
-        "frontend/package.json",
-        "frontend/package-lock.json",
-        "frontend/src-tauri/tauri.conf.json",
-        "frontend/src-tauri/Cargo.toml",
-        "frontend/src-tauri/Cargo.lock",
-        "backend/pyproject.toml"
-      ],
-      "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
     }],
     "@semantic-release/github"
   ]
