@@ -131,7 +131,7 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
       <div
         role="dialog"
         aria-modal="true"
-        className="w-full max-w-2xl max-h-[90vh] rounded-xl border border-border bg-surface-0 overflow-hidden flex flex-col animate-modal-in"
+        className="w-full max-w-4xl max-h-[90vh] rounded-xl border border-border bg-surface-0 overflow-hidden flex flex-col animate-modal-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Loading skeleton */}
@@ -235,13 +235,22 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                       className="text-sm text-text-secondary leading-relaxed
                         [&_strong]:text-text-primary [&_strong]:font-semibold
                         [&_em]:italic
-                        [&_a]:text-accent [&_a]:underline [&_a:hover]:text-accent-hover
+                        [&_a]:text-accent [&_a]:underline [&_a:hover]:text-accent-hover [&_a]:cursor-pointer
                         [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-text-muted [&_blockquote]:my-2
                         [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-0.5 [&_ul]:my-2
                         [&_h3]:text-text-primary [&_h3]:font-semibold [&_h3]:text-base [&_h3]:mt-4 [&_h3]:mb-1
                         [&_img]:max-w-full [&_img]:rounded [&_img]:my-2
                         [&_pre]:bg-surface-2 [&_pre]:rounded [&_pre]:p-2 [&_pre]:text-xs [&_pre]:overflow-x-auto [&_pre]:my-2
-                        [&_hr]:border-border [&_hr]:my-3"
+                        [&_hr]:border-border [&_hr]:my-3
+                        [&_.yt-embed]:relative [&_.yt-embed]:my-3 [&_.yt-embed]:rounded-lg [&_.yt-embed]:overflow-hidden [&_.yt-embed]:aspect-video [&_.yt-embed]:max-w-lg
+                        [&_.yt-embed_iframe]:absolute [&_.yt-embed_iframe]:inset-0 [&_.yt-embed_iframe]:w-full [&_.yt-embed_iframe]:h-full"
+                      onClick={(e) => {
+                        const anchor = (e.target as HTMLElement).closest("a");
+                        if (anchor?.href) {
+                          e.preventDefault();
+                          openUrl(anchor.href).catch(() => {});
+                        }
+                      }}
                       dangerouslySetInnerHTML={{ __html: bbcodeToHtml(detail.description) }}
                     />
                   )}

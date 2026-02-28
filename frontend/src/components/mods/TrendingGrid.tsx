@@ -1,4 +1,4 @@
-import { Check, Clock, Copy, Download, ExternalLink, Eye, Heart, Info, RefreshCw, TrendingUp } from "lucide-react";
+import { Clock, Copy, Download, ExternalLink, Eye, Heart, Info, RefreshCw, TrendingUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -195,24 +195,11 @@ export function TrendingGrid({
         onClick={() => onModClick?.(nexusModId)}
         onContextMenu={(e) => openMenu(e, mod)}
         badge={
-          <div className="flex items-center gap-1">
-            {isInstalled && (
-              <Badge variant="success">
-                <Check size={10} className="mr-0.5" />
-                Installed
-              </Badge>
-            )}
-            {mod.is_tracked && (
-              <Badge variant="neutral">
-                <Eye size={10} className="mr-0.5" /> Tracked
-              </Badge>
-            )}
-            {mod.is_endorsed && (
-              <Badge variant="success">
-                <Heart size={10} className="mr-0.5" /> Endorsed
-              </Badge>
-            )}
-          </div>
+          mod.is_tracked ? (
+            <Badge variant="neutral">
+              <Eye size={10} className="mr-0.5" /> Tracked
+            </Badge>
+          ) : undefined
         }
         footer={
           <div className="flex items-center gap-2">

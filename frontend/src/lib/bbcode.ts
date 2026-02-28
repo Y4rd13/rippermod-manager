@@ -27,6 +27,10 @@ export function bbcodeToHtml(bbcode: string): string {
   // Nexus mixes HTML <br> / <br /> with BBCode — normalise to newlines first
   let s = bbcode.replace(/<br\s*\/?>/gi, "\n");
 
+  // Strip inline font-size from raw HTML — Nexus authors use tiny sizes (e.g. 8px)
+  // that break readability. Must run before escapeHtml — only strips, never injects.
+  s = s.replace(/font-size\s*:\s*[^;"']+;?/gi, "");
+
   s = escapeHtml(s);
 
   // Simple inline tags
@@ -66,11 +70,8 @@ export function bbcodeToHtml(bbcode: string): string {
   // [heading]...[/heading]
   s = s.replace(/\[heading\]([\s\S]*?)\[\/heading\]/gi, "<h3>$1</h3>");
 
-  // [size=N]...[/size]  — clamp to 8-36px
-  s = s.replace(/\[size=(\d+)\]([\s\S]*?)\[\/size\]/gi, (_, n, text) => {
-    const px = Math.min(36, Math.max(8, Number(n)));
-    return `<span style="font-size:${px}px">${text}</span>`;
-  });
+  // [size=N]...[/size]  — strip font-size, let container text-sm govern sizing
+  s = s.replace(/\[size=\d+\]([\s\S]*?)\[\/size\]/gi, "$1");
 
   // [color=X]...[/color]  — only allow hex/named colours
   s = s.replace(/\[color=([#\w]+)\]([\s\S]*?)\[\/color\]/gi, (_, color, text) => {
@@ -100,6 +101,13 @@ export function bbcodeToHtml(bbcode: string): string {
   // [line] / [hr]
   s = s.replace(/\[(?:line|hr)\]/gi, "<hr>");
 
+  // [youtube]VIDEO_ID[/youtube] — embed as inline iframe player
+  s = s.replace(
+    /\[youtube\]([\w-]{11})\[\/youtube\]/gi,
+    (_, id) =>
+      `<div class="yt-embed"><iframe src="https://www.youtube.com/embed/${id}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`,
+  );
+
   // Strip any remaining unknown BBCode tags
   s = s.replace(/\[\/?\w+(?:=[^\]]+)?\]/g, "");
 
@@ -108,6 +116,9 @@ export function bbcodeToHtml(bbcode: string): string {
     .split(/(<pre[\s\S]*?<\/pre>)/i)
     .map((chunk, i) => (i % 2 === 0 ? chunk.replace(/\n/g, "<br>") : chunk))
     .join("");
+
+  // Collapse 3+ consecutive <br> into max 2 (paragraph break)
+  s = s.replace(/(<br\s*\/?>){3,}/gi, "<br><br>");
 
   return s;
 }
