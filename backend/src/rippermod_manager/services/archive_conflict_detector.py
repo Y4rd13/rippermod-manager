@@ -81,9 +81,10 @@ def detect_archive_conflicts(
             e.installed_mod_id for _, e in sorted_archives if e.installed_mod_id is not None
         ]
 
-        # Same-mod internal override — intentional, not actionable
+        # Same-mod internal override — intentional, not actionable.
+        # Also covers mod-vs-unmanaged (vanilla) which is typically intentional.
         unique_mod_ids = set(all_mod_ids)
-        severity = Severity.low if len(unique_mod_ids) == 1 else Severity.high
+        severity = Severity.low if len(unique_mod_ids) <= 1 else Severity.high
 
         detail = {
             "winner_archive": winner_name,

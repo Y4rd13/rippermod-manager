@@ -233,6 +233,7 @@ def install_mod(
 
     _ = installed.files  # ensure files are loaded
     index_mod_archives(game, installed, session)
+    session.commit()
 
     logger.info(
         "Installed '%s' (%d files, %d overwritten)", parsed.name, len(extracted_paths), overwritten
