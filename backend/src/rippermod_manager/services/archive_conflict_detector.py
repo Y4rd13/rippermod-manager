@@ -242,15 +242,19 @@ def get_archive_resource_details(
         select(ConflictEvidence).where(
             ConflictEvidence.game_id == game_id,
             ConflictEvidence.kind == ConflictKind.archive_resource,
+            ConflictEvidence.detail.contains(archive_filename),  # type: ignore[union-attr]
         )
     ).all()
 
-    # Filter for evidences that involve the queried archive
+    # Validate in Python (LIKE pre-filter may include false positives)
     relevant: list[tuple[str, dict]] = []
     for ev in evidences:
-        detail = json.loads(ev.detail)
-        winner = detail["winner_archive"]
-        losers = detail["loser_archives"]
+        try:
+            detail = json.loads(ev.detail)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        winner = detail.get("winner_archive", "")
+        losers = detail.get("loser_archives", [])
         if winner == archive_filename or archive_filename in losers:
             relevant.append((ev.key, detail))
 

@@ -161,9 +161,8 @@ def build_conflict_graph(
     )
     if resource_hash:
         ev_query = ev_query.where(ConflictEvidence.key == resource_hash)
-    resource_evidences = session.exec(ev_query).all()
 
-    for ev in resource_evidences:
+    for ev in session.exec(ev_query).yield_per(500):
         try:
             detail = json.loads(ev.detail)
         except (json.JSONDecodeError, TypeError):
