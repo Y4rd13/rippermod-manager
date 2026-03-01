@@ -148,7 +148,7 @@ class TestGetArchiveLoadOrder:
         assert result.load_order[0].archive_filename == "real.archive"
 
     def test_conflict_detected_winner_determined(self, session, game):
-        """Two mods with the same archive filename — last in sort order wins."""
+        """Two mods with the same archive filename — first in sort order wins."""
         mod_a = InstalledMod(game_id=game.id, name="ModAlpha", installed_at=datetime.now(UTC))
         mod_b = InstalledMod(game_id=game.id, name="ModBeta", installed_at=datetime.now(UTC))
         session.add_all([mod_a, mod_b])
@@ -182,40 +182,41 @@ class TestGetArchiveLoadOrder:
 
 
 class TestGeneratePreferRenames:
-    def test_no_rename_when_winner_already_sorts_after(self, session, game):
-        winner = _make_mod(session, game, "Winner", ["zzz_win.archive"])
-        loser = _make_mod(session, game, "Loser", ["aaa_lose.archive"])
+    def test_no_rename_when_loser_already_sorts_after(self, session, game):
+        winner = _make_mod(session, game, "Winner", ["aaa_win.archive"])
+        loser = _make_mod(session, game, "Loser", ["zzz_lose.archive"])
         renames = generate_prefer_renames(winner, loser, game, session)
         assert renames == []
 
-    def test_basic_zz_prefix(self, session, game):
-        winner = _make_mod(session, game, "Winner", ["aaa.archive"])
-        loser = _make_mod(session, game, "Loser", ["bbb.archive"])
+    def test_basic_zz_prefix_on_loser(self, session, game):
+        winner = _make_mod(session, game, "Winner", ["bbb.archive"])
+        loser = _make_mod(session, game, "Loser", ["aaa.archive"])
         renames = generate_prefer_renames(winner, loser, game, session)
         assert len(renames) == 1
         assert renames[0].new_filename == "zz_aaa.archive"
         assert renames[0].old_filename == "aaa.archive"
+        assert renames[0].owning_mod_id == loser.id
 
-    def test_escalating_prefix_when_loser_has_zz(self, session, game):
-        winner = _make_mod(session, game, "Winner", ["aaa.archive"])
-        loser = _make_mod(session, game, "Loser", ["zz_bbb.archive"])
+    def test_escalating_prefix_when_winner_has_zz(self, session, game):
+        winner = _make_mod(session, game, "Winner", ["zz_bbb.archive"])
+        loser = _make_mod(session, game, "Loser", ["aaa.archive"])
         renames = generate_prefer_renames(winner, loser, game, session)
         assert len(renames) == 1
         assert renames[0].new_filename == "zzz_aaa.archive"
 
     def test_existing_prefix_stripped_before_new(self, session, game):
-        # Winner has old prefix that needs to be replaced with a higher one
-        winner = _make_mod(session, game, "Winner", ["zz_aaa.archive"])
-        loser = _make_mod(session, game, "Loser", ["zzz_bbb.archive"])
+        # Loser has old prefix that needs to be replaced with a higher one
+        winner = _make_mod(session, game, "Winner", ["zzz_bbb.archive"])
+        loser = _make_mod(session, game, "Loser", ["zz_aaa.archive"])
         renames = generate_prefer_renames(winner, loser, game, session)
         assert len(renames) == 1
-        # Old zz_ stripped, new zzzz_ applied (one more z than loser's zzz_)
+        # Old zz_ stripped, new zzzz_ applied (one more z than winner's zzz_)
         assert renames[0].new_filename == "zzzz_aaa.archive"
         assert renames[0].old_filename == "zz_aaa.archive"
 
-    def test_multi_archive_mod_all_renamed(self, session, game):
-        winner = _make_mod(session, game, "Winner", ["a1.archive", "a2.archive"])
-        loser = _make_mod(session, game, "Loser", ["bbb.archive"])
+    def test_multi_archive_loser_all_renamed(self, session, game):
+        winner = _make_mod(session, game, "Winner", ["bbb.archive"])
+        loser = _make_mod(session, game, "Loser", ["a1.archive", "a2.archive"])
         renames = generate_prefer_renames(winner, loser, game, session)
         assert len(renames) == 2
         new_names = {r.new_filename for r in renames}
@@ -229,40 +230,43 @@ class TestGeneratePreferRenames:
 
 class TestApplyPreferMod:
     def test_dry_run_returns_plan_without_touching_filesystem(self, session, game, game_dir):
-        winner = _make_mod(session, game, "Winner", ["aaa.archive"], game_dir=game_dir)
-        loser = _make_mod(session, game, "Loser", ["bbb.archive"], game_dir=game_dir)
+        winner = _make_mod(session, game, "Winner", ["bbb.archive"], game_dir=game_dir)
+        loser = _make_mod(session, game, "Loser", ["aaa.archive"], game_dir=game_dir)
         result = apply_prefer_mod(winner, loser, game, session, dry_run=True)
         assert result.success is True
         assert result.dry_run is True
         assert len(result.renames) == 1
-        # Original file should still exist
+        # Loser's original file should still exist
         assert (game_dir / "archive" / "pc" / "mod" / "aaa.archive").exists()
-        # New file should not exist
+        # Renamed file should not exist
         assert not (game_dir / "archive" / "pc" / "mod" / "zz_aaa.archive").exists()
 
-    def test_apply_renames_files_on_disk(self, session, game, game_dir):
-        winner = _make_mod(session, game, "Winner", ["aaa.archive"], game_dir=game_dir)
-        loser = _make_mod(session, game, "Loser", ["bbb.archive"], game_dir=game_dir)
+    def test_apply_renames_loser_files_on_disk(self, session, game, game_dir):
+        winner = _make_mod(session, game, "Winner", ["bbb.archive"], game_dir=game_dir)
+        loser = _make_mod(session, game, "Loser", ["aaa.archive"], game_dir=game_dir)
         result = apply_prefer_mod(winner, loser, game, session)
         assert result.success is True
         assert result.dry_run is False
+        # Loser's archive is renamed (demoted)
         assert not (game_dir / "archive" / "pc" / "mod" / "aaa.archive").exists()
         assert (game_dir / "archive" / "pc" / "mod" / "zz_aaa.archive").exists()
+        # Winner's archive is untouched
+        assert (game_dir / "archive" / "pc" / "mod" / "bbb.archive").exists()
 
-    def test_apply_updates_db_path(self, session, game, game_dir):
-        winner = _make_mod(session, game, "Winner", ["aaa.archive"], game_dir=game_dir)
-        loser = _make_mod(session, game, "Loser", ["bbb.archive"], game_dir=game_dir)
+    def test_apply_updates_loser_db_path(self, session, game, game_dir):
+        winner = _make_mod(session, game, "Winner", ["bbb.archive"], game_dir=game_dir)
+        loser = _make_mod(session, game, "Loser", ["aaa.archive"], game_dir=game_dir)
         apply_prefer_mod(winner, loser, game, session)
         updated = session.exec(
-            select(InstalledModFile).where(InstalledModFile.installed_mod_id == winner.id)
+            select(InstalledModFile).where(InstalledModFile.installed_mod_id == loser.id)
         ).all()
         archive_files = [f for f in updated if f.relative_path.endswith(".archive")]
         assert len(archive_files) == 1
         assert archive_files[0].relative_path == "archive/pc/mod/zz_aaa.archive"
 
     def test_rollback_on_partial_failure(self, session, game, game_dir):
-        winner = _make_mod(session, game, "Winner", ["a1.archive", "a2.archive"], game_dir=game_dir)
-        loser = _make_mod(session, game, "Loser", ["bbb.archive"], game_dir=game_dir)
+        winner = _make_mod(session, game, "Winner", ["bbb.archive"], game_dir=game_dir)
+        loser = _make_mod(session, game, "Loser", ["a1.archive", "a2.archive"], game_dir=game_dir)
 
         _original_rename = Path.rename
         call_count = 0
@@ -282,16 +286,16 @@ class TestApplyPreferMod:
         assert "disk error" in result.message
 
     def test_validation_rejects_missing_source(self, session, game, game_dir):
-        # Create mod in DB but don't create files on disk
-        winner = _make_mod(session, game, "Winner", ["aaa.archive"])
-        loser = _make_mod(session, game, "Loser", ["bbb.archive"], game_dir=game_dir)
+        # Create loser mod in DB but don't create files on disk
+        winner = _make_mod(session, game, "Winner", ["bbb.archive"], game_dir=game_dir)
+        loser = _make_mod(session, game, "Loser", ["aaa.archive"])
         result = apply_prefer_mod(winner, loser, game, session)
         assert result.success is False
         assert "Source file not found" in result.message
 
     def test_validation_rejects_target_collision(self, session, game, game_dir):
-        winner = _make_mod(session, game, "Winner", ["aaa.archive"], game_dir=game_dir)
-        loser = _make_mod(session, game, "Loser", ["bbb.archive"], game_dir=game_dir)
+        winner = _make_mod(session, game, "Winner", ["bbb.archive"], game_dir=game_dir)
+        loser = _make_mod(session, game, "Loser", ["aaa.archive"], game_dir=game_dir)
         # Pre-create the target file to cause collision
         target = game_dir / "archive" / "pc" / "mod" / "zz_aaa.archive"
         target.write_bytes(b"blocker")

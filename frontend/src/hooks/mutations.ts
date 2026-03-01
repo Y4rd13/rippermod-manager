@@ -8,6 +8,8 @@ import type {
   ArchiveDeleteResult,
   ConflictCheckResult,
   CorrelateResult,
+  PreferModRequest,
+  PreferModResult,
   ReindexResult,
   CorrelationBrief,
   DownloadJobOut,
@@ -539,12 +541,39 @@ export function useReindexConflicts() {
       qc.invalidateQueries({ queryKey: ["conflicts", gameName] });
       qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
       qc.invalidateQueries({ queryKey: ["conflict-graph", gameName] });
+      qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
       toast.success(
         "Reindex complete",
         `${result.conflicts_found} conflict${result.conflicts_found === 1 ? "" : "s"} found in ${result.duration_ms}ms`,
       );
     },
     onError: () => toast.error("Reindex failed"),
+  });
+}
+
+export function usePreferModPreview() {
+  return useMutation<PreferModResult, Error, { gameName: string; data: PreferModRequest }>({
+    mutationFn: ({ gameName, data }) =>
+      api.post(`/api/v1/games/${gameName}/load-order/prefer/preview`, data),
+  });
+}
+
+export function usePreferMod() {
+  const qc = useQueryClient();
+  return useMutation<PreferModResult, Error, { gameName: string; data: PreferModRequest }>({
+    mutationFn: ({ gameName, data }) =>
+      api.post(`/api/v1/games/${gameName}/load-order/prefer`, data),
+    onSuccess: (result, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
+      qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
+      qc.invalidateQueries({ queryKey: ["conflict-graph", gameName] });
+      qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      toast.success(
+        "Load order updated",
+        `${result.renames.length} archive${result.renames.length === 1 ? "" : "s"} renamed`,
+      );
+    },
+    onError: () => toast.error("Failed to apply load order preference"),
   });
 }
 

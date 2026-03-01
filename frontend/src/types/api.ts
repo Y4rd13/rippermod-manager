@@ -593,6 +593,51 @@ export interface TrendingResult {
   cached: boolean;
 }
 
+// Archive conflict summary types
+
+export interface ArchiveConflictSummaryOut {
+  archive_filename: string;
+  installed_mod_id: number | null;
+  mod_name: string | null;
+  total_entries: number;
+  winning_entries: number;
+  losing_entries: number;
+  conflicting_archives: string[];
+  severity: "high" | "medium" | "low";
+  identical_count: number;
+  real_count: number;
+}
+
+export interface ArchiveConflictSummariesResult {
+  game_name: string;
+  summaries: ArchiveConflictSummaryOut[];
+  total_archives_with_conflicts: number;
+}
+
+// Load order types
+
+export interface PreferModRequest {
+  winner_mod_id: number;
+  loser_mod_id: number;
+}
+
+export interface RenameAction {
+  old_relative_path: string;
+  new_relative_path: string;
+  old_filename: string;
+  new_filename: string;
+  owning_mod_id: number;
+  owning_mod_name: string;
+}
+
+export interface PreferModResult {
+  success: boolean;
+  renames: RenameAction[];
+  dry_run: boolean;
+  message: string;
+  rollback_performed?: boolean;
+}
+
 // Conflict graph types
 
 export interface ConflictGraphNode {

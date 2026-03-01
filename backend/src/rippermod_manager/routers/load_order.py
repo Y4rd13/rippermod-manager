@@ -75,6 +75,6 @@ async def prefer(
     data: PreferModRequest,
     session: Session = Depends(get_session),
 ) -> PreferModResult:
-    """Execute archive renames so the winner mod loads after the loser."""
+    """Execute archive renames so the winner mod wins over the loser."""
     game, winner, loser = _get_mod_pair(game_name, data, session)
     return apply_prefer_mod(winner, loser, game, session)

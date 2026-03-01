@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from sqlmodel import Session, select
 
+from rippermod_manager.models.archive_index import ArchiveEntryIndex
 from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
 
@@ -188,6 +189,70 @@ class TestReindexConflicts:
         client.post(f"/api/v1/games/{game_name}/conflicts/reindex")
         r = client.get(f"/api/v1/games/{game_name}/conflicts/summary")
         assert r.json()["total_conflicts"] >= 1
+
+
+class TestArchiveConflictSummaries:
+    def test_game_not_found(self, client):
+        r = client.get("/api/v1/games/NoSuchGame/conflicts/archive-summaries")
+        assert r.status_code == 404
+
+    def test_empty_when_no_conflicts(self, client, game_setup):
+        game_name, _ = game_setup
+        r = client.get(f"/api/v1/games/{game_name}/conflicts/archive-summaries")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["game_name"] == "ConflictsGame"
+        assert data["summaries"] == []
+        assert data["total_archives_with_conflicts"] == 0
+
+    def test_returns_summaries_with_mod_names(self, client, game_setup, engine):
+        game_name, _ = game_setup
+
+        with Session(engine) as s:
+            game = s.exec(select(Game).where(Game.name == game_name)).one()
+            mod_a = InstalledMod(game_id=game.id, name="ModAlpha")
+            mod_b = InstalledMod(game_id=game.id, name="ModBeta")
+            s.add_all([mod_a, mod_b])
+            s.flush()
+
+            s.add(
+                ArchiveEntryIndex(
+                    game_id=game.id,
+                    installed_mod_id=mod_a.id,
+                    archive_filename="alpha.archive",
+                    archive_relative_path="archive/pc/mod/alpha.archive",
+                    resource_hash=100,
+                    sha1_hex="a" * 40,
+                )
+            )
+            s.add(
+                ArchiveEntryIndex(
+                    game_id=game.id,
+                    installed_mod_id=mod_b.id,
+                    archive_filename="beta.archive",
+                    archive_relative_path="archive/pc/mod/beta.archive",
+                    resource_hash=100,
+                    sha1_hex="b" * 40,
+                )
+            )
+            s.commit()
+
+        r = client.get(f"/api/v1/games/{game_name}/conflicts/archive-summaries")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["total_archives_with_conflicts"] == 2
+        assert len(data["summaries"]) == 2
+
+        names = {s["archive_filename"]: s for s in data["summaries"]}
+        alpha = names["alpha.archive"]
+        beta = names["beta.archive"]
+        assert alpha["mod_name"] == "ModAlpha"
+        assert beta["mod_name"] == "ModBeta"
+        assert alpha["winning_entries"] == 1
+        assert beta["losing_entries"] == 1
+        assert "severity" in alpha
+        assert "identical_count" in alpha
+        assert "real_count" in alpha
 
 
 # ---------------------------------------------------------------------------

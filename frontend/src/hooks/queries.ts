@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/lib/api-client";
 import type {
+  ArchiveConflictSummariesResult,
   ArchiveContentsResult,
   ArchivePreviewResult,
   AvailableArchive,
@@ -216,6 +217,15 @@ export function useFileContentsPreview(url: string | null) {
       api.get(`/api/v1/nexus/file-contents-preview?url=${encodeURIComponent(url!)}`),
     enabled: !!url,
     staleTime: 30 * 60 * 1000,
+  });
+}
+
+export function useArchiveConflictSummaries(gameName: string) {
+  return useQuery<ArchiveConflictSummariesResult>({
+    queryKey: ["archive-conflict-summaries", gameName],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/conflicts/archive-summaries`),
+    enabled: !!gameName,
+    staleTime: 60_000,
   });
 }
 

@@ -12,6 +12,8 @@ from rippermod_manager.models.conflict import ConflictEvidence, ConflictKind, Se
 from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.conflict import (
+    ArchiveConflictSummariesResult,
+    ArchiveConflictSummaryOut,
     ConflictEvidenceOut,
     ConflictSummary,
     ModRef,
@@ -145,6 +147,49 @@ def reindex_conflicts(
         conflicts_found=len(evidence),
         by_kind=by_kind,
         duration_ms=elapsed_ms,
+    )
+
+
+@_engine_router.get("/archive-summaries", response_model=ArchiveConflictSummariesResult)
+def archive_conflict_summaries(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> ArchiveConflictSummariesResult:
+    """Return per-archive conflict summaries with win/loss counts and severity."""
+    from rippermod_manager.services.archive_conflict_detector import summarize_conflicts
+
+    game = get_game_or_404(game_name, session)
+    summaries = summarize_conflicts(session, game.id)
+
+    # Resolve mod names from installed_mod_id
+    mod_ids = {s.installed_mod_id for s in summaries if s.installed_mod_id is not None}
+    mod_name_map: dict[int, str] = {}
+    if mod_ids:
+        mods = session.exec(
+            select(InstalledMod).where(InstalledMod.id.in_(list(mod_ids)))  # type: ignore[union-attr]
+        ).all()
+        mod_name_map = {m.id: m.name for m in mods}  # type: ignore[misc]
+
+    out = [
+        ArchiveConflictSummaryOut(
+            archive_filename=s.archive_filename,
+            installed_mod_id=s.installed_mod_id,
+            mod_name=mod_name_map.get(s.installed_mod_id) if s.installed_mod_id else None,
+            total_entries=s.total_entries,
+            winning_entries=s.winning_entries,
+            losing_entries=s.losing_entries,
+            conflicting_archives=list(s.conflicting_archives),
+            severity=s.severity,
+            identical_count=s.identical_count,
+            real_count=s.real_count,
+        )
+        for s in summaries
+    ]
+
+    return ArchiveConflictSummariesResult(
+        game_name=game.name,
+        summaries=out,
+        total_archives_with_conflicts=len(out),
     )
 
 

@@ -4,7 +4,6 @@ import {
   ChevronRight,
   Eye,
   FolderOpen,
-  GitBranch,
   Heart,
   Link2,
   Package,
@@ -74,35 +73,32 @@ const ArchiveResourceConflicts = lazy(() =>
   })),
 );
 
-type ConflictSubTab = "file-conflicts" | "archive-resources";
+type ConflictSubTab = "file-conflicts" | "archive-resources" | "conflict-graph";
 
 function ConflictSubTabs({ gameName }: { gameName: string }) {
   const [subTab, setSubTab] = useState<ConflictSubTab>("file-conflicts");
+  const subTabs: { key: ConflictSubTab; label: string }[] = [
+    { key: "file-conflicts", label: "File Conflicts" },
+    { key: "archive-resources", label: "Archive Resources" },
+    { key: "conflict-graph", label: "Conflict Graph" },
+  ];
   return (
     <div className="space-y-4">
       <div className="flex gap-1 border-b border-border">
-        <button
-          onClick={() => setSubTab("file-conflicts")}
-          className={cn(
-            "px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px",
-            subTab === "file-conflicts"
-              ? "border-accent text-accent"
-              : "border-transparent text-text-muted hover:text-text-secondary",
-          )}
-        >
-          File Conflicts
-        </button>
-        <button
-          onClick={() => setSubTab("archive-resources")}
-          className={cn(
-            "px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px",
-            subTab === "archive-resources"
-              ? "border-accent text-accent"
-              : "border-transparent text-text-muted hover:text-text-secondary",
-          )}
-        >
-          Archive Resources
-        </button>
+        {subTabs.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setSubTab(key)}
+            className={cn(
+              "px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px",
+              subTab === key
+                ? "border-accent text-accent"
+                : "border-transparent text-text-muted hover:text-text-secondary",
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
       {subTab === "file-conflicts" && <ConflictsInbox gameName={gameName} />}
       {subTab === "archive-resources" && (
@@ -110,11 +106,16 @@ function ConflictSubTabs({ gameName }: { gameName: string }) {
           <ArchiveResourceConflicts gameName={gameName} />
         </Suspense>
       )}
+      {subTab === "conflict-graph" && (
+        <Suspense fallback={<SkeletonCardGrid count={3} />}>
+          <ConflictGraphTab gameName={gameName} />
+        </Suspense>
+      )}
     </div>
   );
 }
 
-type Tab = "installed" | "conflicts" | "conflict-graph" | "updates" | "trending" | "endorsed" | "tracked" | "mods" | "matched" | "archives" | "profiles";
+type Tab = "installed" | "conflicts" | "updates" | "trending" | "endorsed" | "tracked" | "mods" | "matched" | "archives" | "profiles";
 
 const TABS: { key: Tab; label: string; Icon: typeof Package; tooltip: string }[] = [
   { key: "installed", label: "Installed", Icon: UserCheck, tooltip: "Managed and recognized mods on your system" },
@@ -127,7 +128,6 @@ const TABS: { key: Tab; label: string; Icon: typeof Package; tooltip: string }[]
   { key: "matched", label: "Nexus Matched", Icon: Link2, tooltip: "Scanned mods matched to Nexus Mods entries" },
   { key: "archives", label: "Archives", Icon: Archive, tooltip: "Downloaded mod archives ready to install" },
   { key: "profiles", label: "Profiles", Icon: FolderOpen, tooltip: "Saved snapshots of your mod enabled/disabled states" },
-  { key: "conflict-graph", label: "Conflict Graph", Icon: GitBranch, tooltip: "Visualize file conflicts between mods and archives" },
 ];
 
 export function GameDetailPage() {
@@ -645,11 +645,6 @@ export function GameDetailPage() {
       )}
       {tab === "updates" && (
         <UpdatesTable gameName={name} updates={updates?.updates ?? []} isLoading={updatesLoading} />
-      )}
-      {tab === "conflict-graph" && (
-        <Suspense fallback={<SkeletonCardGrid count={3} />}>
-          <ConflictGraphTab gameName={name} />
-        </Suspense>
       )}
       </div>
 
