@@ -14,6 +14,7 @@ from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.conflict import (
     ArchiveConflictSummariesResult,
     ArchiveConflictSummaryOut,
+    ArchiveResourceDetailsResult,
     ConflictEvidenceOut,
     ConflictSummary,
     ModRef,
@@ -191,6 +192,63 @@ def archive_conflict_summaries(
         summaries=out,
         total_archives_with_conflicts=len(out),
     )
+
+
+@_engine_router.get(
+    "/archive-details/{archive_filename:path}",
+    response_model=ArchiveResourceDetailsResult,
+)
+def archive_resource_details(
+    game_name: str,
+    archive_filename: str,
+    session: Session = Depends(get_session),
+) -> ArchiveResourceDetailsResult:
+    """Return per-resource conflict details for a single archive file."""
+    from rippermod_manager.services.archive_conflict_detector import (
+        get_archive_resource_details,
+    )
+
+    game = get_game_or_404(game_name, session)
+    result = get_archive_resource_details(session, game.id, archive_filename)
+
+    # Resolve mod names for partner archives
+    archive_names = [g.partner_archive for g in result.groups]
+    if archive_names:
+        from rippermod_manager.models.archive_index import ArchiveEntryIndex
+
+        rows = session.exec(
+            select(
+                ArchiveEntryIndex.archive_filename,
+                ArchiveEntryIndex.installed_mod_id,
+            )
+            .where(
+                ArchiveEntryIndex.game_id == game.id,
+                ArchiveEntryIndex.archive_filename.in_(archive_names),  # type: ignore[union-attr]
+            )
+            .group_by(ArchiveEntryIndex.archive_filename, ArchiveEntryIndex.installed_mod_id)
+        ).all()
+
+        mod_id_map: dict[str, int] = {}
+        for name, mid in rows:
+            if mid is not None:
+                mod_id_map.setdefault(name, mid)
+
+        mod_ids = set(mod_id_map.values())
+        mod_name_map: dict[int, str] = {}
+        if mod_ids:
+            mods = session.exec(
+                select(InstalledMod).where(
+                    InstalledMod.id.in_(list(mod_ids))  # type: ignore[union-attr]
+                )
+            ).all()
+            mod_name_map = {m.id: m.name for m in mods}  # type: ignore[misc]
+
+        for group in result.groups:
+            mid = mod_id_map.get(group.partner_archive)
+            if mid is not None:
+                group.partner_mod_name = mod_name_map.get(mid)
+
+    return result
 
 
 # --- Inbox endpoints (global post-install conflict visibility) ---

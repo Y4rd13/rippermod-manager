@@ -5,6 +5,7 @@ import type {
   ArchiveConflictSummariesResult,
   ArchiveContentsResult,
   ArchivePreviewResult,
+  ArchiveResourceDetailsResult,
   AvailableArchive,
   ConflictGraphResult,
   ConflictKind,
@@ -217,6 +218,18 @@ export function useFileContentsPreview(url: string | null) {
       api.get(`/api/v1/nexus/file-contents-preview?url=${encodeURIComponent(url!)}`),
     enabled: !!url,
     staleTime: 30 * 60 * 1000,
+  });
+}
+
+export function useArchiveResourceDetails(gameName: string, archiveFilename: string | null) {
+  return useQuery<ArchiveResourceDetailsResult>({
+    queryKey: ["archive-resource-details", gameName, archiveFilename],
+    queryFn: () =>
+      api.get(
+        `/api/v1/games/${gameName}/conflicts/archive-details/${encodeURIComponent(archiveFilename!)}`,
+      ),
+    enabled: !!gameName && !!archiveFilename,
+    staleTime: 60_000,
   });
 }
 

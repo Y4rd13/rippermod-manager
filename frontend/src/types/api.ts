@@ -614,6 +614,29 @@ export interface ArchiveConflictSummariesResult {
   total_archives_with_conflicts: number;
 }
 
+export interface ResourceConflictDetail {
+  resource_hash: string;
+  winner_archive: string;
+  loser_archives: string[];
+  is_identical: boolean;
+  severity: "high" | "medium" | "low";
+}
+
+export interface ResourceConflictGroup {
+  partner_archive: string;
+  partner_mod_name: string | null;
+  is_winner: boolean;
+  identical_count: number;
+  real_count: number;
+  resources: ResourceConflictDetail[];
+}
+
+export interface ArchiveResourceDetailsResult {
+  archive_filename: string;
+  total_resource_conflicts: number;
+  groups: ResourceConflictGroup[];
+}
+
 // Load order types
 
 export interface PreferModRequest {

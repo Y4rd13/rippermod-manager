@@ -3,6 +3,7 @@ import {
   ChevronDown,
   ChevronRight,
   Crown,
+  List,
   Power,
   RefreshCw,
   ShieldAlert,
@@ -17,6 +18,7 @@ import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { VirtualTable } from "@/components/ui/VirtualTable";
+import { ResourceDetailsPanel } from "@/components/conflicts/ResourceDetailsPanel";
 import { useArchiveConflictSummaries } from "@/hooks/queries";
 import { usePreferMod, usePreferModPreview, useReindexConflicts, useToggleMod } from "@/hooks/mutations";
 import type { ArchiveConflictSummaryOut, PreferModResult } from "@/types/api";
@@ -56,6 +58,7 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<SeverityFilter>("all");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [detailsOpenFor, setDetailsOpenFor] = useState<string | null>(null);
   const [previewState, setPreviewState] = useState<PreferPreviewState | null>(null);
   const [previewResult, setPreviewResult] = useState<PreferModResult | null>(null);
 
@@ -92,8 +95,12 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
   const toggleExpand = useCallback((filename: string) => {
     setExpandedRows((prev) => {
       const next = new Set(prev);
-      if (next.has(filename)) next.delete(filename);
-      else next.add(filename);
+      if (next.has(filename)) {
+        next.delete(filename);
+        setDetailsOpenFor((cur) => (cur === filename ? null : cur));
+      } else {
+        next.add(filename);
+      }
       return next;
     });
   }, []);
@@ -205,7 +212,7 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
           items={filtered}
           estimateHeight={48}
           dynamicHeight
-          remeasureDep={expandedRows.size}
+          remeasureDep={`${expandedRows.size}-${detailsOpenFor}`}
           renderHead={() => (
             <tr className="border-b border-border text-left text-xs text-text-muted">
               <th className="pb-2 pr-4 font-medium w-8" />
@@ -347,6 +354,26 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
                             </div>
                           );
                         })}
+
+                        <button
+                          className="flex items-center gap-1 mt-2 text-xs text-accent hover:text-accent/80 transition-colors"
+                          onClick={() =>
+                            setDetailsOpenFor((cur) =>
+                              cur === item.archive_filename ? null : item.archive_filename,
+                            )
+                          }
+                        >
+                          <List size={12} />
+                          {detailsOpenFor === item.archive_filename ? "Hide" : "Show"} Resource Details
+                          ({totalConflicts} conflict{totalConflicts !== 1 ? "s" : ""})
+                        </button>
+
+                        {detailsOpenFor === item.archive_filename && (
+                          <ResourceDetailsPanel
+                            gameName={gameName}
+                            archiveFilename={item.archive_filename}
+                          />
+                        )}
                       </div>
                     </td>
                   </tr>
