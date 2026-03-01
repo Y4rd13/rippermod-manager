@@ -39,7 +39,7 @@ export function VirtualTable<T>({
     estimateSize: () => estimateHeight,
     overscan,
     measureElement: dynamicHeight
-      ? (el) => el.getBoundingClientRect().height
+      ? (el: Element) => (el as HTMLElement).offsetHeight
       : undefined,
     scrollMargin,
   });
