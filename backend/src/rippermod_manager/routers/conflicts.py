@@ -4,7 +4,7 @@ import json
 import logging
 import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
 from rippermod_manager.database import get_session
@@ -155,12 +155,15 @@ def reindex_conflicts(
 def archive_conflict_summaries(
     game_name: str,
     session: Session = Depends(get_session),
+    resource_hash: str | None = Query(
+        None, description="Filter to archives with this resource hash"
+    ),
 ) -> ArchiveConflictSummariesResult:
     """Return per-archive conflict summaries with win/loss counts and severity."""
     from rippermod_manager.services.archive_conflict_detector import summarize_conflicts
 
     game = get_game_or_404(game_name, session)
-    summaries = summarize_conflicts(session, game.id)
+    summaries = summarize_conflicts(session, game.id, resource_hash=resource_hash)
 
     # Resolve mod names from installed_mod_id
     mod_ids = {s.installed_mod_id for s in summaries if s.installed_mod_id is not None}
@@ -305,10 +308,11 @@ def inbox_resolve(
 def conflict_graph(
     game_name: str,
     session: Session = Depends(get_session),
+    resource_hash: str | None = Query(None, description="Filter resource edges to this hash"),
 ) -> ConflictGraphResult:
     """Build a conflict graph across all installed mods and uninstalled archives."""
     game = get_game_or_404(game_name, session)
-    return build_conflict_graph(game, session)
+    return build_conflict_graph(game, session, resource_hash=resource_hash)
 
 
 router.include_router(_engine_router)

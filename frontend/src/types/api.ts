@@ -672,6 +672,9 @@ export interface ConflictGraphNode {
   disabled: boolean;
   nexus_mod_id: number | null;
   picture_url: string | null;
+  resource_conflict_count: number;
+  real_resource_count: number;
+  identical_resource_count: number;
 }
 
 export interface ConflictGraphEdge {
@@ -679,6 +682,9 @@ export interface ConflictGraphEdge {
   target: string;
   shared_files: string[];
   weight: number;
+  resource_conflicts: number;
+  identical_resource_count: number;
+  real_resource_count: number;
 }
 
 export interface ConflictGraphResult {

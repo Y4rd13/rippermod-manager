@@ -118,6 +118,8 @@ def detect_archive_conflicts(
 def summarize_conflicts(
     session: Session,
     game_id: int,
+    *,
+    resource_hash: str | None = None,
 ) -> list[ArchiveConflictSummary]:
     """Produce per-archive conflict summaries with severity ratings.
 
@@ -127,10 +129,18 @@ def summarize_conflicts(
     * **high** - >50% of entries lose (or all entries lose)
     * **medium** - 1-50% of entries lose
     * **low** - mod wins all conflicting entries
+
+    If *resource_hash* is given (hex string like ``0xa4fb…``), only evidences
+    whose key matches are included.
     """
     evidences = detect_archive_conflicts(session, game_id)
     if not evidences:
         return []
+
+    if resource_hash:
+        evidences = [e for e in evidences if e.key == resource_hash]
+        if not evidences:
+            return []
 
     total_counts_rows = session.exec(
         select(

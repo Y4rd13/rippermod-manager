@@ -19,6 +19,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 
+import { ConflictSummaryWidget } from "@/components/conflicts/ConflictSummaryWidget";
 import { ArchivesList } from "@/components/mods/ArchivesList";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { ConflictsInbox } from "@/components/mods/ConflictsInbox";
@@ -61,29 +62,23 @@ import { toast } from "@/stores/toast-store";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import type { ModUpdate } from "@/types/api";
 
-const ConflictGraphTab = lazy(() =>
-  import("@/components/conflicts/ConflictGraphTab").then((m) => ({
-    default: m.ConflictGraphTab,
-  })),
-);
-
 const ArchiveResourceConflicts = lazy(() =>
   import("@/components/conflicts/ArchiveResourceConflicts").then((m) => ({
     default: m.ArchiveResourceConflicts,
   })),
 );
 
-type ConflictSubTab = "file-conflicts" | "archive-resources" | "conflict-graph";
+type ConflictSubTab = "file-conflicts" | "archive-resources";
 
 function ConflictSubTabs({ gameName }: { gameName: string }) {
   const [subTab, setSubTab] = useState<ConflictSubTab>("file-conflicts");
   const subTabs: { key: ConflictSubTab; label: string }[] = [
     { key: "file-conflicts", label: "File Conflicts" },
     { key: "archive-resources", label: "Archive Resources" },
-    { key: "conflict-graph", label: "Conflict Graph" },
   ];
   return (
     <div className="space-y-4">
+      <ConflictSummaryWidget gameName={gameName} />
       <div className="flex gap-1 border-b border-border">
         {subTabs.map(({ key, label }) => (
           <button
@@ -104,11 +99,6 @@ function ConflictSubTabs({ gameName }: { gameName: string }) {
       {subTab === "archive-resources" && (
         <Suspense fallback={<SkeletonCardGrid count={3} />}>
           <ArchiveResourceConflicts gameName={gameName} />
-        </Suspense>
-      )}
-      {subTab === "conflict-graph" && (
-        <Suspense fallback={<SkeletonCardGrid count={3} />}>
-          <ConflictGraphTab gameName={gameName} />
         </Suspense>
       )}
     </div>

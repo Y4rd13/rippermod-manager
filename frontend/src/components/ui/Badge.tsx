@@ -23,11 +23,13 @@ interface BadgeProps {
   prominent?: boolean;
   children: React.ReactNode;
   className?: string;
+  title?: string;
 }
 
-export function Badge({ variant = "neutral", prominent, children, className }: BadgeProps) {
+export function Badge({ variant = "neutral", prominent, children, className, title }: BadgeProps) {
   return (
     <span
+      title={title}
       className={cn(
         "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
         prominent ? prominentVariantStyles[variant] : variantStyles[variant],

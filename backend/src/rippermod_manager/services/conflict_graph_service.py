@@ -1,11 +1,14 @@
+import json
 import logging
 from collections import defaultdict
 from itertools import combinations
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from rippermod_manager.archive.handler import open_archive
 from rippermod_manager.matching.filename_parser import parse_mod_filename
+from rippermod_manager.models.archive_index import ArchiveEntryIndex
+from rippermod_manager.models.conflict import ConflictEvidence, ConflictKind
 from rippermod_manager.models.game import Game
 from rippermod_manager.schemas.conflicts import (
     ConflictGraphEdge,
@@ -25,7 +28,12 @@ from rippermod_manager.services.install_service import (
 logger = logging.getLogger(__name__)
 
 
-def build_conflict_graph(game: Game, session: Session) -> ConflictGraphResult:
+def build_conflict_graph(
+    game: Game,
+    session: Session,
+    *,
+    resource_hash: str | None = None,
+) -> ConflictGraphResult:
     """Build a conflict graph across all installed mods and uninstalled archives."""
     ownership = get_file_ownership_map(session, game.id)  # type: ignore[arg-type]
 
@@ -122,10 +130,73 @@ def build_conflict_graph(game: Game, session: Session) -> ConflictGraphResult:
             key = (a, b) if a < b else (b, a)
             edge_map[key].append(path)
 
+    # --- Aggregate resource-level conflicts from ConflictEvidence ---
+    # ConflictEvidence uses game .archive filenames (e.g. "CyberAds.archive"),
+    # NOT download archive names (e.g. "Cyber Ads-26975-1-5-1.zip").
+    # Use ArchiveEntryIndex to map .archive filename → installed_mod_id → node_id.
+    game_archive_to_node: dict[str, str] = {}
+    index_rows = session.exec(
+        select(
+            ArchiveEntryIndex.archive_filename,
+            ArchiveEntryIndex.installed_mod_id,
+        )
+        .where(
+            ArchiveEntryIndex.game_id == game.id,  # type: ignore[arg-type]
+            ArchiveEntryIndex.installed_mod_id.is_not(None),  # type: ignore[union-attr]
+        )
+        .distinct()
+    ).all()
+    for arch_filename, mod_id in index_rows:
+        nid = f"installed:{mod_id}"
+        if nid in node_info:
+            game_archive_to_node[arch_filename] = nid
+
+    resource_edge_data: dict[tuple[str, str], dict[str, int]] = defaultdict(
+        lambda: {"resource_conflicts": 0, "identical_resource_count": 0, "real_resource_count": 0}
+    )
+
+    ev_query = select(ConflictEvidence).where(
+        ConflictEvidence.game_id == game.id,  # type: ignore[arg-type]
+        ConflictEvidence.kind == ConflictKind.archive_resource,
+    )
+    if resource_hash:
+        ev_query = ev_query.where(ConflictEvidence.key == resource_hash)
+    resource_evidences = session.exec(ev_query).all()
+
+    for ev in resource_evidences:
+        detail = json.loads(ev.detail)
+        winner = detail["winner_archive"]
+        sha1s: dict[str, str] = detail.get("sha1s", {})
+        winner_sha1 = sha1s.get(winner, "")
+        winner_node = game_archive_to_node.get(winner)
+        if not winner_node:
+            continue
+        for loser in detail["loser_archives"]:
+            loser_node = game_archive_to_node.get(loser)
+            if not loser_node or loser_node == winner_node:
+                continue
+            key = (
+                (winner_node, loser_node) if winner_node < loser_node else (loser_node, winner_node)
+            )
+            rd = resource_edge_data[key]
+            rd["resource_conflicts"] += 1
+            loser_sha1 = sha1s.get(loser, "")
+            if winner_sha1 and loser_sha1:
+                if winner_sha1 == loser_sha1:
+                    rd["identical_resource_count"] += 1
+                else:
+                    rd["real_resource_count"] += 1
+
     # --- Build result, only including nodes that participate in conflicts ---
     conflict_node_ids: set[str] = set()
     edges: list[ConflictGraphEdge] = []
-    for (src, tgt), files in edge_map.items():
+
+    # Merge file edges with resource data
+    all_edge_keys = set(edge_map.keys()) | set(resource_edge_data.keys())
+    for key in all_edge_keys:
+        src, tgt = key
+        files = edge_map.get(key, [])
+        rd = resource_edge_data.get(key, {})
         conflict_node_ids.add(src)
         conflict_node_ids.add(tgt)
         sorted_files = sorted(files)
@@ -135,18 +206,36 @@ def build_conflict_graph(game: Game, session: Session) -> ConflictGraphResult:
                 target=tgt,
                 shared_files=sorted_files[:200],
                 weight=len(files),
+                resource_conflicts=rd.get("resource_conflicts", 0),
+                identical_resource_count=rd.get("identical_resource_count", 0),
+                real_resource_count=rd.get("real_resource_count", 0),
             )
         )
 
-    # Count conflicts per node
+    # Count conflicts per node (file + resource)
     conflict_counts: dict[str, int] = defaultdict(int)
+    resource_node_counts: dict[str, dict[str, int]] = defaultdict(
+        lambda: {
+            "resource_conflict_count": 0,
+            "real_resource_count": 0,
+            "identical_resource_count": 0,
+        }
+    )
     for edge in edges:
         conflict_counts[edge.source] += edge.weight
         conflict_counts[edge.target] += edge.weight
+        for nid in (edge.source, edge.target):
+            rc = resource_node_counts[nid]
+            rc["resource_conflict_count"] += edge.resource_conflicts
+            rc["real_resource_count"] += edge.real_resource_count
+            rc["identical_resource_count"] += edge.identical_resource_count
 
     nodes: list[ConflictGraphNode] = []
     for nid in sorted(conflict_node_ids):
-        info = node_info[nid]
+        info = node_info.get(nid)
+        if not info:
+            continue
+        rc = resource_node_counts.get(nid, {})
         nodes.append(
             ConflictGraphNode(
                 id=nid,
@@ -157,6 +246,9 @@ def build_conflict_graph(game: Game, session: Session) -> ConflictGraphResult:
                 disabled=info["disabled"],
                 nexus_mod_id=info["nexus_mod_id"],
                 picture_url=info["picture_url"],
+                resource_conflict_count=rc.get("resource_conflict_count", 0),
+                real_resource_count=rc.get("real_resource_count", 0),
+                identical_resource_count=rc.get("identical_resource_count", 0),
             )
         )
 
