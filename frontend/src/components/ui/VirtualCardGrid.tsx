@@ -45,7 +45,7 @@ export function VirtualCardGrid<T>({
     estimateSize: () => estimateHeight,
     overscan,
     gap: 16,
-    measureElement: (el) => el.getBoundingClientRect().height,
+    measureElement: (el: Element) => (el as HTMLElement).offsetHeight,
     scrollMargin,
   });
 
