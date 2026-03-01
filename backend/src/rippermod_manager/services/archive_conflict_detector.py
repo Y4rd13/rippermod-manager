@@ -261,8 +261,8 @@ def get_archive_resource_details(
     # Group by partner archive
     partner_resources: dict[str, list[ResourceConflictDetail]] = defaultdict(list)
     for resource_hash, detail in relevant:
-        winner = detail["winner_archive"]
-        losers: list[str] = detail["loser_archives"]
+        winner = detail.get("winner_archive", "")
+        losers: list[str] = detail.get("loser_archives", [])
         sha1s: dict[str, str] = detail.get("sha1s", {})
 
         partners = losers if winner == archive_filename else [winner]
