@@ -26,13 +26,15 @@ function findClusters(nodes: ConflictGraphNode[], edges: ConflictGraphEdge[]): C
   }
 
   function find(x: string): string {
-    const p = parent.get(x)!;
-    if (p !== x) {
-      const root = find(p);
-      parent.set(x, root);
-      return root;
+    let root = x;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    let curr = x;
+    while (curr !== root) {
+      const next = parent.get(curr)!;
+      parent.set(curr, root);
+      curr = next;
     }
-    return x;
+    return root;
   }
 
   function union(a: string, b: string) {
@@ -217,7 +219,7 @@ export function ConflictSummaryWidget({ gameName }: Props) {
                     {cluster.identicalResourceCount} cosmetic
                   </Badge>
                 )}
-                {cluster.resourceConflicts === 0 && (
+                {(cluster.resourceConflicts === 0 || (cluster.realResourceCount === 0 && cluster.identicalResourceCount === 0)) && cluster.fileConflicts > 0 && (
                   <Badge variant="neutral">
                     {cluster.fileConflicts} file overlap{cluster.fileConflicts !== 1 ? "s" : ""}
                   </Badge>

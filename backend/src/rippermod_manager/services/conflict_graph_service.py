@@ -164,14 +164,19 @@ def build_conflict_graph(
     resource_evidences = session.exec(ev_query).all()
 
     for ev in resource_evidences:
-        detail = json.loads(ev.detail)
-        winner = detail["winner_archive"]
+        try:
+            detail = json.loads(ev.detail)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        winner = detail.get("winner_archive")
+        if not winner:
+            continue
         sha1s: dict[str, str] = detail.get("sha1s", {})
         winner_sha1 = sha1s.get(winner, "")
         winner_node = game_archive_to_node.get(winner)
         if not winner_node:
             continue
-        for loser in detail["loser_archives"]:
+        for loser in detail.get("loser_archives", []):
             loser_node = game_archive_to_node.get(loser)
             if not loser_node or loser_node == winner_node:
                 continue

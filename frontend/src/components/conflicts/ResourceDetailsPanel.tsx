@@ -72,7 +72,7 @@ function GroupSection({
         <div className="space-y-0.5 mt-1.5 ml-5">
           {filtered.map((r) => (
             <div
-              key={r.resource_hash}
+              key={`${r.resource_hash}-${r.winner_archive}`}
               className="flex items-center gap-2 text-xs text-text-secondary"
             >
               <Shuffle size={10} className="text-text-muted shrink-0" />
