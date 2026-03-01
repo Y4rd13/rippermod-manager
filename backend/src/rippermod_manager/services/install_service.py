@@ -228,6 +228,12 @@ def install_mod(
     session.commit()
     session.refresh(installed)
 
+    # Index .archive files for resource-level conflict detection
+    from rippermod_manager.services.archive_index_service import index_mod_archives
+
+    _ = installed.files  # ensure files are loaded
+    index_mod_archives(game, installed, session)
+
     logger.info(
         "Installed '%s' (%d files, %d overwritten)", parsed.name, len(extracted_paths), overwritten
     )

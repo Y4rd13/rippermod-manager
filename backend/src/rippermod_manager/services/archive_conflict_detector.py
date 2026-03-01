@@ -81,6 +81,10 @@ def detect_archive_conflicts(
             e.installed_mod_id for _, e in sorted_archives if e.installed_mod_id is not None
         ]
 
+        # Same-mod internal override — intentional, not actionable
+        unique_mod_ids = set(all_mod_ids)
+        severity = Severity.low if len(unique_mod_ids) == 1 else Severity.high
+
         detail = {
             "winner_archive": winner_name,
             "loser_archives": [name for name, _ in loser_entries],
@@ -89,9 +93,9 @@ def detect_archive_conflicts(
         evidences.append(
             ConflictEvidence(
                 game_id=game_id,
-                kind=ConflictKind.archive_entry,
-                severity=Severity.high,
-                key=hex(resource_hash),
+                kind=ConflictKind.archive_resource,
+                severity=severity,
+                key=hex(resource_hash & 0xFFFFFFFFFFFFFFFF),
                 mod_ids=",".join(str(mid) for mid in all_mod_ids),
                 winner_mod_id=winner_entry.installed_mod_id,
                 detail=json.dumps(detail),

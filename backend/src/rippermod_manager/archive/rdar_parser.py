@@ -16,13 +16,17 @@ from pathlib import Path
 
 RDAR_MAGIC = b"RDAR"
 HEADER_SIZE = 0x28  # 40 bytes
-TOC_PREAMBLE_SIZE = 28  # 5x uint32 + 1x uint64
+TOC_PREAMBLE_SIZE = 28  # 2x uint32 + 1x uint64 + 3x uint32
 HASH_ENTRY_SIZE = 0x38  # 56 bytes
 MAX_HASH_TABLE_BYTES = 512 * 1024 * 1024  # 512 MB sanity limit
 
 # struct formats (little-endian)
-_HEADER_FMT = "<4sIQQQQ"
-_TOC_PREAMBLE_FMT = "<IIIIIQ"
+# Header: magic(4s) version(u32) table_offset(u64) index(u32)
+#         custom_data_count(u32) unk(u64) file_size(u64)
+_HEADER_FMT = "<4sIQIIQQ"
+# TOC preamble: FileTableOffset(u32) FileTableSize(u32) CRC(u64)
+#               FileEntryCount(u32) FileSegmentCount(u32) ResourceDependencyCount(u32)
+_TOC_PREAMBLE_FMT = "<IIQIII"
 _HASH_ENTRY_FMT = "<QQIIIII"  # 36 bytes; remaining 20 bytes are SHA-1
 
 
@@ -57,14 +61,14 @@ def parse_rdar_header(data: bytes) -> RdarHeader:
     magic = data[0:4]
     if magic != RDAR_MAGIC:
         raise ValueError(f"Invalid RDAR magic: {magic!r}")
-    _, version, table_offset, archive_id, _dummy, file_size = struct.unpack_from(
+    _, version, table_offset, index, _custom_data_count, _unk, file_size = struct.unpack_from(
         _HEADER_FMT, data, 0
     )
     return RdarHeader(
         magic=magic,
         version=version,
         table_offset=table_offset,
-        archive_id=archive_id,
+        archive_id=index,
         file_size=file_size,
     )
 
@@ -90,7 +94,7 @@ def parse_rdar_toc(file_path: str | Path) -> RdarToc:
         if len(toc_meta) < TOC_PREAMBLE_SIZE:
             raise ValueError("TOC preamble truncated")
 
-        _num, _size, num_files, _num_offsets, _num_hashes, _checksum = struct.unpack_from(
+        _tbl_off, _tbl_sz, _crc, num_files, _num_segments, _num_deps = struct.unpack_from(
             _TOC_PREAMBLE_FMT, toc_meta, 0
         )
 

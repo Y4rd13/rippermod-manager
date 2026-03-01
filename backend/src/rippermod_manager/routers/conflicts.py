@@ -128,6 +128,10 @@ def reindex_conflicts(
     """Trigger a full conflict re-scan for all installed mods."""
     game = get_game_or_404(game_name, session)
 
+    from rippermod_manager.services.archive_index_service import index_game_archives
+
+    index_game_archives(game, session, force_reindex=False)
+
     start = time.perf_counter()
     engine = ConflictEngine()
     evidence = engine.run(game, session)

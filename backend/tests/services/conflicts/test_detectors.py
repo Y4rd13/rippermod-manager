@@ -2,14 +2,17 @@
 
 import pytest
 
+from rippermod_manager.models.archive_index import ArchiveEntryIndex
 from rippermod_manager.models.conflict import ConflictKind, Severity
 from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
 from rippermod_manager.services.conflicts.detectors import (
     ArchiveEntryDetector,
+    ArchiveResourceDetector,
     RedscriptTargetDetector,
     TweakKeyDetector,
     _archive_entry_severity,
+    get_all_detectors,
 )
 
 
@@ -302,3 +305,54 @@ class TestTweakKeyDetector:
         detector = TweakKeyDetector()
         evidence = detector.detect(game, [mod_a], session)
         assert len(evidence) == 0
+
+
+# ---------------------------------------------------------------------------
+# ArchiveResourceDetector
+# ---------------------------------------------------------------------------
+
+
+def _add_archive_entry(session, game_id, archive_filename, resource_hash, mod_id=None):
+    """Helper to insert an ArchiveEntryIndex row."""
+    session.add(
+        ArchiveEntryIndex(
+            game_id=game_id,
+            installed_mod_id=mod_id,
+            archive_filename=archive_filename,
+            archive_relative_path=f"archive/pc/mod/{archive_filename}",
+            resource_hash=resource_hash,
+            sha1_hex="0" * 40,
+        )
+    )
+    session.flush()
+
+
+class TestArchiveResourceDetector:
+    def test_no_conflicts_when_disjoint(self, session, game_with_dir):
+        game, _ = game_with_dir
+        mod_a = _add_mod(session, game, "A", ["archive/pc/mod/a.archive"])
+        mod_b = _add_mod(session, game, "B", ["archive/pc/mod/b.archive"])
+        _add_archive_entry(session, game.id, "a.archive", 100, mod_a.id)
+        _add_archive_entry(session, game.id, "b.archive", 200, mod_b.id)
+
+        detector = ArchiveResourceDetector()
+        evidence = detector.detect(game, [mod_a, mod_b], session)
+        assert len(evidence) == 0
+
+    def test_detects_hash_collision(self, session, game_with_dir):
+        game, _ = game_with_dir
+        mod_a = _add_mod(session, game, "A", ["archive/pc/mod/a.archive"])
+        mod_b = _add_mod(session, game, "B", ["archive/pc/mod/b.archive"])
+        _add_archive_entry(session, game.id, "a.archive", 100, mod_a.id)
+        _add_archive_entry(session, game.id, "b.archive", 100, mod_b.id)
+
+        detector = ArchiveResourceDetector()
+        evidence = detector.detect(game, [mod_a, mod_b], session)
+        assert len(evidence) == 1
+        assert evidence[0].kind == ConflictKind.archive_resource
+        assert evidence[0].severity == Severity.high
+
+    def test_registered_in_engine(self):
+        detectors = get_all_detectors()
+        kinds = [d.kind for d in detectors]
+        assert ConflictKind.archive_resource in kinds

@@ -68,6 +68,52 @@ const ConflictGraphTab = lazy(() =>
   })),
 );
 
+const ArchiveResourceConflicts = lazy(() =>
+  import("@/components/conflicts/ArchiveResourceConflicts").then((m) => ({
+    default: m.ArchiveResourceConflicts,
+  })),
+);
+
+type ConflictSubTab = "file-conflicts" | "archive-resources";
+
+function ConflictSubTabs({ gameName }: { gameName: string }) {
+  const [subTab, setSubTab] = useState<ConflictSubTab>("file-conflicts");
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 border-b border-border">
+        <button
+          onClick={() => setSubTab("file-conflicts")}
+          className={cn(
+            "px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px",
+            subTab === "file-conflicts"
+              ? "border-accent text-accent"
+              : "border-transparent text-text-muted hover:text-text-secondary",
+          )}
+        >
+          File Conflicts
+        </button>
+        <button
+          onClick={() => setSubTab("archive-resources")}
+          className={cn(
+            "px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px",
+            subTab === "archive-resources"
+              ? "border-accent text-accent"
+              : "border-transparent text-text-muted hover:text-text-secondary",
+          )}
+        >
+          Archive Resources
+        </button>
+      </div>
+      {subTab === "file-conflicts" && <ConflictsInbox gameName={gameName} />}
+      {subTab === "archive-resources" && (
+        <Suspense fallback={<SkeletonCardGrid count={3} />}>
+          <ArchiveResourceConflicts gameName={gameName} />
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
 type Tab = "installed" | "conflicts" | "conflict-graph" | "updates" | "trending" | "endorsed" | "tracked" | "mods" | "matched" | "archives" | "profiles";
 
 const TABS: { key: Tab; label: string; Icon: typeof Package; tooltip: string }[] = [
@@ -575,7 +621,7 @@ export function GameDetailPage() {
         />
       )}
       {tab === "conflicts" && (
-        <ConflictsInbox gameName={name} />
+        <ConflictSubTabs gameName={name} />
       )}
       {tab === "installed" && (
         <InstalledModsTable

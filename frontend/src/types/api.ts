@@ -314,6 +314,39 @@ export interface ArchiveContentsResult {
   tree: ArchiveEntryNode[];
 }
 
+// Conflict engine types (persisted)
+
+export type ConflictKind = "archive_entry" | "archive_resource" | "redscript_target" | "tweak_key";
+
+export interface ModRef {
+  id: number;
+  name: string;
+}
+
+export interface ConflictEvidenceOut {
+  id: number;
+  kind: ConflictKind;
+  severity: "high" | "medium" | "low";
+  key: string;
+  mods: ModRef[];
+  winner: ModRef | null;
+  detail: Record<string, unknown>;
+}
+
+export interface ConflictSummaryResult {
+  game_name: string;
+  total_conflicts: number;
+  by_severity: Record<string, number>;
+  by_kind: Partial<Record<ConflictKind, number>>;
+  evidence: ConflictEvidenceOut[];
+}
+
+export interface ReindexResult {
+  conflicts_found: number;
+  by_kind: Partial<Record<ConflictKind, number>>;
+  duration_ms: number;
+}
+
 // Conflicts inbox types
 
 export type ConflictSeverity = "critical" | "warning" | "info";

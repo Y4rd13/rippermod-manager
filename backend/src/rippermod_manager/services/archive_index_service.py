@@ -20,6 +20,13 @@ from rippermod_manager.services.progress import ProgressCallback, noop_progress
 
 logger = logging.getLogger(__name__)
 
+_INT64_MAX = (1 << 63) - 1
+
+
+def _to_signed64(val: int) -> int:
+    """Convert unsigned 64-bit int to signed 64-bit for SQLite storage."""
+    return val - (1 << 64) if val > _INT64_MAX else val
+
 
 def _discover_archive_files(game: Game) -> list[tuple[Path, str]]:
     """Find all .archive files in the game's mod paths.
@@ -122,7 +129,7 @@ def index_game_archives(
                     installed_mod_id=mod_id,
                     archive_filename=filename,
                     archive_relative_path=rel_path,
-                    resource_hash=entry.hash,
+                    resource_hash=_to_signed64(entry.hash),
                     sha1_hex=entry.sha1.hex(),
                 )
             )
@@ -139,6 +146,57 @@ def index_game_archives(
     session.commit()
     on_progress("archive-index", f"Indexed {new_entries} entries from {total} archives", 100)
     logger.info("Indexed %d archive entries for game_id=%d", new_entries, game_id)
+    return new_entries
+
+
+def index_mod_archives(
+    game: Game,
+    installed_mod: InstalledMod,
+    session: Session,
+) -> int:
+    """Index .archive files belonging to a single installed mod.
+
+    Called after mod installation to incrementally update the archive
+    entry index without re-scanning all game archives.  Returns the
+    number of newly indexed entries.
+    """
+    game_id: int = game.id  # type: ignore[assignment]
+    install_path = Path(game.install_path)
+
+    new_entries = 0
+    for f in installed_mod.files:
+        if not f.relative_path.lower().endswith(".archive"):
+            continue
+        abs_path = install_path / f.relative_path
+        if not abs_path.is_file():
+            continue
+        try:
+            toc = parse_rdar_toc(abs_path)
+        except (ValueError, OSError) as exc:
+            logger.warning("Failed to parse %s: %s", abs_path, exc)
+            continue
+
+        rel_path = f.relative_path.replace("\\", "/")
+        for entry in toc.hash_entries:
+            session.add(
+                ArchiveEntryIndex(
+                    game_id=game_id,
+                    installed_mod_id=installed_mod.id,
+                    archive_filename=abs_path.name,
+                    archive_relative_path=rel_path,
+                    resource_hash=_to_signed64(entry.hash),
+                    sha1_hex=entry.sha1.hex(),
+                )
+            )
+            new_entries += 1
+        session.flush()
+
+    if new_entries:
+        logger.info(
+            "Indexed %d archive entries for mod '%s'",
+            new_entries,
+            installed_mod.name,
+        )
     return new_entries
 
 
