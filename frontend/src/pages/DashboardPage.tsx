@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router";
 
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
-import { useGames, useInstalledMods, useMods, useTrendingMods, useUpdates } from "@/hooks/queries";
+import { useConflictsOverview, useGames, useInstalledMods, useMods, useTrendingMods, useUpdates } from "@/hooks/queries";
 import { formatCount } from "@/lib/format";
 import type { TrendingMod } from "@/types/api";
 
@@ -12,6 +12,7 @@ interface GameStatsData {
   totalInstalled: number;
   nexusMatched: number;
   updatesAvailable: number;
+  conflictsAffected: number;
 }
 
 function StatCard({
@@ -54,14 +55,16 @@ function GameStatsReporter({ gameName, onReport }: { gameName: string; onReport:
   const { data: mods = [] } = useMods(gameName);
   const { data: installed = [] } = useInstalledMods(gameName);
   const { data: updates } = useUpdates(gameName);
+  const { data: conflicts } = useConflictsOverview(gameName);
 
   const stats = useMemo(() => ({
     totalInstalled: installed.length,
     nexusMatched: mods.filter((m) => m.nexus_match).length,
     updatesAvailable: updates?.updates_available ?? 0,
-  }), [installed.length, mods, updates?.updates_available]);
+    conflictsAffected: conflicts?.mods_affected ?? 0,
+  }), [installed.length, mods, updates?.updates_available, conflicts?.mods_affected]);
 
-  const serialized = `${stats.totalInstalled}-${stats.nexusMatched}-${stats.updatesAvailable}`;
+  const serialized = `${stats.totalInstalled}-${stats.nexusMatched}-${stats.updatesAvailable}-${stats.conflictsAffected}`;
   const lastRef = useRef("");
 
   useEffect(() => {
@@ -147,12 +150,14 @@ export function DashboardPage() {
     let totalInstalled = 0;
     let nexusMatched = 0;
     let updatesAvailable = 0;
+    let conflictsAffected = 0;
     for (const s of Object.values(gameStats)) {
       totalInstalled += s.totalInstalled;
       nexusMatched += s.nexusMatched;
       updatesAvailable += s.updatesAvailable;
+      conflictsAffected += s.conflictsAffected;
     }
-    return { totalInstalled, nexusMatched, updatesAvailable };
+    return { totalInstalled, nexusMatched, updatesAvailable, conflictsAffected };
   }, [gameStats]);
 
   const firstGame = games[0]?.name;
@@ -171,7 +176,7 @@ export function DashboardPage() {
         <GameStatsReporter key={game.id} gameName={game.name} onReport={handleReport} />
       ))}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <StatCard
           icon={Gamepad2}
           label="Games"
@@ -207,6 +212,15 @@ export function DashboardPage() {
           hoverBorder="hover:border-danger/40"
           onClick={firstGame ? () => navigate(`/games/${firstGame}`) : undefined}
           title="View available updates"
+        />
+        <StatCard
+          icon={AlertTriangle}
+          label="Conflicts"
+          value={games.length > 0 ? totals.conflictsAffected : "--"}
+          color={totals.conflictsAffected > 0 ? "bg-warning/10 text-warning" : "bg-success/10 text-success"}
+          hoverBorder={totals.conflictsAffected > 0 ? "hover:border-warning/40" : "hover:border-success/40"}
+          onClick={firstGame ? () => navigate(`/games/${firstGame}`) : undefined}
+          title="Mods with file or resource conflicts"
         />
       </div>
 

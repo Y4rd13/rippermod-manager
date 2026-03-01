@@ -68,6 +68,7 @@ const ArchiveResourceConflicts = lazy(() =>
   })),
 );
 
+type MatchedSubTab = "nexus-matched" | "scan-details";
 type ConflictSubTab = "file-conflicts" | "archive-resources";
 
 function ConflictSubTabs({ gameName }: { gameName: string }) {
@@ -105,19 +106,21 @@ function ConflictSubTabs({ gameName }: { gameName: string }) {
   );
 }
 
-type Tab = "installed" | "conflicts" | "updates" | "trending" | "endorsed" | "tracked" | "mods" | "matched" | "archives" | "profiles";
+type Tab = "installed" | "matched" | "archives" | "updates" | "conflicts" | "profiles" | "trending" | "endorsed" | "tracked";
 
 const TABS: { key: Tab; label: string; Icon: typeof Package; tooltip: string }[] = [
+  // Your mods
   { key: "installed", label: "Installed", Icon: UserCheck, tooltip: "Managed and recognized mods on your system" },
-  { key: "conflicts", label: "Conflicts", Icon: AlertTriangle, tooltip: "File conflicts between installed mods" },
+  { key: "matched", label: "Matched", Icon: Link2, tooltip: "Nexus-matched mods and scan details" },
+  { key: "archives", label: "Archives", Icon: Archive, tooltip: "Downloaded mod archives ready to install" },
+  // Maintenance
   { key: "updates", label: "Updates", Icon: RefreshCw, tooltip: "Mods with newer versions available on Nexus" },
+  { key: "conflicts", label: "Conflicts", Icon: AlertTriangle, tooltip: "File and resource conflicts between installed mods" },
+  { key: "profiles", label: "Profiles", Icon: FolderOpen, tooltip: "Saved snapshots of your mod enabled/disabled states" },
+  // Discovery & Nexus account
   { key: "trending", label: "Trending", Icon: TrendingUp, tooltip: "Popular and recently updated mods on Nexus" },
   { key: "endorsed", label: "Endorsed", Icon: Heart, tooltip: "Mods you've endorsed on your Nexus account" },
   { key: "tracked", label: "Tracked", Icon: Eye, tooltip: "Mods you're tracking on your Nexus account" },
-  { key: "mods", label: "Scanned", Icon: Package, tooltip: "All mod file groups found by scanning your game folder" },
-  { key: "matched", label: "Nexus Matched", Icon: Link2, tooltip: "Scanned mods matched to Nexus Mods entries" },
-  { key: "archives", label: "Archives", Icon: Archive, tooltip: "Downloaded mod archives ready to install" },
-  { key: "profiles", label: "Profiles", Icon: FolderOpen, tooltip: "Saved snapshots of your mod enabled/disabled states" },
 ];
 
 export function GameDetailPage() {
@@ -137,6 +140,7 @@ export function GameDetailPage() {
   const hasOpenaiKey = useHasOpenaiKey();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("installed");
+  const [matchedSubTab, setMatchedSubTab] = useState<MatchedSubTab>("nexus-matched");
   const [selectedModId, setSelectedModId] = useState<number | null>(null);
   const [fileSelectModId, setFileSelectModId] = useState<number | null>(null);
   const [aiSearch, setAiSearch] = useState(() => {
@@ -311,26 +315,24 @@ export function GameDetailPage() {
 
   const tabCounts = useMemo<Partial<Record<Tab, number>>>(() => ({
     installed: installedLoading ? undefined : installedMods.length + recognizedNotInstalled,
-    conflicts: conflictsLoading ? undefined : conflictsOverview?.mods_affected,
+    matched: modsLoading ? undefined : nexusMatched.length,
+    archives: archivesLoading ? undefined : archives.length,
     updates: updatesLoading ? undefined : updates?.updates_available,
+    conflicts: conflictsLoading ? undefined : conflictsOverview?.mods_affected,
+    profiles: profilesLoading ? undefined : profiles.length,
     trending: trendingLoading ? undefined : (trendingResult?.trending.length ?? 0) + (trendingResult?.latest_updated.length ?? 0),
     endorsed: endorsedLoading ? undefined : endorsedMods.length,
     tracked: trackedLoading ? undefined : trackedMods.length,
-    mods: modsLoading ? undefined : mods.length,
-    matched: modsLoading ? undefined : nexusMatched.length,
-    archives: archivesLoading ? undefined : archives.length,
-    profiles: profilesLoading ? undefined : profiles.length,
   }), [
     installedMods.length, installedLoading, recognizedNotInstalled,
-    conflictsOverview?.mods_affected, conflictsLoading,
+    nexusMatched.length, modsLoading,
+    archives.length, archivesLoading,
     updates?.updates_available, updatesLoading,
+    conflictsOverview?.mods_affected, conflictsLoading,
+    profiles.length, profilesLoading,
     trendingResult, trendingLoading,
     endorsedMods.length, endorsedLoading,
     trackedMods.length, trackedLoading,
-    mods.length, modsLoading,
-    nexusMatched.length,
-    archives.length, archivesLoading,
-    profiles.length, profilesLoading,
   ]);
 
   const tabsRef = useRef<HTMLDivElement>(null);
@@ -374,8 +376,8 @@ export function GameDetailPage() {
             <div className="h-9 w-36 bg-surface-2 rounded-lg" />
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }, (_, i) => (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          {Array.from({ length: 5 }, (_, i) => (
             <div key={i} className="rounded-xl border border-border bg-surface-1 p-5">
               <div className="flex items-center gap-3">
                 <div className="h-5 w-5 bg-surface-2 rounded" />
@@ -448,10 +450,10 @@ export function GameDetailPage() {
         <ScanProgress logs={scanLogs} percent={scanPercent} phase={scanPhase} />
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <Card
           className="hover:border-success/40 transition-colors"
-          onClick={() => setTab("mods")}
+          onClick={() => { setTab("matched"); setMatchedSubTab("scan-details"); }}
           title="Total mod groups found by scanning your game folder"
         >
           <div className="flex items-center gap-3">
@@ -479,7 +481,7 @@ export function GameDetailPage() {
         </Card>
         <Card
           className="hover:border-warning/40 transition-colors"
-          onClick={() => setTab("matched")}
+          onClick={() => { setTab("matched"); setMatchedSubTab("nexus-matched"); }}
           title="Scanned mods matched to Nexus Mods entries"
         >
           <div className="flex items-center gap-3">
@@ -501,6 +503,29 @@ export function GameDetailPage() {
               <p className="text-xs text-text-muted">Updates</p>
               <p className="text-lg font-bold text-text-primary">
                 {updates?.updates_available ?? "--"}
+              </p>
+            </div>
+          </div>
+        </Card>
+        <Card
+          className={cn(
+            "transition-colors",
+            (conflictsOverview?.mods_affected ?? 0) > 0
+              ? "hover:border-warning/40"
+              : "hover:border-success/40",
+          )}
+          onClick={() => setTab("conflicts")}
+          title="Installed mods with file or resource conflicts"
+        >
+          <div className="flex items-center gap-3">
+            <AlertTriangle
+              size={18}
+              className={(conflictsOverview?.mods_affected ?? 0) > 0 ? "text-warning" : "text-success"}
+            />
+            <div>
+              <p className="text-xs text-text-muted">Conflicts</p>
+              <p className="text-lg font-bold text-text-primary">
+                {conflictsLoading ? "--" : (conflictsOverview?.mods_affected ?? 0)}
               </p>
             </div>
           </div>
@@ -549,18 +574,43 @@ export function GameDetailPage() {
       </div>
 
       <div key={tab} className="animate-fade-in">
-      {tab === "mods" && <ModsTable mods={mods} gameName={name} isLoading={modsLoading} />}
       {tab === "matched" && (
-        <NexusMatchedGrid
-          mods={nexusMatched}
-          archives={archives}
-          installedMods={installedMods}
-          gameName={name}
-          downloadJobs={downloadJobs}
-          isLoading={modsLoading}
-          onModClick={setSelectedModId}
-          onFileSelect={handleFileSelect}
-        />
+        <div className="space-y-4">
+          <div className="flex gap-1 border-b border-border">
+            {([
+              { key: "nexus-matched" as const, label: "Nexus Matched" },
+              { key: "scan-details" as const, label: "Scan Details" },
+            ]).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setMatchedSubTab(key)}
+                className={cn(
+                  "px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px",
+                  matchedSubTab === key
+                    ? "border-accent text-accent"
+                    : "border-transparent text-text-muted hover:text-text-secondary",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {matchedSubTab === "nexus-matched" && (
+            <NexusMatchedGrid
+              mods={nexusMatched}
+              archives={archives}
+              installedMods={installedMods}
+              gameName={name}
+              downloadJobs={downloadJobs}
+              isLoading={modsLoading}
+              onModClick={setSelectedModId}
+              onFileSelect={handleFileSelect}
+            />
+          )}
+          {matchedSubTab === "scan-details" && (
+            <ModsTable mods={mods} gameName={name} isLoading={modsLoading} />
+          )}
+        </div>
       )}
       {tab === "endorsed" && (
         <NexusAccountGrid
