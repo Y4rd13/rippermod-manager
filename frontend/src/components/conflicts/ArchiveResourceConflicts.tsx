@@ -101,11 +101,16 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
   const handlePrefer = useCallback(
     async (winnerId: number, loserId: number, winnerName: string, loserName: string) => {
       setPreviewState({ winnerId, loserId, winnerName, loserName });
-      const result = await preferPreview.mutateAsync({
-        gameName,
-        data: { winner_mod_id: winnerId, loser_mod_id: loserId },
-      });
-      setPreviewResult(result);
+      try {
+        const result = await preferPreview.mutateAsync({
+          gameName,
+          data: { winner_mod_id: winnerId, loser_mod_id: loserId },
+        });
+        setPreviewResult(result);
+      } catch {
+        setPreviewState(null);
+        setPreviewResult(null);
+      }
     },
     [gameName, preferPreview],
   );
@@ -273,28 +278,29 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
                   </td>
                   <td className="py-2.5">
                     <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                      {item.installed_mod_id != null && item.losing_entries > 0 && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          title="Prefer this mod (demote conflicting archives)"
-                          onClick={() => {
-                            // Find the first conflicting archive's mod to set as loser
-                            const conflictPartner = item.conflicting_archives[0];
-                            const partner = conflictPartner ? summaryMap.get(conflictPartner) : undefined;
-                            if (partner?.installed_mod_id != null) {
+                      {item.installed_mod_id != null && item.losing_entries > 0 && (() => {
+                        const conflictPartner = item.conflicting_archives[0];
+                        const partner = conflictPartner ? summaryMap.get(conflictPartner) : undefined;
+                        if (!partner?.installed_mod_id) return null;
+                        const targetName = partner.mod_name ?? partner.archive_filename;
+                        return (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            title={`Prefer over "${targetName}" (demote its archives)`}
+                            onClick={() =>
                               handlePrefer(
                                 item.installed_mod_id!,
-                                partner.installed_mod_id,
+                                partner.installed_mod_id!,
                                 item.mod_name ?? item.archive_filename,
-                                partner.mod_name ?? partner.archive_filename,
-                              );
+                                targetName,
+                              )
                             }
-                          }}
-                        >
-                          <Crown size={12} /> Prefer
-                        </Button>
-                      )}
+                          >
+                            <Crown size={12} /> Prefer
+                          </Button>
+                        );
+                      })()}
                       {item.installed_mod_id != null && (
                         <Button
                           variant="secondary"
@@ -317,7 +323,8 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
                         </p>
                         {item.conflicting_archives.map((conflictArchive) => {
                           const partner = summaryMap.get(conflictArchive);
-                          const isWinner = item.winning_entries > 0 && (partner?.losing_entries ?? 0) > 0;
+                          // First-loaded-wins: lower ASCII filename wins
+                          const isWinner = item.archive_filename.toLowerCase() < conflictArchive.toLowerCase();
                           return (
                             <div
                               key={conflictArchive}

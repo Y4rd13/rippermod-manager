@@ -172,12 +172,13 @@ def summarize_conflicts(
             conflicts_with[loser].add(winner_archive)
 
             loser_sha1 = sha1s.get(loser, "")
-            if winner_sha1 and loser_sha1 and winner_sha1 == loser_sha1:
-                identical[winner_archive] += 1
-                identical[loser] += 1
-            else:
-                real[winner_archive] += 1
-                real[loser] += 1
+            if winner_sha1 and loser_sha1:
+                if winner_sha1 == loser_sha1:
+                    identical[winner_archive] += 1
+                    identical[loser] += 1
+                else:
+                    real[winner_archive] += 1
+                    real[loser] += 1
 
     all_archives = set(wins) | set(losses)
     summaries: list[ArchiveConflictSummary] = []

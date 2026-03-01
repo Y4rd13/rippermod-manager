@@ -41,13 +41,13 @@ def _strip_load_order_prefix(filename: str) -> str:
     return _PREFIX_RE.sub("", filename)
 
 
-def _compute_prefix(loser_min_filename: str) -> str:
-    """Determine the minimal ``zz_`` / ``zzz_`` prefix that sorts after *loser_min_filename*.
+def _compute_prefix(sort_after_filename: str) -> str:
+    """Determine the minimal ``zz_`` / ``zzz_`` prefix that sorts after *sort_after_filename*.
 
-    If the loser already starts with ``zz_``, we add one more ``z`` to guarantee
-    the demoted archive sorts later.
+    If the reference filename already starts with ``zz_``, we add one more ``z``
+    to guarantee the demoted archive sorts later.
     """
-    stripped = loser_min_filename.lower()
+    stripped = sort_after_filename.lower()
     m = _PREFIX_RE.match(stripped)
     if m:
         existing_zs = len(m.group(0)) - 1  # minus the underscore
