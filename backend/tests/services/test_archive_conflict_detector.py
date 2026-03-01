@@ -48,7 +48,7 @@ class TestDetectArchiveConflicts:
 
         result = detect_archive_conflicts(session, game.id)
         assert len(result) == 1
-        assert result[0].kind == ConflictKind.archive_entry
+        assert result[0].kind == ConflictKind.archive_resource
         assert result[0].key == hex(100)
         assert result[0].winner_mod_id == 1
         detail = json.loads(result[0].detail)
@@ -125,11 +125,20 @@ class TestDetectArchiveConflicts:
 
     def test_severity_is_high(self, session, make_game):
         game = make_game()
-        _add_entry(session, game.id, "a.archive", 100)
-        _add_entry(session, game.id, "b.archive", 100)
+        _add_entry(session, game.id, "a.archive", 100, installed_mod_id=1)
+        _add_entry(session, game.id, "b.archive", 100, installed_mod_id=2)
 
         result = detect_archive_conflicts(session, game.id)
         assert result[0].severity == Severity.high
+
+    def test_same_mod_is_low_severity(self, session, make_game):
+        game = make_game()
+        _add_entry(session, game.id, "a.archive", 100, installed_mod_id=5)
+        _add_entry(session, game.id, "b.archive", 100, installed_mod_id=5)
+
+        result = detect_archive_conflicts(session, game.id)
+        assert len(result) == 1
+        assert result[0].severity == Severity.low
 
 
 class TestSummarizeConflicts:

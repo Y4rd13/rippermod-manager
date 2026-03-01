@@ -25,8 +25,8 @@ def _build_rdar(entries: list[tuple[int, bytes]]) -> bytes:
     table_offset = HEADER_SIZE
     n = len(entries)
     file_size = HEADER_SIZE + TOC_PREAMBLE_SIZE + n * HASH_ENTRY_SIZE
-    header = struct.pack("<4sIQQQQ", RDAR_MAGIC, 12, table_offset, 1, 0, file_size)
-    toc_meta = struct.pack("<IIIIIQ", 0, 0, n, n, 0, 0)
+    header = struct.pack("<4sIQIIQQ", RDAR_MAGIC, 12, table_offset, 1, 0, 0, file_size)
+    toc_meta = struct.pack("<IIQIII", 0, 0, 0, n, 0, 0)
     hash_data = b""
     for h, sha1 in entries:
         hash_data += struct.pack("<QQIIIII", h, 0, 1, 0, 0, 0, 0) + sha1

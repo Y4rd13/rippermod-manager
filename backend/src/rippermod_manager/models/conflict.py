@@ -16,6 +16,7 @@ class ConflictKind(StrEnum):
     """Category of conflict between mods."""
 
     archive_entry = "archive_entry"
+    archive_resource = "archive_resource"
     redscript_target = "redscript_target"
     tweak_key = "tweak_key"
 

@@ -8,6 +8,7 @@ import type {
   ArchiveDeleteResult,
   ConflictCheckResult,
   CorrelateResult,
+  ReindexResult,
   CorrelationBrief,
   DownloadJobOut,
   DownloadRequest,
@@ -526,6 +527,24 @@ export function useResolveConflict() {
       toast.success("Conflict resolved", "Mod reinstalled to reclaim files");
     },
     onError: () => toast.error("Failed to resolve conflict"),
+  });
+}
+
+export function useReindexConflicts() {
+  const qc = useQueryClient();
+  return useMutation<ReindexResult, Error, string>({
+    mutationFn: (gameName) =>
+      api.post(`/api/v1/games/${gameName}/conflicts/reindex`),
+    onSuccess: (result, gameName) => {
+      qc.invalidateQueries({ queryKey: ["conflicts", gameName] });
+      qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
+      qc.invalidateQueries({ queryKey: ["conflict-graph", gameName] });
+      toast.success(
+        "Reindex complete",
+        `${result.conflicts_found} conflict${result.conflicts_found === 1 ? "" : "s"} found in ${result.duration_ms}ms`,
+      );
+    },
+    onError: () => toast.error("Reindex failed"),
   });
 }
 

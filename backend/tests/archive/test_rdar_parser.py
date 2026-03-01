@@ -26,9 +26,11 @@ def build_rdar_binary(entries: list[tuple[int, bytes]]) -> bytes:
     num_entries = len(entries)
     file_size = HEADER_SIZE + TOC_PREAMBLE_SIZE + num_entries * HASH_ENTRY_SIZE
 
-    header = struct.pack("<4sIQQQQ", RDAR_MAGIC, 12, table_offset, 1, 0, file_size)
+    # Header: magic version table_offset index custom_data_count unk file_size
+    header = struct.pack("<4sIQIIQQ", RDAR_MAGIC, 12, table_offset, 1, 0, 0, file_size)
 
-    toc_meta = struct.pack("<IIIIIQ", 0, 0, num_entries, num_entries, 0, 0)
+    # TOC: tbl_off tbl_sz crc entry_count seg_count dep_count
+    toc_meta = struct.pack("<IIQIII", 0, 0, 0, num_entries, 0, 0)
 
     hash_data = b""
     for h, sha1 in entries:
@@ -40,7 +42,7 @@ def build_rdar_binary(entries: list[tuple[int, bytes]]) -> bytes:
 
 class TestParseRdarHeader:
     def test_valid_header(self):
-        data = struct.pack("<4sIQQQQ", RDAR_MAGIC, 12, 0x100, 42, 0, 999)
+        data = struct.pack("<4sIQIIQQ", RDAR_MAGIC, 12, 0x100, 42, 0, 0, 999)
         hdr = parse_rdar_header(data)
         assert hdr.magic == RDAR_MAGIC
         assert hdr.version == 12
@@ -49,7 +51,7 @@ class TestParseRdarHeader:
         assert hdr.file_size == 999
 
     def test_invalid_magic_raises(self):
-        data = struct.pack("<4sIQQQQ", b"NOPE", 12, 0, 0, 0, 0)
+        data = struct.pack("<4sIQIIQQ", b"NOPE", 12, 0, 0, 0, 0, 0)
         with pytest.raises(ValueError, match="Invalid RDAR magic"):
             parse_rdar_header(data)
 
@@ -103,7 +105,7 @@ class TestParseRdarToc:
         assert toc.header.archive_id == 1
 
     def test_table_offset_exceeds_file_size_raises(self, tmp_path):
-        header = struct.pack("<4sIQQQQ", RDAR_MAGIC, 12, 99999, 0, 0, 100)
+        header = struct.pack("<4sIQIIQQ", RDAR_MAGIC, 12, 99999, 0, 0, 0, 100)
         archive = tmp_path / "bad_offset.archive"
         archive.write_bytes(header)
 
@@ -113,8 +115,8 @@ class TestParseRdarToc:
     def test_unreasonable_num_files_raises(self, tmp_path):
         table_offset = HEADER_SIZE
         file_size = HEADER_SIZE + TOC_PREAMBLE_SIZE + 100
-        header = struct.pack("<4sIQQQQ", RDAR_MAGIC, 12, table_offset, 0, 0, file_size)
-        toc_meta = struct.pack("<IIIIIQ", 0, 0, 2**31, 0, 0, 0)
+        header = struct.pack("<4sIQIIQQ", RDAR_MAGIC, 12, table_offset, 0, 0, 0, file_size)
+        toc_meta = struct.pack("<IIQIII", 0, 0, 0, 2**31, 0, 0)
         archive = tmp_path / "huge.archive"
         archive.write_bytes(header + toc_meta)
 
@@ -122,7 +124,7 @@ class TestParseRdarToc:
             parse_rdar_toc(archive)
 
     def test_corrupt_toc_raises(self, tmp_path):
-        header = struct.pack("<4sIQQQQ", RDAR_MAGIC, 12, HEADER_SIZE, 0, 0, 100)
+        header = struct.pack("<4sIQIIQQ", RDAR_MAGIC, 12, HEADER_SIZE, 0, 0, 0, 100)
         archive = tmp_path / "corrupt.archive"
         archive.write_bytes(header + b"\x00" * 5)
 
@@ -131,8 +133,8 @@ class TestParseRdarToc:
 
     def test_truncated_hash_entries_raises(self, tmp_path):
         table_offset = HEADER_SIZE
-        header = struct.pack("<4sIQQQQ", RDAR_MAGIC, 12, table_offset, 0, 0, 200)
-        toc_meta = struct.pack("<IIIIIQ", 0, 0, 3, 0, 0, 0)
+        header = struct.pack("<4sIQIIQQ", RDAR_MAGIC, 12, table_offset, 0, 0, 0, 200)
+        toc_meta = struct.pack("<IIQIII", 0, 0, 0, 3, 0, 0)
         archive = tmp_path / "truncated.archive"
         archive.write_bytes(header + toc_meta + b"\x00" * 10)
 
@@ -147,8 +149,8 @@ class TestParseRdarToc:
         sha1 = b"\x00" * 20
         table_offset = HEADER_SIZE
         file_size = HEADER_SIZE + TOC_PREAMBLE_SIZE + HASH_ENTRY_SIZE
-        header = struct.pack("<4sIQQQQ", RDAR_MAGIC, 12, table_offset, 0, 0, file_size)
-        toc_meta = struct.pack("<IIIIIQ", 0, 0, 1, 0, 0, 0)
+        header = struct.pack("<4sIQIIQQ", RDAR_MAGIC, 12, table_offset, 0, 0, 0, file_size)
+        toc_meta = struct.pack("<IIQIII", 0, 0, 0, 1, 0, 0)
         entry = struct.pack("<QQIIIII", 42, 999, 7, 0, 0, 0, 0) + sha1
         archive = tmp_path / "chunks.archive"
         archive.write_bytes(header + toc_meta + entry)

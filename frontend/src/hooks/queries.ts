@@ -6,7 +6,9 @@ import type {
   ArchivePreviewResult,
   AvailableArchive,
   ConflictGraphResult,
+  ConflictKind,
   ConflictsOverview,
+  ConflictSummaryResult,
   DownloadJobOut,
   Game,
   GameVersion,
@@ -214,6 +216,16 @@ export function useFileContentsPreview(url: string | null) {
       api.get(`/api/v1/nexus/file-contents-preview?url=${encodeURIComponent(url!)}`),
     enabled: !!url,
     staleTime: 30 * 60 * 1000,
+  });
+}
+
+export function useConflictSummary(gameName: string, kind?: ConflictKind) {
+  const params = kind ? `?kind=${kind}` : "";
+  return useQuery<ConflictSummaryResult>({
+    queryKey: ["conflict-summary", gameName, kind],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/conflicts/summary${params}`),
+    enabled: !!gameName,
+    staleTime: 60_000,
   });
 }
 

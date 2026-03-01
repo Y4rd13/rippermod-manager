@@ -17,6 +17,7 @@ from sqlmodel import Session
 from rippermod_manager.models.conflict import ConflictEvidence, ConflictKind, Severity
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod
+from rippermod_manager.services.archive_conflict_detector import detect_archive_conflicts
 
 logger = logging.getLogger(__name__)
 
@@ -283,3 +284,18 @@ class TweakKeyDetector:
             is_append = match.group(2) is not None
             results.append((key, is_append))
         return results
+
+
+@register_detector
+class ArchiveResourceDetector:
+    """Detects RDAR resource hash collisions inside .archive files."""
+
+    kind = ConflictKind.archive_resource
+
+    def detect(
+        self,
+        game: Game,
+        installed_mods: list[InstalledMod],
+        session: Session,
+    ) -> list[ConflictEvidence]:
+        return detect_archive_conflicts(session, game.id)  # type: ignore[arg-type]
