@@ -117,12 +117,16 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
 
   const handleConfirmPrefer = useCallback(async () => {
     if (!previewState) return;
-    await preferMod.mutateAsync({
-      gameName,
-      data: { winner_mod_id: previewState.winnerId, loser_mod_id: previewState.loserId },
-    });
-    setPreviewState(null);
-    setPreviewResult(null);
+    try {
+      await preferMod.mutateAsync({
+        gameName,
+        data: { winner_mod_id: previewState.winnerId, loser_mod_id: previewState.loserId },
+      });
+      setPreviewState(null);
+      setPreviewResult(null);
+    } catch {
+      // Dialog stays open so the user can retry or cancel.
+    }
   }, [gameName, previewState, preferMod]);
 
   const handleCancelPrefer = useCallback(() => {
