@@ -32,6 +32,8 @@ class ArchiveConflictSummary:
     losing_entries: int
     conflicting_archives: tuple[str, ...]
     severity: Severity
+    identical_count: int = 0
+    real_count: int = 0
 
 
 def detect_archive_conflicts(
@@ -86,9 +88,11 @@ def detect_archive_conflicts(
         unique_mod_ids = set(all_mod_ids)
         severity = Severity.low if len(unique_mod_ids) <= 1 else Severity.high
 
+        sha1s = {name: entry.sha1_hex for name, entry in sorted_archives if entry.sha1_hex}
         detail = {
             "winner_archive": winner_name,
             "loser_archives": [name for name, _ in loser_entries],
+            "sha1s": sha1s,
         }
 
         evidences.append(
@@ -133,15 +137,33 @@ def summarize_conflicts(
     ).all()
     total_counts: dict[str, int] = {name: count for name, count in total_counts_rows}
 
+    # Build archive_filename → installed_mod_id mapping from index table
+    archive_mod_rows = session.exec(
+        select(
+            ArchiveEntryIndex.archive_filename,
+            ArchiveEntryIndex.installed_mod_id,
+        )
+        .where(ArchiveEntryIndex.game_id == game_id)
+        .group_by(ArchiveEntryIndex.archive_filename, ArchiveEntryIndex.installed_mod_id)
+    ).all()
+    mod_ids: dict[str, int | None] = {}
+    for name, mid in archive_mod_rows:
+        mod_ids.setdefault(name, mid)
+
     wins: dict[str, set[str]] = defaultdict(set)
     losses: dict[str, set[str]] = defaultdict(set)
     conflicts_with: dict[str, set[str]] = defaultdict(set)
-    mod_ids: dict[str, int | None] = {}
+    # Track per-archive identical vs real conflict counts
+    identical: dict[str, int] = defaultdict(int)
+    real: dict[str, int] = defaultdict(int)
 
     for ev in evidences:
         detail = json.loads(ev.detail)
         winner_archive = detail["winner_archive"]
         loser_archives = detail["loser_archives"]
+        sha1s: dict[str, str] = detail.get("sha1s", {})
+
+        winner_sha1 = sha1s.get(winner_archive, "")
 
         wins[winner_archive].add(ev.key)
         for loser in loser_archives:
@@ -149,7 +171,13 @@ def summarize_conflicts(
             conflicts_with[winner_archive].add(loser)
             conflicts_with[loser].add(winner_archive)
 
-        mod_ids.setdefault(winner_archive, ev.winner_mod_id)
+            loser_sha1 = sha1s.get(loser, "")
+            if winner_sha1 and loser_sha1 and winner_sha1 == loser_sha1:
+                identical[winner_archive] += 1
+                identical[loser] += 1
+            else:
+                real[winner_archive] += 1
+                real[loser] += 1
 
     all_archives = set(wins) | set(losses)
     summaries: list[ArchiveConflictSummary] = []
@@ -174,6 +202,8 @@ def summarize_conflicts(
                 losing_entries=n_losses,
                 conflicting_archives=tuple(sorted(conflicts_with.get(archive, set()))),
                 severity=severity,
+                identical_count=identical.get(archive, 0),
+                real_count=real.get(archive, 0),
             )
         )
 

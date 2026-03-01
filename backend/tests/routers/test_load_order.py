@@ -138,8 +138,8 @@ class TestPreferEndpoint:
 
     def test_executes_rename(self, client, engine, game_setup):
         game_name, game_dir = game_setup
-        w_id = _add_mod(engine, game_name, "Winner", ["aaa.archive"], game_dir=game_dir)
-        l_id = _add_mod(engine, game_name, "Loser", ["bbb.archive"], game_dir=game_dir)
+        w_id = _add_mod(engine, game_name, "Winner", ["bbb.archive"], game_dir=game_dir)
+        l_id = _add_mod(engine, game_name, "Loser", ["aaa.archive"], game_dir=game_dir)
 
         r = client.post(
             f"/api/v1/games/{game_name}/load-order/prefer",
@@ -150,6 +150,8 @@ class TestPreferEndpoint:
         assert data["success"] is True
         assert data["dry_run"] is False
         assert len(data["renames"]) == 1
-        # Verify file was renamed on disk
+        # Verify loser's file was renamed on disk (demoted)
         assert not (game_dir / "archive" / "pc" / "mod" / "aaa.archive").exists()
         assert (game_dir / "archive" / "pc" / "mod" / "zz_aaa.archive").exists()
+        # Winner's file should be untouched
+        assert (game_dir / "archive" / "pc" / "mod" / "bbb.archive").exists()

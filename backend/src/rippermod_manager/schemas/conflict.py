@@ -42,3 +42,26 @@ class ReindexResult(BaseModel):
     conflicts_found: int
     by_kind: dict[ConflictKind, int]
     duration_ms: int
+
+
+class ArchiveConflictSummaryOut(BaseModel):
+    """Per-archive conflict summary for the archive resources view."""
+
+    archive_filename: str
+    installed_mod_id: int | None
+    mod_name: str | None = None
+    total_entries: int
+    winning_entries: int
+    losing_entries: int
+    conflicting_archives: list[str]
+    severity: Severity
+    identical_count: int = 0
+    real_count: int = 0
+
+
+class ArchiveConflictSummariesResult(BaseModel):
+    """Aggregated archive conflict summaries for a game."""
+
+    game_name: str
+    summaries: list[ArchiveConflictSummaryOut]
+    total_archives_with_conflicts: int

@@ -18,6 +18,7 @@ def _add_entry(
     archive_filename: str,
     resource_hash: int,
     installed_mod_id: int | None = None,
+    sha1_hex: str = "0" * 40,
 ) -> None:
     session.add(
         ArchiveEntryIndex(
@@ -26,7 +27,7 @@ def _add_entry(
             archive_filename=archive_filename,
             archive_relative_path=f"archive/pc/mod/{archive_filename}",
             resource_hash=resource_hash,
-            sha1_hex="0" * 40,
+            sha1_hex=sha1_hex,
         )
     )
     session.flush()
@@ -54,6 +55,9 @@ class TestDetectArchiveConflicts:
         detail = json.loads(result[0].detail)
         assert detail["winner_archive"] == "a.archive"
         assert detail["loser_archives"] == ["b.archive"]
+        assert "sha1s" in detail
+        assert "a.archive" in detail["sha1s"]
+        assert "b.archive" in detail["sha1s"]
 
     def test_winner_is_alphabetically_first(self, session, make_game):
         game = make_game()
@@ -219,3 +223,46 @@ class TestSummarizeConflicts:
     def test_empty_returns_empty(self, session, make_game):
         game = make_game()
         assert summarize_conflicts(session, game.id) == []
+
+    def test_identical_sha1_counted(self, session, make_game):
+        """Resources with same SHA1 across archives are cosmetic conflicts."""
+        game = make_game()
+        same_sha1 = "a" * 40
+        _add_entry(session, game.id, "a.archive", 100, sha1_hex=same_sha1)
+        _add_entry(session, game.id, "b.archive", 100, sha1_hex=same_sha1)
+
+        summaries = summarize_conflicts(session, game.id)
+        a = next(s for s in summaries if s.archive_filename == "a.archive")
+        b = next(s for s in summaries if s.archive_filename == "b.archive")
+        assert a.identical_count == 1
+        assert a.real_count == 0
+        assert b.identical_count == 1
+        assert b.real_count == 0
+
+    def test_different_sha1_counted_as_real(self, session, make_game):
+        """Resources with different SHA1 across archives are real conflicts."""
+        game = make_game()
+        _add_entry(session, game.id, "a.archive", 100, sha1_hex="a" * 40)
+        _add_entry(session, game.id, "b.archive", 100, sha1_hex="b" * 40)
+
+        summaries = summarize_conflicts(session, game.id)
+        a = next(s for s in summaries if s.archive_filename == "a.archive")
+        b = next(s for s in summaries if s.archive_filename == "b.archive")
+        assert a.real_count == 1
+        assert a.identical_count == 0
+        assert b.real_count == 1
+        assert b.identical_count == 0
+
+    def test_mixed_sha1_counts(self, session, make_game):
+        """Mix of identical and different SHA1 hashes."""
+        game = make_game()
+        same = "c" * 40
+        _add_entry(session, game.id, "a.archive", 100, sha1_hex=same)
+        _add_entry(session, game.id, "b.archive", 100, sha1_hex=same)
+        _add_entry(session, game.id, "a.archive", 200, sha1_hex="d" * 40)
+        _add_entry(session, game.id, "b.archive", 200, sha1_hex="e" * 40)
+
+        summaries = summarize_conflicts(session, game.id)
+        a = next(s for s in summaries if s.archive_filename == "a.archive")
+        assert a.identical_count == 1
+        assert a.real_count == 1

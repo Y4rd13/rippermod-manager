@@ -2,7 +2,7 @@
 
 The RED engine (Cyberpunk 2077) loads ``.archive`` files from ``archive/pc/mod/``
 in ASCII filename order (case-insensitive).  When two archives contain the same
-internal resource, the **last** loaded archive wins.  This module computes the
+internal resource, the **first** loaded archive wins.  This module computes the
 load order, detects file-path level conflicts, and provides a "prefer mod"
 action that renames archives to control which mod wins.
 """
@@ -41,13 +41,13 @@ def _strip_load_order_prefix(filename: str) -> str:
     return _PREFIX_RE.sub("", filename)
 
 
-def _compute_prefix(loser_max_filename: str) -> str:
-    """Determine the minimal ``zz_`` / ``zzz_`` prefix that sorts after *loser_max_filename*.
+def _compute_prefix(loser_min_filename: str) -> str:
+    """Determine the minimal ``zz_`` / ``zzz_`` prefix that sorts after *loser_min_filename*.
 
     If the loser already starts with ``zz_``, we add one more ``z`` to guarantee
-    the winner sorts later.
+    the demoted archive sorts later.
     """
-    stripped = loser_max_filename.lower()
+    stripped = loser_min_filename.lower()
     m = _PREFIX_RE.match(stripped)
     if m:
         existing_zs = len(m.group(0)) - 1  # minus the underscore
@@ -125,12 +125,12 @@ def get_archive_load_order(game: Game, session: Session) -> LoadOrderResult:
     for norm_path, owners in path_owners.items():
         if len(owners) < 2:
             continue
-        # Sort owners by archive filename to determine winner (last loaded wins).
+        # Sort owners by archive filename to determine winner (first loaded wins).
         # NOTE: when two mods share the exact same filename, the winner is
         # ambiguous (one physically overwrites the other during install).
         sorted_owners = sorted(owners, key=lambda o: o[0].lower())
-        winner_filename, winner_mod = sorted_owners[-1]
-        for loser_filename, loser_mod in sorted_owners[:-1]:
+        winner_filename, winner_mod = sorted_owners[0]
+        for loser_filename, loser_mod in sorted_owners[1:]:
             if loser_mod.id == winner_mod.id:
                 continue
             conflicts.append(
@@ -143,8 +143,8 @@ def get_archive_load_order(game: Game, session: Session) -> LoadOrderResult:
                     loser_mod_name=loser_mod.name,
                     loser_archive=loser_filename,
                     reasoning=(
-                        f"'{winner_filename}' sorts after '{loser_filename}' "
-                        f"(case-insensitive ASCII); last loaded wins"
+                        f"'{winner_filename}' sorts before '{loser_filename}' "
+                        f"(case-insensitive ASCII); first loaded wins"
                     ),
                 )
             )
@@ -163,7 +163,11 @@ def generate_prefer_renames(
     game: Game,
     session: Session,
 ) -> list[RenameAction]:
-    """Compute renames needed so *winner_mod*'s archives sort after *loser_mod*'s."""
+    """Compute renames needed so *loser_mod*'s archives sort after *winner_mod*'s.
+
+    Since first-loaded wins, the winner must sort before the loser.  We demote
+    the loser by adding a ``zz_`` prefix to its archives.
+    """
     winner_files = _get_mod_archive_files(winner_mod)
     loser_files = _get_mod_archive_files(loser_mod)
 
@@ -173,14 +177,14 @@ def generate_prefer_renames(
     loser_filenames = [f.relative_path.replace("\\", "/").rsplit("/", 1)[-1] for f in loser_files]
     winner_filenames = [f.relative_path.replace("\\", "/").rsplit("/", 1)[-1] for f in winner_files]
 
-    loser_max = max(fn.lower() for fn in loser_filenames)
-    winner_min = min(fn.lower() for fn in winner_filenames)
+    loser_min = min(fn.lower() for fn in loser_filenames)
+    winner_max = max(fn.lower() for fn in winner_filenames)
 
-    # Already in correct order — winner sorts after all loser archives
-    if winner_min > loser_max:
+    # Already in correct order — loser sorts after all winner archives
+    if loser_min > winner_max:
         return []
 
-    prefix = _compute_prefix(max(loser_filenames, key=lambda fn: fn.lower()))
+    prefix = _compute_prefix(max(winner_filenames, key=lambda fn: fn.lower()))
 
     # Collect all existing archive filenames for this game (collision detection)
     all_archive_files = session.exec(
@@ -196,7 +200,7 @@ def generate_prefer_renames(
     }
 
     renames: list[RenameAction] = []
-    for f in winner_files:
+    for f in loser_files:
         rel = f.relative_path.replace("\\", "/")
         old_filename = rel.rsplit("/", 1)[-1]
         stripped = _strip_load_order_prefix(old_filename)
@@ -209,7 +213,7 @@ def generate_prefer_renames(
         ):
             stem = new_filename.rsplit(".", 1)[0]
             ext = new_filename.rsplit(".", 1)[1]
-            new_filename = f"{stem}_{winner_mod.id}.{ext}"
+            new_filename = f"{stem}_{loser_mod.id}.{ext}"
 
         if new_filename == old_filename:
             continue
@@ -221,8 +225,8 @@ def generate_prefer_renames(
                 new_relative_path=new_rel,
                 old_filename=old_filename,
                 new_filename=new_filename,
-                owning_mod_id=winner_mod.id,  # type: ignore[arg-type]
-                owning_mod_name=winner_mod.name,
+                owning_mod_id=loser_mod.id,  # type: ignore[arg-type]
+                owning_mod_name=loser_mod.name,
             )
         )
 
@@ -237,10 +241,11 @@ def apply_prefer_mod(
     *,
     dry_run: bool = False,
 ) -> PreferModResult:
-    """Rename archives so *winner_mod* loads after *loser_mod*.
+    """Rename archives so *winner_mod* wins over *loser_mod*.
 
-    With ``dry_run=True`` the plan is returned without touching the filesystem.
-    On failure, completed renames are rolled back.
+    The loser's archives are demoted (``zz_`` prefix) so they sort after
+    the winner.  With ``dry_run=True`` the plan is returned without touching
+    the filesystem.  On failure, completed renames are rolled back.
     """
     renames = generate_prefer_renames(winner_mod, loser_mod, game, session)
 
@@ -249,7 +254,7 @@ def apply_prefer_mod(
             success=True,
             renames=renames,
             dry_run=dry_run,
-            message="No renames needed; winner already loads after loser",
+            message="No renames needed; loser already sorts after winner",
         )
 
     if dry_run:
