@@ -1,8 +1,10 @@
 import {
+  AlertTriangle,
   CheckCircle,
   ChevronDown,
   ChevronRight,
   Crown,
+  List,
   Power,
   RefreshCw,
   ShieldAlert,
@@ -17,6 +19,7 @@ import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { VirtualTable } from "@/components/ui/VirtualTable";
+import { ResourceDetailsPanel } from "@/components/conflicts/ResourceDetailsPanel";
 import { useArchiveConflictSummaries } from "@/hooks/queries";
 import { usePreferMod, usePreferModPreview, useReindexConflicts, useToggleMod } from "@/hooks/mutations";
 import type { ArchiveConflictSummaryOut, PreferModResult } from "@/types/api";
@@ -26,13 +29,22 @@ interface Props {
 }
 
 type SeverityFilter = "all" | "high" | "medium" | "low";
+type ConflictTypeFilter = "all" | "real" | "cosmetic";
 
-const FILTER_CHIPS: { key: SeverityFilter; label: string }[] = [
+const SEVERITY_CHIPS: { key: SeverityFilter; label: string }[] = [
   { key: "all", label: "All" },
   { key: "high", label: "High" },
   { key: "medium", label: "Medium" },
   { key: "low", label: "Low" },
 ];
+
+const TYPE_CHIPS: { key: ConflictTypeFilter; label: string }[] = [
+  { key: "all", label: "All types" },
+  { key: "real", label: "Real" },
+  { key: "cosmetic", label: "Cosmetic" },
+];
+
+const HEX_PATTERN = /^0x[0-9a-fA-F]{4,16}$/;
 
 const SEVERITY_VARIANT: Record<string, "danger" | "warning" | "success"> = {
   high: "danger",
@@ -48,14 +60,23 @@ interface PreferPreviewState {
 }
 
 export function ArchiveResourceConflicts({ gameName }: Props) {
-  const { data: result, isLoading } = useArchiveConflictSummaries(gameName);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<SeverityFilter>("all");
+  const [typeFilter, setTypeFilter] = useState<ConflictTypeFilter>("all");
+
+  // When the search looks like a hex resource hash, pass it to the backend
+  const resourceHash = HEX_PATTERN.test(search.trim()) ? search.trim() : undefined;
+
+  const { data: result, isLoading } = useArchiveConflictSummaries(gameName, resourceHash);
   const reindex = useReindexConflicts();
   const toggleMod = useToggleMod();
   const preferPreview = usePreferModPreview();
   const preferMod = usePreferMod();
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<SeverityFilter>("all");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [detailsOpenFor, setDetailsOpenFor] = useState<{
+    archive: string;
+    filter: "all" | "real" | "cosmetic";
+  } | null>(null);
   const [previewState, setPreviewState] = useState<PreferPreviewState | null>(null);
   const [previewResult, setPreviewResult] = useState<PreferModResult | null>(null);
 
@@ -68,7 +89,14 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
       items = items.filter((s) => s.severity === filter);
     }
 
-    if (search) {
+    if (typeFilter === "real") {
+      items = items.filter((s) => s.real_count > 0);
+    } else if (typeFilter === "cosmetic") {
+      items = items.filter((s) => s.identical_count > 0 && s.real_count === 0);
+    }
+
+    // Text search (skip when search is a resource hash — already filtered server-side)
+    if (search && !resourceHash) {
       const q = search.toLowerCase();
       items = items.filter(
         (s) =>
@@ -79,7 +107,7 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
     }
 
     return items;
-  }, [summaries, filter, search]);
+  }, [summaries, filter, typeFilter, search, resourceHash]);
 
   const chipCounts = useMemo(() => {
     const all = summaries.length;
@@ -89,14 +117,36 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
     return { all, high, medium, low };
   }, [summaries]);
 
+  const typeCounts = useMemo(() => ({
+    all: summaries.length,
+    real: summaries.filter((s) => s.real_count > 0).length,
+    cosmetic: summaries.filter((s) => s.identical_count > 0 && s.real_count === 0).length,
+  }), [summaries]);
+
   const toggleExpand = useCallback((filename: string) => {
     setExpandedRows((prev) => {
       const next = new Set(prev);
-      if (next.has(filename)) next.delete(filename);
-      else next.add(filename);
+      if (next.has(filename)) {
+        next.delete(filename);
+        setDetailsOpenFor((cur) => (cur?.archive === filename ? null : cur));
+      } else {
+        next.add(filename);
+      }
       return next;
     });
   }, []);
+
+  const openDetails = useCallback(
+    (archive: string, filter: "all" | "real" | "cosmetic") => {
+      setExpandedRows((prev) => {
+        const next = new Set(prev);
+        next.add(archive);
+        return next;
+      });
+      setDetailsOpenFor({ archive, filter });
+    },
+    [],
+  );
 
   const handlePrefer = useCallback(
     async (winnerId: number, loserId: number, winnerName: string, loserName: string) => {
@@ -171,12 +221,17 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <SearchInput value={search} onChange={setSearch} placeholder="Filter by archive or mod name..." />
+      <div className="flex items-center gap-3 flex-wrap">
+        <SearchInput value={search} onChange={setSearch} placeholder="Filter by name or resource hash (0x...)" />
         <FilterChips
-          chips={FILTER_CHIPS.map((c) => ({ ...c, count: chipCounts[c.key] }))}
+          chips={SEVERITY_CHIPS.map((c) => ({ ...c, count: chipCounts[c.key] }))}
           active={filter}
           onChange={(v) => setFilter(v as SeverityFilter)}
+        />
+        <FilterChips
+          chips={TYPE_CHIPS.map((c) => ({ ...c, count: typeCounts[c.key] }))}
+          active={typeFilter}
+          onChange={(v) => setTypeFilter(v as ConflictTypeFilter)}
         />
         <div className="flex items-center gap-2 ml-auto">
           <div className="flex items-center gap-2 text-xs text-text-muted mr-2">
@@ -205,7 +260,7 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
           items={filtered}
           estimateHeight={48}
           dynamicHeight
-          remeasureDep={expandedRows.size}
+          remeasureDep={`${expandedRows.size}-${detailsOpenFor?.archive}-${detailsOpenFor?.filter}`}
           renderHead={() => (
             <tr className="border-b border-border text-left text-xs text-text-muted">
               <th className="pb-2 pr-4 font-medium w-8" />
@@ -263,20 +318,53 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
                       </div>
                     </div>
                   </td>
-                  <td className="py-2.5 pr-4">
-                    <span className="text-xs text-text-secondary">
-                      {item.real_count > 0 && (
-                        <span className="text-danger">{item.real_count} real</span>
+                  <td className="py-2.5 pr-4" onClick={(e) => e.stopPropagation()}>
+                    <div className="space-y-1">
+                      <span className="text-xs text-text-secondary">
+                        {item.real_count > 0 && (
+                          <button
+                            className="text-danger hover:underline"
+                            onClick={() => openDetails(item.archive_filename, "real")}
+                          >
+                            {item.real_count} real
+                          </button>
+                        )}
+                        {item.real_count > 0 && item.identical_count > 0 && ", "}
+                        {item.identical_count > 0 && (
+                          <button
+                            className="text-text-muted hover:underline"
+                            onClick={() => openDetails(item.archive_filename, "cosmetic")}
+                          >
+                            {item.identical_count} cosmetic
+                          </button>
+                        )}
+                        {totalConflicts === 0 && "—"}
+                      </span>
+                      {totalConflicts > 0 && (
+                        <div className="flex h-1 w-12 rounded-full overflow-hidden bg-surface-2">
+                          <div
+                            className="bg-danger h-full"
+                            style={{ width: `${(item.real_count / totalConflicts) * 100}%` }}
+                          />
+                          <div
+                            className="bg-success/30 h-full"
+                            style={{ width: `${(item.identical_count / totalConflicts) * 100}%` }}
+                          />
+                        </div>
                       )}
-                      {item.real_count > 0 && item.identical_count > 0 && ", "}
-                      {item.identical_count > 0 && (
-                        <span className="text-text-muted">{item.identical_count} cosmetic</span>
-                      )}
-                      {totalConflicts === 0 && "—"}
-                    </span>
+                    </div>
                   </td>
                   <td className="py-2.5 pr-4">
-                    <Badge variant={SEVERITY_VARIANT[item.severity] ?? "neutral"}>
+                    <Badge
+                      variant={SEVERITY_VARIANT[item.severity] ?? "neutral"}
+                      title={
+                        item.severity === "high"
+                          ? "Over 50% of resources are being overridden by another archive"
+                          : item.severity === "medium"
+                            ? "Some resources are being overridden"
+                            : "This archive wins all conflicts or has only cosmetic differences"
+                      }
+                    >
                       {item.severity}
                     </Badge>
                   </td>
@@ -322,6 +410,13 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
                   <tr className="bg-surface-1/50">
                     <td colSpan={7} className="px-8 py-3">
                       <div className="text-xs space-y-1.5">
+                        {item.losing_entries > 0 && item.real_count > 0 && (
+                          <p className="text-warning/80 flex items-center gap-1 mb-2">
+                            <AlertTriangle size={12} />
+                            This archive is losing {item.real_count} real conflict{item.real_count !== 1 ? "s" : ""}.
+                            Use &quot;Prefer&quot; to change load order, or disable the conflicting mod.
+                          </p>
+                        )}
                         <p className="text-text-muted font-medium mb-2">
                           Conflicting archives ({item.conflicting_archives.length}):
                         </p>
@@ -347,6 +442,29 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
                             </div>
                           );
                         })}
+
+                        <button
+                          className="flex items-center gap-1 mt-2 text-xs text-accent hover:text-accent/80 transition-colors"
+                          onClick={() =>
+                            setDetailsOpenFor((cur) =>
+                              cur?.archive === item.archive_filename
+                                ? null
+                                : { archive: item.archive_filename, filter: "all" },
+                            )
+                          }
+                        >
+                          <List size={12} />
+                          {detailsOpenFor?.archive === item.archive_filename ? "Hide" : "Show"} Resource Details
+                          ({totalConflicts} conflict{totalConflicts !== 1 ? "s" : ""})
+                        </button>
+
+                        {detailsOpenFor?.archive === item.archive_filename && (
+                          <ResourceDetailsPanel
+                            gameName={gameName}
+                            archiveFilename={item.archive_filename}
+                            initialFilter={detailsOpenFor.filter}
+                          />
+                        )}
                       </div>
                     </td>
                   </tr>

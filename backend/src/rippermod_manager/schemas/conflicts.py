@@ -110,6 +110,9 @@ class ConflictGraphNode(BaseModel):
     disabled: bool = False
     nexus_mod_id: int | None = None
     picture_url: str | None = None
+    resource_conflict_count: int = 0
+    real_resource_count: int = 0
+    identical_resource_count: int = 0
 
 
 class ConflictGraphEdge(BaseModel):
@@ -117,6 +120,9 @@ class ConflictGraphEdge(BaseModel):
     target: str
     shared_files: list[str]
     weight: int
+    resource_conflicts: int = 0
+    identical_resource_count: int = 0
+    real_resource_count: int = 0
 
 
 class ConflictGraphResult(BaseModel):

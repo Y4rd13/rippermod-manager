@@ -65,3 +65,32 @@ class ArchiveConflictSummariesResult(BaseModel):
     game_name: str
     summaries: list[ArchiveConflictSummaryOut]
     total_archives_with_conflicts: int
+
+
+class ResourceConflictDetail(BaseModel):
+    """Single resource hash conflict within an archive pair."""
+
+    resource_hash: str
+    winner_archive: str
+    loser_archives: list[str]
+    is_identical: bool
+    severity: Severity
+
+
+class ResourceConflictGroup(BaseModel):
+    """Conflicts grouped by partner archive."""
+
+    partner_archive: str
+    partner_mod_name: str | None = None
+    is_winner: bool
+    identical_count: int
+    real_count: int
+    resources: list[ResourceConflictDetail]
+
+
+class ArchiveResourceDetailsResult(BaseModel):
+    """Per-resource conflict details for a single archive."""
+
+    archive_filename: str
+    total_resource_conflicts: int
+    groups: list[ResourceConflictGroup]

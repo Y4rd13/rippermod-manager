@@ -17,6 +17,11 @@ from sqlmodel import Session, select
 
 from rippermod_manager.models.archive_index import ArchiveEntryIndex
 from rippermod_manager.models.conflict import ConflictEvidence, ConflictKind, Severity
+from rippermod_manager.schemas.conflict import (
+    ArchiveResourceDetailsResult,
+    ResourceConflictDetail,
+    ResourceConflictGroup,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +118,8 @@ def detect_archive_conflicts(
 def summarize_conflicts(
     session: Session,
     game_id: int,
+    *,
+    resource_hash: str | None = None,
 ) -> list[ArchiveConflictSummary]:
     """Produce per-archive conflict summaries with severity ratings.
 
@@ -122,10 +129,18 @@ def summarize_conflicts(
     * **high** - >50% of entries lose (or all entries lose)
     * **medium** - 1-50% of entries lose
     * **low** - mod wins all conflicting entries
+
+    If *resource_hash* is given (hex string like ``0xa4fb…``), only evidences
+    whose key matches are included.
     """
     evidences = detect_archive_conflicts(session, game_id)
     if not evidences:
         return []
+
+    if resource_hash:
+        evidences = [e for e in evidences if e.key == resource_hash]
+        if not evidences:
+            return []
 
     total_counts_rows = session.exec(
         select(
@@ -211,3 +226,88 @@ def summarize_conflicts(
     severity_order = {Severity.high: 0, Severity.medium: 1, Severity.low: 2}
     summaries.sort(key=lambda s: (severity_order[s.severity], s.archive_filename))
     return summaries
+
+
+def get_archive_resource_details(
+    session: Session,
+    game_id: int,
+    archive_filename: str,
+) -> ArchiveResourceDetailsResult:
+    """Return per-resource conflict details for a single archive.
+
+    Groups conflicts by partner archive and classifies each resource
+    as identical (cosmetic) or real based on SHA1 comparison.
+    """
+    evidences = session.exec(
+        select(ConflictEvidence).where(
+            ConflictEvidence.game_id == game_id,
+            ConflictEvidence.kind == ConflictKind.archive_resource,
+            ConflictEvidence.detail.contains(archive_filename),  # type: ignore[union-attr]
+        )
+    ).all()
+
+    # Validate in Python (LIKE pre-filter may include false positives)
+    relevant: list[tuple[str, dict]] = []
+    for ev in evidences:
+        try:
+            detail = json.loads(ev.detail)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        winner = detail.get("winner_archive", "")
+        losers = detail.get("loser_archives", [])
+        if winner == archive_filename or archive_filename in losers:
+            relevant.append((ev.key, detail))
+
+    # Group by partner archive
+    partner_resources: dict[str, list[ResourceConflictDetail]] = defaultdict(list)
+    for resource_hash, detail in relevant:
+        winner = detail.get("winner_archive", "")
+        losers: list[str] = detail.get("loser_archives", [])
+        sha1s: dict[str, str] = detail.get("sha1s", {})
+
+        partners = losers if winner == archive_filename else [winner]
+
+        winner_sha1 = sha1s.get(winner, "")
+
+        for partner in partners:
+            if partner == archive_filename:
+                continue
+            partner_sha1 = sha1s.get(partner, "") if winner == archive_filename else winner_sha1
+            this_sha1 = sha1s.get(archive_filename, "")
+            is_identical = bool(this_sha1 and partner_sha1 and this_sha1 == partner_sha1)
+
+            unique_sha1s = set(sha1s.values()) - {""}
+            severity = Severity.low if len(unique_sha1s) <= 1 else Severity.high
+
+            partner_resources[partner].append(
+                ResourceConflictDetail(
+                    resource_hash=resource_hash,
+                    winner_archive=winner,
+                    loser_archives=losers,
+                    is_identical=is_identical,
+                    severity=severity,
+                )
+            )
+
+    # Build groups
+    groups: list[ResourceConflictGroup] = []
+    for partner, resources in sorted(partner_resources.items()):
+        is_winner = archive_filename.lower() < partner.lower()
+        identical = sum(1 for r in resources if r.is_identical)
+        real = len(resources) - identical
+        groups.append(
+            ResourceConflictGroup(
+                partner_archive=partner,
+                is_winner=is_winner,
+                identical_count=identical,
+                real_count=real,
+                resources=resources,
+            )
+        )
+
+    total = sum(len(g.resources) for g in groups)
+    return ArchiveResourceDetailsResult(
+        archive_filename=archive_filename,
+        total_resource_conflicts=total,
+        groups=groups,
+    )

@@ -4,7 +4,7 @@ import json
 import logging
 import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
 from rippermod_manager.database import get_session
@@ -14,6 +14,7 @@ from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.conflict import (
     ArchiveConflictSummariesResult,
     ArchiveConflictSummaryOut,
+    ArchiveResourceDetailsResult,
     ConflictEvidenceOut,
     ConflictSummary,
     ModRef,
@@ -154,12 +155,15 @@ def reindex_conflicts(
 def archive_conflict_summaries(
     game_name: str,
     session: Session = Depends(get_session),
+    resource_hash: str | None = Query(
+        None, description="Filter to archives with this resource hash"
+    ),
 ) -> ArchiveConflictSummariesResult:
     """Return per-archive conflict summaries with win/loss counts and severity."""
     from rippermod_manager.services.archive_conflict_detector import summarize_conflicts
 
     game = get_game_or_404(game_name, session)
-    summaries = summarize_conflicts(session, game.id)
+    summaries = summarize_conflicts(session, game.id, resource_hash=resource_hash)
 
     # Resolve mod names from installed_mod_id
     mod_ids = {s.installed_mod_id for s in summaries if s.installed_mod_id is not None}
@@ -191,6 +195,63 @@ def archive_conflict_summaries(
         summaries=out,
         total_archives_with_conflicts=len(out),
     )
+
+
+@_engine_router.get(
+    "/archive-details/{archive_filename:path}",
+    response_model=ArchiveResourceDetailsResult,
+)
+def archive_resource_details(
+    game_name: str,
+    archive_filename: str,
+    session: Session = Depends(get_session),
+) -> ArchiveResourceDetailsResult:
+    """Return per-resource conflict details for a single archive file."""
+    from rippermod_manager.services.archive_conflict_detector import (
+        get_archive_resource_details,
+    )
+
+    game = get_game_or_404(game_name, session)
+    result = get_archive_resource_details(session, game.id, archive_filename)
+
+    # Resolve mod names for partner archives
+    archive_names = [g.partner_archive for g in result.groups]
+    if archive_names:
+        from rippermod_manager.models.archive_index import ArchiveEntryIndex
+
+        rows = session.exec(
+            select(
+                ArchiveEntryIndex.archive_filename,
+                ArchiveEntryIndex.installed_mod_id,
+            )
+            .where(
+                ArchiveEntryIndex.game_id == game.id,
+                ArchiveEntryIndex.archive_filename.in_(archive_names),  # type: ignore[union-attr]
+            )
+            .group_by(ArchiveEntryIndex.archive_filename, ArchiveEntryIndex.installed_mod_id)
+        ).all()
+
+        mod_id_map: dict[str, int] = {}
+        for name, mid in rows:
+            if mid is not None:
+                mod_id_map.setdefault(name, mid)
+
+        mod_ids = set(mod_id_map.values())
+        mod_name_map: dict[int, str] = {}
+        if mod_ids:
+            mods = session.exec(
+                select(InstalledMod).where(
+                    InstalledMod.id.in_(list(mod_ids))  # type: ignore[union-attr]
+                )
+            ).all()
+            mod_name_map = {m.id: m.name for m in mods}  # type: ignore[misc]
+
+        for group in result.groups:
+            mid = mod_id_map.get(group.partner_archive)
+            if mid is not None:
+                group.partner_mod_name = mod_name_map.get(mid)
+
+    return result
 
 
 # --- Inbox endpoints (global post-install conflict visibility) ---
@@ -247,10 +308,11 @@ def inbox_resolve(
 def conflict_graph(
     game_name: str,
     session: Session = Depends(get_session),
+    resource_hash: str | None = Query(None, description="Filter resource edges to this hash"),
 ) -> ConflictGraphResult:
     """Build a conflict graph across all installed mods and uninstalled archives."""
     game = get_game_or_404(game_name, session)
-    return build_conflict_graph(game, session)
+    return build_conflict_graph(game, session, resource_hash=resource_hash)
 
 
 router.include_router(_engine_router)

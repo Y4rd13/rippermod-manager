@@ -542,6 +542,7 @@ export function useReindexConflicts() {
       qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
       qc.invalidateQueries({ queryKey: ["conflict-graph", gameName] });
       qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
+      qc.invalidateQueries({ queryKey: ["archive-resource-details", gameName] });
       toast.success(
         "Reindex complete",
         `${result.conflicts_found} conflict${result.conflicts_found === 1 ? "" : "s"} found in ${result.duration_ms}ms`,

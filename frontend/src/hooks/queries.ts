@@ -5,6 +5,7 @@ import type {
   ArchiveConflictSummariesResult,
   ArchiveContentsResult,
   ArchivePreviewResult,
+  ArchiveResourceDetailsResult,
   AvailableArchive,
   ConflictGraphResult,
   ConflictKind,
@@ -220,10 +221,23 @@ export function useFileContentsPreview(url: string | null) {
   });
 }
 
-export function useArchiveConflictSummaries(gameName: string) {
+export function useArchiveResourceDetails(gameName: string, archiveFilename: string | null) {
+  return useQuery<ArchiveResourceDetailsResult>({
+    queryKey: ["archive-resource-details", gameName, archiveFilename],
+    queryFn: () =>
+      api.get(
+        `/api/v1/games/${gameName}/conflicts/archive-details/${encodeURIComponent(archiveFilename!)}`,
+      ),
+    enabled: !!gameName && !!archiveFilename,
+    staleTime: 60_000,
+  });
+}
+
+export function useArchiveConflictSummaries(gameName: string, resourceHash?: string) {
+  const params = resourceHash ? `?resource_hash=${encodeURIComponent(resourceHash)}` : "";
   return useQuery<ArchiveConflictSummariesResult>({
-    queryKey: ["archive-conflict-summaries", gameName],
-    queryFn: () => api.get(`/api/v1/games/${gameName}/conflicts/archive-summaries`),
+    queryKey: ["archive-conflict-summaries", gameName, resourceHash ?? ""],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/conflicts/archive-summaries${params}`),
     enabled: !!gameName,
     staleTime: 60_000,
   });
@@ -239,10 +253,11 @@ export function useConflictSummary(gameName: string, kind?: ConflictKind) {
   });
 }
 
-export function useConflictGraph(gameName: string, enabled = true) {
+export function useConflictGraph(gameName: string, resourceHash?: string, enabled = true) {
+  const params = resourceHash ? `?resource_hash=${encodeURIComponent(resourceHash)}` : "";
   return useQuery<ConflictGraphResult>({
-    queryKey: ["conflict-graph", gameName],
-    queryFn: () => api.get(`/api/v1/games/${gameName}/conflicts/graph`),
+    queryKey: ["conflict-graph", gameName, resourceHash ?? ""],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/conflicts/graph${params}`),
     enabled: !!gameName && enabled,
     staleTime: 60_000,
   });
