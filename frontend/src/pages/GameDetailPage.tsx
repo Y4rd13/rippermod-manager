@@ -69,6 +69,12 @@ const ArchiveResourceConflicts = lazy(() =>
 );
 
 type MatchedSubTab = "nexus-matched" | "scan-details";
+
+const MATCHED_SUB_TABS: { key: MatchedSubTab; label: string }[] = [
+  { key: "nexus-matched", label: "Nexus Matched" },
+  { key: "scan-details", label: "Scan Details" },
+];
+
 type ConflictSubTab = "file-conflicts" | "archive-resources";
 
 function ConflictSubTabs({ gameName }: { gameName: string }) {
@@ -577,10 +583,7 @@ export function GameDetailPage() {
       {tab === "matched" && (
         <div className="space-y-4">
           <div className="flex gap-1 border-b border-border">
-            {([
-              { key: "nexus-matched" as const, label: "Nexus Matched" },
-              { key: "scan-details" as const, label: "Scan Details" },
-            ]).map(({ key, label }) => (
+            {MATCHED_SUB_TABS.map(({ key, label }) => (
               <button
                 key={key}
                 onClick={() => setMatchedSubTab(key)}
