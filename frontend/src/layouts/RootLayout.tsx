@@ -5,15 +5,19 @@ import { ChatPanel } from "@/components/chat/ChatPanel";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Titlebar } from "@/components/layout/Titlebar";
+import { DownloadQueueFooter } from "@/components/ui/DownloadQueueFooter";
 import { KeyboardShortcutsModal } from "@/components/ui/KeyboardShortcutsModal";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAppUpdater } from "@/hooks/use-app-updater";
+import { useDownloadSync } from "@/hooks/use-download-sync";
 import { useHasOpenaiKey } from "@/hooks/queries";
 import { ScrollContainerContext } from "@/hooks/use-scroll-container";
 import { useUIStore } from "@/stores/ui-store";
 
 export function RootLayout() {
   useAppUpdater(); // Triggers auto-check on startup; UI lives in SettingsPage
+  const activeGameName = useUIStore((s) => s.activeGameName);
+  useDownloadSync(activeGameName);
   const toggleChatPanel = useUIStore((s) => s.toggleChatPanel);
   const setChatPanelOpen = useUIStore((s) => s.setChatPanelOpen);
   const hasOpenaiKey = useHasOpenaiKey();
@@ -67,6 +71,7 @@ export function RootLayout() {
         </main>
         <ChatPanel />
       </div>
+      <DownloadQueueFooter />
       <ToastContainer />
       {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
     </div>
