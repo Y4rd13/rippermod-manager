@@ -1,5 +1,5 @@
 import { AlertTriangle, Archive, Check, ChevronDown, Copy, Download, ExternalLink, FolderOpen, FolderTree, Link, PackageMinus, Settings2, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { openPath } from "@tauri-apps/plugin-opener";
 
@@ -16,7 +16,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
-import { SortSelect } from "@/components/ui/SortSelect";
+import { SortableHeader } from "@/components/ui/SortableHeader";
 import { VirtualTable } from "@/components/ui/VirtualTable";
 import {
   useCheckConflicts,
@@ -44,15 +44,16 @@ interface Props {
   isLoading?: boolean;
 }
 
-type ArchiveSortKey = "name" | "size" | "version";
+type ArchiveSortKey = "archive" | "name" | "version" | "size" | "nexusId" | "downloaded" | "status";
 
 type LinkChip = "all" | "linked" | "unlinked" | "installed" | "orphan";
 
-const ARCHIVE_SORT_OPTIONS: { value: ArchiveSortKey; label: string }[] = [
-  { value: "name", label: "Name" },
-  { value: "size", label: "Size" },
-  { value: "version", label: "Version" },
-];
+const STATUS_ORDER: Record<string, number> = { installed: 0, orphan: 1, empty: 2 };
+
+function archiveStatus(a: AvailableArchive): string {
+  if (a.is_empty) return "empty";
+  return a.is_installed ? "installed" : "orphan";
+}
 
 function buildContextItems(archive: AvailableArchive): ContextMenuItem[] {
   const items: ContextMenuItem[] = [];
@@ -120,6 +121,12 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
   const [sortDir, setSortDir] = useSessionState<"asc" | "desc">(`archives-dir-${gameName}`, "asc");
   const [linkChip, setLinkChip] = useSessionState<LinkChip>(`archives-chip-${gameName}`, "all");
 
+  const handleSort = useCallback((key: string) => {
+    const k = key as ArchiveSortKey;
+    setSortDir((prev) => (sortKey === k ? (prev === "asc" ? "desc" : "asc") : (k === "size" ? "desc" : "asc")));
+    setSortKey(k);
+  }, [sortKey, setSortDir, setSortKey]);
+
   const { menuState, openMenu, closeMenu } = useContextMenu<AvailableArchive>();
 
   const filtered = useMemo(() => {
@@ -139,6 +146,9 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
     items.sort((a, b) => {
       let cmp = 0;
       switch (sortKey) {
+        case "archive":
+          cmp = a.filename.localeCompare(b.filename);
+          break;
         case "name":
           cmp = a.parsed_name.localeCompare(b.parsed_name);
           break;
@@ -147,6 +157,15 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
           break;
         case "version":
           cmp = (a.parsed_version ?? "").localeCompare(b.parsed_version ?? "", undefined, { numeric: true });
+          break;
+        case "nexusId":
+          cmp = (a.nexus_mod_id ?? -1) - (b.nexus_mod_id ?? -1);
+          break;
+        case "downloaded":
+          cmp = (a.last_downloaded_at ?? "").localeCompare(b.last_downloaded_at ?? "");
+          break;
+        case "status":
+          cmp = (STATUS_ORDER[archiveStatus(a)] ?? 3) - (STATUS_ORDER[archiveStatus(b)] ?? 3);
           break;
       }
       return sortDir === "asc" ? cmp : -cmp;
@@ -343,17 +362,6 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
 
         <div className="flex items-center gap-3">
           <SearchInput value={filter} onChange={setFilter} placeholder="Filter by filename..." />
-          <SortSelect
-            value={sortKey}
-            onChange={(v) => {
-              const key = v as ArchiveSortKey;
-              setSortKey(key);
-              setSortDir(key === "size" ? "desc" : "asc");
-            }}
-            options={ARCHIVE_SORT_OPTIONS}
-            sortDir={sortDir}
-            onSortDirChange={setSortDir}
-          />
           <span className="text-xs text-text-muted">
             {filtered.length} archive{filtered.length !== 1 ? "s" : ""}
           </span>
@@ -405,14 +413,14 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
                   className="rounded border-border accent-accent"
                 />
               </th>
-              <th className="py-2 pr-3">Archive</th>
-              <th className="py-2 pr-3">Parsed Name</th>
-              <th className="py-2 pr-3 whitespace-nowrap">Version</th>
-              <th className="py-2 pr-3 whitespace-nowrap">Size</th>
-              <th className="py-2 pr-3 whitespace-nowrap">Nexus ID</th>
-              <th className="py-2 pr-3 whitespace-nowrap">Downloaded</th>
-              <th className="py-2 pr-2 whitespace-nowrap">Status</th>
-              <th className="py-2 pl-2 text-right whitespace-nowrap">Actions</th>
+              <SortableHeader label="Archive" sortKey="archive" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-3" />
+              <SortableHeader label="Parsed Name" sortKey="name" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-3" />
+              <SortableHeader label="Version" sortKey="version" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-3 whitespace-nowrap" />
+              <SortableHeader label="Size" sortKey="size" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-3 whitespace-nowrap" />
+              <SortableHeader label="Nexus ID" sortKey="nexusId" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-3 whitespace-nowrap" />
+              <SortableHeader label="Downloaded" sortKey="downloaded" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-3 whitespace-nowrap" />
+              <SortableHeader label="Status" sortKey="status" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-2 whitespace-nowrap" />
+              <th className="py-2 pl-2 text-right whitespace-nowrap font-medium text-text-muted">Actions</th>
             </tr>
           )}
           renderRow={(a) => (

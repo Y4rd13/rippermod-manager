@@ -10,7 +10,7 @@ import { useState } from "react";
 import { formatBytes } from "@/lib/format";
 import type { ArchiveEntryNode } from "@/types/api";
 
-function TreeNode({ node, depth }: { node: ArchiveEntryNode; depth: number }) {
+function TreeNode({ node, depth, showSize = true }: { node: ArchiveEntryNode; depth: number; showSize?: boolean }) {
   const [open, setOpen] = useState(true);
 
   if (!node.is_dir) {
@@ -23,9 +23,11 @@ function TreeNode({ node, depth }: { node: ArchiveEntryNode; depth: number }) {
         <span className="font-mono text-xs text-text-secondary truncate">
           {node.name}
         </span>
-        <span className="ml-auto font-mono text-xs text-text-muted whitespace-nowrap">
-          {formatBytes(node.size)}
-        </span>
+        {showSize && (
+          <span className="ml-auto font-mono text-xs text-text-muted whitespace-nowrap">
+            {formatBytes(node.size)}
+          </span>
+        )}
       </div>
     );
   }
@@ -54,17 +56,17 @@ function TreeNode({ node, depth }: { node: ArchiveEntryNode; depth: number }) {
       </button>
       {open &&
         node.children.map((child) => (
-          <TreeNode key={child.name} node={child} depth={depth + 1} />
+          <TreeNode key={child.name} node={child} depth={depth + 1} showSize={showSize} />
         ))}
     </div>
   );
 }
 
-export function FileTreeView({ tree }: { tree: ArchiveEntryNode[] }) {
+export function FileTreeView({ tree, showSize = true }: { tree: ArchiveEntryNode[]; showSize?: boolean }) {
   return (
     <>
       {tree.map((node) => (
-        <TreeNode key={node.name} node={node} depth={0} />
+        <TreeNode key={node.name} node={node} depth={0} showSize={showSize} />
       ))}
     </>
   );

@@ -4,13 +4,15 @@ import {
   ChevronDown,
   ChevronRight,
   Crown,
+  HelpCircle,
   List,
   Power,
   RefreshCw,
   ShieldAlert,
   Shuffle,
+  X,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -18,6 +20,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
+import { SortableHeader } from "@/components/ui/SortableHeader";
 import { VirtualTable } from "@/components/ui/VirtualTable";
 import { ResourceDetailsPanel } from "@/components/conflicts/ResourceDetailsPanel";
 import { useArchiveConflictSummaries } from "@/hooks/queries";
@@ -46,6 +49,10 @@ const TYPE_CHIPS: { key: ConflictTypeFilter; label: string }[] = [
 
 const HEX_PATTERN = /^0x[0-9a-fA-F]{4,16}$/;
 
+type ArcSortKey = "archive" | "mod" | "impact" | "conflicts" | "severity";
+
+const SEVERITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
 const SEVERITY_VARIANT: Record<string, "danger" | "warning" | "success"> = {
   high: "danger",
   medium: "warning",
@@ -63,6 +70,8 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<SeverityFilter>("all");
   const [typeFilter, setTypeFilter] = useState<ConflictTypeFilter>("all");
+  const [sortKey, setSortKey] = useState<ArcSortKey>("severity");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   // When the search looks like a hex resource hash, pass it to the backend
   const resourceHash = HEX_PATTERN.test(search.trim()) ? search.trim() : undefined;
@@ -79,6 +88,7 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
   } | null>(null);
   const [previewState, setPreviewState] = useState<PreferPreviewState | null>(null);
   const [previewResult, setPreviewResult] = useState<PreferModResult | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const summaries = result?.summaries ?? [];
 
@@ -106,8 +116,33 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
       );
     }
 
+    items = [...items].sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "archive":
+          cmp = a.archive_filename.localeCompare(b.archive_filename);
+          break;
+        case "mod":
+          cmp = (a.mod_name ?? "\uffff").localeCompare(b.mod_name ?? "\uffff");
+          break;
+        case "impact": {
+          const aImpact = a.total_entries > 0 ? (a.winning_entries + a.losing_entries) / a.total_entries : 0;
+          const bImpact = b.total_entries > 0 ? (b.winning_entries + b.losing_entries) / b.total_entries : 0;
+          cmp = aImpact - bImpact;
+          break;
+        }
+        case "conflicts":
+          cmp = (a.real_count + a.identical_count) - (b.real_count + b.identical_count);
+          break;
+        case "severity":
+          cmp = (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3);
+          break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
     return items;
-  }, [summaries, filter, typeFilter, search, resourceHash]);
+  }, [summaries, filter, typeFilter, search, resourceHash, sortKey, sortDir]);
 
   const chipCounts = useMemo(() => {
     const all = summaries.length;
@@ -122,6 +157,12 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
     real: summaries.filter((s) => s.real_count > 0).length,
     cosmetic: summaries.filter((s) => s.identical_count > 0 && s.real_count === 0).length,
   }), [summaries]);
+
+  const handleSort = useCallback((key: string) => {
+    const k = key as ArcSortKey;
+    setSortDir((prev) => (sortKey === k ? (prev === "asc" ? "desc" : "asc") : "asc"));
+    setSortKey(k);
+  }, [sortKey]);
 
   const toggleExpand = useCallback((filename: string) => {
     setExpandedRows((prev) => {
@@ -240,6 +281,14 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
               {result.total_archives_with_conflicts} archive{result.total_archives_with_conflicts !== 1 ? "s" : ""} with conflicts
             </span>
           </div>
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            className="rounded-lg p-1.5 text-text-muted hover:text-accent hover:bg-surface-2 transition-colors"
+            title="How do archive conflicts work?"
+          >
+            <HelpCircle size={16} />
+          </button>
           <Button
             variant="secondary"
             size="sm"
@@ -264,11 +313,11 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
           renderHead={() => (
             <tr className="border-b border-border text-left text-xs text-text-muted">
               <th className="pb-2 pr-4 font-medium w-8" />
-              <th className="pb-2 pr-4 font-medium">Archive</th>
-              <th className="pb-2 pr-4 font-medium">Mod</th>
-              <th className="pb-2 pr-4 font-medium">Impact</th>
-              <th className="pb-2 pr-4 font-medium">Conflicts</th>
-              <th className="pb-2 pr-4 font-medium w-24">Severity</th>
+              <SortableHeader label="Archive" sortKey="archive" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Mod" sortKey="mod" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Impact" sortKey="impact" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Conflicts" sortKey="conflicts" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Severity" sortKey="severity" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-24" />
               <th className="pb-2 font-medium">Actions</th>
             </tr>
           )}
@@ -548,6 +597,73 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
           </div>
         </div>
       )}
+
+      {helpOpen && (
+        <ConflictHelpModal onClose={() => setHelpOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+function ConflictHelpModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="conflict-help-title"
+        className="w-full max-w-md rounded-xl border border-border bg-surface-1 p-6 animate-modal-in"
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <HelpCircle size={18} className="text-accent" />
+            <h3 id="conflict-help-title" className="text-lg font-semibold text-text-primary">
+              How do archive conflicts work?
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 rounded p-1 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"
+            aria-label="Close"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-3 text-sm text-text-secondary">
+          <p>
+            <Badge variant="success">cosmetic</Badge>{" "}
+            Both archives contain identical data for this resource. No gameplay impact — safe to ignore.
+          </p>
+          <p>
+            <Badge variant="danger">real</Badge>{" "}
+            Archives contain different data. The winner&apos;s version is used in-game.
+          </p>
+          <p>
+            <Badge variant="success">wins over</Badge>{" "}
+            This archive loads first (lower ASCII filename), so its resources take priority over the other archive.
+          </p>
+          <p>
+            <Badge variant="danger">loses to</Badge>{" "}
+            The other archive loads first, overriding this archive&apos;s resources.
+            Use the <strong className="text-text-primary">Prefer</strong> button to rename the loser so your preferred mod wins.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

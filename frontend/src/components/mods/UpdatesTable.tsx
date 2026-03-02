@@ -1,5 +1,5 @@
 import { Download, ExternalLink, RefreshCw } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { SourceBadge } from "@/components/mods/SourceBadge";
 import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
-import { SortSelect } from "@/components/ui/SortSelect";
+import { SortableHeader } from "@/components/ui/SortableHeader";
 import { VirtualTable } from "@/components/ui/VirtualTable";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
@@ -18,14 +18,7 @@ import { useSessionState } from "@/hooks/use-session-state";
 import { timeAgo } from "@/lib/format";
 import type { ModUpdate } from "@/types/api";
 
-type UpdateSortKey = "name" | "author" | "source" | "updated";
-
-const UPDATE_SORT_OPTIONS: { value: UpdateSortKey; label: string }[] = [
-  { value: "name", label: "Name" },
-  { value: "author", label: "Author" },
-  { value: "source", label: "Source" },
-  { value: "updated", label: "Last Updated" },
-];
+type UpdateSortKey = "name" | "localVer" | "nexusVer" | "source" | "author" | "updated" | "downloaded";
 
 interface Props {
   gameName: string;
@@ -42,6 +35,12 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
   const [sortDir, setSortDir] = useSessionState<"asc" | "desc">(`updates-dir-${gameName}`, "desc");
   const [chip, setChip] = useSessionState(`updates-chip-${gameName}`, "all");
 
+  const handleSort = useCallback((key: string) => {
+    const k = key as UpdateSortKey;
+    setSortDir((prev) => (sortKey === k ? (prev === "asc" ? "desc" : "asc") : "asc"));
+    setSortKey(k);
+  }, [sortKey, setSortDir, setSortKey]);
+
   const filteredUpdates = useMemo(() => {
     const q = filter.toLowerCase();
     const items = updates.filter((u) => {
@@ -56,6 +55,12 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
         case "name":
           cmp = a.display_name.localeCompare(b.display_name);
           break;
+        case "localVer":
+          cmp = a.local_version.localeCompare(b.local_version, undefined, { numeric: true });
+          break;
+        case "nexusVer":
+          cmp = a.nexus_version.localeCompare(b.nexus_version, undefined, { numeric: true });
+          break;
         case "author":
           cmp = a.author.localeCompare(b.author);
           break;
@@ -64,6 +69,9 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
           break;
         case "updated":
           cmp = (a.nexus_timestamp ?? 0) - (b.nexus_timestamp ?? 0);
+          break;
+        case "downloaded":
+          cmp = (a.local_download_date ?? 0) - (b.local_download_date ?? 0);
           break;
       }
       return sortDir === "asc" ? cmp : -cmp;
@@ -108,13 +116,6 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
     <div className="space-y-3">
       <div className="flex items-center gap-3">
         <SearchInput value={filter} onChange={setFilter} placeholder="Filter by name or author..." />
-        <SortSelect
-          value={sortKey}
-          onChange={(v) => setSortKey(v as UpdateSortKey)}
-          options={UPDATE_SORT_OPTIONS}
-          sortDir={sortDir}
-          onSortDirChange={setSortDir}
-        />
         <span className="text-xs text-text-muted">
           {filteredUpdates.length} update{filteredUpdates.length !== 1 ? "s" : ""}
         </span>
@@ -168,13 +169,13 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
           items={filteredUpdates}
           renderHead={() => (
             <tr className="border-b border-border text-left text-text-muted sticky top-0 z-10 bg-surface-0">
-              <th className="py-2 pr-4">Mod</th>
-              <th className="py-2 pr-4">Local Version</th>
-              <th className="py-2 pr-4">Nexus Version</th>
-              <th className="py-2 pr-4">Source</th>
-              <th className="py-2 pr-4">Author</th>
-              <th className="py-2 pr-4">Updated</th>
-              <th className="py-2 pr-4">Downloaded</th>
+              <SortableHeader label="Mod" sortKey="name" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-4" />
+              <SortableHeader label="Local Version" sortKey="localVer" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-4" />
+              <SortableHeader label="Nexus Version" sortKey="nexusVer" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-4" />
+              <SortableHeader label="Source" sortKey="source" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-4" />
+              <SortableHeader label="Author" sortKey="author" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-4" />
+              <SortableHeader label="Updated" sortKey="updated" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-4" />
+              <SortableHeader label="Downloaded" sortKey="downloaded" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-4" />
               <th className="py-2" />
             </tr>
           )}
