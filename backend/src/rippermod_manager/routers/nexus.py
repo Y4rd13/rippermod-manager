@@ -201,7 +201,7 @@ async def mod_detail(
                                     version=af.get("version", ""),
                                     category_id=af.get("category_id"),
                                     uploaded_timestamp=af.get("uploaded_timestamp"),
-                                    file_size=af.get("size_in_bytes") or af.get("file_size", 0),
+                                    file_size=af.get("size_in_bytes") or 0,
                                     content_preview_link=af.get("content_preview_link"),
                                     description=af.get("description"),
                                 )

@@ -1,6 +1,7 @@
-import { Check, Copy, Eye, ExternalLink, Heart, Info, Settings } from "lucide-react";
+import { Check, Copy, Download, Eye, ExternalLink, Heart, Info, Settings } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { FomodWizard } from "@/components/mods/FomodWizard";
@@ -17,7 +18,7 @@ import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { VirtualCardGrid } from "@/components/ui/VirtualCardGrid";
-import { useAbstainMod, useEndorseMod, useTrackMod, useUntrackMod } from "@/hooks/mutations";
+import { useAbstainMod, useEndorseMod, useStartModDownload, useTrackMod, useUntrackMod } from "@/hooks/mutations";
 import { toast } from "@/stores/toast-store";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useInstallFlow } from "@/hooks/use-install-flow";
@@ -43,6 +44,7 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 function getContextMenuItems(mod: NexusDownload): ContextMenuItem[] {
   return [
     { key: "details", label: "View Details", icon: Info },
+    { key: "download", label: "Download", icon: Download },
     { key: "nexus", label: "Open on Nexus", icon: ExternalLink },
     { key: "copy-name", label: "Copy Name", icon: Copy },
     { key: "sep-actions", label: "", separator: true },
@@ -105,6 +107,7 @@ export function NexusAccountGrid({
   const [chip, setChip] = useSessionState(`account-chip-${gameName}`, "all");
 
   const flow = useInstallFlow(gameName, archives, downloadJobs, onFileSelect);
+  const startModDownload = useStartModDownload();
   const endorseMod = useEndorseMod();
   const abstainMod = useAbstainMod();
   const trackMod = useTrackMod();
@@ -152,7 +155,8 @@ export function NexusAccountGrid({
     const mod = menuState.data;
     if (!mod) return;
     if (key === "details") onModClick?.(mod.nexus_mod_id);
-    else if (key === "nexus") window.open(mod.nexus_url, "_blank", "noopener,noreferrer");
+    else if (key === "download") startModDownload.mutate({ gameName, nexusModId: mod.nexus_mod_id });
+    else if (key === "nexus") openUrl(mod.nexus_url).catch(() => {});
     else if (key === "copy-name") void navigator.clipboard.writeText(mod.mod_name).then(
       () => toast.success("Copied to clipboard"),
       () => toast.error("Failed to copy"),
@@ -313,7 +317,8 @@ export function NexusAccountGrid({
                   items={getContextMenuItems(mod)}
                   onSelect={(key) => {
                     if (key === "details") onModClick?.(nexusModId);
-                    else if (key === "nexus") window.open(mod.nexus_url, "_blank", "noopener,noreferrer");
+                    else if (key === "download") startModDownload.mutate({ gameName, nexusModId });
+                    else if (key === "nexus") openUrl(mod.nexus_url).catch(() => {});
                     else if (key === "copy-name") void navigator.clipboard.writeText(mod.mod_name).then(
                       () => toast.success("Copied to clipboard"),
                       () => toast.error("Failed to copy"),

@@ -1,7 +1,7 @@
-import { AlertTriangle, Archive, Check, ChevronDown, Copy, Download, ExternalLink, FolderOpen, FolderTree, Link, PackageMinus, Settings2, Trash2 } from "lucide-react";
+import { AlertTriangle, Archive, Check, ChevronDown, Copy, Download, ExternalLink, FolderOpen, FolderTree, Link, PackageMinus, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { openPath } from "@tauri-apps/plugin-opener";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 
 import { ArchiveTreeModal } from "@/components/mods/ArchiveTreeModal";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -24,13 +24,16 @@ import {
   useDeleteArchive,
   useInstallMod,
   useLinkArchiveToNexus,
+  useStartModDownload,
   useUninstallMod,
 } from "@/hooks/mutations";
+import { useDownloadJobs } from "@/hooks/queries";
 import { toast } from "@/stores/toast-store";
 import { useBulkSelect } from "@/hooks/use-bulk-select";
 import { useSessionState } from "@/hooks/use-session-state";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { formatBytes, isoToEpoch, timeAgo } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type {
   AvailableArchive,
   ConflictCheckResult,
@@ -58,13 +61,16 @@ function archiveStatus(a: AvailableArchive): string {
 function buildContextItems(archive: AvailableArchive): ContextMenuItem[] {
   const items: ContextMenuItem[] = [];
   if (archive.is_empty && archive.nexus_mod_id) {
-    items.push({ key: "nexus", label: "View on Nexus", icon: ExternalLink });
+    items.push({ key: "redownload", label: "Re-download", icon: RefreshCw });
   } else if (archive.is_installed && archive.installed_mod_id) {
     items.push({ key: "uninstall", label: "Uninstall", icon: PackageMinus, variant: "danger" });
   } else {
     items.push({ key: "install", label: "Install", icon: Download });
   }
-  if (archive.nexus_mod_id && !archive.is_empty) {
+  if (archive.nexus_mod_id) {
+    if (!archive.is_empty) {
+      items.push({ key: "redownload", label: "Re-download", icon: RefreshCw });
+    }
     items.push({ key: "nexus", label: "View on Nexus", icon: ExternalLink });
   }
   items.push({ key: "copy", label: "Copy Filename", icon: Copy });
@@ -79,6 +85,18 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
   const deleteArchive = useDeleteArchive();
   const cleanupOrphans = useCleanupOrphans();
   const linkArchive = useLinkArchiveToNexus();
+  const startModDownload = useStartModDownload();
+  const { data: downloadJobs = [] } = useDownloadJobs(gameName);
+
+  const activeDownloadByModId = useMemo(() => {
+    const map = new Map<number, { status: string }>();
+    for (const job of downloadJobs) {
+      if (job.status === "downloading" || job.status === "pending") {
+        map.set(job.nexus_mod_id, { status: job.status });
+      }
+    }
+    return map;
+  }, [downloadJobs]);
   const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
   const [confirmUninstall, setConfirmUninstall] = useState<{ filename: string; modId: number } | null>(null);
   const [fomodArchive, setFomodArchive] = useState<string | null>(null);
@@ -317,8 +335,10 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
         () => toast.success("Copied to clipboard"),
         () => toast.error("Failed to copy"),
       );
+    } else if (key === "redownload" && archive.nexus_mod_id) {
+      startModDownload.mutate({ gameName, nexusModId: archive.nexus_mod_id });
     } else if (key === "nexus" && archive.nexus_mod_id) {
-      window.open(`https://www.nexusmods.com/${gameDomain}/mods/${archive.nexus_mod_id}?tab=files`, "_blank", "noopener,noreferrer");
+      openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${archive.nexus_mod_id}?tab=files`).catch(() => {});
     } else if (key === "delete") {
       setConfirmDeleteFile(archive.filename);
     }
@@ -456,7 +476,9 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
               </td>
               <td className="py-2 pr-2 whitespace-nowrap">
                 {a.is_empty ? (
-                  <Badge variant="danger"><AlertTriangle size={10} /> Empty</Badge>
+                  <span title="Download failed or was interrupted — re-download from Nexus to fix">
+                    <Badge variant="danger"><AlertTriangle size={10} /> Empty</Badge>
+                  </span>
                 ) : a.is_installed ? (
                   <Badge variant="success"><Check size={10} /> Installed</Badge>
                 ) : (
@@ -501,11 +523,26 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
                       </button>
                     </div>
                   )}
+                  {a.nexus_mod_id && (() => {
+                    const isDownloading = activeDownloadByModId.has(a.nexus_mod_id!);
+                    return (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={isDownloading}
+                        onClick={() => startModDownload.mutate({ gameName, nexusModId: a.nexus_mod_id! })}
+                        title={isDownloading ? "Downloading..." : "Re-download from Nexus"}
+                        aria-label="Re-download"
+                      >
+                        <RefreshCw size={14} className={cn(isDownloading && "animate-spin text-success")} />
+                      </Button>
+                    );
+                  })()}
                   {a.nexus_mod_id ? (
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => window.open(`https://www.nexusmods.com/${gameDomain}/mods/${a.nexus_mod_id}?tab=files`, "_blank", "noopener,noreferrer")}
+                      onClick={() => openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${a.nexus_mod_id}?tab=files`).catch(() => {})}
                       title={`View mod ${a.nexus_mod_id} on Nexus Mods`}
                       aria-label="View on Nexus"
                     >
