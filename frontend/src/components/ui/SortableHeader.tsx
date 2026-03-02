@@ -26,6 +26,8 @@ export function SortableHeader({
 
   return (
     <th
+      scope="col"
+      aria-sort={isActive ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
       className={cn(
         "pb-2 pr-4 font-medium cursor-pointer select-none transition-colors",
         isActive ? "text-accent" : "text-text-muted hover:text-text-primary",

@@ -153,13 +153,17 @@ interface Props {
   gameName: string;
 }
 
-export function ConflictSummaryWidget({ gameName }: Props) {
+function useClusters(gameName: string) {
   const { data: graph, isLoading } = useConflictGraph(gameName);
-
   const clusters = useMemo(() => {
     if (!graph) return [];
     return findClusters(graph.nodes, graph.edges);
   }, [graph]);
+  return { graph, clusters, isLoading };
+}
+
+export function ConflictSummaryWidget({ gameName }: Props) {
+  const { graph, clusters, isLoading } = useClusters(gameName);
 
   const stats = useMemo(() => {
     if (!graph) return null;
@@ -211,19 +215,14 @@ export function ConflictSummaryWidget({ gameName }: Props) {
 }
 
 export function ClusterDetailsPanel({ gameName }: Props) {
-  const { data: graph, isLoading } = useConflictGraph(gameName);
-  const [expandedClusters, setExpandedClusters] = useState<Set<number>>(new Set());
+  const { graph, clusters, isLoading } = useClusters(gameName);
+  const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set());
 
-  const clusters = useMemo(() => {
-    if (!graph) return [];
-    return findClusters(graph.nodes, graph.edges);
-  }, [graph]);
-
-  const toggleCluster = (index: number) => {
+  const toggleCluster = (key: string) => {
     setExpandedClusters((prev) => {
       const next = new Set(prev);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -254,14 +253,15 @@ export function ClusterDetailsPanel({ gameName }: Props) {
         {clusters.length} cluster{clusters.length !== 1 ? "s" : ""} of mods sharing conflicting files or resources.
         Expand a cluster to see pairwise relationships.
       </p>
-      {clusters.map((cluster, i) => {
-        const isExpanded = expandedClusters.has(i);
+      {clusters.map((cluster) => {
+        const clusterKey = cluster.modNames.join("|");
+        const isExpanded = expandedClusters.has(clusterKey);
         return (
-          <div key={i}>
+          <div key={clusterKey}>
             <button
               type="button"
               className={`flex items-center gap-2 text-sm rounded-r-md border-l-2 px-2.5 py-1.5 w-full text-left ${severityBorder[cluster.severity]}`}
-              onClick={() => toggleCluster(i)}
+              onClick={() => toggleCluster(clusterKey)}
             >
               {isExpanded ? (
                 <ChevronDown size={14} className="shrink-0 text-text-muted" />

@@ -116,7 +116,7 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
       );
     }
 
-    items.sort((a, b) => {
+    items = [...items].sort((a, b) => {
       let cmp = 0;
       switch (sortKey) {
         case "archive":
