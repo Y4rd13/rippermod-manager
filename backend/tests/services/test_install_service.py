@@ -9,6 +9,7 @@ from rippermod_manager.services.install_service import (
     get_file_ownership_map,
     install_mod,
     list_available_archives,
+    reparse_installed_mods,
     toggle_mod,
     uninstall_mod,
 )
@@ -322,3 +323,77 @@ class TestToggleMod:
         installed = session.get(InstalledMod, result.installed_mod_id)
         assert installed.disabled is False
         assert (game_dir / "mods" / "double.txt").exists()
+
+
+class TestReparseInstalledMods:
+    def test_updates_stale_metadata(self, session, game):
+        """Mods stored with an old parser get their metadata corrected."""
+        mod = InstalledMod(
+            game_id=game.id,
+            name="Wrong Name-6968-v",
+            source_archive="NC_Ambient_NPCs_v3LITE (Definitive Edition)-6968-v-3-0-1742148061.rar",
+            nexus_mod_id=3,
+            installed_version="0",
+            upload_timestamp=None,
+        )
+        session.add(mod)
+        session.commit()
+
+        updated = reparse_installed_mods(game.id, session)
+
+        assert updated == 1
+        session.refresh(mod)
+        assert mod.nexus_mod_id == 6968
+        assert mod.installed_version == "v.3.0"
+        assert mod.upload_timestamp == 1742148061
+        assert "6968" not in mod.name or mod.name != "Wrong Name-6968-v"
+
+    def test_no_changes_when_already_correct(self, session, game):
+        """Mods that already match the parser output are not touched."""
+        mod = InstalledMod(
+            game_id=game.id,
+            name="CET",
+            source_archive="CET-107-1-37-1-1759193708.zip",
+            nexus_mod_id=107,
+            installed_version="1.37.1",
+            upload_timestamp=1759193708,
+        )
+        session.add(mod)
+        session.commit()
+
+        updated = reparse_installed_mods(game.id, session)
+        assert updated == 0
+
+    def test_skips_mods_without_source_archive(self, session, game):
+        """Mods with empty source_archive are excluded from reparsing."""
+        mod = InstalledMod(
+            game_id=game.id,
+            name="Manual Mod",
+            source_archive="",
+        )
+        session.add(mod)
+        session.commit()
+
+        updated = reparse_installed_mods(game.id, session)
+        assert updated == 0
+
+    def test_partial_update_only_changed_fields(self, session, game):
+        """Only fields that differ from the parser are updated."""
+        mod = InstalledMod(
+            game_id=game.id,
+            name="CET",
+            source_archive="CET-107-1-37-1-1759193708.zip",
+            nexus_mod_id=107,
+            installed_version="0.0.0",  # wrong version only
+            upload_timestamp=1759193708,
+        )
+        session.add(mod)
+        session.commit()
+
+        updated = reparse_installed_mods(game.id, session)
+        assert updated == 1
+        session.refresh(mod)
+        assert mod.name == "CET"  # unchanged
+        assert mod.nexus_mod_id == 107  # unchanged
+        assert mod.installed_version == "1.37.1"  # fixed
+        assert mod.upload_timestamp == 1759193708  # unchanged

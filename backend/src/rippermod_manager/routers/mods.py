@@ -168,6 +168,13 @@ def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> S
                 # Phase 1: Scan files + group (0-83%)
                 scan_game_mods(game, session, on_progress=on_progress)
 
+                # Re-parse installed mods with current parser (fixes stale metadata)
+                from rippermod_manager.services.install_service import reparse_installed_mods
+
+                reparsed = reparse_installed_mods(game.id, session)  # type: ignore[arg-type]
+                if reparsed:
+                    on_progress("reparse", f"Re-parsed {reparsed} installed mod(s)", 83)
+
                 # Phase 1.5: FOMOD/REDmod metadata (83-85%)
                 on_progress("fomod", "Inspecting archive metadata...", 83)
                 fomod_result = parse_archive_metadata(game, session, on_progress)

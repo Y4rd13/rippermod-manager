@@ -506,3 +506,54 @@ def delete_orphaned_archives(
         freed_bytes=freed_bytes,
         deleted_files=deleted_files,
     )
+
+
+def reparse_installed_mods(game_id: int, session: Session) -> int:
+    """Re-parse source_archive filenames and update stale InstalledMod metadata.
+
+    Compares the current parser output against stored ``name``,
+    ``nexus_mod_id``, ``installed_version``, and ``upload_timestamp``.
+    Updates any fields that differ.  Returns the number of mods updated.
+    """
+    mods = session.exec(
+        select(InstalledMod).where(
+            InstalledMod.game_id == game_id,
+            InstalledMod.source_archive != "",
+        )
+    ).all()
+
+    updated = 0
+    for mod in mods:
+        parsed = parse_mod_filename(mod.source_archive)
+        changed = False
+
+        if parsed.name and parsed.name != mod.name:
+            mod.name = parsed.name
+            changed = True
+        if parsed.nexus_mod_id is not None and parsed.nexus_mod_id != mod.nexus_mod_id:
+            mod.nexus_mod_id = parsed.nexus_mod_id
+            changed = True
+        if parsed.version and parsed.version != mod.installed_version:
+            mod.installed_version = parsed.version
+            changed = True
+        if parsed.upload_timestamp and parsed.upload_timestamp != mod.upload_timestamp:
+            mod.upload_timestamp = parsed.upload_timestamp
+            changed = True
+
+        if changed:
+            session.add(mod)
+            updated += 1
+            logger.info(
+                "Re-parsed InstalledMod %d (%s): name=%r, nexus_mod_id=%s, version=%s",
+                mod.id,
+                mod.source_archive,
+                mod.name,
+                mod.nexus_mod_id,
+                mod.installed_version,
+            )
+
+    if updated:
+        session.commit()
+        logger.info("Re-parsed %d/%d installed mods for game %d", updated, len(mods), game_id)
+
+    return updated
