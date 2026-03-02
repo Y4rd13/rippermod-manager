@@ -33,7 +33,11 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useSessionState<UpdateSortKey>(`updates-sort-${gameName}`, "updated");
   const [sortDir, setSortDir] = useSessionState<"asc" | "desc">(`updates-dir-${gameName}`, "desc");
-  const [chip, setChip] = useSessionState(`updates-chip-${gameName}`, "all");
+  const [activeSourceList, setActiveSourceList] = useSessionState<string[]>(
+    `updates-sources-${gameName}`,
+    ["installed"],
+  );
+  const activeSources = useMemo(() => new Set(activeSourceList), [activeSourceList]);
 
   const handleSort = useCallback((key: string) => {
     const k = key as UpdateSortKey;
@@ -41,11 +45,14 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
     setSortKey(k);
   }, [sortKey, setSortDir, setSortKey]);
 
+  const allSourceKeys = ["installed", "correlation", "endorsed", "tracked"] as const;
+  const showAll = activeSources.size === 0 || activeSources.size === allSourceKeys.length;
+
   const filteredUpdates = useMemo(() => {
     const q = filter.toLowerCase();
     const items = updates.filter((u) => {
       if (q && !u.display_name.toLowerCase().includes(q) && !u.author.toLowerCase().includes(q)) return false;
-      if (chip !== "all" && u.source !== chip) return false;
+      if (!showAll && !activeSources.has(u.source)) return false;
       return true;
     });
 
@@ -78,7 +85,7 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
     });
 
     return items;
-  }, [updates, filter, sortKey, sortDir, chip]);
+  }, [updates, filter, sortKey, sortDir, activeSources, showAll]);
 
   const downloadableUpdates = filteredUpdates.filter((u) => u.nexus_file_id != null);
 
@@ -100,15 +107,35 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
     }
   };
 
-  const updateChips = useMemo(() => {
-    const sources = new Set(updates.map((u) => u.source));
-    const chips = [{ key: "all", label: "All" }];
-    if (sources.has("installed")) chips.push({ key: "installed", label: "Installed" });
-    if (sources.has("correlation")) chips.push({ key: "correlation", label: "Matched" });
-    if (sources.has("endorsed")) chips.push({ key: "endorsed", label: "Endorsed" });
-    if (sources.has("tracked")) chips.push({ key: "tracked", label: "Tracked" });
-    return chips;
+  const sourceCountMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const u of updates) {
+      map[u.source] = (map[u.source] ?? 0) + 1;
+    }
+    return map;
   }, [updates]);
+
+  const sourceChips = useMemo(
+    () => [
+      { key: "installed", label: "Installed", count: sourceCountMap["installed"] },
+      { key: "correlation", label: "Matched", count: sourceCountMap["correlation"] },
+      { key: "endorsed", label: "Endorsed", count: sourceCountMap["endorsed"] },
+      { key: "tracked", label: "Tracked", count: sourceCountMap["tracked"] },
+    ],
+    [sourceCountMap],
+  );
+
+  const handleToggleSource = useCallback(
+    (key: string) => {
+      setActiveSourceList((prev) => {
+        const set = new Set(prev);
+        if (set.has(key)) set.delete(key);
+        else set.add(key);
+        return [...set];
+      });
+    },
+    [setActiveSourceList],
+  );
 
   if (isLoading) return <SkeletonTable columns={8} rows={5} />;
 
@@ -145,9 +172,12 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
         </div>
       </div>
 
-      {updateChips.length > 2 && (
-        <FilterChips chips={updateChips} active={chip} onChange={setChip} />
-      )}
+      <FilterChips
+        multi
+        chips={sourceChips}
+        activeKeys={activeSources}
+        onToggle={handleToggleSource}
+      />
 
       {!updates.length ? (
         <EmptyState
