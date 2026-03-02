@@ -4,11 +4,9 @@ import { ChevronUp, Download, Trash2 } from "lucide-react";
 import { DownloadProgress } from "@/components/ui/DownloadProgress";
 import { useCancelDownload } from "@/hooks/mutations";
 import { cn } from "@/lib/utils";
-import { useDownloadStore } from "@/stores/download-store";
+import { TERMINAL_STATUSES, useDownloadStore } from "@/stores/download-store";
 import { useUIStore } from "@/stores/ui-store";
 import type { DownloadJobOut } from "@/types/api";
-
-const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 
 export function DownloadQueueFooter() {
   const jobs = useDownloadStore((s) => s.jobs);
@@ -29,18 +27,18 @@ export function DownloadQueueFooter() {
   const { activeJobs, terminalJobs, aggregatePercent } = useMemo(() => {
     const active: DownloadJobOut[] = [];
     const terminal: DownloadJobOut[] = [];
-    let totalPercent = 0;
 
     for (const job of jobList) {
-      if (TERMINAL.has(job.status)) {
+      if (TERMINAL_STATUSES.has(job.status)) {
         terminal.push(job);
       } else {
         active.push(job);
       }
-      totalPercent += job.percent;
     }
 
-    const avg = jobList.length > 0 ? Math.round(totalPercent / jobList.length) : 0;
+    const avg = active.length > 0
+      ? Math.round(active.reduce((sum, j) => sum + j.percent, 0) / active.length)
+      : 100;
     return { activeJobs: active, terminalJobs: terminal, aggregatePercent: avg };
   }, [jobList]);
 
