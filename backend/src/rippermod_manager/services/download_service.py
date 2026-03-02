@@ -5,6 +5,7 @@ import logging
 import re
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import unquote
 
 from sqlmodel import Session, col, select
 
@@ -142,15 +143,23 @@ def _parse_content_disposition(header: str) -> str | None:
     """Extract filename from a Content-Disposition header value."""
     if not header:
         return None
-    # Try filename*= (RFC 5987 extended) first, then plain filename=
+    # Try filename*= (RFC 5987: charset'language'value) first
+    rfc5987 = re.search(
+        r"""filename\*\s*=\s*[Uu][Tt][Ff]-8'[^']*'(.+?)(?:;|$)""",
+        header,
+    )
+    if rfc5987:
+        name = Path(unquote(rfc5987.group(1))).name
+        if name:
+            return name
+    # Fall back to plain filename=
     for pattern in (
-        r"""filename\*\s*=\s*(?:UTF-8''|utf-8'')(.+?)(?:;|$)""",
         r"""filename\s*=\s*"([^"]+)"\s*(?:;|$)""",
         r"""filename\s*=\s*([^\s;]+)""",
     ):
         match = re.search(pattern, header, re.IGNORECASE)
         if match:
-            name = Path(match.group(1)).name  # sanitize path traversal
+            name = Path(match.group(1)).name
             if name:
                 return name
     return None
@@ -216,7 +225,10 @@ async def _run_download(
                                 s.add(job)
                                 s.commit()
                     except Exception:
-                        pass
+                        logger.debug(
+                            "Failed to update resolved filename for job %d",
+                            job_id,
+                        )
 
             total = int(resp.headers.get("Content-Length", 0))
             downloaded = 0
@@ -234,8 +246,8 @@ async def _run_download(
             part_path.unlink(missing_ok=True)
             raise RuntimeError("CDN returned an empty response (0 bytes downloaded)")
 
-        # Atomic rename: only place a complete file in the staging folder
-        part_path.rename(dest_path)
+        # Atomic move: only place a complete file in the staging folder
+        part_path.replace(dest_path)
 
         with Session(engine) as s:
             job = s.get(DownloadJob, job_id)

@@ -22,9 +22,13 @@ class TestParseContentDisposition:
         header = "attachment; filename=mod.zip"
         assert _parse_content_disposition(header) == "mod.zip"
 
-    def test_utf8_extended_filename(self):
+    def test_utf8_extended_filename_decoded(self):
         header = "attachment; filename*=UTF-8''My%20Mod.7z"
-        assert _parse_content_disposition(header) == "My%20Mod.7z"
+        assert _parse_content_disposition(header) == "My Mod.7z"
+
+    def test_utf8_extended_with_language_tag(self):
+        header = "attachment; filename*=UTF-8'en'My%20Mod.7z"
+        assert _parse_content_disposition(header) == "My Mod.7z"
 
     def test_empty_header(self):
         assert _parse_content_disposition("") is None
@@ -227,6 +231,42 @@ class TestRunDownload:
 
         assert not (staging_dir / "test.zip").exists()
         assert not (staging_dir / "test.zip.part").exists()
+
+    @patch(ENGINE_ATTR)
+    def test_mid_download_failure_cleans_up_part_file(
+        self, mock_engine, session, game_dir, staging_dir, job_in_db,
+    ):
+        """Exception during aiter_bytes after partial write cleans .part."""
+        mock_engine.__enter__ = MagicMock(return_value=session)
+
+        async def fail_mid_stream(chunk_size=65_536):
+            yield b"partial data"
+            raise ConnectionError("connection reset mid-stream")
+
+        resp = AsyncMock()
+        resp.raise_for_status = MagicMock()
+        resp.headers = {"Content-Length": "1000"}
+        resp.aiter_bytes = fail_mid_stream
+
+        client = _make_mock_client(resp)
+
+        with (
+            patch("rippermod_manager.services.download_service.Session")
+            as mock_sess,
+            patch("httpx.AsyncClient", return_value=client),
+        ):
+            mock_sess.return_value.__enter__ = MagicMock(
+                return_value=session,
+            )
+            mock_sess.return_value.__exit__ = MagicMock(return_value=False)
+            cancel = asyncio.Event()
+            _run(_run_download(
+                job_in_db.id, CDN_URL, game_dir, "test.zip", cancel,
+            ))
+
+        # .part with partial data should have been cleaned up
+        assert not (staging_dir / "test.zip.part").exists()
+        assert not (staging_dir / "test.zip").exists()
 
     def test_part_file_not_visible_during_download(self, tmp_path):
         staging = tmp_path / "game" / "downloaded_mods"
