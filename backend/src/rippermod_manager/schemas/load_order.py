@@ -41,10 +41,20 @@ class RenameAction(BaseModel):
 
 class PreferModRequest(BaseModel):
     winner_mod_id: int
-    loser_mod_id: int
+    loser_mod_ids: list[int]
 
 
 class PreferModResult(BaseModel):
+    success: bool
+    message: str
+    preferences_added: int = 0
+    modlist_entries: int = 0
+    dry_run: bool = False
+
+
+class LegacyPreferModResult(BaseModel):
+    """Kept for backward compatibility with the rename-based approach."""
+
     success: bool
     renames: list[RenameAction]
     dry_run: bool

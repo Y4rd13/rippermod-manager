@@ -61,9 +61,8 @@ const SEVERITY_VARIANT: Record<string, "danger" | "warning" | "success"> = {
 
 interface PreferPreviewState {
   winnerId: number;
-  loserId: number;
   winnerName: string;
-  loserName: string;
+  losers: { modId: number; modName: string }[];
 }
 
 export function ArchiveResourceConflicts({ gameName }: Props) {
@@ -190,12 +189,12 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
   );
 
   const handlePrefer = useCallback(
-    async (winnerId: number, loserId: number, winnerName: string, loserName: string) => {
-      setPreviewState({ winnerId, loserId, winnerName, loserName });
+    async (winnerId: number, winnerName: string, losers: { modId: number; modName: string }[]) => {
+      setPreviewState({ winnerId, winnerName, losers });
       try {
         const result = await preferPreview.mutateAsync({
           gameName,
-          data: { winner_mod_id: winnerId, loser_mod_id: loserId },
+          data: { winner_mod_id: winnerId, loser_mod_ids: losers.map((l) => l.modId) },
         });
         setPreviewResult(result);
       } catch {
@@ -211,7 +210,10 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
     try {
       await preferMod.mutateAsync({
         gameName,
-        data: { winner_mod_id: previewState.winnerId, loser_mod_id: previewState.loserId },
+        data: {
+          winner_mod_id: previewState.winnerId,
+          loser_mod_ids: previewState.losers.map((l) => l.modId),
+        },
       });
       setPreviewState(null);
       setPreviewResult(null);
@@ -420,21 +422,29 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
                   <td className="py-2.5">
                     <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                       {item.installed_mod_id != null && item.losing_entries > 0 && (() => {
-                        const conflictPartner = item.conflicting_archives[0];
-                        const partner = conflictPartner ? summaryMap.get(conflictPartner) : undefined;
-                        if (!partner?.installed_mod_id) return null;
-                        const targetName = partner.mod_name ?? partner.archive_filename;
+                        // Collect ALL mods whose archives beat this one
+                        const losingMods = new Map<number, string>();
+                        for (const conflictArchive of item.conflicting_archives) {
+                          if (item.archive_filename.toLowerCase() > conflictArchive.toLowerCase()) {
+                            const partner = summaryMap.get(conflictArchive);
+                            if (partner?.installed_mod_id && !losingMods.has(partner.installed_mod_id)) {
+                              losingMods.set(partner.installed_mod_id, partner.mod_name ?? partner.archive_filename);
+                            }
+                          }
+                        }
+                        if (losingMods.size === 0) return null;
+                        const losers = Array.from(losingMods, ([modId, modName]) => ({ modId, modName }));
+                        const tooltip = `Prefer over ${losers.map((l) => l.modName).join(", ")} (update load order)`;
                         return (
                           <Button
                             variant="secondary"
                             size="sm"
-                            title={`Prefer over "${targetName}" (demote its archives)`}
+                            title={tooltip}
                             onClick={() =>
                               handlePrefer(
                                 item.installed_mod_id!,
-                                partner.installed_mod_id!,
                                 item.mod_name ?? item.archive_filename,
-                                targetName,
+                                losers,
                               )
                             }
                           >
@@ -480,8 +490,10 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
                             >
                               <Shuffle size={12} className="text-text-muted shrink-0" />
                               <code className="font-mono text-accent">{conflictArchive}</code>
-                              {partner?.mod_name && (
+                              {partner?.mod_name ? (
                                 <span className="text-text-muted">({partner.mod_name})</span>
+                              ) : (
+                                <span className="text-text-muted/50">(Unmanaged)</span>
                               )}
                               {isWinner ? (
                                 <Badge variant="success">wins over</Badge>
@@ -537,41 +549,38 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
             <div className="flex items-center gap-2 mb-4 text-accent">
               <Crown size={20} />
               <h3 className="text-lg font-semibold text-text-primary">
-                Prefer &ldquo;{previewState.winnerName}&rdquo;
+                Prefer &ldquo;{previewState.winnerName}&rdquo; over{" "}
+                {previewState.losers.map((l) => `"${l.modName}"`).join(", ")}
               </h3>
             </div>
 
             <p className="text-sm text-text-secondary mb-4">
-              This will rename <strong>{previewState.loserName}</strong>&apos;s archives so they
-              load after <strong>{previewState.winnerName}</strong>, making the winner&apos;s
-              resources take priority.
+              This will update the game&apos;s load order file (<code className="text-xs">modlist.txt</code>) so{" "}
+              <strong>{previewState.winnerName}</strong>&apos;s archives load first, making its
+              resources take priority. No files will be renamed.
             </p>
 
+            {previewState.losers.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs text-text-muted font-medium mb-1.5">
+                  Mods that will be demoted ({previewState.losers.length}):
+                </p>
+                <div className="rounded border border-border p-2 bg-surface-0 space-y-1">
+                  {previewState.losers.map((l) => (
+                    <div key={l.modId} className="text-xs text-text-secondary">
+                      {l.modName}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {preferPreview.isPending && (
-              <p className="text-sm text-text-muted py-4 text-center">Computing renames...</p>
+              <p className="text-sm text-text-muted py-4 text-center">Computing load order changes...</p>
             )}
 
             {previewResult && (
-              <div className="space-y-2 mb-4">
-                {previewResult.renames.length === 0 ? (
-                  <p className="text-sm text-success">{previewResult.message}</p>
-                ) : (
-                  <>
-                    <p className="text-xs text-text-muted font-medium">
-                      Planned renames ({previewResult.renames.length}):
-                    </p>
-                    <div className="max-h-48 overflow-y-auto space-y-1 rounded border border-border p-2 bg-surface-0">
-                      {previewResult.renames.map((r) => (
-                        <div key={r.old_filename} className="text-xs font-mono">
-                          <span className="text-danger">{r.old_filename}</span>
-                          <span className="text-text-muted"> → </span>
-                          <span className="text-success">{r.new_filename}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
+              <p className="text-sm text-text-secondary mb-4">{previewResult.message}</p>
             )}
 
             <div className="flex justify-end gap-2">
@@ -583,14 +592,14 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
               >
                 Cancel
               </Button>
-              {previewResult && previewResult.renames.length > 0 && (
+              {previewResult && previewResult.preferences_added > 0 && (
                 <Button
                   variant="primary"
                   size="sm"
                   loading={preferMod.isPending}
                   onClick={handleConfirmPrefer}
                 >
-                  Apply {previewResult.renames.length} rename{previewResult.renames.length !== 1 ? "s" : ""}
+                  Apply
                 </Button>
               )}
             </div>

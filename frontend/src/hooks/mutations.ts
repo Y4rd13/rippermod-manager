@@ -571,7 +571,7 @@ export function usePreferMod() {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       toast.success(
         "Load order updated",
-        `${result.renames.length} archive${result.renames.length === 1 ? "" : "s"} renamed`,
+        `${result.preferences_added} preference${result.preferences_added === 1 ? "" : "s"} applied, modlist.txt has ${result.modlist_entries} entries`,
       );
     },
     onError: () => toast.error("Failed to apply load order preference"),
