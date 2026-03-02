@@ -20,6 +20,8 @@ import type { ModUpdate } from "@/types/api";
 
 type UpdateSortKey = "name" | "localVer" | "nexusVer" | "source" | "author" | "updated" | "downloaded";
 
+const ALL_SOURCE_KEYS = ["installed", "correlation", "endorsed", "tracked"] as const;
+
 interface Props {
   gameName: string;
   updates: ModUpdate[];
@@ -45,8 +47,7 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
     setSortKey(k);
   }, [sortKey, setSortDir, setSortKey]);
 
-  const allSourceKeys = ["installed", "correlation", "endorsed", "tracked"] as const;
-  const showAll = activeSources.size === 0 || activeSources.size === allSourceKeys.length;
+  const showAll = activeSources.size === 0 || activeSources.size === ALL_SOURCE_KEYS.length;
 
   const filteredUpdates = useMemo(() => {
     const q = filter.toLowerCase();
@@ -117,10 +118,10 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
 
   const sourceChips = useMemo(
     () => [
-      { key: "installed", label: "Installed", count: sourceCountMap["installed"] },
-      { key: "correlation", label: "Matched", count: sourceCountMap["correlation"] },
-      { key: "endorsed", label: "Endorsed", count: sourceCountMap["endorsed"] },
-      { key: "tracked", label: "Tracked", count: sourceCountMap["tracked"] },
+      { key: "installed", label: "Installed", count: sourceCountMap["installed"] ?? 0 },
+      { key: "correlation", label: "Matched", count: sourceCountMap["correlation"] ?? 0 },
+      { key: "endorsed", label: "Endorsed", count: sourceCountMap["endorsed"] ?? 0 },
+      { key: "tracked", label: "Tracked", count: sourceCountMap["tracked"] ?? 0 },
     ],
     [sourceCountMap],
   );
