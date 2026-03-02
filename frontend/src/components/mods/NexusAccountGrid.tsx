@@ -156,7 +156,7 @@ export function NexusAccountGrid({
     if (!mod) return;
     if (key === "details") onModClick?.(mod.nexus_mod_id);
     else if (key === "download") startModDownload.mutate({ gameName, nexusModId: mod.nexus_mod_id });
-    else if (key === "nexus") openUrl(mod.nexus_url).catch(() => {});
+    else if (key === "nexus") openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
     else if (key === "copy-name") void navigator.clipboard.writeText(mod.mod_name).then(
       () => toast.success("Copied to clipboard"),
       () => toast.error("Failed to copy"),
@@ -318,7 +318,7 @@ export function NexusAccountGrid({
                   onSelect={(key) => {
                     if (key === "details") onModClick?.(nexusModId);
                     else if (key === "download") startModDownload.mutate({ gameName, nexusModId });
-                    else if (key === "nexus") openUrl(mod.nexus_url).catch(() => {});
+                    else if (key === "nexus") openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
                     else if (key === "copy-name") void navigator.clipboard.writeText(mod.mod_name).then(
                       () => toast.success("Copied to clipboard"),
                       () => toast.error("Failed to copy"),

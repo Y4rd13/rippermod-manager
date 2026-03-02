@@ -195,7 +195,7 @@ function ManagedModsGrid({
         toggleMod.mutate({ gameName, modId: mod.id });
         break;
       case "nexus":
-        if (mod.nexus_url) openUrl(mod.nexus_url).catch(() => {});
+        if (mod.nexus_url) openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
         break;
       case "redownload":
         if (mod.nexus_mod_id) startModDownload.mutate({ gameName, nexusModId: mod.nexus_mod_id });
@@ -354,7 +354,7 @@ function ManagedModsGrid({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          openUrl(mod.nexus_url!).catch(() => {});
+                          openUrl(mod.nexus_url!).catch(() => toast.error("Failed to open URL"));
                         }}
                         title="Open mod page on Nexus Mods"
                         aria-label="Open on Nexus Mods"
@@ -368,17 +368,14 @@ function ManagedModsGrid({
                 action={
                   (() => {
                     const activeDl = mod.nexus_mod_id ? activeDownloadByModId.get(mod.nexus_mod_id) : undefined;
-                    if (activeDl) {
-                      return (
-                        <div className="w-36">
-                          <DownloadProgress
-                            job={activeDl}
-                            onCancel={() => cancelDownload.mutate({ gameName, jobId: activeDl.id })}
-                          />
-                        </div>
-                      );
-                    }
-                    return (
+                    return activeDl ? (
+                      <div className="w-36">
+                        <DownloadProgress
+                          job={activeDl}
+                          onCancel={() => cancelDownload.mutate({ gameName, jobId: activeDl.id })}
+                        />
+                      </div>
+                    ) : (
                       <InstalledModCardAction
                         disabled={mod.disabled}
                         isToggling={toggleMod.isPending && toggleMod.variables?.modId === mod.id}
@@ -399,7 +396,7 @@ function ManagedModsGrid({
                           toggleMod.mutate({ gameName, modId: mod.id });
                           break;
                         case "nexus":
-                          if (mod.nexus_url) openUrl(mod.nexus_url).catch(() => {});
+                          if (mod.nexus_url) openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
                           break;
                         case "redownload":
                           if (mod.nexus_mod_id) startModDownload.mutate({ gameName, nexusModId: mod.nexus_mod_id });

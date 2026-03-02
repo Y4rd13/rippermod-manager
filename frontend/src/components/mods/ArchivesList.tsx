@@ -338,7 +338,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
     } else if (key === "redownload" && archive.nexus_mod_id) {
       startModDownload.mutate({ gameName, nexusModId: archive.nexus_mod_id });
     } else if (key === "nexus" && archive.nexus_mod_id) {
-      openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${archive.nexus_mod_id}?tab=files`).catch(() => {});
+      openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${archive.nexus_mod_id}?tab=files`).catch(() => toast.error("Failed to open URL"));
     } else if (key === "delete") {
       setConfirmDeleteFile(archive.filename);
     }
@@ -523,26 +523,23 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
                       </button>
                     </div>
                   )}
-                  {a.nexus_mod_id && (() => {
-                    const isDownloading = activeDownloadByModId.has(a.nexus_mod_id!);
-                    return (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={isDownloading}
-                        onClick={() => startModDownload.mutate({ gameName, nexusModId: a.nexus_mod_id! })}
-                        title={isDownloading ? "Downloading..." : "Re-download from Nexus"}
-                        aria-label="Re-download"
-                      >
-                        <RefreshCw size={14} className={cn(isDownloading && "animate-spin text-success")} />
-                      </Button>
-                    );
-                  })()}
+                  {a.nexus_mod_id && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={activeDownloadByModId.has(a.nexus_mod_id)}
+                      onClick={() => startModDownload.mutate({ gameName, nexusModId: a.nexus_mod_id! })}
+                      title={activeDownloadByModId.has(a.nexus_mod_id) ? "Downloading..." : "Re-download from Nexus"}
+                      aria-label="Re-download"
+                    >
+                      <RefreshCw size={14} className={cn(activeDownloadByModId.has(a.nexus_mod_id) && "animate-spin text-success")} />
+                    </Button>
+                  )}
                   {a.nexus_mod_id ? (
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${a.nexus_mod_id}?tab=files`).catch(() => {})}
+                      onClick={() => openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${a.nexus_mod_id}?tab=files`).catch(() => toast.error("Failed to open URL"))}
                       title={`View mod ${a.nexus_mod_id} on Nexus Mods`}
                       aria-label="View on Nexus"
                     >

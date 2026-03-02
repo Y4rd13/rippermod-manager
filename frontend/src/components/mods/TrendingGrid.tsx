@@ -167,7 +167,7 @@ export function TrendingGrid({
     if (!mod) return;
     if (key === "view") onModClick?.(mod.mod_id);
     else if (key === "download") startModDownload.mutate({ gameName, nexusModId: mod.mod_id });
-    else if (key === "nexus") openUrl(mod.nexus_url).catch(() => {});
+    else if (key === "nexus") openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
     else if (key === "copy") void navigator.clipboard.writeText(mod.name).then(
       () => toast.success("Copied to clipboard"),
       () => toast.error("Failed to copy"),
@@ -259,7 +259,7 @@ export function TrendingGrid({
             onSelect={(key) => {
               if (key === "view") onModClick?.(nexusModId);
               else if (key === "download") startModDownload.mutate({ gameName, nexusModId });
-              else if (key === "nexus") openUrl(mod.nexus_url).catch(() => {});
+              else if (key === "nexus") openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
               else if (key === "copy") void navigator.clipboard.writeText(mod.name).then(
                 () => toast.success("Copied to clipboard"),
                 () => toast.error("Failed to copy"),
