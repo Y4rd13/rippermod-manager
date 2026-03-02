@@ -9,7 +9,9 @@ from rippermod_manager.models.load_order import LoadOrderPreference
 from rippermod_manager.services.modlist_service import (
     add_preferences,
     generate_modlist,
+    get_modlist_view,
     get_preferences,
+    remove_all_preferences,
     remove_preference,
     write_modlist,
 )
@@ -233,3 +235,78 @@ class TestRemovePreference:
     def test_returns_false_for_nonexistent(self, session, game, game_dir):
         removed = remove_preference(game.id, 999, 998, game, session)
         assert removed is False
+
+
+class TestGetModlistView:
+    def test_returns_correct_groups_and_positions(self, session, game, game_dir):
+        _make_mod(session, game, "ModA", ["aaa.archive"], game_dir=game_dir)
+        _make_mod(session, game, "ModB", ["bbb.archive"], game_dir=game_dir)
+        result = get_modlist_view(game, session)
+        assert result.game_name == game.name
+        assert result.total_groups == 2
+        assert result.total_archives == 2
+        assert result.total_preferences == 0
+        assert result.groups[0].position == 1
+        assert result.groups[0].mod_name == "ModA"
+        assert result.groups[1].position == 2
+        assert result.groups[1].mod_name == "ModB"
+
+    def test_unmanaged_archives_marked(self, session, game, game_dir):
+        _make_mod(session, game, "ModA", ["aaa.archive"], game_dir=game_dir)
+        _create_disk_archives(game_dir, ["unmanaged.archive"])
+        result = get_modlist_view(game, session)
+        unmanaged = [g for g in result.groups if g.is_unmanaged]
+        assert len(unmanaged) == 1
+        assert unmanaged[0].mod_name == "Unmanaged"
+        assert unmanaged[0].mod_id is None
+
+    def test_preferences_included(self, session, game, game_dir):
+        mod_a = _make_mod(session, game, "ModA", ["aaa.archive"], game_dir=game_dir)
+        mod_b = _make_mod(session, game, "ModB", ["bbb.archive"], game_dir=game_dir)
+        add_preferences(game.id, mod_b.id, [mod_a.id], game, session)
+        result = get_modlist_view(game, session)
+        assert result.total_preferences == 1
+        assert result.preferences[0].winner_mod_name == "ModB"
+        assert result.preferences[0].loser_mod_name == "ModA"
+        # ModB should now be first
+        assert result.groups[0].mod_name == "ModB"
+        assert result.groups[0].has_user_preference is True
+
+    def test_modlist_active_flag(self, session, game, game_dir):
+        result = get_modlist_view(game, session)
+        assert result.modlist_active is False
+        _make_mod(session, game, "ModA", ["aaa.archive"], game_dir=game_dir)
+        write_modlist(game, session)
+        result = get_modlist_view(game, session)
+        assert result.modlist_active is True
+
+    def test_multi_archive_group(self, session, game, game_dir):
+        _make_mod(
+            session, game, "MultiMod", ["a1.archive", "a2.archive"], game_dir=game_dir
+        )
+        result = get_modlist_view(game, session)
+        assert result.total_groups == 1
+        assert result.groups[0].archive_count == 2
+        assert result.groups[0].archive_filenames == ["a1.archive", "a2.archive"]
+
+
+
+class TestRemoveAllPreferences:
+    def test_clears_all_and_regenerates(self, session, game, game_dir):
+        mod_a = _make_mod(session, game, "ModA", ["aaa.archive"], game_dir=game_dir)
+        mod_b = _make_mod(session, game, "ModB", ["bbb.archive"], game_dir=game_dir)
+        mod_c = _make_mod(session, game, "ModC", ["ccc.archive"], game_dir=game_dir)
+        add_preferences(game.id, mod_b.id, [mod_a.id], game, session)
+        add_preferences(game.id, mod_c.id, [mod_b.id], game, session)
+        assert len(get_preferences(game.id, session)) == 2
+        removed = remove_all_preferences(game.id, game, session)
+        assert removed == 2
+        assert get_preferences(game.id, session) == []
+        # modlist.txt should still exist (with default order)
+        modlist_path = game_dir / "archive" / "pc" / "mod" / "modlist.txt"
+        assert modlist_path.exists()
+
+    def test_returns_zero_when_no_preferences(self, session, game, game_dir):
+        _make_mod(session, game, "ModA", ["aaa.archive"], game_dir=game_dir)
+        removed = remove_all_preferences(game.id, game, session)
+        assert removed == 0

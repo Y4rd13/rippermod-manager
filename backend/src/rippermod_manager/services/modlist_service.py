@@ -21,6 +21,11 @@ from sqlmodel import Session, select
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
 from rippermod_manager.models.load_order import LoadOrderPreference
+from rippermod_manager.schemas.load_order import (
+    ModlistGroupEntry,
+    ModlistViewResult,
+    PreferenceOut,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,19 +68,25 @@ def _build_file_to_mod_map(
     return file_map
 
 
-def generate_modlist(game: Game, session: Session) -> list[str]:
-    """Generate an ordered list of archive filenames respecting user preferences.
+def _compute_ordered_groups(
+    game: Game, session: Session
+) -> tuple[list[tuple[int | str, list[str]]], list[LoadOrderPreference]]:
+    """Compute ordered groups of archives respecting user preferences.
 
+    Returns ``(ordered_groups, preferences)`` where each group is
+    ``(group_key, [filenames])``.  ``group_key`` is a mod ID (int) for managed
+    mods or a string like ``"unmanaged_-1"`` for unmanaged archives.
+
+    Algorithm:
     1. Scan disk for ``.archive`` files
     2. Map each to its owning mod (or ``None`` for unmanaged)
     3. Group archives by mod; each unmanaged archive is its own group
     4. Default order: groups sorted by their lowest filename (ASCII, case-insensitive)
     5. Apply ``LoadOrderPreference`` constraints via topological sort (Kahn's with min-heap)
-    6. Emit filenames in group order, archives sorted within each group
     """
     disk_files = _scan_archive_files(game)
     if not disk_files:
-        return []
+        return [], []
 
     file_mod_map = _build_file_to_mod_map(session, game.id)  # type: ignore[arg-type]
 
@@ -108,9 +119,11 @@ def generate_modlist(game: Game, session: Session) -> list[str]:
     adj: dict[int, list[int]] = defaultdict(list)
     in_degree: dict[int, int] = {i: 0 for i in range(n)}
 
-    preferences = session.exec(
-        select(LoadOrderPreference).where(LoadOrderPreference.game_id == game.id)
-    ).all()
+    preferences = list(
+        session.exec(
+            select(LoadOrderPreference).where(LoadOrderPreference.game_id == game.id)
+        ).all()
+    )
 
     for pref in preferences:
         winner_idx = key_to_idx.get(pref.winner_mod_id)
@@ -136,7 +149,6 @@ def generate_modlist(game: Game, session: Session) -> list[str]:
                 heapq.heappush(heap, neighbor)
 
     if len(topo_order) < n:
-        # Cycle detected — log warning and append remaining nodes in default order
         remaining = [i for i in range(n) if i not in set(topo_order)]
         logger.warning(
             "Cycle detected in load order preferences; %d group(s) could not be sorted. "
@@ -145,13 +157,22 @@ def generate_modlist(game: Game, session: Session) -> list[str]:
         )
         topo_order.extend(sorted(remaining))
 
-    # Emit filenames in topological order
-    result: list[str] = []
-    for idx in topo_order:
-        group_key = sorted_group_keys[idx]
-        result.extend(groups[group_key])
+    ordered = [(sorted_group_keys[idx], groups[sorted_group_keys[idx]]) for idx in topo_order]
+    return ordered, preferences
 
-    return result
+
+def generate_modlist(game: Game, session: Session) -> list[str]:
+    """Generate an ordered list of archive filenames respecting user preferences.
+
+    1. Scan disk for ``.archive`` files
+    2. Map each to its owning mod (or ``None`` for unmanaged)
+    3. Group archives by mod; each unmanaged archive is its own group
+    4. Default order: groups sorted by their lowest filename (ASCII, case-insensitive)
+    5. Apply ``LoadOrderPreference`` constraints via topological sort (Kahn's with min-heap)
+    6. Emit filenames in group order, archives sorted within each group
+    """
+    ordered_groups, _ = _compute_ordered_groups(game, session)
+    return [fn for _, files in ordered_groups for fn in files]
 
 
 def write_modlist(game: Game, session: Session) -> int:
@@ -263,3 +284,85 @@ def get_preferences(game_id: int, session: Session) -> list[LoadOrderPreference]
             select(LoadOrderPreference).where(LoadOrderPreference.game_id == game_id)
         ).all()
     )
+
+
+def get_modlist_view(game: Game, session: Session) -> ModlistViewResult:
+    """Build the modlist view showing ordered groups, preferences, and status."""
+    ordered_groups, preferences = _compute_ordered_groups(game, session)
+
+    # Build mod name lookup
+    mod_ids = [key for key, _ in ordered_groups if isinstance(key, int)]
+    mod_names: dict[int, str] = {}
+    if mod_ids:
+        mods = session.exec(select(InstalledMod).where(InstalledMod.id.in_(mod_ids))).all()  # type: ignore[union-attr]
+        mod_names = {m.id: m.name for m in mods if m.id is not None}
+
+    # Build set of mod IDs that appear in any preference
+    pref_mod_ids: set[int] = set()
+    for pref in preferences:
+        pref_mod_ids.add(pref.winner_mod_id)
+        pref_mod_ids.add(pref.loser_mod_id)
+
+    # Build group entries
+    group_entries: list[ModlistGroupEntry] = []
+    total_archives = 0
+    for position, (key, files) in enumerate(ordered_groups, start=1):
+        is_unmanaged = isinstance(key, str)
+        mod_id = None if is_unmanaged else key
+        mod_name = "Unmanaged" if is_unmanaged else mod_names.get(key, f"Mod #{key}")  # type: ignore[arg-type]
+        total_archives += len(files)
+        group_entries.append(
+            ModlistGroupEntry(
+                position=position,
+                mod_id=mod_id,
+                mod_name=mod_name,
+                archive_filenames=files,
+                archive_count=len(files),
+                is_unmanaged=is_unmanaged,
+                has_user_preference=mod_id is not None and mod_id in pref_mod_ids,
+            )
+        )
+
+    # Build preference entries with resolved names
+    pref_entries: list[PreferenceOut] = []
+    for pref in preferences:
+        pref_entries.append(
+            PreferenceOut(
+                id=pref.id,  # type: ignore[arg-type]
+                winner_mod_id=pref.winner_mod_id,
+                winner_mod_name=mod_names.get(pref.winner_mod_id, f"Mod #{pref.winner_mod_id}"),
+                loser_mod_id=pref.loser_mod_id,
+                loser_mod_name=mod_names.get(pref.loser_mod_id, f"Mod #{pref.loser_mod_id}"),
+            )
+        )
+
+    modlist_path = Path(game.install_path) / _ARCHIVE_DIR / "modlist.txt"
+    return ModlistViewResult(
+        game_name=game.name,
+        groups=group_entries,
+        preferences=pref_entries,
+        total_archives=total_archives,
+        total_groups=len(group_entries),
+        total_preferences=len(preferences),
+        modlist_active=modlist_path.is_file(),
+        modlist_path=str(modlist_path),
+    )
+
+
+def remove_all_preferences(
+    game_id: int, game: Game, session: Session
+) -> int:
+    """Delete all load-order preferences for a game and regenerate modlist.txt.
+
+    Returns the number of preferences removed.
+    """
+    prefs = session.exec(
+        select(LoadOrderPreference).where(LoadOrderPreference.game_id == game_id)
+    ).all()
+    count = len(list(prefs))
+    for pref in prefs:
+        session.delete(pref)
+    session.commit()
+    write_modlist(game, session)
+    logger.info("Removed all %d preferences for game %d", count, game_id)
+    return count

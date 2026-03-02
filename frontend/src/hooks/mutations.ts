@@ -11,6 +11,8 @@ import type {
   PreferModRequest,
   PreferModResult,
   ReindexResult,
+  RemovePreferenceResult,
+  ResetPreferencesResult,
   CorrelationBrief,
   DownloadJobOut,
   DownloadRequest,
@@ -569,6 +571,7 @@ export function usePreferMod() {
       qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
       qc.invalidateQueries({ queryKey: ["conflict-graph", gameName] });
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      qc.invalidateQueries({ queryKey: ["modlist-view", gameName] });
       toast.success(
         "Load order updated",
         `${result.preferences_added} preference${result.preferences_added === 1 ? "" : "s"} applied, modlist.txt has ${result.modlist_entries} entries`,
@@ -675,5 +678,42 @@ export function useUntrackMod() {
       toast.success("Mod untracked");
     },
     onError: () => toast.error("Failed to untrack mod"),
+  });
+}
+
+export function useRemovePreference() {
+  const qc = useQueryClient();
+  return useMutation<
+    RemovePreferenceResult,
+    Error,
+    { gameName: string; winnerId: number; loserId: number }
+  >({
+    mutationFn: ({ gameName, winnerId, loserId }) =>
+      api.delete(`/api/v1/games/${gameName}/load-order/preferences/${winnerId}/${loserId}`),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["modlist-view", gameName] });
+      qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
+      qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
+      toast.success("Preference removed");
+    },
+    onError: () => toast.error("Failed to remove preference"),
+  });
+}
+
+export function useResetAllPreferences() {
+  const qc = useQueryClient();
+  return useMutation<ResetPreferencesResult, Error, string>({
+    mutationFn: (gameName) =>
+      api.delete(`/api/v1/games/${gameName}/load-order/preferences`),
+    onSuccess: (result, gameName) => {
+      qc.invalidateQueries({ queryKey: ["modlist-view", gameName] });
+      qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
+      qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
+      toast.success(
+        "All preferences reset",
+        `${result.removed_count} preference${result.removed_count === 1 ? "" : "s"} removed`,
+      );
+    },
+    onError: () => toast.error("Failed to reset preferences"),
   });
 }

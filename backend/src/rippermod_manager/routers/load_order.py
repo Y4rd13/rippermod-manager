@@ -11,11 +11,20 @@ from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.load_order import (
     LoadOrderResult,
+    ModlistViewResult,
     PreferModRequest,
     PreferModResult,
+    RemovePreferenceResult,
+    ResetPreferencesResult,
 )
 from rippermod_manager.services.load_order import get_archive_load_order
-from rippermod_manager.services.modlist_service import add_preferences, generate_modlist
+from rippermod_manager.services.modlist_service import (
+    add_preferences,
+    generate_modlist,
+    get_modlist_view,
+    remove_all_preferences,
+    remove_preference,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,4 +115,53 @@ async def prefer(
         preferences_added=added,
         modlist_entries=len(modlist),
         dry_run=False,
+    )
+
+
+@router.get("/modlist", response_model=ModlistViewResult)
+async def modlist_view(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> ModlistViewResult:
+    """Return ordered mod groups and preferences for the Load Order view."""
+    game = get_game_or_404(game_name, session)
+    return get_modlist_view(game, session)
+
+
+@router.delete("/preferences", response_model=ResetPreferencesResult)
+async def reset_preferences(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> ResetPreferencesResult:
+    """Remove all load-order preferences for a game."""
+    game = get_game_or_404(game_name, session)
+    removed = remove_all_preferences(game.id, game, session)  # type: ignore[arg-type]
+    modlist = generate_modlist(game, session)
+    return ResetPreferencesResult(
+        removed_count=removed,
+        modlist_entries=len(modlist),
+        message=f"Removed {removed} preference(s), modlist.txt has {len(modlist)} entries.",
+    )
+
+
+@router.delete(
+    "/preferences/{winner_mod_id}/{loser_mod_id}",
+    response_model=RemovePreferenceResult,
+)
+async def delete_preference(
+    game_name: str,
+    winner_mod_id: int,
+    loser_mod_id: int,
+    session: Session = Depends(get_session),
+) -> RemovePreferenceResult:
+    """Remove a single load-order preference."""
+    game = get_game_or_404(game_name, session)
+    removed = remove_preference(game.id, winner_mod_id, loser_mod_id, game, session)  # type: ignore[arg-type]
+    if not removed:
+        raise HTTPException(404, "Preference not found")
+    modlist = generate_modlist(game, session)
+    return RemovePreferenceResult(
+        success=True,
+        message=f"Preference removed, modlist.txt has {len(modlist)} entries.",
+        modlist_entries=len(modlist),
     )
