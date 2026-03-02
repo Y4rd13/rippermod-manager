@@ -2,8 +2,10 @@
 
 import asyncio
 import logging
+import re
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import unquote
 
 from sqlmodel import Session, col, select
 
@@ -66,20 +68,20 @@ async def create_and_start_download(
     async with NexusClient(api_key) as client:
         # Fetch file metadata to get the filename and size
         file_size = 0
+        file_name_from_api = False
         try:
             files_resp = await client.get_mod_files(game_domain, nexus_mod_id)
             nexus_files = files_resp.get("files", [])
             target_file = next((f for f in nexus_files if f.get("file_id") == nexus_file_id), None)
-            file_name = (
-                target_file.get("file_name", f"{nexus_mod_id}-{nexus_file_id}.zip")
-                if target_file
-                else f"{nexus_mod_id}-{nexus_file_id}.zip"
-            )
-            if target_file:
+            if target_file and target_file.get("file_name"):
+                file_name = target_file["file_name"]
+                file_name_from_api = True
                 file_size = target_file.get("size_in_bytes") or 0
+            else:
+                file_name = f"{nexus_mod_id}-{nexus_file_id}"
         except Exception:
             logger.warning("Could not fetch file metadata for %d/%d", nexus_mod_id, nexus_file_id)
-            file_name = f"{nexus_mod_id}-{nexus_file_id}.zip"
+            file_name = f"{nexus_mod_id}-{nexus_file_id}"
 
         # Sanitize filename to prevent path traversal
         file_name = Path(file_name).name
@@ -126,12 +128,45 @@ async def create_and_start_download(
     cancel_event = asyncio.Event()
     _cancel_events[job_id] = cancel_event
     task = asyncio.create_task(
-        _run_download(job_id, cdn_url, install_path, file_name, cancel_event)
+        _run_download(
+            job_id,
+            cdn_url,
+            install_path,
+            file_name,
+            cancel_event,
+            needs_extension=not file_name_from_api,
+        )
     )
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
 
     return job
+
+
+def _parse_content_disposition(header: str) -> str | None:
+    """Extract filename from a Content-Disposition header value."""
+    if not header:
+        return None
+    # Try filename*= (RFC 5987: charset'language'value) first
+    rfc5987 = re.search(
+        r"""filename\*\s*=\s*[Uu][Tt][Ff]-8'[^']*'(.+?)(?:;|$)""",
+        header,
+    )
+    if rfc5987:
+        name = Path(unquote(rfc5987.group(1))).name
+        if name:
+            return name
+    # Fall back to plain filename=
+    for pattern in (
+        r"""filename\s*=\s*"([^"]+)"\s*(?:;|$)""",
+        r"""filename\s*=\s*([^\s;]+)""",
+    ):
+        match = re.search(pattern, header, re.IGNORECASE)
+        if match:
+            name = Path(match.group(1)).name
+            if name:
+                return name
+    return None
 
 
 async def _run_download(
@@ -140,11 +175,14 @@ async def _run_download(
     install_path: str,
     file_name: str,
     cancel_event: asyncio.Event,
+    *,
+    needs_extension: bool = False,
 ) -> None:
     """Background task that streams the download and updates the DB periodically."""
     dest_dir = Path(install_path) / "downloaded_mods"
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_path = dest_dir / file_name
+    part_path = dest_path.with_suffix(dest_path.suffix + ".part")
 
     last_db_update = 0.0
 
@@ -174,9 +212,31 @@ async def _run_download(
             cdn_client.stream("GET", cdn_url) as resp,
         ):
             resp.raise_for_status()
+
+            # Resolve filename from CDN Content-Disposition when API didn't provide one
+            if needs_extension:
+                cdn_name = _parse_content_disposition(resp.headers.get("Content-Disposition", ""))
+                if cdn_name:
+                    file_name = cdn_name
+                    dest_path = dest_dir / file_name
+                    part_path = dest_path.with_suffix(dest_path.suffix + ".part")
+                    # Update job with resolved filename
+                    try:
+                        with Session(engine) as s:
+                            job = s.get(DownloadJob, job_id)
+                            if job:
+                                job.file_name = file_name
+                                s.add(job)
+                                s.commit()
+                    except Exception:
+                        logger.debug(
+                            "Failed to update resolved filename for job %d",
+                            job_id,
+                        )
+
             total = int(resp.headers.get("Content-Length", 0))
             downloaded = 0
-            with open(dest_path, "wb") as f:
+            with open(part_path, "wb") as f:
                 async for chunk in resp.aiter_bytes(chunk_size=65_536):
                     if cancel_event.is_set():
                         raise asyncio.CancelledError("Download cancelled")
@@ -184,19 +244,27 @@ async def _run_download(
                     downloaded += len(chunk)
                     _progress(downloaded, total)
 
-        # Completed
+        # Validate: reject 0-byte downloads
+        final_size = part_path.stat().st_size
+        if final_size == 0:
+            part_path.unlink(missing_ok=True)
+            raise RuntimeError("CDN returned an empty response (0 bytes downloaded)")
+
+        # Atomic move: only place a complete file in the staging folder
+        part_path.replace(dest_path)
+
         with Session(engine) as s:
             job = s.get(DownloadJob, job_id)
             if job:
                 job.status = "completed"
                 job.completed_at = datetime.now(UTC)
-                if dest_path.exists():
-                    job.total_bytes = dest_path.stat().st_size
-                    job.progress_bytes = job.total_bytes
+                job.total_bytes = final_size
+                job.progress_bytes = final_size
                 s.add(job)
                 s.commit()
 
     except asyncio.CancelledError:
+        part_path.unlink(missing_ok=True)
         dest_path.unlink(missing_ok=True)
         with Session(engine) as s:
             job = s.get(DownloadJob, job_id)
@@ -206,6 +274,7 @@ async def _run_download(
                 s.commit()
 
     except Exception as e:
+        part_path.unlink(missing_ok=True)
         logger.exception("Download failed for job %d", job_id)
         with Session(engine) as s:
             job = s.get(DownloadJob, job_id)
