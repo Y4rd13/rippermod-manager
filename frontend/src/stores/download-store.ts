@@ -72,5 +72,5 @@ export const useDownloadStore = create<DownloadState>((set) => ({
       return { jobs: filtered, dismissedIds: newDismissed };
     }),
 
-  reset: () => set({ jobs: {}, missCounts: {}, dismissedIds: new Set(), footerExpanded: false }),
+  reset: () => set((state) => ({ jobs: {}, missCounts: {}, dismissedIds: state.dismissedIds, footerExpanded: false })),
 }));
