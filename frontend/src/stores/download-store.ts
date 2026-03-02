@@ -10,8 +10,6 @@ interface DownloadState {
   jobs: Record<number, DownloadJobOut>;
   /** Counts how many sync cycles a local-only job has been absent from polled data. */
   missCounts: Record<number, number>;
-  /** Job IDs the user dismissed via "Clear completed" — excluded from future syncs. */
-  dismissedIds: Set<number>;
   footerExpanded: boolean;
   setJob: (job: DownloadJobOut) => void;
   syncJobs: (polled: DownloadJobOut[]) => void;
@@ -23,7 +21,6 @@ interface DownloadState {
 export const useDownloadStore = create<DownloadState>((set) => ({
   jobs: {},
   missCounts: {},
-  dismissedIds: new Set(),
   footerExpanded: false,
 
   setJob: (job) =>
@@ -38,7 +35,10 @@ export const useDownloadStore = create<DownloadState>((set) => ({
       const polledIds = new Set<number>();
 
       for (const job of polled) {
-        if (state.dismissedIds.has(job.id) && TERMINAL_STATUSES.has(job.status)) continue;
+        // Only add terminal jobs if they already exist in the store
+        // (i.e. the user witnessed them transition from active → terminal).
+        // This prevents cleared items from being re-inserted by future polls.
+        if (TERMINAL_STATUSES.has(job.status) && !(job.id in state.jobs)) continue;
         next[job.id] = job;
         polledIds.add(job.id);
       }
@@ -61,16 +61,13 @@ export const useDownloadStore = create<DownloadState>((set) => ({
   clearCompleted: () =>
     set((state) => {
       const filtered: Record<number, DownloadJobOut> = {};
-      const newDismissed = new Set(state.dismissedIds);
       for (const [id, job] of Object.entries(state.jobs)) {
-        if (TERMINAL_STATUSES.has(job.status)) {
-          newDismissed.add(Number(id));
-        } else {
+        if (!TERMINAL_STATUSES.has(job.status)) {
           filtered[Number(id)] = job;
         }
       }
-      return { jobs: filtered, dismissedIds: newDismissed };
+      return { jobs: filtered };
     }),
 
-  reset: () => set((state) => ({ jobs: {}, missCounts: {}, dismissedIds: state.dismissedIds, footerExpanded: false })),
+  reset: () => set({ jobs: {}, missCounts: {}, footerExpanded: false }),
 }));
