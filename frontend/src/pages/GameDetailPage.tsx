@@ -59,6 +59,7 @@ import { api } from "@/lib/api-client";
 import { parseSSE } from "@/lib/sse-parser";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
+import { useUIStore } from "@/stores/ui-store";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import type { ModUpdate } from "@/types/api";
 
@@ -144,6 +145,11 @@ const TABS: { key: Tab; label: string; Icon: typeof Package; tooltip: string }[]
 
 export function GameDetailPage() {
   const { name = "" } = useParams();
+  const setActiveGame = useUIStore((s) => s.setActiveGame);
+  useEffect(() => {
+    setActiveGame(name || null);
+    return () => setActiveGame(null);
+  }, [name, setActiveGame]);
   const { data: game } = useGame(name);
   const { data: gameVersion } = useGameVersion(name);
   const { data: mods = [], isLoading: modsLoading } = useMods(name);
