@@ -330,7 +330,10 @@ export function NexusMatchedGrid({
                   onContextMenu={(e) => openMenu(e, mod)}
                   action={
                     <ModCardAction
-                      isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
+                      isInstalled={
+                        (nexusModId != null && installedModIds.has(nexusModId)) ||
+                        (archive?.is_installed ?? false)
+                      }
                       isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
                       activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
                       completedDownload={dl}
