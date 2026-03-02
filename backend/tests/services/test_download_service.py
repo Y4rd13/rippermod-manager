@@ -41,10 +41,7 @@ class TestParseContentDisposition:
         assert _parse_content_disposition(header) == "passwd"
 
     def test_prefers_extended_over_plain(self):
-        header = (
-            "attachment; filename*=UTF-8''correct.rar;"
-            ' filename="wrong.zip"'
-        )
+        header = "attachment; filename*=UTF-8''correct.rar; filename=\"wrong.zip\""
         assert _parse_content_disposition(header) == "correct.rar"
 
 
@@ -112,15 +109,19 @@ class TestRunDownload:
 
     @patch(ENGINE_ATTR)
     def test_successful_download_creates_file(
-        self, mock_engine, session, game_dir, staging_dir, job_in_db,
+        self,
+        mock_engine,
+        session,
+        game_dir,
+        staging_dir,
+        job_in_db,
     ):
         mock_engine.__enter__ = MagicMock(return_value=session)
         resp = _make_mock_response([b"hello ", b"world"])
         client = _make_mock_client(resp)
 
         with (
-            patch("rippermod_manager.services.download_service.Session")
-            as mock_sess,
+            patch("rippermod_manager.services.download_service.Session") as mock_sess,
             patch("httpx.AsyncClient", return_value=client),
         ):
             mock_sess.return_value.__enter__ = MagicMock(
@@ -128,9 +129,15 @@ class TestRunDownload:
             )
             mock_sess.return_value.__exit__ = MagicMock(return_value=False)
             cancel = asyncio.Event()
-            _run(_run_download(
-                job_in_db.id, CDN_URL, game_dir, "test.zip", cancel,
-            ))
+            _run(
+                _run_download(
+                    job_in_db.id,
+                    CDN_URL,
+                    game_dir,
+                    "test.zip",
+                    cancel,
+                )
+            )
 
         dest = staging_dir / "test.zip"
         assert dest.exists()
@@ -139,7 +146,12 @@ class TestRunDownload:
 
     @patch(ENGINE_ATTR)
     def test_failed_download_leaves_no_file(
-        self, mock_engine, session, game_dir, staging_dir, job_in_db,
+        self,
+        mock_engine,
+        session,
+        game_dir,
+        staging_dir,
+        job_in_db,
     ):
         mock_engine.__enter__ = MagicMock(return_value=session)
 
@@ -156,8 +168,7 @@ class TestRunDownload:
         client.stream = MagicMock(return_value=stream_ctx)
 
         with (
-            patch("rippermod_manager.services.download_service.Session")
-            as mock_sess,
+            patch("rippermod_manager.services.download_service.Session") as mock_sess,
             patch("httpx.AsyncClient", return_value=client),
         ):
             mock_sess.return_value.__enter__ = MagicMock(
@@ -165,24 +176,34 @@ class TestRunDownload:
             )
             mock_sess.return_value.__exit__ = MagicMock(return_value=False)
             cancel = asyncio.Event()
-            _run(_run_download(
-                job_in_db.id, CDN_URL, game_dir, "test.zip", cancel,
-            ))
+            _run(
+                _run_download(
+                    job_in_db.id,
+                    CDN_URL,
+                    game_dir,
+                    "test.zip",
+                    cancel,
+                )
+            )
 
         assert not (staging_dir / "test.zip").exists()
         assert not (staging_dir / "test.zip.part").exists()
 
     @patch(ENGINE_ATTR)
     def test_zero_byte_download_marked_as_failed(
-        self, mock_engine, session, game_dir, staging_dir, job_in_db,
+        self,
+        mock_engine,
+        session,
+        game_dir,
+        staging_dir,
+        job_in_db,
     ):
         mock_engine.__enter__ = MagicMock(return_value=session)
         resp = _make_mock_response([], headers={"Content-Length": "0"})
         client = _make_mock_client(resp)
 
         with (
-            patch("rippermod_manager.services.download_service.Session")
-            as mock_sess,
+            patch("rippermod_manager.services.download_service.Session") as mock_sess,
             patch("httpx.AsyncClient", return_value=client),
         ):
             mock_sess.return_value.__enter__ = MagicMock(
@@ -190,16 +211,27 @@ class TestRunDownload:
             )
             mock_sess.return_value.__exit__ = MagicMock(return_value=False)
             cancel = asyncio.Event()
-            _run(_run_download(
-                job_in_db.id, CDN_URL, game_dir, "test.zip", cancel,
-            ))
+            _run(
+                _run_download(
+                    job_in_db.id,
+                    CDN_URL,
+                    game_dir,
+                    "test.zip",
+                    cancel,
+                )
+            )
 
         assert not (staging_dir / "test.zip").exists()
         assert not (staging_dir / "test.zip.part").exists()
 
     @patch(ENGINE_ATTR)
     def test_cancelled_download_cleans_up(
-        self, mock_engine, session, game_dir, staging_dir, job_in_db,
+        self,
+        mock_engine,
+        session,
+        game_dir,
+        staging_dir,
+        job_in_db,
     ):
         mock_engine.__enter__ = MagicMock(return_value=session)
         cancel = asyncio.Event()
@@ -217,24 +249,34 @@ class TestRunDownload:
         client = _make_mock_client(resp)
 
         with (
-            patch("rippermod_manager.services.download_service.Session")
-            as mock_sess,
+            patch("rippermod_manager.services.download_service.Session") as mock_sess,
             patch("httpx.AsyncClient", return_value=client),
         ):
             mock_sess.return_value.__enter__ = MagicMock(
                 return_value=session,
             )
             mock_sess.return_value.__exit__ = MagicMock(return_value=False)
-            _run(_run_download(
-                job_in_db.id, CDN_URL, game_dir, "test.zip", cancel,
-            ))
+            _run(
+                _run_download(
+                    job_in_db.id,
+                    CDN_URL,
+                    game_dir,
+                    "test.zip",
+                    cancel,
+                )
+            )
 
         assert not (staging_dir / "test.zip").exists()
         assert not (staging_dir / "test.zip.part").exists()
 
     @patch(ENGINE_ATTR)
     def test_mid_download_failure_cleans_up_part_file(
-        self, mock_engine, session, game_dir, staging_dir, job_in_db,
+        self,
+        mock_engine,
+        session,
+        game_dir,
+        staging_dir,
+        job_in_db,
     ):
         """Exception during aiter_bytes after partial write cleans .part."""
         mock_engine.__enter__ = MagicMock(return_value=session)
@@ -251,8 +293,7 @@ class TestRunDownload:
         client = _make_mock_client(resp)
 
         with (
-            patch("rippermod_manager.services.download_service.Session")
-            as mock_sess,
+            patch("rippermod_manager.services.download_service.Session") as mock_sess,
             patch("httpx.AsyncClient", return_value=client),
         ):
             mock_sess.return_value.__enter__ = MagicMock(
@@ -260,9 +301,15 @@ class TestRunDownload:
             )
             mock_sess.return_value.__exit__ = MagicMock(return_value=False)
             cancel = asyncio.Event()
-            _run(_run_download(
-                job_in_db.id, CDN_URL, game_dir, "test.zip", cancel,
-            ))
+            _run(
+                _run_download(
+                    job_in_db.id,
+                    CDN_URL,
+                    game_dir,
+                    "test.zip",
+                    cancel,
+                )
+            )
 
         # .part with partial data should have been cleaned up
         assert not (staging_dir / "test.zip.part").exists()

@@ -129,7 +129,11 @@ async def create_and_start_download(
     _cancel_events[job_id] = cancel_event
     task = asyncio.create_task(
         _run_download(
-            job_id, cdn_url, install_path, file_name, cancel_event,
+            job_id,
+            cdn_url,
+            install_path,
+            file_name,
+            cancel_event,
             needs_extension=not file_name_from_api,
         )
     )
