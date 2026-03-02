@@ -19,9 +19,9 @@ from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
 from rippermod_manager.schemas.load_order import (
     ConflictEvidence,
+    LegacyPreferModResult,
     LoadOrderEntry,
     LoadOrderResult,
-    PreferModResult,
     RenameAction,
 )
 
@@ -240,7 +240,7 @@ def apply_prefer_mod(
     session: Session,
     *,
     dry_run: bool = False,
-) -> PreferModResult:
+) -> LegacyPreferModResult:
     """Rename archives so *winner_mod* wins over *loser_mod*.
 
     The loser's archives are demoted (``zz_`` prefix) so they sort after
@@ -250,7 +250,7 @@ def apply_prefer_mod(
     renames = generate_prefer_renames(winner_mod, loser_mod, game, session)
 
     if not renames:
-        return PreferModResult(
+        return LegacyPreferModResult(
             success=True,
             renames=renames,
             dry_run=dry_run,
@@ -258,7 +258,7 @@ def apply_prefer_mod(
         )
 
     if dry_run:
-        return PreferModResult(
+        return LegacyPreferModResult(
             success=True,
             renames=renames,
             dry_run=True,
@@ -271,7 +271,7 @@ def apply_prefer_mod(
     for r in renames:
         src = game_dir / r.old_relative_path
         if not src.exists():
-            return PreferModResult(
+            return LegacyPreferModResult(
                 success=False,
                 renames=[],
                 dry_run=False,
@@ -279,7 +279,7 @@ def apply_prefer_mod(
             )
         dst = game_dir / r.new_relative_path
         if dst.exists():
-            return PreferModResult(
+            return LegacyPreferModResult(
                 success=False,
                 renames=[],
                 dry_run=False,
@@ -297,7 +297,7 @@ def apply_prefer_mod(
     except OSError as exc:
         logger.error("Rename failed: %s", exc)
         rollback_ok = _rollback_renames(completed)
-        return PreferModResult(
+        return LegacyPreferModResult(
             success=False,
             renames=renames,
             dry_run=False,
@@ -329,7 +329,7 @@ def apply_prefer_mod(
         session.rollback()
         logger.error("DB update failed after renames: %s — rolling back filesystem", exc)
         _rollback_renames(completed)
-        return PreferModResult(
+        return LegacyPreferModResult(
             success=False,
             renames=renames,
             dry_run=False,
@@ -337,7 +337,7 @@ def apply_prefer_mod(
             rollback_performed=True,
         )
 
-    return PreferModResult(
+    return LegacyPreferModResult(
         success=True,
         renames=renames,
         dry_run=False,

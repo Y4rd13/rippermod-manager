@@ -368,7 +368,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => openPath(`${installPath}/downloaded_mods`).catch(() => {})}
+            onClick={() => openPath(`${installPath}/downloaded_mods`).catch((e) => toast.error("Could not open folder", String(e)))}
             title="Open downloaded_mods folder in file explorer"
           >
             <FolderOpen size={14} /> Open Folder

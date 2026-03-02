@@ -235,6 +235,11 @@ def install_mod(
     index_mod_archives(game, installed, session)
     session.commit()
 
+    # Regenerate modlist.txt to include new archives in the load order
+    from rippermod_manager.services.modlist_service import write_modlist
+
+    write_modlist(game, session)
+
     logger.info(
         "Installed '%s' (%d files, %d overwritten)", parsed.name, len(extracted_paths), overwritten
     )
@@ -291,6 +296,11 @@ def uninstall_mod(
     session.delete(installed_mod)
     session.commit()
 
+    # Regenerate modlist.txt to remove uninstalled archives
+    from rippermod_manager.services.modlist_service import write_modlist
+
+    write_modlist(game, session)
+
     logger.info("Uninstalled '%s' (%d files deleted)", installed_mod.name, deleted)
     return UninstallResult(files_deleted=deleted, directories_removed=dirs_removed)
 
@@ -336,6 +346,11 @@ def toggle_mod(
     session.add(installed_mod)
     if commit:
         session.commit()
+
+    # Regenerate modlist.txt to reflect enabled/disabled state
+    from rippermod_manager.services.modlist_service import write_modlist
+
+    write_modlist(game, session)
 
     action = "Disabled" if should_disable else "Enabled"
     logger.info("%s '%s' (%d files)", action, installed_mod.name, affected)

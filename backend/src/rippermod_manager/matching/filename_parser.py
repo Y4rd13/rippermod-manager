@@ -21,15 +21,26 @@ class ParsedFilename:
     upload_timestamp: int | None
 
 
-# Pattern 1: Nexus download format
+# Pattern 1a: Nexus download format (version starts with a digit or v/V)
 # Examples:
 #   "CET 1.37.1-107-1-37-1-1759193708"
 #   "Mod Name-12345-2-0-0-1750000000"
 _NEXUS_RE = re.compile(
     r"^(.+?)"  # mod name (non-greedy)
-    r"-(\d{1,6})"  # nexus mod id (1-6 digits)
+    r"-(\d{2,6})"  # nexus mod id (2-6 digits; min 2 avoids false splits)
     r"-([vV]?\d[\da-zA-Z\-]*[\da-zA-Z]|[vV]?\d)"  # version
     r"-(\d{8,})$"  # upload timestamp (8+ digits)
+)
+
+# Pattern 1b: Nexus download format (version starts with a letter)
+# Examples:
+#   "Enemies of Night City-8467-PL-Beta-1-8-8-Hotfix-1720272238"
+#   "Some Mod-500-RC1-1750000000"
+_NEXUS_ALPHA_RE = re.compile(
+    r"^(.+?)"  # mod name (non-greedy)
+    r"-(\d{2,6})"  # nexus mod id (2-6 digits; min 2 to avoid false positives)
+    r"-([a-zA-Z].+)"  # version starting with letter (greedy)
+    r"-(\d{10})$"  # upload timestamp (exactly 10 digits)
 )
 
 # Pattern 2: Simple id-name format
@@ -40,14 +51,26 @@ _SIMPLE_RE = re.compile(r"^(\d+)[-_](.+)$")
 def parse_mod_filename(filename: str) -> ParsedFilename:
     """Parse a mod archive filename and extract Nexus metadata.
 
-    Supports three filename formats in order of specificity:
-    1. Full Nexus: ``ModName-{id}-{version}-{timestamp}.ext``
+    Supports four filename formats in order of specificity:
+    1a. Full Nexus (digit version): ``ModName-{id}-{version}-{timestamp}.ext``
+    1b. Full Nexus (alpha version): ``ModName-{id}-{alpha_version}-{timestamp}.ext``
     2. Simple: ``{id}-ModName.ext`` or ``{id}_ModName.ext``
     3. Plain: ``ModName.ext`` (no metadata extracted)
     """
     stem = filename.rsplit(".", 1)[0] if "." in filename else filename
 
     match = _NEXUS_RE.match(stem)
+    if match:
+        version_raw = match.group(3)
+        version = version_raw.replace("-", ".")
+        return ParsedFilename(
+            nexus_mod_id=int(match.group(2)),
+            name=match.group(1).strip(),
+            version=version,
+            upload_timestamp=int(match.group(4)),
+        )
+
+    match = _NEXUS_ALPHA_RE.match(stem)
     if match:
         version_raw = match.group(3)
         version = version_raw.replace("-", ".")

@@ -78,7 +78,7 @@ class TestPreferPreviewEndpoint:
     def test_404_for_unknown_game(self, client):
         r = client.post(
             "/api/v1/games/NoSuchGame/load-order/prefer/preview",
-            json={"winner_mod_id": 1, "loser_mod_id": 2},
+            json={"winner_mod_id": 1, "loser_mod_ids": [2]},
         )
         assert r.status_code == 404
 
@@ -89,7 +89,7 @@ class TestPreferPreviewEndpoint:
 
         r = client.post(
             f"/api/v1/games/{game_name}/load-order/prefer/preview",
-            json={"winner_mod_id": w_id, "loser_mod_id": l_id},
+            json={"winner_mod_id": w_id, "loser_mod_ids": [l_id]},
         )
         assert r.status_code == 200
         data = r.json()
@@ -102,7 +102,7 @@ class TestPreferPreviewEndpoint:
 
         r = client.post(
             f"/api/v1/games/{game_name}/load-order/prefer/preview",
-            json={"winner_mod_id": w_id, "loser_mod_id": 99999},
+            json={"winner_mod_id": w_id, "loser_mod_ids": [99999]},
         )
         assert r.status_code == 404
 
@@ -112,7 +112,7 @@ class TestPreferPreviewEndpoint:
 
         r = client.post(
             f"/api/v1/games/{game_name}/load-order/prefer/preview",
-            json={"winner_mod_id": w_id, "loser_mod_id": w_id},
+            json={"winner_mod_id": w_id, "loser_mod_ids": [w_id]},
         )
         assert r.status_code == 400
 
@@ -123,7 +123,7 @@ class TestPreferPreviewEndpoint:
 
         r = client.post(
             f"/api/v1/games/{game_name}/load-order/prefer/preview",
-            json={"winner_mod_id": w_id, "loser_mod_id": l_id},
+            json={"winner_mod_id": w_id, "loser_mod_ids": [l_id]},
         )
         assert r.status_code == 400
 
@@ -132,26 +132,27 @@ class TestPreferEndpoint:
     def test_404_for_unknown_game(self, client):
         r = client.post(
             "/api/v1/games/NoSuchGame/load-order/prefer",
-            json={"winner_mod_id": 1, "loser_mod_id": 2},
+            json={"winner_mod_id": 1, "loser_mod_ids": [2]},
         )
         assert r.status_code == 404
 
-    def test_executes_rename(self, client, engine, game_setup):
+    def test_adds_preference_and_writes_modlist(self, client, engine, game_setup):
         game_name, game_dir = game_setup
         w_id = _add_mod(engine, game_name, "Winner", ["bbb.archive"], game_dir=game_dir)
         l_id = _add_mod(engine, game_name, "Loser", ["aaa.archive"], game_dir=game_dir)
 
         r = client.post(
             f"/api/v1/games/{game_name}/load-order/prefer",
-            json={"winner_mod_id": w_id, "loser_mod_id": l_id},
+            json={"winner_mod_id": w_id, "loser_mod_ids": [l_id]},
         )
         assert r.status_code == 200
         data = r.json()
         assert data["success"] is True
         assert data["dry_run"] is False
-        assert len(data["renames"]) == 1
-        # Verify loser's file was renamed on disk (demoted)
-        assert not (game_dir / "archive" / "pc" / "mod" / "aaa.archive").exists()
-        assert (game_dir / "archive" / "pc" / "mod" / "zz_aaa.archive").exists()
-        # Winner's file should be untouched
-        assert (game_dir / "archive" / "pc" / "mod" / "bbb.archive").exists()
+        assert data["preferences_added"] == 1
+        # modlist.txt should be written
+        modlist_path = game_dir / "archive" / "pc" / "mod" / "modlist.txt"
+        assert modlist_path.exists()
+        lines = modlist_path.read_text().strip().splitlines()
+        assert lines[0] == "bbb.archive"
+        assert lines[1] == "aaa.archive"

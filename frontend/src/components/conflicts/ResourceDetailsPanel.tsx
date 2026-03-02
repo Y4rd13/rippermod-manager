@@ -55,8 +55,10 @@ function GroupSection({
           <ChevronDown size={12} className="text-text-muted shrink-0" />
         )}
         <code className="font-mono text-accent text-xs">{group.partner_archive}</code>
-        {group.partner_mod_name && (
+        {group.partner_mod_name ? (
           <span className="text-text-muted text-xs">({group.partner_mod_name})</span>
+        ) : (
+          <span className="text-text-muted/50 text-xs">(Unmanaged)</span>
         )}
         {group.is_winner ? (
           <Badge variant="success">wins over</Badge>

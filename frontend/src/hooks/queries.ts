@@ -18,6 +18,7 @@ import type {
   ModConflictDetail,
   ModDetail,
   ModGroup,
+  ModlistViewResult,
   NexusDownload,
   NexusDownloadBrief,
   OnboardingStatus,
@@ -260,5 +261,14 @@ export function useConflictGraph(gameName: string, resourceHash?: string, enable
     queryFn: () => api.get(`/api/v1/games/${gameName}/conflicts/graph${params}`),
     enabled: !!gameName && enabled,
     staleTime: 60_000,
+  });
+}
+
+export function useModlistView(gameName: string) {
+  return useQuery<ModlistViewResult>({
+    queryKey: ["modlist-view", gameName],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/load-order/modlist`),
+    enabled: !!gameName,
+    staleTime: 30_000,
   });
 }

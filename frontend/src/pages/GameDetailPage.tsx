@@ -68,6 +68,12 @@ const ArchiveResourceConflicts = lazy(() =>
   })),
 );
 
+const LoadOrderView = lazy(() =>
+  import("@/components/conflicts/LoadOrderView").then((m) => ({
+    default: m.LoadOrderView,
+  })),
+);
+
 type MatchedSubTab = "nexus-matched" | "scan-details";
 
 const MATCHED_SUB_TABS: { key: MatchedSubTab; label: string }[] = [
@@ -75,13 +81,14 @@ const MATCHED_SUB_TABS: { key: MatchedSubTab; label: string }[] = [
   { key: "scan-details", label: "Scan Details" },
 ];
 
-type ConflictSubTab = "file-conflicts" | "archive-resources" | "cluster-details";
+type ConflictSubTab = "file-conflicts" | "archive-resources" | "cluster-details" | "load-order";
 
 function ConflictSubTabs({ gameName }: { gameName: string }) {
   const [subTab, setSubTab] = useState<ConflictSubTab>("file-conflicts");
   const subTabs: { key: ConflictSubTab; label: string }[] = [
     { key: "file-conflicts", label: "File Conflicts" },
     { key: "archive-resources", label: "Archive Resources" },
+    { key: "load-order", label: "Load Order" },
     { key: "cluster-details", label: "Cluster Details" },
   ];
   return (
@@ -110,6 +117,11 @@ function ConflictSubTabs({ gameName }: { gameName: string }) {
         </Suspense>
       )}
       {subTab === "cluster-details" && <ClusterDetailsPanel gameName={gameName} />}
+      {subTab === "load-order" && (
+        <Suspense fallback={<SkeletonCardGrid count={3} />}>
+          <LoadOrderView gameName={gameName} />
+        </Suspense>
+      )}
     </div>
   );
 }
@@ -117,15 +129,14 @@ function ConflictSubTabs({ gameName }: { gameName: string }) {
 type Tab = "installed" | "matched" | "archives" | "updates" | "conflicts" | "profiles" | "trending" | "endorsed" | "tracked";
 
 const TABS: { key: Tab; label: string; Icon: typeof Package; tooltip: string }[] = [
-  // Your mods
+  // Management
   { key: "installed", label: "Installed", Icon: UserCheck, tooltip: "Managed and recognized mods on your system" },
-  { key: "matched", label: "Matched", Icon: Link2, tooltip: "Nexus-matched mods and scan details" },
   { key: "archives", label: "Archives", Icon: Archive, tooltip: "Downloaded mod archives ready to install" },
-  // Maintenance
   { key: "updates", label: "Updates", Icon: RefreshCw, tooltip: "Mods with newer versions available on Nexus" },
   { key: "conflicts", label: "Conflicts", Icon: AlertTriangle, tooltip: "File and resource conflicts between installed mods" },
   { key: "profiles", label: "Profiles", Icon: FolderOpen, tooltip: "Saved snapshots of your mod enabled/disabled states" },
   // Discovery & Nexus account
+  { key: "matched", label: "Matched", Icon: Link2, tooltip: "Nexus-matched mods and scan details" },
   { key: "trending", label: "Trending", Icon: TrendingUp, tooltip: "Popular and recently updated mods on Nexus" },
   { key: "endorsed", label: "Endorsed", Icon: Heart, tooltip: "Mods you've endorsed on your Nexus account" },
   { key: "tracked", label: "Tracked", Icon: Eye, tooltip: "Mods you're tracking on your Nexus account" },
