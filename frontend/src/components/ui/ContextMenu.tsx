@@ -126,7 +126,8 @@ export function ContextMenu({ items, position, onSelect, onClose }: ContextMenuP
                 ? "text-danger hover:bg-danger/10"
                 : "text-text-primary hover:bg-surface-2"
             }`}
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               onSelect(item.key);
               onClose();
             }}

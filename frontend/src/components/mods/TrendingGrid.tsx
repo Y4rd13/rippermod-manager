@@ -1,5 +1,6 @@
 import { Clock, Copy, Download, ExternalLink, Eye, Heart, Info, RefreshCw, TrendingUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { FomodWizard } from "@/components/mods/FomodWizard";
@@ -17,7 +18,7 @@ import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { VirtualCardGrid } from "@/components/ui/VirtualCardGrid";
-import { useAbstainMod, useEndorseMod, useRefreshTrending, useTrackMod, useUntrackMod } from "@/hooks/mutations";
+import { useAbstainMod, useEndorseMod, useRefreshTrending, useStartModDownload, useTrackMod, useUntrackMod } from "@/hooks/mutations";
 import { toast } from "@/stores/toast-store";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useInstallFlow } from "@/hooks/use-install-flow";
@@ -44,6 +45,7 @@ const FILTER_CHIPS: { key: ChipKey; label: string }[] = [
 function getContextMenuItems(mod: TrendingMod): ContextMenuItem[] {
   return [
     { key: "view", label: "View Details", icon: Info },
+    { key: "download", label: "Download", icon: Download },
     { key: "nexus", label: "Open on Nexus", icon: ExternalLink },
     { key: "copy", label: "Copy Name", icon: Copy },
     { key: "sep-actions", label: "", separator: true },
@@ -100,6 +102,7 @@ export function TrendingGrid({
 
   const flow = useInstallFlow(gameName, archives, downloadJobs, onFileSelect);
   const refreshTrending = useRefreshTrending();
+  const startModDownload = useStartModDownload();
   const endorseMod = useEndorseMod();
   const abstainMod = useAbstainMod();
   const trackMod = useTrackMod();
@@ -163,7 +166,8 @@ export function TrendingGrid({
     const mod = menuState.data;
     if (!mod) return;
     if (key === "view") onModClick?.(mod.mod_id);
-    else if (key === "nexus") window.open(mod.nexus_url, "_blank", "noopener,noreferrer");
+    else if (key === "download") startModDownload.mutate({ gameName, nexusModId: mod.mod_id });
+    else if (key === "nexus") openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
     else if (key === "copy") void navigator.clipboard.writeText(mod.name).then(
       () => toast.success("Copied to clipboard"),
       () => toast.error("Failed to copy"),
@@ -254,7 +258,8 @@ export function TrendingGrid({
             items={getContextMenuItems(mod)}
             onSelect={(key) => {
               if (key === "view") onModClick?.(nexusModId);
-              else if (key === "nexus") window.open(mod.nexus_url, "_blank", "noopener,noreferrer");
+              else if (key === "download") startModDownload.mutate({ gameName, nexusModId });
+              else if (key === "nexus") openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
               else if (key === "copy") void navigator.clipboard.writeText(mod.name).then(
                 () => toast.success("Copied to clipboard"),
                 () => toast.error("Failed to copy"),

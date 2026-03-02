@@ -7,6 +7,7 @@ import {
   Package,
   Power,
   PowerOff,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -31,10 +32,11 @@ import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { VirtualCardGrid } from "@/components/ui/VirtualCardGrid";
+import { DownloadProgress } from "@/components/ui/DownloadProgress";
 import { useBulkSelect } from "@/hooks/use-bulk-select";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useSessionState } from "@/hooks/use-session-state";
-import { useAbstainMod, useEndorseMod, useToggleMod, useTrackMod, useUninstallMod, useUntrackMod } from "@/hooks/mutations";
+import { useAbstainMod, useCancelDownload, useEndorseMod, useStartModDownload, useToggleMod, useTrackMod, useUninstallMod, useUntrackMod } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { isoToEpoch, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -93,12 +95,14 @@ const MANAGED_SORT_OPTIONS: { value: SortKey; label: string }[] = [
 function ManagedModsGrid({
   mods,
   gameName,
+  downloadJobs,
   updateByInstalledId,
   updateByNexusId,
   onModClick,
 }: {
   mods: InstalledModOut[];
   gameName: string;
+  downloadJobs: DownloadJobOut[];
   updateByInstalledId: Map<number, ModUpdate>;
   updateByNexusId: Map<number, ModUpdate>;
   onModClick?: (nexusModId: number) => void;
@@ -108,10 +112,22 @@ function ManagedModsGrid({
   const [confirmDeleteModId, setConfirmDeleteModId] = useState<number | null>(null);
   const toggleMod = useToggleMod();
   const uninstallMod = useUninstallMod();
+  const startModDownload = useStartModDownload();
+  const cancelDownload = useCancelDownload();
   const endorseMod = useEndorseMod();
   const abstainMod = useAbstainMod();
   const trackMod = useTrackMod();
   const untrackMod = useUntrackMod();
+
+  const activeDownloadByModId = useMemo(() => {
+    const map = new Map<number, DownloadJobOut>();
+    for (const job of downloadJobs) {
+      if ((job.status === "downloading" || job.status === "pending") && job.nexus_mod_id) {
+        map.set(job.nexus_mod_id, job);
+      }
+    }
+    return map;
+  }, [downloadJobs]);
 
   const sorted = useMemo(
     () =>
@@ -149,6 +165,7 @@ function ManagedModsGrid({
     ];
     if (mod.nexus_mod_id) {
       items.push({ key: "nexus", label: "View on Nexus", icon: ExternalLink });
+      items.push({ key: "redownload", label: "Re-download", icon: RefreshCw });
     }
     items.push({ key: "copy", label: "Copy Name", icon: Copy });
     if (mod.nexus_mod_id) {
@@ -178,7 +195,10 @@ function ManagedModsGrid({
         toggleMod.mutate({ gameName, modId: mod.id });
         break;
       case "nexus":
-        if (mod.nexus_mod_id) onModClick?.(mod.nexus_mod_id);
+        if (mod.nexus_url) openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
+        break;
+      case "redownload":
+        if (mod.nexus_mod_id) startModDownload.mutate({ gameName, nexusModId: mod.nexus_mod_id });
         break;
       case "copy":
         void navigator.clipboard.writeText(mod.nexus_name || mod.name).then(
@@ -334,7 +354,7 @@ function ManagedModsGrid({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          openUrl(mod.nexus_url!).catch(() => {});
+                          openUrl(mod.nexus_url!).catch(() => toast.error("Failed to open URL"));
                         }}
                         title="Open mod page on Nexus Mods"
                         aria-label="Open on Nexus Mods"
@@ -346,13 +366,25 @@ function ManagedModsGrid({
                   </div>
                 }
                 action={
-                  <InstalledModCardAction
-                    disabled={mod.disabled}
-                    isToggling={toggleMod.isPending && toggleMod.variables?.modId === mod.id}
-                    isUninstalling={uninstallMod.isPending && uninstallMod.variables?.modId === mod.id}
-                    onToggle={() => toggleMod.mutateAsync({ gameName, modId: mod.id })}
-                    onUninstall={() => uninstallMod.mutateAsync({ gameName, modId: mod.id })}
-                  />
+                  (() => {
+                    const activeDl = mod.nexus_mod_id ? activeDownloadByModId.get(mod.nexus_mod_id) : undefined;
+                    return activeDl ? (
+                      <div className="w-36">
+                        <DownloadProgress
+                          job={activeDl}
+                          onCancel={() => cancelDownload.mutate({ gameName, jobId: activeDl.id })}
+                        />
+                      </div>
+                    ) : (
+                      <InstalledModCardAction
+                        disabled={mod.disabled}
+                        isToggling={toggleMod.isPending && toggleMod.variables?.modId === mod.id}
+                        isUninstalling={uninstallMod.isPending && uninstallMod.variables?.modId === mod.id}
+                        onToggle={() => toggleMod.mutateAsync({ gameName, modId: mod.id })}
+                        onUninstall={() => uninstallMod.mutateAsync({ gameName, modId: mod.id })}
+                      />
+                    );
+                  })()
                 }
                 overflowMenu={
                   <OverflowMenuButton
@@ -364,7 +396,10 @@ function ManagedModsGrid({
                           toggleMod.mutate({ gameName, modId: mod.id });
                           break;
                         case "nexus":
-                          if (mod.nexus_mod_id) onModClick?.(mod.nexus_mod_id);
+                          if (mod.nexus_url) openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
+                          break;
+                        case "redownload":
+                          if (mod.nexus_mod_id) startModDownload.mutate({ gameName, nexusModId: mod.nexus_mod_id });
                           break;
                         case "copy":
                           void navigator.clipboard.writeText(mod.nexus_name || mod.name).then(
@@ -761,6 +796,7 @@ export function InstalledModsTable({
             <ManagedModsGrid
               mods={filteredMods}
               gameName={gameName}
+              downloadJobs={downloadJobs}
               updateByInstalledId={updateByInstalledId}
               updateByNexusId={updateByNexusId}
               onModClick={onModClick}
