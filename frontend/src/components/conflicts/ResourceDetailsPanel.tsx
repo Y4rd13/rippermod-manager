@@ -160,21 +160,6 @@ export function ResourceDetailsPanel({ gameName, archiveFilename, initialFilter 
           active={resourceFilter}
           onChange={(v) => setResourceFilter(v as ResourceFilter)}
         />
-        <details className="text-xs text-text-muted">
-          <summary className="cursor-pointer text-accent hover:text-accent/80 transition-colors">
-            What does this mean?
-          </summary>
-          <div className="mt-1.5 p-2 rounded bg-surface-2 space-y-1.5">
-            <p>
-              <Badge variant="success">cosmetic</Badge>{" "}
-              Both archives contain identical data for this resource. No gameplay impact — safe to ignore.
-            </p>
-            <p>
-              <Badge variant="danger">real</Badge>{" "}
-              Archives contain different data. The winner&apos;s version is used in-game. Change load order if you want the other version.
-            </p>
-          </div>
-        </details>
       </div>
 
       {/* Groups */}

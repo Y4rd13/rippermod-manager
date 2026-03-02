@@ -1,5 +1,5 @@
 import { AlertTriangle, CheckCircle, ShieldAlert } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { ConflictDetailDrawer } from "@/components/mods/ConflictDetailDrawer";
 import { Badge } from "@/components/ui/Badge";
@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
+import { SortableHeader } from "@/components/ui/SortableHeader";
 import { VirtualTable } from "@/components/ui/VirtualTable";
 import { useConflictsOverview } from "@/hooks/queries";
 import type { ConflictSeverity, ModConflictSummary } from "@/types/api";
@@ -23,6 +24,10 @@ const FILTER_CHIPS: { key: FilterKey; label: string }[] = [
   { key: "warning", label: "Warning" },
 ];
 
+type InboxSortKey = "name" | "conflicts" | "severity";
+
+const INBOX_SEVERITY_ORDER: Record<string, number> = { critical: 0, warning: 1, info: 2 };
+
 const SEVERITY_VARIANT: Record<ConflictSeverity, "danger" | "warning" | "success"> = {
   critical: "danger",
   warning: "warning",
@@ -34,6 +39,14 @@ export function ConflictsInbox({ gameName }: Props) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
   const [selectedMod, setSelectedMod] = useState<ModConflictSummary | null>(null);
+  const [sortKey, setSortKey] = useState<InboxSortKey>("conflicts");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const handleSort = useCallback((key: string) => {
+    const k = key as InboxSortKey;
+    setSortDir((prev) => (sortKey === k ? (prev === "asc" ? "desc" : "asc") : "asc"));
+    setSortKey(k);
+  }, [sortKey]);
 
   const filtered = useMemo(() => {
     if (!overview) return [];
@@ -48,8 +61,24 @@ export function ConflictsInbox({ gameName }: Props) {
       items = items.filter((s) => s.mod_name.toLowerCase().includes(q));
     }
 
-    return items.sort((a, b) => b.conflict_count - a.conflict_count);
-  }, [overview, filter, search]);
+    items = [...items].sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "name":
+          cmp = a.mod_name.localeCompare(b.mod_name);
+          break;
+        case "conflicts":
+          cmp = a.conflict_count - b.conflict_count;
+          break;
+        case "severity":
+          cmp = (INBOX_SEVERITY_ORDER[a.severity] ?? 3) - (INBOX_SEVERITY_ORDER[b.severity] ?? 3);
+          break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
+    return items;
+  }, [overview, filter, search, sortKey, sortDir]);
 
   const chipCounts = useMemo(() => {
     if (!overview) return {};
@@ -101,9 +130,9 @@ export function ConflictsInbox({ gameName }: Props) {
           estimateHeight={48}
           renderHead={() => (
             <tr className="border-b border-border text-left text-xs text-text-muted">
-              <th className="pb-2 pr-4 font-medium">Mod Name</th>
-              <th className="pb-2 pr-4 font-medium w-28">Conflicts</th>
-              <th className="pb-2 pr-4 font-medium w-24">Severity</th>
+              <SortableHeader label="Mod Name" sortKey="name" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Conflicts" sortKey="conflicts" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-28" />
+              <SortableHeader label="Severity" sortKey="severity" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-24" />
               <th className="pb-2 pr-4 font-medium">Conflicting Mods</th>
             </tr>
           )}

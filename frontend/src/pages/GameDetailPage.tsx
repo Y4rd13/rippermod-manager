@@ -19,7 +19,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 
-import { ConflictSummaryWidget } from "@/components/conflicts/ConflictSummaryWidget";
+import { ClusterDetailsPanel, ConflictSummaryWidget } from "@/components/conflicts/ConflictSummaryWidget";
 import { ArchivesList } from "@/components/mods/ArchivesList";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { ConflictsInbox } from "@/components/mods/ConflictsInbox";
@@ -75,13 +75,14 @@ const MATCHED_SUB_TABS: { key: MatchedSubTab; label: string }[] = [
   { key: "scan-details", label: "Scan Details" },
 ];
 
-type ConflictSubTab = "file-conflicts" | "archive-resources";
+type ConflictSubTab = "file-conflicts" | "archive-resources" | "cluster-details";
 
 function ConflictSubTabs({ gameName }: { gameName: string }) {
   const [subTab, setSubTab] = useState<ConflictSubTab>("file-conflicts");
   const subTabs: { key: ConflictSubTab; label: string }[] = [
     { key: "file-conflicts", label: "File Conflicts" },
     { key: "archive-resources", label: "Archive Resources" },
+    { key: "cluster-details", label: "Cluster Details" },
   ];
   return (
     <div className="space-y-4">
@@ -108,6 +109,7 @@ function ConflictSubTabs({ gameName }: { gameName: string }) {
           <ArchiveResourceConflicts gameName={gameName} />
         </Suspense>
       )}
+      {subTab === "cluster-details" && <ClusterDetailsPanel gameName={gameName} />}
     </div>
   );
 }
