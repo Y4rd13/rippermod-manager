@@ -10,6 +10,8 @@ interface DownloadState {
   jobs: Record<number, DownloadJobOut>;
   /** Counts how many sync cycles a local-only job has been absent from polled data. */
   missCounts: Record<number, number>;
+  /** Job IDs the user dismissed via "Clear completed" — excluded from future syncs. */
+  dismissedIds: Set<number>;
   footerExpanded: boolean;
   setJob: (job: DownloadJobOut) => void;
   syncJobs: (polled: DownloadJobOut[]) => void;
@@ -21,6 +23,7 @@ interface DownloadState {
 export const useDownloadStore = create<DownloadState>((set) => ({
   jobs: {},
   missCounts: {},
+  dismissedIds: new Set(),
   footerExpanded: false,
 
   setJob: (job) =>
@@ -35,6 +38,7 @@ export const useDownloadStore = create<DownloadState>((set) => ({
       const polledIds = new Set<number>();
 
       for (const job of polled) {
+        if (state.dismissedIds.has(job.id) && TERMINAL_STATUSES.has(job.status)) continue;
         next[job.id] = job;
         polledIds.add(job.id);
       }
@@ -57,13 +61,16 @@ export const useDownloadStore = create<DownloadState>((set) => ({
   clearCompleted: () =>
     set((state) => {
       const filtered: Record<number, DownloadJobOut> = {};
+      const newDismissed = new Set(state.dismissedIds);
       for (const [id, job] of Object.entries(state.jobs)) {
-        if (!TERMINAL_STATUSES.has(job.status)) {
+        if (TERMINAL_STATUSES.has(job.status)) {
+          newDismissed.add(Number(id));
+        } else {
           filtered[Number(id)] = job;
         }
       }
-      return { jobs: filtered };
+      return { jobs: filtered, dismissedIds: newDismissed };
     }),
 
-  reset: () => set({ jobs: {}, missCounts: {}, footerExpanded: false }),
+  reset: () => set({ jobs: {}, missCounts: {}, dismissedIds: new Set(), footerExpanded: false }),
 }));
