@@ -669,7 +669,7 @@ function ConflictHelpModal({ onClose }: { onClose: () => void }) {
           <p>
             <Badge variant="danger">loses to</Badge>{" "}
             The other archive loads first, overriding this archive&apos;s resources.
-            Use the <strong className="text-text-primary">Prefer</strong> button to rename the loser so your preferred mod wins.
+            Use the <strong className="text-text-primary">Prefer</strong> button to update modlist.txt so your preferred mod wins.
           </p>
         </div>
       </div>

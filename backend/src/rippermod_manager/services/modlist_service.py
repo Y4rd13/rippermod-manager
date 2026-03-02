@@ -42,9 +42,7 @@ def _scan_archive_files(game: Game) -> list[str]:
     )
 
 
-def _build_file_to_mod_map(
-    session: Session, game_id: int
-) -> dict[str, int | None]:
+def _build_file_to_mod_map(session: Session, game_id: int) -> dict[str, int | None]:
     """Map archive filenames (lowercased) to their owning ``installed_mod_id``.
 
     Returns ``None`` for unmanaged archives (not tracked in the DB).
@@ -349,9 +347,7 @@ def get_modlist_view(game: Game, session: Session) -> ModlistViewResult:
     )
 
 
-def remove_all_preferences(
-    game_id: int, game: Game, session: Session
-) -> int:
+def remove_all_preferences(game_id: int, game: Game, session: Session) -> int:
     """Delete all load-order preferences for a game and regenerate modlist.txt.
 
     Returns the number of preferences removed.
@@ -359,7 +355,7 @@ def remove_all_preferences(
     prefs = session.exec(
         select(LoadOrderPreference).where(LoadOrderPreference.game_id == game_id)
     ).all()
-    count = len(list(prefs))
+    count = len(prefs)
     for pref in prefs:
         session.delete(pref)
     session.commit()

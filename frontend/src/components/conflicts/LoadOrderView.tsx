@@ -192,8 +192,8 @@ export function LoadOrderView({ gameName }: Props) {
               );
               const isFirst = fullIndex === 0;
               const isLast = fullIndex === fullGroups.length - 1;
-              const canMoveUp = !isFirst && !group.is_unmanaged && fullGroups[fullIndex - 1] != null && !fullGroups[fullIndex - 1]!.is_unmanaged;
-              const canMoveDown = !isLast && !group.is_unmanaged && fullGroups[fullIndex + 1] != null && !fullGroups[fullIndex + 1]!.is_unmanaged;
+              const canMoveUp = !isFirst && !group.is_unmanaged && !fullGroups[fullIndex - 1]!.is_unmanaged;
+              const canMoveDown = !isLast && !group.is_unmanaged && !fullGroups[fullIndex + 1]!.is_unmanaged;
               const isSingleArchive = group.archive_count === 1;
 
               return (

@@ -103,9 +103,7 @@ class TestGenerateModlist:
         assert result.index("bbb.archive") < result.index("aaa.archive")
 
     def test_multi_archive_mod_group_stays_together(self, session, game, game_dir):
-        mod_a = _make_mod(
-            session, game, "ModA", ["a1.archive", "a2.archive"], game_dir=game_dir
-        )
+        mod_a = _make_mod(session, game, "ModA", ["a1.archive", "a2.archive"], game_dir=game_dir)
         mod_b = _make_mod(session, game, "ModB", ["bbb.archive"], game_dir=game_dir)
         # Prefer ModB over ModA
         session.add(
@@ -281,14 +279,11 @@ class TestGetModlistView:
         assert result.modlist_active is True
 
     def test_multi_archive_group(self, session, game, game_dir):
-        _make_mod(
-            session, game, "MultiMod", ["a1.archive", "a2.archive"], game_dir=game_dir
-        )
+        _make_mod(session, game, "MultiMod", ["a1.archive", "a2.archive"], game_dir=game_dir)
         result = get_modlist_view(game, session)
         assert result.total_groups == 1
         assert result.groups[0].archive_count == 2
         assert result.groups[0].archive_filenames == ["a1.archive", "a2.archive"]
-
 
 
 class TestRemoveAllPreferences:
