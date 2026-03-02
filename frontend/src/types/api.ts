@@ -641,24 +641,56 @@ export interface ArchiveResourceDetailsResult {
 
 export interface PreferModRequest {
   winner_mod_id: number;
-  loser_mod_id: number;
-}
-
-export interface RenameAction {
-  old_relative_path: string;
-  new_relative_path: string;
-  old_filename: string;
-  new_filename: string;
-  owning_mod_id: number;
-  owning_mod_name: string;
+  loser_mod_ids: number[];
 }
 
 export interface PreferModResult {
   success: boolean;
-  renames: RenameAction[];
-  dry_run: boolean;
   message: string;
-  rollback_performed?: boolean;
+  preferences_added: number;
+  modlist_entries: number;
+  dry_run: boolean;
+}
+
+export interface ModlistGroupEntry {
+  position: number;
+  mod_id: number | null;
+  mod_name: string;
+  archive_filenames: string[];
+  archive_count: number;
+  is_unmanaged: boolean;
+  has_user_preference: boolean;
+}
+
+export interface PreferenceOut {
+  id: number;
+  winner_mod_id: number;
+  winner_mod_name: string;
+  loser_mod_id: number;
+  loser_mod_name: string;
+}
+
+export interface ModlistViewResult {
+  game_name: string;
+  groups: ModlistGroupEntry[];
+  preferences: PreferenceOut[];
+  total_archives: number;
+  total_groups: number;
+  total_preferences: number;
+  modlist_active: boolean;
+  modlist_path: string;
+}
+
+export interface RemovePreferenceResult {
+  success: boolean;
+  message: string;
+  modlist_entries: number;
+}
+
+export interface ResetPreferencesResult {
+  removed_count: number;
+  modlist_entries: number;
+  message: string;
 }
 
 // Conflict graph types

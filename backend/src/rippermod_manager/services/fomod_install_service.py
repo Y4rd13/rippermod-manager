@@ -377,6 +377,11 @@ def install_fomod(
     session.commit()
     session.refresh(installed)
 
+    # Regenerate modlist.txt to include new archives in the load order
+    from rippermod_manager.services.modlist_service import write_modlist
+
+    write_modlist(game, session)
+
     logger.info(
         "FOMOD installed '%s' (%d files, %d overwritten)",
         mod_name,

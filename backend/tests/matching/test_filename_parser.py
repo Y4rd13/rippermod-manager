@@ -67,6 +67,24 @@ class TestParseModFilename:
         result = parse_mod_filename("CET-107-1-37-1-1759193708.zip")
         assert "." in result.version
 
+    def test_alpha_version_nexus_format(self):
+        # Version starts with letters (e.g., "PL-Beta-1-8-8-Hotfix")
+        result = parse_mod_filename(
+            "Enemies of Night City-8467-PL-Beta-1-8-8-Hotfix-1720272238.zip"
+        )
+        assert result.nexus_mod_id == 8467
+        assert result.name == "Enemies of Night City"
+        assert result.version == "PL.Beta.1.8.8.Hotfix"
+        assert result.upload_timestamp == 1720272238
+
+    def test_alpha_version_short(self):
+        # Short alpha version like "RC1"
+        result = parse_mod_filename("Some Mod-500-RC1-1750000000.zip")
+        assert result.nexus_mod_id == 500
+        assert result.name == "Some Mod"
+        assert result.version == "RC1"
+        assert result.upload_timestamp == 1750000000
+
     @pytest.mark.parametrize(
         "filename,expected_id",
         [

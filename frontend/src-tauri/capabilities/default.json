@@ -20,7 +20,10 @@
     "core:app:default",
     "deep-link:default",
     "opener:default",
-    "opener:allow-open-path",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [{ "path": "**" }]
+    },
     "shell:default",
     {
       "identifier": "shell:allow-spawn",
