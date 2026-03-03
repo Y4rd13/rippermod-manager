@@ -39,6 +39,7 @@ class NexusModMeta(SQLModel, table=True):
     category: str = ""
     picture_url: str = ""
     files_updated_at: datetime | None = None
+    requirements_fetched_at: datetime | None = None
 
 
 class NexusModRequirement(SQLModel, table=True):

@@ -10,6 +10,7 @@ import {
   FolderOpen,
   Heart,
   Loader2,
+  Puzzle,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -227,6 +228,35 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
               {/* About tab */}
               {activeTab === "about" && (
                 <>
+                  {detail.requirements && detail.requirements.length > 0 && (
+                    <div className="rounded-lg border border-border bg-surface-1 p-3">
+                      <div className="flex items-center gap-1.5 text-xs text-text-muted mb-2">
+                        <Puzzle size={12} />
+                        <span className="font-medium uppercase tracking-wide">Requires</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {detail.requirements.map((req) => {
+                          const href = req.url
+                            || (req.required_mod_id
+                              ? `https://www.nexusmods.com/${detail.game_domain}/mods/${req.required_mod_id}`
+                              : "");
+                          return (
+                            <button
+                              key={`${req.nexus_mod_id}-${req.required_mod_id ?? req.mod_name}`}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/15 hover:border-accent/40 transition-colors disabled:opacity-50 disabled:cursor-default"
+                              onClick={() => { if (href) openUrl(href).catch(() => {}); }}
+                              disabled={!href}
+                            >
+                              {req.mod_name || "Unknown mod"}
+                              {req.notes && <span className="text-text-muted font-normal">{req.notes}</span>}
+                              {req.is_external && <ExternalLink size={10} />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {detail.summary && (
                     <p className="text-sm text-text-secondary italic">{detail.summary}</p>
                   )}

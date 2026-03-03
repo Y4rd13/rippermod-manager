@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlparse
 
@@ -167,6 +168,12 @@ async def mod_detail(
         gql_reqs = (mod_reqs.get("nexusRequirements") or {}).get("nodes") or []
         if gql_reqs:
             upsert_mod_requirements(session, mod_id, gql_reqs)
+        # Mark requirements as fetched (even if empty) to avoid repeated API calls
+        fresh_meta = session.exec(
+            select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)
+        ).first()
+        if fresh_meta:
+            fresh_meta.requirements_fetched_at = datetime.utcnow()
         session.commit()
         meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
 
@@ -267,12 +274,29 @@ async def mod_detail(
             )
         ).first()
 
-    # Load requirements
-    from rippermod_manager.schemas.nexus import ModRequirementOut
-
+    # Backfill requirements for mods cached before this feature
     req_rows = session.exec(
         select(NexusModRequirement).where(NexusModRequirement.nexus_mod_id == mod_id)
     ).all()
+    if not req_rows and api_key and not meta.requirements_fetched_at:
+        try:
+            async with NexusGraphQLClient(api_key) as gql:
+                gql_mod = await gql.get_mod(game_domain, mod_id)
+            mod_reqs = gql_mod.get("modRequirements") or {}
+            gql_reqs = (mod_reqs.get("nexusRequirements") or {}).get("nodes") or []
+            if gql_reqs:
+                upsert_mod_requirements(session, mod_id, gql_reqs)
+                req_rows = session.exec(
+                    select(NexusModRequirement).where(
+                        NexusModRequirement.nexus_mod_id == mod_id
+                    )
+                ).all()
+            meta.requirements_fetched_at = datetime.utcnow()
+            session.commit()
+        except Exception:
+            logger.debug("Failed to backfill requirements for mod %d", mod_id, exc_info=True)
+
+    from rippermod_manager.schemas.nexus import ModRequirementOut
     requirements = [
         ModRequirementOut(
             nexus_mod_id=r.nexus_mod_id,

@@ -89,6 +89,11 @@ def _migrate_missing_columns() -> None:
             "uid",
             "ALTER TABLE nexus_mod_meta ADD COLUMN uid TEXT DEFAULT ''",
         ),
+        (
+            "nexus_mod_meta",
+            "requirements_fetched_at",
+            "ALTER TABLE nexus_mod_meta ADD COLUMN requirements_fetched_at TIMESTAMP",
+        ),
     ]
     with Session(engine) as session:
         for table, column, ddl in migrations:
