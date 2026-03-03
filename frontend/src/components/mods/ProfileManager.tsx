@@ -15,6 +15,9 @@ import {
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
+
 import { ProfileCompareDialog } from "@/components/mods/ProfileCompareDialog";
 import { ProfileDiffDialog } from "@/components/mods/ProfileDiffDialog";
 import { Badge } from "@/components/ui/Badge";
@@ -36,6 +39,7 @@ import {
 } from "@/hooks/mutations";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { isoToEpoch, timeAgo } from "@/lib/format";
+import { toast } from "@/stores/toast-store";
 import type { ProfileCompareOut, ProfileDiffOut, ProfileExport, ProfileOut } from "@/types/api";
 
 function CreateProfileForm({
@@ -213,17 +217,17 @@ export function ProfileManager({ profiles, gameName, isLoading = false, installe
   const handleExport = async (profileId: number) => {
     try {
       const data = await exportProfile.mutateAsync({ gameName, profileId });
-      const blob = new Blob([JSON.stringify(data, null, 2)], {
-        type: "application/json",
+      const filePath = await save({
+        title: "Export Profile",
+        defaultPath: `${data.profile_name}_modlist.json`,
+        filters: [{ name: "JSON", extensions: ["json"] }],
       });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${data.profile_name}_modlist.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      // Error state handled by React Query
+      if (!filePath) return;
+      await writeTextFile(filePath, JSON.stringify(data, null, 2));
+      toast.success("Profile exported");
+    } catch (err) {
+      if (!(err instanceof Error && err.message.includes("cancelled")))
+        toast.error("Failed to export profile");
     }
   };
 
