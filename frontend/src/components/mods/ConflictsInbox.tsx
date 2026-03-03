@@ -16,9 +16,9 @@ interface Props {
   gameName: string;
 }
 
-type FilterKey = "all" | "critical" | "warning";
+type FilterKey = "all" | "critical" | "warning" | "dismissed";
 
-const FILTER_CHIPS: { key: FilterKey; label: string }[] = [
+const BASE_FILTER_CHIPS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "All" },
   { key: "critical", label: "Critical" },
   { key: "warning", label: "Warning" },
@@ -52,8 +52,13 @@ export function ConflictsInbox({ gameName }: Props) {
     if (!overview) return [];
     let items = overview.summaries;
 
-    if (filter !== "all") {
-      items = items.filter((s) => s.severity === filter);
+    if (filter === "dismissed") {
+      items = items.filter((s) => s.dismissed);
+    } else {
+      items = items.filter((s) => !s.dismissed);
+      if (filter !== "all") {
+        items = items.filter((s) => s.severity === filter);
+      }
     }
 
     if (search) {
@@ -82,10 +87,20 @@ export function ConflictsInbox({ gameName }: Props) {
 
   const chipCounts = useMemo(() => {
     if (!overview) return {};
-    const all = overview.summaries.length;
-    const critical = overview.summaries.filter((s) => s.severity === "critical").length;
-    const warning = overview.summaries.filter((s) => s.severity === "warning").length;
-    return { all, critical, warning };
+    const active = overview.summaries.filter((s) => !s.dismissed);
+    const all = active.length;
+    const critical = active.filter((s) => s.severity === "critical").length;
+    const warning = active.filter((s) => s.severity === "warning").length;
+    const dismissed = overview.dismissed_count;
+    return { all, critical, warning, dismissed };
+  }, [overview]);
+
+  const filterChips = useMemo(() => {
+    const chips = [...BASE_FILTER_CHIPS];
+    if (overview && overview.dismissed_count > 0) {
+      chips.push({ key: "dismissed", label: "Dismissed" });
+    }
+    return chips;
   }, [overview]);
 
   if (isLoading) {
@@ -107,7 +122,7 @@ export function ConflictsInbox({ gameName }: Props) {
       <div className="flex items-center gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Filter by mod name..." />
         <FilterChips
-          chips={FILTER_CHIPS.map((c) => ({ ...c, count: chipCounts[c.key] }))}
+          chips={filterChips.map((c) => ({ ...c, count: chipCounts[c.key] }))}
           active={filter}
           onChange={(v) => setFilter(v as FilterKey)}
         />
@@ -116,6 +131,9 @@ export function ConflictsInbox({ gameName }: Props) {
           <span>
             {overview.total_conflicts} conflict{overview.total_conflicts !== 1 ? "s" : ""} across{" "}
             {overview.mods_affected} mod{overview.mods_affected !== 1 ? "s" : ""}
+            {overview.dismissed_count > 0 && (
+              <> &middot; {overview.dismissed_count} dismissed</>
+            )}
           </span>
         </div>
       </div>
@@ -140,7 +158,7 @@ export function ConflictsInbox({ gameName }: Props) {
             <tr
               key={item.mod_id}
               onClick={() => setSelectedMod(item)}
-              className="border-b border-border/50 cursor-pointer hover:bg-surface-1 transition-colors"
+              className={`border-b border-border/50 cursor-pointer hover:bg-surface-1 transition-colors${item.dismissed ? " opacity-60" : ""}`}
             >
               <td className="py-2.5 pr-4">
                 <div className="flex items-center gap-2">
@@ -177,6 +195,7 @@ export function ConflictsInbox({ gameName }: Props) {
           modId={selectedMod.mod_id}
           modName={selectedMod.mod_name}
           severity={selectedMod.severity}
+          dismissed={selectedMod.dismissed}
           onClose={() => setSelectedMod(null)}
         />
       )}

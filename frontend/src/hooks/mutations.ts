@@ -14,6 +14,7 @@ import type {
   RemovePreferenceResult,
   ResetPreferencesResult,
   CorrelationBrief,
+  DismissResult,
   DownloadJobOut,
   DownloadRequest,
   DownloadStartResult,
@@ -149,6 +150,7 @@ export function useInstallMod() {
     onSuccess: (result, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
+      qc.invalidateQueries({ queryKey: ["updates", gameName] });
       toast.success("Mod installed", `${result.files_extracted} files extracted`);
       if (result.files_overwritten > 0) {
         toast.warning(
@@ -169,6 +171,7 @@ export function useUninstallMod() {
     onSuccess: (_, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
+      qc.invalidateQueries({ queryKey: ["updates", gameName] });
       toast.success("Mod uninstalled");
     },
     onError: () => toast.error("Failed to uninstall mod"),
@@ -531,6 +534,32 @@ export function useResolveConflict() {
       toast.success("Conflict resolved", "Mod reinstalled to reclaim files");
     },
     onError: () => toast.error("Failed to resolve conflict"),
+  });
+}
+
+export function useDismissConflict() {
+  const qc = useQueryClient();
+  return useMutation<DismissResult, Error, { gameName: string; modId: number }>({
+    mutationFn: ({ gameName, modId }) =>
+      api.post(`/api/v1/games/${gameName}/conflicts/inbox/${modId}/dismiss`),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["conflicts", gameName] });
+      toast.success("Conflict dismissed");
+    },
+    onError: () => toast.error("Failed to dismiss conflict"),
+  });
+}
+
+export function useRestoreConflict() {
+  const qc = useQueryClient();
+  return useMutation<DismissResult, Error, { gameName: string; modId: number }>({
+    mutationFn: ({ gameName, modId }) =>
+      api.delete(`/api/v1/games/${gameName}/conflicts/inbox/${modId}/dismiss`),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["conflicts", gameName] });
+      toast.success("Conflict restored");
+    },
+    onError: () => toast.error("Failed to restore conflict"),
   });
 }
 

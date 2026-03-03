@@ -79,6 +79,11 @@ def _migrate_missing_columns() -> None:
             "files_updated_at",
             "ALTER TABLE nexus_mod_meta ADD COLUMN files_updated_at TIMESTAMP",
         ),
+        (
+            "installed_mods",
+            "conflict_dismissed",
+            "ALTER TABLE installed_mods ADD COLUMN conflict_dismissed BOOLEAN DEFAULT 0",
+        ),
     ]
     with Session(engine) as session:
         for table, column, ddl in migrations:

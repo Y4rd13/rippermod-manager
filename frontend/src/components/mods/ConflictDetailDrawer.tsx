@@ -1,12 +1,14 @@
-import { AlertTriangle, Loader2, RefreshCw, X } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, Bell, BellOff, Info, Loader2, RefreshCw, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { FileTreeView } from "@/components/ui/FileTreeView";
-import { useResolveConflict } from "@/hooks/mutations";
+import { useDismissConflict, useResolveConflict, useRestoreConflict, useUninstallMod } from "@/hooks/mutations";
 import { useModConflicts } from "@/hooks/queries";
-import type { ArchiveEntryNode, ConflictSeverity } from "@/types/api";
+import type { ArchiveEntryNode, ConflictSeverity, InstalledModOut } from "@/types/api";
 
 function pathsToTree(paths: string[]): ArchiveEntryNode[] {
   interface TreeMap {
@@ -58,12 +60,18 @@ interface Props {
   modId: number;
   modName: string;
   severity: ConflictSeverity;
+  dismissed: boolean;
   onClose: () => void;
 }
 
-export function ConflictDetailDrawer({ gameName, modId, modName, severity, onClose }: Props) {
+export function ConflictDetailDrawer({ gameName, modId, modName, severity, dismissed, onClose }: Props) {
+  const qc = useQueryClient();
   const { data: detail, isLoading } = useModConflicts(gameName, modId);
   const resolve = useResolveConflict();
+  const uninstallMod = useUninstallMod();
+  const dismiss = useDismissConflict();
+  const restore = useRestoreConflict();
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -76,6 +84,11 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, onClo
   useEffect(() => {
     if (resolve.isSuccess) onClose();
   }, [resolve.isSuccess, onClose]);
+
+  useEffect(() => {
+    if (uninstallMod.isSuccess) onClose();
+  }, [uninstallMod.isSuccess, onClose]);
+
 
   const grouped = useMemo(() => {
     if (!detail?.evidence.length) return [];
@@ -95,6 +108,21 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, onClo
     () => new Map(grouped.map(([name, { files }]) => [name, pathsToTree(files)])),
     [grouped],
   );
+
+  const isSuperseded = useMemo(() => {
+    if (grouped.length !== 1 || detail == null) return false;
+    if (detail.evidence.length !== detail.total_archive_files) return false;
+
+    const installedMods = qc.getQueryData<InstalledModOut[]>(["installed-mods", gameName]);
+    if (!installedMods) return false;
+
+    const loser = installedMods.find((m) => m.id === modId);
+    const winner = installedMods.find((m) => m.id === grouped[0][1].winnerId);
+    if (!loser?.nexus_mod_id || !winner?.nexus_mod_id) return false;
+
+    return loser.nexus_mod_id === winner.nexus_mod_id;
+  }, [grouped, detail, qc, gameName, modId]);
+  const winnerName = isSuperseded ? grouped[0][0] : null;
 
   return (
     <div
@@ -148,19 +176,33 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, onClo
             </p>
           )}
 
-          {grouped.map(([winnerName, { files }]) => (
-            <div key={winnerName}>
+          {isSuperseded && winnerName && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2.5">
+              <Info size={14} className="text-accent mt-0.5 shrink-0" />
+              <div className="text-xs text-text-secondary space-y-1">
+                <p className="font-medium text-text-primary">Superseded by newer version</p>
+                <p>
+                  All files from this mod have been replaced by &ldquo;{winnerName}&rdquo;.
+                  This usually happens when a newer version is installed without removing
+                  the old one first. You can safely remove this outdated entry.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {grouped.map(([groupWinnerName, { files }]) => (
+            <div key={groupWinnerName}>
               <div className="flex items-center gap-2 mb-2">
                 <AlertTriangle size={14} className="text-warning shrink-0" />
                 <h3 className="text-sm font-medium text-text-primary truncate">
-                  Overwritten by {winnerName}
+                  Overwritten by {groupWinnerName}
                 </h3>
                 <span className="text-xs text-text-muted shrink-0">
                   {files.length} file{files.length !== 1 ? "s" : ""}
                 </span>
               </div>
               <div className="max-h-[40vh] overflow-y-auto rounded border border-border bg-surface-0 p-3">
-                <FileTreeView tree={trees.get(winnerName) ?? []} showSize={false} />
+                <FileTreeView tree={trees.get(groupWinnerName) ?? []} showSize={false} />
               </div>
             </div>
           ))}
@@ -168,18 +210,68 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, onClo
 
         {/* Resolve actions */}
         <div className="border-t border-border px-6 py-4 flex items-center gap-3 shrink-0">
+          {isSuperseded && (
+            <Button
+              variant="danger"
+              onClick={() => setShowRemoveConfirm(true)}
+              disabled={uninstallMod.isPending}
+            >
+              <Trash2 size={14} /> Remove old version
+            </Button>
+          )}
           <Button
+            variant={isSuperseded ? "secondary" : undefined}
             onClick={() => resolve.mutate({ gameName, modId })}
             loading={resolve.isPending}
             disabled={!detail || detail.evidence.length === 0}
           >
             <RefreshCw size={14} /> Reinstall
           </Button>
+          <div className="flex-1" />
+          {dismissed ? (
+            <Button
+              variant="secondary"
+              onClick={() => restore.mutate({ gameName, modId }, { onSuccess: onClose })}
+              loading={restore.isPending}
+            >
+              <Bell size={14} /> Restore
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              onClick={() => dismiss.mutate({ gameName, modId }, { onSuccess: onClose })}
+              loading={dismiss.isPending}
+            >
+              <BellOff size={14} /> Dismiss
+            </Button>
+          )}
           <Button variant="secondary" onClick={onClose}>
             Close
           </Button>
         </div>
       </div>
+      {showRemoveConfirm && (
+        <ConfirmDialog
+          title="Remove old version?"
+          message={`This will remove the "${modName}" entry from your installed mods. Your files are safe — they are now managed by "${winnerName}".`}
+          confirmLabel="Remove"
+          variant="danger"
+          icon={Trash2}
+          loading={uninstallMod.isPending}
+          onConfirm={() =>
+            uninstallMod.mutate(
+              { gameName, modId },
+              {
+                onSuccess: () => {
+                  qc.invalidateQueries({ queryKey: ["conflicts", gameName] });
+                  qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
+                },
+              },
+            )
+          }
+          onCancel={() => setShowRemoveConfirm(false)}
+        />
+      )}
     </div>
   );
 }

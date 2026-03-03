@@ -488,6 +488,12 @@ def _cache_update_result(game_id: int, result: UpdateResult, session: Session) -
     session.commit()
 
 
+def invalidate_update_cache(game_id: int, session: Session) -> None:
+    """Clear the cached update result so the next query recalculates from live data."""
+    set_setting(session, f"{_CACHE_KEY_PREFIX}{game_id}", "")
+    session.commit()
+
+
 def _load_cached_result(game_id: int, session: Session) -> UpdateResult | None:
     """Load a previously cached update result from AppSetting, respecting TTL."""
     raw = get_setting(session, f"{_CACHE_KEY_PREFIX}{game_id}")

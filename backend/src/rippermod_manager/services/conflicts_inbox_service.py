@@ -18,6 +18,7 @@ from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.schemas.conflicts import (
     ConflictEvidence,
     ConflictsOverview,
+    DismissResult,
     InboxSeverity,
     ModConflictDetail,
     ModConflictSummary,
@@ -116,13 +117,16 @@ def get_conflicts_overview(game: Game, session: Session) -> ConflictsOverview:
                 conflict_count=conflict_count,
                 severity=severity,
                 conflicting_mod_names=conflicting_names,
+                dismissed=mod.conflict_dismissed,
             )
         )
 
-    total_conflicts = sum(s.conflict_count for s in summaries)
+    dismissed_count = sum(1 for s in summaries if s.dismissed)
+    active_summaries = [s for s in summaries if not s.dismissed]
     return ConflictsOverview(
-        total_conflicts=total_conflicts,
-        mods_affected=len(summaries),
+        total_conflicts=sum(s.conflict_count for s in active_summaries),
+        mods_affected=len(active_summaries),
+        dismissed_count=dismissed_count,
         summaries=summaries,
     )
 
@@ -201,3 +205,19 @@ def resolve_conflict(
         files_extracted=result.files_extracted,
         files_reclaimed=pre_conflicts,
     )
+
+
+def dismiss_conflict(mod: InstalledMod, session: Session) -> DismissResult:
+    """Mark a mod's conflicts as dismissed (acknowledged, expected)."""
+    mod.conflict_dismissed = True
+    session.add(mod)
+    session.commit()
+    return DismissResult(mod_id=mod.id, dismissed=True)  # type: ignore[arg-type]
+
+
+def restore_conflict(mod: InstalledMod, session: Session) -> DismissResult:
+    """Restore a previously dismissed mod back to the active conflict inbox."""
+    mod.conflict_dismissed = False
+    session.add(mod)
+    session.commit()
+    return DismissResult(mod_id=mod.id, dismissed=False)  # type: ignore[arg-type]
