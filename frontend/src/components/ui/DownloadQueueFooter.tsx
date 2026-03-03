@@ -21,7 +21,15 @@ export function DownloadQueueFooter() {
   const cancelDownload = useCancelDownload();
   const { data: archives = [] } = useAvailableArchives(activeGameName ?? "");
   const jobArray = useMemo(() => Object.values(jobs), [jobs]);
-  const flow = useInstallFlow(activeGameName ?? "", archives, jobArray);
+  const {
+    handleInstallByFilename,
+    fomodArchive,
+    dismissFomod,
+    conflicts,
+    dismissConflicts,
+    handleInstallWithSkip,
+    handleInstallOverwrite,
+  } = useInstallFlow(activeGameName ?? "", archives, jobArray);
 
   const [installingFiles, setInstallingFiles] = useState<Set<string>>(new Set());
 
@@ -29,7 +37,7 @@ export function DownloadQueueFooter() {
     async (nexusModId: number, fileName: string) => {
       setInstallingFiles((prev) => new Set(prev).add(fileName));
       try {
-        await flow.handleInstallByFilename(nexusModId, fileName);
+        await handleInstallByFilename(nexusModId, fileName);
       } finally {
         setInstallingFiles((prev) => {
           const next = new Set(prev);
@@ -38,15 +46,15 @@ export function DownloadQueueFooter() {
         });
       }
     },
-    [flow.handleInstallByFilename],
+    [handleInstallByFilename],
   );
 
   const jobList = useMemo(
     () =>
-      Object.values(jobs).sort(
+      [...jobArray].sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
       ),
-    [jobs],
+    [jobArray],
   );
 
   const { activeJobs, terminalJobs, aggregatePercent } = useMemo(() => {
@@ -171,21 +179,21 @@ export function DownloadQueueFooter() {
         )}
       </div>
 
-      {flow.fomodArchive && (
+      {fomodArchive && (
         <FomodWizard
           gameName={activeGameName!}
-          archiveFilename={flow.fomodArchive}
-          onDismiss={flow.dismissFomod}
-          onInstallComplete={flow.dismissFomod}
+          archiveFilename={fomodArchive}
+          onDismiss={dismissFomod}
+          onInstallComplete={dismissFomod}
         />
       )}
 
-      {flow.conflicts && (
+      {conflicts && (
         <ConflictDialog
-          conflicts={flow.conflicts}
-          onCancel={flow.dismissConflicts}
-          onSkip={flow.handleInstallWithSkip}
-          onOverwrite={flow.handleInstallOverwrite}
+          conflicts={conflicts}
+          onCancel={dismissConflicts}
+          onSkip={handleInstallWithSkip}
+          onOverwrite={handleInstallOverwrite}
         />
       )}
     </div>
