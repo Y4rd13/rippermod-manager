@@ -58,7 +58,7 @@ def graphql_file_to_rest_file(gql_file: dict[str, Any]) -> dict[str, Any]:
         "version": gql_file.get("version", ""),
         "category_id": gql_file.get("categoryId"),
         "category_name": gql_file.get("category", ""),
-        "uploaded_timestamp": gql_file.get("date"),
+        "uploaded_timestamp": _iso_to_epoch(gql_file.get("date")),
         "size_in_bytes": gql_file.get("size") or 0,
         "description": gql_file.get("description"),
     }
@@ -138,7 +138,10 @@ def upsert_mod_requirements(
     for req_data in gql_requirements:
         url = req_data.get("url", "")
         raw_mod_id = req_data.get("modId")
-        required_mod_id = int(raw_mod_id) if raw_mod_id else None
+        try:
+            required_mod_id = int(raw_mod_id) if raw_mod_id else None
+        except (ValueError, TypeError):
+            required_mod_id = None
         is_external = req_data.get("externalRequirement", False)
 
         session.add(

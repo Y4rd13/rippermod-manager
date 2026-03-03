@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlparse
 
@@ -173,7 +173,7 @@ async def mod_detail(
             select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)
         ).first()
         if fresh_meta:
-            fresh_meta.requirements_fetched_at = datetime.utcnow()
+            fresh_meta.requirements_fetched_at = datetime.now(UTC)
         session.commit()
         meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
 
@@ -194,7 +194,7 @@ async def mod_detail(
         needs_backfill = (
             not needs_insert
             and not needs_refresh
-            and any(f.content_preview_link is None or f.description is None for f in files)
+            and any(f.description is None for f in files)
         )
 
         try:
@@ -240,8 +240,6 @@ async def mod_detail(
                         if not f.file_id:
                             continue
                         af = api_files.get(f.file_id)
-                        if af and f.content_preview_link is None:
-                            f.content_preview_link = af.get("content_preview_link")
                         if af and f.description is None:
                             f.description = af.get("description")
                     session.commit()
@@ -291,7 +289,7 @@ async def mod_detail(
                         NexusModRequirement.nexus_mod_id == mod_id
                     )
                 ).all()
-            meta.requirements_fetched_at = datetime.utcnow()
+            meta.requirements_fetched_at = datetime.now(UTC)
             session.commit()
         except Exception:
             logger.debug("Failed to backfill requirements for mod %d", mod_id, exc_info=True)

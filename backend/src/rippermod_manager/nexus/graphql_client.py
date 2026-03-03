@@ -320,7 +320,7 @@ class NexusGraphQLClient:
 
     async def endorse_mod(self, mod_uid: str) -> dict[str, Any]:
         query = """
-        mutation EndorseMod($modUid: String!) {
+        mutation EndorseMod($modUid: ID!) {
             createModEndorsement(modUid: $modUid) {
                 success
             }
@@ -331,7 +331,7 @@ class NexusGraphQLClient:
 
     async def abstain_mod(self, mod_uid: str) -> dict[str, Any]:
         query = """
-        mutation AbstainMod($modUid: String!) {
+        mutation AbstainMod($modUid: ID!) {
             abstainFromModEndorsement(modUid: $modUid) {
                 success
             }
