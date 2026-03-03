@@ -21,6 +21,7 @@ from rippermod_manager.schemas.nexus import (
     NexusDownloadBrief,
     NexusModEnrichedOut,
     NexusModFileOut,
+    NexusModSearchResult,
     NexusSyncResult,
     SSOPollResult,
     SSOStartResult,
@@ -131,25 +132,39 @@ def search_downloads(
 async def mod_detail(
     game_domain: str, mod_id: int, session: Session = Depends(get_session)
 ) -> ModDetailOut:
-    from rippermod_manager.models.nexus import NexusModFile, NexusModMeta
+    from rippermod_manager.models.nexus import NexusModFile, NexusModMeta, NexusModRequirement
     from rippermod_manager.nexus.client import NexusClient
-    from rippermod_manager.services.nexus_helpers import upsert_nexus_mod
+    from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
+    from rippermod_manager.services.nexus_helpers import (
+        graphql_file_to_rest_file,
+        graphql_mod_to_rest_info,
+        store_uid_from_gql,
+        upsert_mod_requirements,
+        upsert_nexus_mod,
+    )
 
     meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
 
     key_setting = session.exec(select(AppSetting).where(AppSetting.key == "nexus_api_key")).first()
     api_key = key_setting.value if key_setting else ""
 
+    # Fetch mod info via GraphQL if missing
     if not meta or not meta.description:
         if not api_key:
             raise HTTPException(404, "Mod metadata not found and no API key configured")
-        async with NexusClient(api_key) as client:
-            info = await client.get_mod_info(game_domain, mod_id)
+        async with NexusGraphQLClient(api_key) as gql:
+            gql_mod = await gql.get_mod(game_domain, mod_id)
+        info = graphql_mod_to_rest_info(gql_mod)
         game = session.exec(select(Game).where(Game.domain_name == game_domain)).first()
         if not game:
             raise HTTPException(404, f"Game domain '{game_domain}' not found")
-        game_id = game.id
-        upsert_nexus_mod(session, game_id, game_domain, mod_id, info)
+        upsert_nexus_mod(session, game.id, game_domain, mod_id, info)
+        if gql_mod.get("uid"):
+            store_uid_from_gql(session, mod_id, gql_mod["uid"])
+        # Store requirements
+        gql_reqs = gql_mod.get("modRequirements") or []
+        if gql_reqs:
+            upsert_mod_requirements(session, mod_id, gql_reqs)
         session.commit()
         meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
 
@@ -173,55 +188,54 @@ async def mod_detail(
             and any(f.content_preview_link is None or f.description is None for f in files)
         )
 
-        # Single client for all API calls: changelogs + file fetch/backfill
         try:
-            async with NexusClient(api_key) as client:
+            # REST for changelogs (no GQL equivalent), GQL for file list
+            async with NexusClient(api_key) as rest_client:
                 try:
-                    changelogs = await client.get_changelogs(game_domain, mod_id)
+                    changelogs = await rest_client.get_changelogs(game_domain, mod_id)
                 except Exception:
                     logger.debug("Failed to fetch changelogs for mod %d", mod_id, exc_info=True)
 
-                if needs_insert or needs_refresh or needs_backfill:
-                    files_resp = await client.get_mod_files(
-                        game_domain, mod_id, category="main,update,optional,miscellaneous"
-                    )
-                    api_file_list = files_resp.get("files", [])
+            if needs_insert or needs_refresh or needs_backfill:
+                async with NexusGraphQLClient(api_key) as gql:
+                    gql_files = await gql.get_mod_files(game_domain, mod_id)
+                api_file_list = [graphql_file_to_rest_file(gf) for gf in gql_files]
 
-                    if needs_insert or needs_refresh:
-                        existing_file_ids = {f.file_id for f in files}
-                        for af in api_file_list:
-                            fid = af.get("file_id")
-                            if not fid or fid in existing_file_ids:
-                                continue
-                            session.add(
-                                NexusModFile(
-                                    nexus_mod_id=mod_id,
-                                    file_id=fid,
-                                    file_name=af.get("file_name", ""),
-                                    version=af.get("version", ""),
-                                    category_id=af.get("category_id"),
-                                    uploaded_timestamp=af.get("uploaded_timestamp"),
-                                    file_size=af.get("size_in_bytes") or 0,
-                                    content_preview_link=af.get("content_preview_link"),
-                                    description=af.get("description"),
-                                )
+                if needs_insert or needs_refresh:
+                    existing_file_ids = {f.file_id for f in files}
+                    for af in api_file_list:
+                        fid = af.get("file_id")
+                        if not fid or fid in existing_file_ids:
+                            continue
+                        session.add(
+                            NexusModFile(
+                                nexus_mod_id=mod_id,
+                                file_id=fid,
+                                file_name=af.get("file_name", ""),
+                                version=af.get("version", ""),
+                                category_id=af.get("category_id"),
+                                uploaded_timestamp=af.get("uploaded_timestamp"),
+                                file_size=af.get("size_in_bytes") or 0,
+                                content_preview_link=af.get("content_preview_link"),
+                                description=af.get("description"),
                             )
-                        meta.files_updated_at = meta.updated_at
-                        session.commit()
-                        files = session.exec(
-                            select(NexusModFile).where(NexusModFile.nexus_mod_id == mod_id)
-                        ).all()
-                    else:
-                        api_files = {af["file_id"]: af for af in api_file_list if af.get("file_id")}
-                        for f in files:
-                            if not f.file_id:
-                                continue
-                            af = api_files.get(f.file_id)
-                            if af and f.content_preview_link is None:
-                                f.content_preview_link = af.get("content_preview_link")
-                            if af and f.description is None:
-                                f.description = af.get("description")
-                        session.commit()
+                        )
+                    meta.files_updated_at = meta.updated_at
+                    session.commit()
+                    files = session.exec(
+                        select(NexusModFile).where(NexusModFile.nexus_mod_id == mod_id)
+                    ).all()
+                else:
+                    api_files = {af["file_id"]: af for af in api_file_list if af.get("file_id")}
+                    for f in files:
+                        if not f.file_id:
+                            continue
+                        af = api_files.get(f.file_id)
+                        if af and f.content_preview_link is None:
+                            f.content_preview_link = af.get("content_preview_link")
+                        if af and f.description is None:
+                            f.description = af.get("description")
+                    session.commit()
         except Exception:
             logger.debug(
                 "Failed to fetch/backfill file metadata for mod %d",
@@ -250,6 +264,24 @@ async def mod_detail(
                 NexusDownload.game_id == game_for_dl.id,
             )
         ).first()
+
+    # Load requirements
+    from rippermod_manager.schemas.nexus import ModRequirementOut
+
+    req_rows = session.exec(
+        select(NexusModRequirement).where(NexusModRequirement.nexus_mod_id == mod_id)
+    ).all()
+    requirements = [
+        ModRequirementOut(
+            nexus_mod_id=r.nexus_mod_id,
+            required_mod_id=r.required_mod_id,
+            mod_name=r.mod_name,
+            url=r.url,
+            notes=r.notes,
+            is_external=r.is_external,
+        )
+        for r in req_rows
+    ]
 
     nexus_url = f"https://www.nexusmods.com/{game_domain}/mods/{mod_id}"
 
@@ -282,6 +314,7 @@ async def mod_detail(
             )
             for f in files
         ],
+        requirements=requirements,
         is_tracked=dl.is_tracked if dl else False,
         is_endorsed=dl.is_endorsed if dl else False,
     )
@@ -363,6 +396,47 @@ async def file_contents_preview(url: str = Query(...)) -> ArchiveContentsResult:
     )
 
 
+@router.get("/search/{game_name}", response_model=list[NexusModSearchResult])
+async def search_nexus_mods(
+    game_name: str,
+    q: str = Query(min_length=2),
+    count: int = Query(default=20, ge=1, le=50),
+    session: Session = Depends(get_session),
+) -> list[NexusModSearchResult]:
+    """Search Nexus Mods by name via GraphQL v2 text search."""
+    game = get_game_or_404(game_name, session)
+    api_key = get_setting(session, "nexus_api_key")
+    if not api_key:
+        raise HTTPException(400, "Nexus API key not configured")
+
+    from rippermod_manager.nexus.client import NexusRateLimitError
+    from rippermod_manager.nexus.graphql_client import NexusGraphQLClient, NexusGraphQLError
+
+    try:
+        async with NexusGraphQLClient(api_key) as gql:
+            results = await gql.search_mods(game.domain_name, q, count=count)
+    except NexusRateLimitError as e:
+        raise HTTPException(429, f"Rate limited: {e}") from e
+    except NexusGraphQLError as e:
+        raise HTTPException(400, f"GraphQL error: {e}") from e
+
+    return [
+        NexusModSearchResult(
+            mod_id=m.get("modId", 0),
+            name=m.get("name", ""),
+            summary=m.get("summary", ""),
+            author=m.get("author", ""),
+            version=m.get("version", ""),
+            picture_url=m.get("pictureUrl", ""),
+            endorsement_count=m.get("endorsementCount", 0),
+            mod_downloads=m.get("modDownloads", 0),
+            category_id=m.get("categoryId"),
+            nexus_url=f"https://www.nexusmods.com/{game.domain_name}/mods/{m.get('modId', 0)}",
+        )
+        for m in results
+    ]
+
+
 def _get_or_create_download(
     session: Session, game_id: int, mod_id: int, game_domain: str
 ) -> "NexusDownload":
@@ -388,6 +462,24 @@ def _get_or_create_download(
     return dl
 
 
+async def _resolve_mod_uid(
+    api_key: str, game_domain: str, mod_id: int, session: Session
+) -> str:
+    """Get or fetch the mod UID needed for GraphQL mutations."""
+    from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
+    from rippermod_manager.services.nexus_helpers import get_stored_uid, store_uid_from_gql
+
+    uid = get_stored_uid(session, mod_id)
+    if uid:
+        return uid
+
+    async with NexusGraphQLClient(api_key) as gql:
+        uid = await gql.fetch_mod_uid(game_domain, mod_id)
+    store_uid_from_gql(session, mod_id, uid)
+    session.flush()
+    return uid
+
+
 @router.post("/{game_name}/mods/{mod_id}/endorse", response_model=ModActionResult)
 async def endorse_mod(
     game_name: str, mod_id: int, session: Session = Depends(get_session)
@@ -397,17 +489,17 @@ async def endorse_mod(
     if not api_key:
         raise HTTPException(400, "Nexus API key not configured")
 
-    from httpx import HTTPStatusError
-
-    from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
+    from rippermod_manager.nexus.client import NexusRateLimitError
+    from rippermod_manager.nexus.graphql_client import NexusGraphQLClient, NexusGraphQLError
 
     try:
-        async with NexusClient(api_key) as client:
-            await client.endorse_mod(game.domain_name, mod_id)
+        uid = await _resolve_mod_uid(api_key, game.domain_name, mod_id, session)
+        async with NexusGraphQLClient(api_key) as gql:
+            await gql.endorse_mod(uid)
     except NexusRateLimitError as e:
         raise HTTPException(429, f"Rate limited: {e}") from e
-    except HTTPStatusError as e:
-        raise HTTPException(e.response.status_code, f"Nexus API error: {e.response.text}") from e
+    except NexusGraphQLError as e:
+        raise HTTPException(400, f"GraphQL error: {e}") from e
 
     dl = _get_or_create_download(session, game.id, mod_id, game.domain_name)  # type: ignore[arg-type]
     dl.is_endorsed = True
@@ -424,17 +516,17 @@ async def abstain_mod(
     if not api_key:
         raise HTTPException(400, "Nexus API key not configured")
 
-    from httpx import HTTPStatusError
-
-    from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
+    from rippermod_manager.nexus.client import NexusRateLimitError
+    from rippermod_manager.nexus.graphql_client import NexusGraphQLClient, NexusGraphQLError
 
     try:
-        async with NexusClient(api_key) as client:
-            await client.abstain_mod(game.domain_name, mod_id)
+        uid = await _resolve_mod_uid(api_key, game.domain_name, mod_id, session)
+        async with NexusGraphQLClient(api_key) as gql:
+            await gql.abstain_mod(uid)
     except NexusRateLimitError as e:
         raise HTTPException(429, f"Rate limited: {e}") from e
-    except HTTPStatusError as e:
-        raise HTTPException(e.response.status_code, f"Nexus API error: {e.response.text}") from e
+    except NexusGraphQLError as e:
+        raise HTTPException(400, f"GraphQL error: {e}") from e
 
     dl = _get_or_create_download(session, game.id, mod_id, game.domain_name)  # type: ignore[arg-type]
     dl.is_endorsed = False
@@ -451,17 +543,17 @@ async def track_mod(
     if not api_key:
         raise HTTPException(400, "Nexus API key not configured")
 
-    from httpx import HTTPStatusError
-
-    from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
+    from rippermod_manager.nexus.client import NexusRateLimitError
+    from rippermod_manager.nexus.graphql_client import NexusGraphQLClient, NexusGraphQLError
 
     try:
-        async with NexusClient(api_key) as client:
-            await client.track_mod(game.domain_name, mod_id)
+        uid = await _resolve_mod_uid(api_key, game.domain_name, mod_id, session)
+        async with NexusGraphQLClient(api_key) as gql:
+            await gql.track_mod(uid)
     except NexusRateLimitError as e:
         raise HTTPException(429, f"Rate limited: {e}") from e
-    except HTTPStatusError as e:
-        raise HTTPException(e.response.status_code, f"Nexus API error: {e.response.text}") from e
+    except NexusGraphQLError as e:
+        raise HTTPException(400, f"GraphQL error: {e}") from e
 
     dl = _get_or_create_download(session, game.id, mod_id, game.domain_name)  # type: ignore[arg-type]
     dl.is_tracked = True
@@ -478,17 +570,17 @@ async def untrack_mod(
     if not api_key:
         raise HTTPException(400, "Nexus API key not configured")
 
-    from httpx import HTTPStatusError
-
-    from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
+    from rippermod_manager.nexus.client import NexusRateLimitError
+    from rippermod_manager.nexus.graphql_client import NexusGraphQLClient, NexusGraphQLError
 
     try:
-        async with NexusClient(api_key) as client:
-            await client.untrack_mod(game.domain_name, mod_id)
+        uid = await _resolve_mod_uid(api_key, game.domain_name, mod_id, session)
+        async with NexusGraphQLClient(api_key) as gql:
+            await gql.untrack_mod(uid)
     except NexusRateLimitError as e:
         raise HTTPException(429, f"Rate limited: {e}") from e
-    except HTTPStatusError as e:
-        raise HTTPException(e.response.status_code, f"Nexus API error: {e.response.text}") from e
+    except NexusGraphQLError as e:
+        raise HTTPException(400, f"GraphQL error: {e}") from e
 
     dl = _get_or_create_download(session, game.id, mod_id, game.domain_name)  # type: ignore[arg-type]
     dl.is_tracked = False

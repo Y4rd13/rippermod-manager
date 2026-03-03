@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock, patch
+
 import httpx
 import pytest
 import respx
@@ -8,17 +10,24 @@ from rippermod_manager.nexus.client import BASE_URL
 from rippermod_manager.services.nexus_sync import sync_nexus_history
 
 
-def _setup_respx(tracked, endorsed, mod_infos):
+def _setup_respx(tracked, endorsed):
     respx.get(f"{BASE_URL}/v1/user/tracked_mods.json").mock(
         return_value=httpx.Response(200, json=tracked)
     )
     respx.get(f"{BASE_URL}/v1/user/endorsements.json").mock(
         return_value=httpx.Response(200, json=endorsed)
     )
-    for mod_id, info in mod_infos.items():
-        respx.get(f"{BASE_URL}/v1/games/cyberpunk2077/mods/{mod_id}.json").mock(
-            return_value=httpx.Response(200, json=info)
-        )
+
+
+def _make_gql_mock(batch_mods_return=None, batch_mods_side_effect=None):
+    mock = AsyncMock()
+    mock.__aenter__.return_value = mock
+    if batch_mods_side_effect:
+        mock.batch_mods.side_effect = batch_mods_side_effect
+    else:
+        mock.batch_mods.return_value = batch_mods_return or {}
+    mock.get_mod_files.return_value = []
+    return mock
 
 
 class TestSyncNexusHistory:
@@ -29,18 +38,21 @@ class TestSyncNexusHistory:
         _setup_respx(
             tracked=[{"domain_name": "cyberpunk2077", "mod_id": 10}],
             endorsed=[],
-            mod_infos={
-                10: {
-                    "name": "CoolMod",
-                    "version": "1.0",
-                    "summary": "A mod",
-                    "author": "Auth",
-                    "category_id": 5,
-                    "endorsement_count": 100,
-                }
-            },
         )
-        result = await sync_nexus_history(game, "key", session)
+        with patch("rippermod_manager.services.nexus_sync.NexusGraphQLClient") as mock_gql_cls:
+            mock_gql_cls.return_value = _make_gql_mock(
+                batch_mods_return={
+                    10: {
+                        "name": "CoolMod",
+                        "version": "1.0",
+                        "summary": "A mod",
+                        "author": "Auth",
+                        "categoryId": 5,
+                        "endorsementCount": 100,
+                    }
+                },
+            )
+            result = await sync_nexus_history(game, "key", session)
         assert result.tracked_mods == 1
         assert result.total_stored == 1
         dl = session.exec(select(NexusDownload)).first()
@@ -63,18 +75,21 @@ class TestSyncNexusHistory:
         _setup_respx(
             tracked=[{"domain_name": "cyberpunk2077", "mod_id": 10}],
             endorsed=[],
-            mod_infos={
-                10: {
-                    "name": "NewName",
-                    "version": "1.0",
-                    "summary": "",
-                    "author": "",
-                    "category_id": 0,
-                    "endorsement_count": 0,
-                }
-            },
         )
-        await sync_nexus_history(game, "key", session)
+        with patch("rippermod_manager.services.nexus_sync.NexusGraphQLClient") as mock_gql_cls:
+            mock_gql_cls.return_value = _make_gql_mock(
+                batch_mods_return={
+                    10: {
+                        "name": "NewName",
+                        "version": "1.0",
+                        "summary": "",
+                        "author": "",
+                        "categoryId": 0,
+                        "endorsementCount": 0,
+                    }
+                },
+            )
+            await sync_nexus_history(game, "key", session)
         dl = session.exec(select(NexusDownload)).first()
         assert dl.mod_name == "NewName"
         assert dl.version == "0.9"  # preserved, NOT overwritten to "1.0"
@@ -91,18 +106,21 @@ class TestSyncNexusHistory:
         _setup_respx(
             tracked=[{"domain_name": "cyberpunk2077", "mod_id": 10}],
             endorsed=[],
-            mod_infos={
-                10: {
-                    "name": "NewMod",
-                    "version": "1.0",
-                    "summary": "",
-                    "author": "",
-                    "category_id": 0,
-                    "endorsement_count": 0,
-                }
-            },
         )
-        await sync_nexus_history(game, "key", session)
+        with patch("rippermod_manager.services.nexus_sync.NexusGraphQLClient") as mock_gql_cls:
+            mock_gql_cls.return_value = _make_gql_mock(
+                batch_mods_return={
+                    10: {
+                        "name": "NewMod",
+                        "version": "1.0",
+                        "summary": "",
+                        "author": "",
+                        "categoryId": 0,
+                        "endorsementCount": 0,
+                    }
+                },
+            )
+            await sync_nexus_history(game, "key", session)
         meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == 10)).first()
         assert meta.version == "1.0"  # metadata SHOULD be updated
 
@@ -113,18 +131,21 @@ class TestSyncNexusHistory:
         _setup_respx(
             tracked=[{"domain_name": "cyberpunk2077", "mod_id": 20}],
             endorsed=[],
-            mod_infos={
-                20: {
-                    "name": "MetaMod",
-                    "version": "2.0",
-                    "summary": "desc",
-                    "author": "me",
-                    "category_id": 3,
-                    "endorsement_count": 50,
-                }
-            },
         )
-        await sync_nexus_history(game, "key", session)
+        with patch("rippermod_manager.services.nexus_sync.NexusGraphQLClient") as mock_gql_cls:
+            mock_gql_cls.return_value = _make_gql_mock(
+                batch_mods_return={
+                    20: {
+                        "name": "MetaMod",
+                        "version": "2.0",
+                        "summary": "desc",
+                        "author": "me",
+                        "categoryId": 3,
+                        "endorsementCount": 50,
+                    }
+                },
+            )
+            await sync_nexus_history(game, "key", session)
         meta = session.exec(select(NexusModMeta)).first()
         assert meta.name == "MetaMod"
         assert meta.author == "me"
@@ -139,18 +160,21 @@ class TestSyncNexusHistory:
                 {"domain_name": "skyrim", "mod_id": 99},
             ],
             endorsed=[],
-            mod_infos={
-                10: {
-                    "name": "CP Mod",
-                    "version": "1.0",
-                    "summary": "",
-                    "author": "",
-                    "category_id": 0,
-                    "endorsement_count": 0,
-                }
-            },
         )
-        result = await sync_nexus_history(game, "key", session)
+        with patch("rippermod_manager.services.nexus_sync.NexusGraphQLClient") as mock_gql_cls:
+            mock_gql_cls.return_value = _make_gql_mock(
+                batch_mods_return={
+                    10: {
+                        "name": "CP Mod",
+                        "version": "1.0",
+                        "summary": "",
+                        "author": "",
+                        "categoryId": 0,
+                        "endorsementCount": 0,
+                    }
+                },
+            )
+            result = await sync_nexus_history(game, "key", session)
         assert result.tracked_mods == 1
         assert result.total_stored == 1
 
@@ -158,14 +182,13 @@ class TestSyncNexusHistory:
     @pytest.mark.asyncio
     async def test_handles_mod_info_failure(self, session, make_game):
         game = make_game()
-        respx.get(f"{BASE_URL}/v1/user/tracked_mods.json").mock(
-            return_value=httpx.Response(200, json=[{"domain_name": "cyberpunk2077", "mod_id": 10}])
+        _setup_respx(
+            tracked=[{"domain_name": "cyberpunk2077", "mod_id": 10}],
+            endorsed=[],
         )
-        respx.get(f"{BASE_URL}/v1/user/endorsements.json").mock(
-            return_value=httpx.Response(200, json=[])
-        )
-        respx.get(f"{BASE_URL}/v1/games/cyberpunk2077/mods/10.json").mock(
-            return_value=httpx.Response(500)
-        )
-        result = await sync_nexus_history(game, "key", session)
+        with patch("rippermod_manager.services.nexus_sync.NexusGraphQLClient") as mock_gql_cls:
+            mock_gql_cls.return_value = _make_gql_mock(
+                batch_mods_side_effect=Exception("GQL batch failed"),
+            )
+            result = await sync_nexus_history(game, "key", session)
         assert result.total_stored == 0

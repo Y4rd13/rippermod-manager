@@ -93,14 +93,19 @@ async def check_updates(
 
     if has_key:
         from rippermod_manager.nexus.client import NexusClient
+        from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
 
-        async with NexusClient(key_setting.value) as client:  # type: ignore[union-attr]
+        async with (
+            NexusClient(key_setting.value) as client,  # type: ignore[union-attr]
+            NexusGraphQLClient(key_setting.value) as gql,  # type: ignore[union-attr]
+        ):
             result = await check_all_updates(
                 game.id,  # type: ignore[arg-type]
                 game.domain_name,
                 client,
                 session,  # type: ignore[arg-type]
                 install_path=game.install_path,
+                gql=gql,
             )
     else:
         result = check_cached_updates(game.id, game.domain_name, session)  # type: ignore[arg-type]

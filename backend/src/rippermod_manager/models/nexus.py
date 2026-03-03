@@ -25,6 +25,7 @@ class NexusModMeta(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     nexus_mod_id: int = Field(index=True, unique=True)
+    uid: str = ""
     game_domain: str = ""
     name: str = ""
     summary: str = ""
@@ -38,6 +39,19 @@ class NexusModMeta(SQLModel, table=True):
     category: str = ""
     picture_url: str = ""
     files_updated_at: datetime | None = None
+
+
+class NexusModRequirement(SQLModel, table=True):
+    __tablename__ = "nexus_mod_requirements"
+
+    id: int | None = Field(default=None, primary_key=True)
+    nexus_mod_id: int = Field(index=True)
+    required_mod_id: int | None = None
+    mod_name: str = ""
+    url: str = ""
+    notes: str = ""
+    is_external: bool = False
+    game_id: int | None = None
 
 
 class NexusModFile(SQLModel, table=True):

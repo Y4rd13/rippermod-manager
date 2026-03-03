@@ -1,7 +1,7 @@
 """Tier 2: MD5 hash matching for mod archives.
 
 Computes MD5 hashes of downloaded archives and looks them up via the Nexus
-v1 md5_search endpoint to identify exact mod+file matches.
+GraphQL v2 batch_file_hashes endpoint for efficient bulk matching.
 """
 
 import hashlib
@@ -12,10 +12,15 @@ from sqlmodel import Session, select
 
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import ArchiveNexusLink
-from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
+from rippermod_manager.nexus.client import NexusRateLimitError
+from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
 from rippermod_manager.schemas.mod import ArchiveMatchResult
 from rippermod_manager.services.install_service import list_available_archives
-from rippermod_manager.services.nexus_helpers import upsert_nexus_mod
+from rippermod_manager.services.nexus_helpers import (
+    graphql_hash_to_mod_info,
+    store_uid_from_gql,
+    upsert_nexus_mod,
+)
 from rippermod_manager.services.progress import ProgressCallback, noop_progress
 
 logger = logging.getLogger(__name__)
@@ -35,7 +40,7 @@ async def match_archives_by_md5(
     session: Session,
     on_progress: ProgressCallback = noop_progress,
 ) -> ArchiveMatchResult:
-    """Compute MD5 hashes of downloaded archives and match via Nexus API."""
+    """Compute MD5 hashes of downloaded archives and batch-match via Nexus GraphQL."""
     archives = list_available_archives(game)
 
     if not archives:
@@ -57,45 +62,34 @@ async def match_archives_by_md5(
             pct = 92 + int((i + 1) / len(archives) * 1)  # 92-93%
             on_progress("md5", f"Hashed {i + 1}/{len(archives)} archives", pct)
 
+    if not archive_hashes:
+        return ArchiveMatchResult(archives_scanned=0, matched=0, unmatched=0)
+
     on_progress("md5", f"Looking up {len(archive_hashes)} hashes on Nexus...", 93)
+
+    all_md5s = [md5 for _, md5 in archive_hashes]
 
     matched = 0
     unmatched = 0
 
-    async with NexusClient(api_key) as client:
-        for i, (archive_path, md5) in enumerate(archive_hashes):
-            # Rate limit safety
-            if client.hourly_remaining is not None and client.hourly_remaining < 5:
-                remaining = len(archive_hashes) - i
-                on_progress("md5", f"Rate limit low, skipping {remaining} lookups", 95)
-                logger.warning(
-                    "Hourly rate limit low (%d), stopping MD5 matching",
-                    client.hourly_remaining,
-                )
-                unmatched += remaining
-                break
+    try:
+        async with NexusGraphQLClient(api_key) as gql:
+            hits = await gql.batch_file_hashes(all_md5s)
 
-            try:
-                results = await client.md5_search(game.domain_name, md5)
-            except NexusRateLimitError:
-                remaining = len(archive_hashes) - i
-                on_progress("md5", f"Rate limited, skipping {remaining} lookups", 95)
-                unmatched += remaining
-                break
-            except Exception:
-                logger.warning("MD5 search failed for %s", archive_path.name)
+        # Build md5 → hit mapping (first hit per md5)
+        md5_to_hit: dict[str, dict] = {}
+        for hit in hits:
+            md5 = hit.get("md5", "")
+            if md5 and md5 not in md5_to_hit:
+                md5_to_hit[md5] = hit
+
+        for archive_path, md5 in archive_hashes:
+            hit = md5_to_hit.get(md5)
+            if not hit:
                 unmatched += 1
                 continue
 
-            if not results:
-                unmatched += 1
-                continue
-
-            # md5_search returns a list of {mod, file_details} objects
-            hit = results[0]
-            mod_info = hit.get("mod", {})
-            file_info = hit.get("file_details", {})
-            mod_id = mod_info.get("mod_id")
+            mod_info, file_info, mod_id = graphql_hash_to_mod_info(hit)
 
             if not mod_id:
                 unmatched += 1
@@ -118,6 +112,12 @@ async def match_archives_by_md5(
                 file_id=file_id,
             )
 
+            # Store UID from GraphQL response
+            mod_file = hit.get("modFile") or {}
+            mod_data = mod_file.get("mod") or {}
+            if mod_data.get("uid"):
+                store_uid_from_gql(session, mod_id, mod_data["uid"])
+
             # Store local filename → mod_id so list_archives can surface it
             existing_link = session.exec(
                 select(ArchiveNexusLink).where(
@@ -137,9 +137,15 @@ async def match_archives_by_md5(
                 )
 
             matched += 1
-            pct = 93 + int((i + 1) / len(archive_hashes) * 2)  # 93-95%
             mod_name = mod_info.get("name", "")
-            on_progress("md5", f"Matched: {mod_name or archive_path.name}", pct)
+            on_progress("md5", f"Matched: {mod_name or archive_path.name}", 94)
+
+    except NexusRateLimitError:
+        on_progress("md5", "Rate limited during batch hash lookup", 95)
+        unmatched = len(archive_hashes) - matched
+    except Exception:
+        logger.warning("Batch MD5 search failed", exc_info=True)
+        unmatched = len(archive_hashes) - matched
 
     session.commit()
     logger.info(
