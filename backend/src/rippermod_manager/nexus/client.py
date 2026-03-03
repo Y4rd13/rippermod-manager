@@ -82,6 +82,30 @@ class NexusClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def _post(self, path: str, data: dict[str, Any] | None = None) -> Any:
+        resp = await self.client.post(path, json=data or {})
+        self._read_rate_limit_headers(resp)
+        if resp.status_code == 429:
+            raise NexusRateLimitError(
+                hourly_remaining=self.hourly_remaining or 0,
+                daily_remaining=self.daily_remaining or 0,
+                reset=resp.headers.get("X-RL-Hourly-Reset", ""),
+            )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def _delete(self, path: str, data: dict[str, Any] | None = None) -> Any:
+        resp = await self.client.request("DELETE", path, json=data or {})
+        self._read_rate_limit_headers(resp)
+        if resp.status_code == 429:
+            raise NexusRateLimitError(
+                hourly_remaining=self.hourly_remaining or 0,
+                daily_remaining=self.daily_remaining or 0,
+                reset=resp.headers.get("X-RL-Hourly-Reset", ""),
+            )
+        resp.raise_for_status()
+        return resp.json()
+
     async def validate_key(self) -> NexusKeyResult:
         try:
             data = await self._get("/v1/users/validate.json")
@@ -152,6 +176,30 @@ class NexusClient:
                     "Premium account required for direct downloads"
                 ) from e
             raise
+
+    async def endorse_mod(self, game_domain: str, mod_id: int, version: str = "") -> Any:
+        return await self._post(
+            f"/v1/games/{game_domain}/mods/{mod_id}/endorse.json",
+            {"Version": version},
+        )
+
+    async def abstain_mod(self, game_domain: str, mod_id: int, version: str = "") -> Any:
+        return await self._post(
+            f"/v1/games/{game_domain}/mods/{mod_id}/abstain.json",
+            {"Version": version},
+        )
+
+    async def track_mod(self, game_domain: str, mod_id: int) -> Any:
+        return await self._post(
+            "/v1/user/tracked_mods.json",
+            {"domain_name": game_domain, "mod_id": mod_id},
+        )
+
+    async def untrack_mod(self, game_domain: str, mod_id: int) -> Any:
+        return await self._delete(
+            "/v1/user/tracked_mods.json",
+            {"domain_name": game_domain, "mod_id": mod_id},
+        )
 
     async def stream_download(
         self,
