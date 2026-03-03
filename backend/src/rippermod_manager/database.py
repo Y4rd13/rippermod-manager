@@ -84,6 +84,11 @@ def _migrate_missing_columns() -> None:
             "conflict_dismissed",
             "ALTER TABLE installed_mods ADD COLUMN conflict_dismissed BOOLEAN DEFAULT 0",
         ),
+        (
+            "nexus_mod_meta",
+            "uid",
+            "ALTER TABLE nexus_mod_meta ADD COLUMN uid TEXT DEFAULT ''",
+        ),
     ]
     with Session(engine) as session:
         for table, column, ddl in migrations:

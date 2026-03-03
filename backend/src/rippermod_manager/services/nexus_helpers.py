@@ -41,9 +41,9 @@ def graphql_mod_to_rest_info(gql_mod: dict[str, Any]) -> dict[str, Any]:
         "description": gql_mod.get("description", ""),
         "version": gql_mod.get("version", ""),
         "author": gql_mod.get("author", ""),
-        "endorsement_count": gql_mod.get("endorsementCount", 0),
-        "mod_downloads": gql_mod.get("modDownloads", 0),
-        "category_id": gql_mod.get("categoryId"),
+        "endorsement_count": gql_mod.get("endorsements", 0),
+        "mod_downloads": gql_mod.get("downloads", 0),
+        "category_id": gql_mod.get("category", ""),
         "picture_url": gql_mod.get("pictureUrl", ""),
         "created_timestamp": _iso_to_epoch(gql_mod.get("createdAt")),
         "updated_timestamp": _iso_to_epoch(gql_mod.get("updatedAt")),
@@ -57,10 +57,9 @@ def graphql_file_to_rest_file(gql_file: dict[str, Any]) -> dict[str, Any]:
         "file_name": gql_file.get("name", ""),
         "version": gql_file.get("version", ""),
         "category_id": gql_file.get("categoryId"),
-        "category_name": gql_file.get("categoryName", ""),
-        "uploaded_timestamp": _iso_to_epoch(gql_file.get("uploadedAt")),
+        "category_name": gql_file.get("category", ""),
+        "uploaded_timestamp": gql_file.get("date"),
         "size_in_bytes": gql_file.get("size") or 0,
-        "content_preview_link": gql_file.get("contentPreviewLink"),
         "description": gql_file.get("description"),
     }
 
@@ -81,9 +80,9 @@ def graphql_hash_to_mod_info(
         "summary": mod.get("summary", ""),
         "version": mod.get("version", ""),
         "author": mod.get("author", ""),
-        "endorsement_count": mod.get("endorsementCount", 0),
-        "mod_downloads": mod.get("modDownloads", 0),
-        "category_id": mod.get("categoryId"),
+        "endorsement_count": mod.get("endorsements", 0),
+        "mod_downloads": mod.get("downloads", 0),
+        "category_id": mod.get("category", ""),
         "picture_url": mod.get("pictureUrl", ""),
         "created_timestamp": _iso_to_epoch(mod.get("createdAt")),
         "updated_timestamp": _iso_to_epoch(mod.get("updatedAt")),
@@ -137,15 +136,16 @@ def upsert_mod_requirements(
         session.delete(req)
 
     for req_data in gql_requirements:
-        url = req_data.get("modUrl", "")
-        required_mod_id = req_data.get("modId")
-        is_external = not url or "nexusmods.com" not in url
+        url = req_data.get("url", "")
+        raw_mod_id = req_data.get("modId")
+        required_mod_id = int(raw_mod_id) if raw_mod_id else None
+        is_external = req_data.get("externalRequirement", False)
 
         session.add(
             NexusModRequirement(
                 nexus_mod_id=nexus_mod_id,
                 required_mod_id=required_mod_id,
-                mod_name=req_data.get("name", ""),
+                mod_name=req_data.get("modName", ""),
                 url=url,
                 notes=req_data.get("notes", ""),
                 is_external=is_external,

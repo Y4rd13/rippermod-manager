@@ -163,7 +163,8 @@ async def mod_detail(
         if gql_mod.get("uid"):
             store_uid_from_gql(session, mod_id, gql_mod["uid"])
         # Store requirements
-        gql_reqs = gql_mod.get("modRequirements") or []
+        mod_reqs = gql_mod.get("modRequirements") or {}
+        gql_reqs = (mod_reqs.get("nexusRequirements") or {}).get("nodes") or []
         if gql_reqs:
             upsert_mod_requirements(session, mod_id, gql_reqs)
         session.commit()
@@ -429,9 +430,9 @@ async def search_nexus_mods(
             author=m.get("author", ""),
             version=m.get("version", ""),
             picture_url=m.get("pictureUrl", ""),
-            endorsement_count=m.get("endorsementCount", 0),
-            mod_downloads=m.get("modDownloads", 0),
-            category_id=m.get("categoryId"),
+            endorsement_count=m.get("endorsements", 0),
+            mod_downloads=m.get("downloads", 0),
+            category_id=m.get("category"),
             nexus_url=f"https://www.nexusmods.com/{game.domain_name}/mods/{m.get('modId', 0)}",
         )
         for m in results
