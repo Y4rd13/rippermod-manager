@@ -72,6 +72,7 @@ class ModConflictSummary(BaseModel):
     conflict_count: int
     severity: InboxSeverity
     conflicting_mod_names: list[str]
+    dismissed: bool = False
 
 
 class ModConflictDetail(BaseModel):
@@ -85,6 +86,7 @@ class ModConflictDetail(BaseModel):
 class ConflictsOverview(BaseModel):
     total_conflicts: int
     mods_affected: int
+    dismissed_count: int = 0
     summaries: list[ModConflictSummary]
 
 
@@ -96,6 +98,11 @@ class ResolveResult(BaseModel):
     installed_mod_id: int
     files_extracted: int
     files_reclaimed: int
+
+
+class DismissResult(BaseModel):
+    mod_id: int
+    dismissed: bool
 
 
 # --- Conflict graph visualization ---

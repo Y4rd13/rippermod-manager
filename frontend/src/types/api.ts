@@ -365,6 +365,7 @@ export interface ModConflictSummary {
   conflict_count: number;
   severity: ConflictSeverity;
   conflicting_mod_names: string[];
+  dismissed: boolean;
 }
 
 export interface ModConflictDetail {
@@ -378,6 +379,7 @@ export interface ModConflictDetail {
 export interface ConflictsOverview {
   total_conflicts: number;
   mods_affected: number;
+  dismissed_count: number;
   summaries: ModConflictSummary[];
 }
 
@@ -385,6 +387,11 @@ export interface ResolveResult {
   installed_mod_id: number;
   files_extracted: number;
   files_reclaimed: number;
+}
+
+export interface DismissResult {
+  mod_id: number;
+  dismissed: boolean;
 }
 
 // Profile feature types

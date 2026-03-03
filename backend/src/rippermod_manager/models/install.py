@@ -16,6 +16,7 @@ class InstalledMod(SQLModel, table=True):
     upload_timestamp: int | None = None
     installed_version: str = ""
     disabled: bool = False
+    conflict_dismissed: bool = False
     installed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     mod_group_id: int | None = Field(default=None, foreign_key="mod_groups.id")
 

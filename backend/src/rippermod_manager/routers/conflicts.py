@@ -24,6 +24,7 @@ from rippermod_manager.schemas.conflicts import (
     ConflictGraphResult,
     ConflictSeverity,
     ConflictsOverview,
+    DismissResult,
     InstalledConflictsResult,
     ModConflictDetail,
     PairwiseConflictResult,
@@ -37,9 +38,11 @@ from rippermod_manager.services.conflict_service import (
 )
 from rippermod_manager.services.conflicts.engine import ConflictEngine
 from rippermod_manager.services.conflicts_inbox_service import (
+    dismiss_conflict,
     get_conflicts_overview,
     get_mod_conflict_detail,
     resolve_conflict,
+    restore_conflict,
 )
 
 logger = logging.getLogger(__name__)
@@ -299,6 +302,34 @@ def inbox_resolve(
         raise HTTPException(400, str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
+
+
+@_engine_router.post("/inbox/{mod_id}/dismiss", response_model=DismissResult)
+def inbox_dismiss(
+    game_name: str,
+    mod_id: int,
+    session: Session = Depends(get_session),
+) -> DismissResult:
+    """Dismiss a mod's conflicts (acknowledge as expected)."""
+    game = get_game_or_404(game_name, session)
+    mod = session.get(InstalledMod, mod_id)
+    if not mod or mod.game_id != game.id:
+        raise HTTPException(404, "Installed mod not found")
+    return dismiss_conflict(mod, session)
+
+
+@_engine_router.delete("/inbox/{mod_id}/dismiss", response_model=DismissResult)
+def inbox_restore(
+    game_name: str,
+    mod_id: int,
+    session: Session = Depends(get_session),
+) -> DismissResult:
+    """Restore a dismissed mod back to the active conflict inbox."""
+    game = get_game_or_404(game_name, session)
+    mod = session.get(InstalledMod, mod_id)
+    if not mod or mod.game_id != game.id:
+        raise HTTPException(404, "Installed mod not found")
+    return restore_conflict(mod, session)
 
 
 # --- Conflict graph visualization ---
