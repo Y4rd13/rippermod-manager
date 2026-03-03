@@ -192,9 +192,7 @@ async def mod_detail(
             and (meta.files_updated_at is None or meta.updated_at > meta.files_updated_at)
         )
         needs_backfill = (
-            not needs_insert
-            and not needs_refresh
-            and any(f.description is None for f in files)
+            not needs_insert and not needs_refresh and any(f.description is None for f in files)
         )
 
         try:
@@ -285,9 +283,7 @@ async def mod_detail(
             if gql_reqs:
                 upsert_mod_requirements(session, mod_id, gql_reqs)
                 req_rows = session.exec(
-                    select(NexusModRequirement).where(
-                        NexusModRequirement.nexus_mod_id == mod_id
-                    )
+                    select(NexusModRequirement).where(NexusModRequirement.nexus_mod_id == mod_id)
                 ).all()
             meta.requirements_fetched_at = datetime.now(UTC)
             session.commit()
@@ -295,6 +291,7 @@ async def mod_detail(
             logger.debug("Failed to backfill requirements for mod %d", mod_id, exc_info=True)
 
     from rippermod_manager.schemas.nexus import ModRequirementOut
+
     requirements = [
         ModRequirementOut(
             nexus_mod_id=r.nexus_mod_id,
