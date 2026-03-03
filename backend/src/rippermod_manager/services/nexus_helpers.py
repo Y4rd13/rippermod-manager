@@ -99,9 +99,7 @@ def graphql_hash_to_mod_info(
     return mod_info, file_info, mod_id
 
 
-def store_uid_from_gql(
-    session: Session, nexus_mod_id: int, uid: str
-) -> None:
+def store_uid_from_gql(session: Session, nexus_mod_id: int, uid: str) -> None:
     """Store the global UID in NexusModMeta if not already set."""
     if not uid:
         return
@@ -133,9 +131,7 @@ def upsert_mod_requirements(
 
     # Delete existing requirements for this mod
     existing = session.exec(
-        select(NexusModRequirement).where(
-            NexusModRequirement.nexus_mod_id == nexus_mod_id
-        )
+        select(NexusModRequirement).where(NexusModRequirement.nexus_mod_id == nexus_mod_id)
     ).all()
     for req in existing:
         session.delete(req)

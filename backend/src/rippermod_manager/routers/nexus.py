@@ -462,9 +462,7 @@ def _get_or_create_download(
     return dl
 
 
-async def _resolve_mod_uid(
-    api_key: str, game_domain: str, mod_id: int, session: Session
-) -> str:
+async def _resolve_mod_uid(api_key: str, game_domain: str, mod_id: int, session: Session) -> str:
     """Get or fetch the mod UID needed for GraphQL mutations."""
     from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
     from rippermod_manager.services.nexus_helpers import get_stored_uid, store_uid_from_gql

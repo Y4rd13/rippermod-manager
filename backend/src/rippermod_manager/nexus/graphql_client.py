@@ -119,9 +119,7 @@ class NexusGraphQLClient:
             raise ValueError(f"Unknown game domain: {game_domain}")
         return gid
 
-    async def _execute(
-        self, query: str, variables: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    async def _execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
         payload: dict[str, Any] = {"query": query}
         if variables:
             payload["variables"] = variables
@@ -164,9 +162,7 @@ class NexusGraphQLClient:
         gid = self._game_id(game_domain)
         query = (
             "query GetModFiles($modId: Int!, $gameId: Int!) {"
-            "  modFiles(modId: $modId, gameId: $gameId) {"
-            + _MOD_FILE_FIELDS
-            + "  }"
+            "  modFiles(modId: $modId, gameId: $gameId) {" + _MOD_FILE_FIELDS + "  }"
             "}"
         )
         data = await self._execute(query, {"modId": mod_id, "gameId": gid})
@@ -223,9 +219,7 @@ class NexusGraphQLClient:
 
     # -- Batch mods via aliases ----------------------------------------------
 
-    async def batch_mods(
-        self, game_domain: str, mod_ids: list[int]
-    ) -> dict[int, dict[str, Any]]:
+    async def batch_mods(self, game_domain: str, mod_ids: list[int]) -> dict[int, dict[str, Any]]:
         """Fetch multiple mods in one query using GraphQL aliases.
 
         Returns a dict keyed by mod_id.
@@ -262,9 +256,7 @@ class NexusGraphQLClient:
         query = (
             "query SearchMods($filter: ModsFilter!, $count: Int!) {"
             "  mods(filter: $filter, count: $count) {"
-            "    nodes {"
-            + _MOD_FIELDS
-            + "    }"
+            "    nodes {" + _MOD_FIELDS + "    }"
             "  }"
             "}"
         )

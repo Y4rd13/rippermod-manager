@@ -329,9 +329,7 @@ async def _refresh_metadata(
         if gql_mod.get("uid"):
             store_uid_from_gql(session, mod_id, gql_mod["uid"])
 
-        meta = session.exec(
-            select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)
-        ).first()
+        meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
         if meta:
             meta.version = info.get("version", meta.version)
             ts = info.get("updated_timestamp")
