@@ -82,6 +82,7 @@ export function DownloadQueueFooter() {
     : `${terminalJobs.length} completed`;
 
   return (
+    <>
     <div className="fixed bottom-0 left-0 right-0 z-30 animate-slide-up bg-surface-1 border-t border-border">
       <button
         onClick={toggleFooter}
@@ -178,24 +179,25 @@ export function DownloadQueueFooter() {
           </>
         )}
       </div>
-
-      {fomodArchive && (
-        <FomodWizard
-          gameName={activeGameName!}
-          archiveFilename={fomodArchive}
-          onDismiss={dismissFomod}
-          onInstallComplete={dismissFomod}
-        />
-      )}
-
-      {conflicts && (
-        <ConflictDialog
-          conflicts={conflicts}
-          onCancel={dismissConflicts}
-          onSkip={handleInstallWithSkip}
-          onOverwrite={handleInstallOverwrite}
-        />
-      )}
     </div>
+
+    {fomodArchive && (
+      <FomodWizard
+        gameName={activeGameName!}
+        archiveFilename={fomodArchive}
+        onDismiss={dismissFomod}
+        onInstallComplete={dismissFomod}
+      />
+    )}
+
+    {conflicts && (
+      <ConflictDialog
+        conflicts={conflicts}
+        onCancel={dismissConflicts}
+        onSkip={handleInstallWithSkip}
+        onOverwrite={handleInstallOverwrite}
+      />
+    )}
+    </>
   );
 }
