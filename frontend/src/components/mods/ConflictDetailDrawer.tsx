@@ -89,9 +89,6 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, dismi
     if (uninstallMod.isSuccess) onClose();
   }, [uninstallMod.isSuccess, onClose]);
 
-  useEffect(() => {
-    if (dismiss.isSuccess || restore.isSuccess) onClose();
-  }, [dismiss.isSuccess, restore.isSuccess, onClose]);
 
   const grouped = useMemo(() => {
     if (!detail?.evidence.length) return [];
@@ -193,19 +190,19 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, dismi
             </div>
           )}
 
-          {grouped.map(([winnerName, { files }]) => (
-            <div key={winnerName}>
+          {grouped.map(([groupWinnerName, { files }]) => (
+            <div key={groupWinnerName}>
               <div className="flex items-center gap-2 mb-2">
                 <AlertTriangle size={14} className="text-warning shrink-0" />
                 <h3 className="text-sm font-medium text-text-primary truncate">
-                  Overwritten by {winnerName}
+                  Overwritten by {groupWinnerName}
                 </h3>
                 <span className="text-xs text-text-muted shrink-0">
                   {files.length} file{files.length !== 1 ? "s" : ""}
                 </span>
               </div>
               <div className="max-h-[40vh] overflow-y-auto rounded border border-border bg-surface-0 p-3">
-                <FileTreeView tree={trees.get(winnerName) ?? []} showSize={false} />
+                <FileTreeView tree={trees.get(groupWinnerName) ?? []} showSize={false} />
               </div>
             </div>
           ))}
@@ -234,7 +231,7 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, dismi
           {dismissed ? (
             <Button
               variant="secondary"
-              onClick={() => restore.mutate({ gameName, modId })}
+              onClick={() => restore.mutate({ gameName, modId }, { onSuccess: onClose })}
               loading={restore.isPending}
             >
               <Bell size={14} /> Restore
@@ -242,7 +239,7 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, dismi
           ) : (
             <Button
               variant="secondary"
-              onClick={() => dismiss.mutate({ gameName, modId })}
+              onClick={() => dismiss.mutate({ gameName, modId }, { onSuccess: onClose })}
               loading={dismiss.isPending}
             >
               <BellOff size={14} /> Dismiss
