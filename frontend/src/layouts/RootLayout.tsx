@@ -12,12 +12,14 @@ import { useAppUpdater } from "@/hooks/use-app-updater";
 import { useDownloadSync } from "@/hooks/use-download-sync";
 import { useHasOpenaiKey } from "@/hooks/queries";
 import { ScrollContainerContext } from "@/hooks/use-scroll-container";
+import { useDownloadStore } from "@/stores/download-store";
 import { useUIStore } from "@/stores/ui-store";
 
 export function RootLayout() {
   useAppUpdater(); // Triggers auto-check on startup; UI lives in SettingsPage
   const activeGameName = useUIStore((s) => s.activeGameName);
   useDownloadSync(activeGameName);
+  const hasDownloads = useDownloadStore((s) => Object.keys(s.jobs).length > 0);
   const toggleChatPanel = useUIStore((s) => s.toggleChatPanel);
   const setChatPanelOpen = useUIStore((s) => s.setChatPanelOpen);
   const hasOpenaiKey = useHasOpenaiKey();
@@ -62,7 +64,7 @@ export function RootLayout() {
       <Titlebar />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
-        <main ref={mainRef} id="main-content" className="flex-1 overflow-y-auto bg-surface-0 p-6">
+        <main ref={mainRef} id="main-content" className={`flex-1 overflow-y-auto bg-surface-0 p-6 ${hasDownloads && activeGameName ? "pb-16" : ""}`}>
           <ScrollContainerContext value={mainRef}>
             <ErrorBoundary>
               <Outlet />
