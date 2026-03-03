@@ -225,8 +225,9 @@ export function ProfileManager({ profiles, gameName, isLoading = false, installe
       if (!filePath) return;
       await writeTextFile(filePath, JSON.stringify(data, null, 2));
       toast.success("Profile exported");
-    } catch {
-      // Error state handled by React Query
+    } catch (err) {
+      if (!(err instanceof Error && err.message.includes("cancelled")))
+        toast.error("Failed to export profile");
     }
   };
 

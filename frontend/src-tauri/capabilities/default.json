@@ -17,7 +17,7 @@
     "core:window:allow-start-dragging",
     "core:window:allow-set-focus",
     "dialog:default",
-    "fs:default",
+    "fs:allow-write-text-file",
     "core:app:default",
     "deep-link:default",
     "opener:default",
