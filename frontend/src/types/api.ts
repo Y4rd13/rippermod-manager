@@ -573,6 +573,15 @@ export interface ModActionResult {
   is_tracked?: boolean;
 }
 
+export interface ModRequirement {
+  nexus_mod_id: number;
+  required_mod_id: number | null;
+  mod_name: string;
+  url: string;
+  notes: string;
+  is_external: boolean;
+}
+
 export interface ModDetail {
   nexus_mod_id: number;
   game_domain: string;
@@ -590,6 +599,7 @@ export interface ModDetail {
   nexus_url: string;
   changelogs: Record<string, string[]>;
   files: NexusModFileDetail[];
+  requirements: ModRequirement[];
   is_tracked: boolean;
   is_endorsed: boolean;
 }

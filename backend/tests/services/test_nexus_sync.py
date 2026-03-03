@@ -47,8 +47,8 @@ class TestSyncNexusHistory:
                         "version": "1.0",
                         "summary": "A mod",
                         "author": "Auth",
-                        "categoryId": 5,
-                        "endorsementCount": 100,
+                        "category": "5",
+                        "endorsements": 100,
                     }
                 },
             )
@@ -84,8 +84,8 @@ class TestSyncNexusHistory:
                         "version": "1.0",
                         "summary": "",
                         "author": "",
-                        "categoryId": 0,
-                        "endorsementCount": 0,
+                        "category": "0",
+                        "endorsements": 0,
                     }
                 },
             )
@@ -115,8 +115,8 @@ class TestSyncNexusHistory:
                         "version": "1.0",
                         "summary": "",
                         "author": "",
-                        "categoryId": 0,
-                        "endorsementCount": 0,
+                        "category": "0",
+                        "endorsements": 0,
                     }
                 },
             )
@@ -140,8 +140,8 @@ class TestSyncNexusHistory:
                         "version": "2.0",
                         "summary": "desc",
                         "author": "me",
-                        "categoryId": 3,
-                        "endorsementCount": 50,
+                        "category": "3",
+                        "endorsements": 50,
                     }
                 },
             )
@@ -169,8 +169,8 @@ class TestSyncNexusHistory:
                         "version": "1.0",
                         "summary": "",
                         "author": "",
-                        "categoryId": 0,
-                        "endorsementCount": 0,
+                        "category": "0",
+                        "endorsements": 0,
                     }
                 },
             )

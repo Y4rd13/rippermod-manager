@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlparse
 
@@ -163,9 +164,16 @@ async def mod_detail(
         if gql_mod.get("uid"):
             store_uid_from_gql(session, mod_id, gql_mod["uid"])
         # Store requirements
-        gql_reqs = gql_mod.get("modRequirements") or []
+        mod_reqs = gql_mod.get("modRequirements") or {}
+        gql_reqs = (mod_reqs.get("nexusRequirements") or {}).get("nodes") or []
         if gql_reqs:
             upsert_mod_requirements(session, mod_id, gql_reqs)
+        # Mark requirements as fetched (even if empty) to avoid repeated API calls
+        fresh_meta = session.exec(
+            select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)
+        ).first()
+        if fresh_meta:
+            fresh_meta.requirements_fetched_at = datetime.now(UTC)
         session.commit()
         meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
 
@@ -184,9 +192,7 @@ async def mod_detail(
             and (meta.files_updated_at is None or meta.updated_at > meta.files_updated_at)
         )
         needs_backfill = (
-            not needs_insert
-            and not needs_refresh
-            and any(f.content_preview_link is None or f.description is None for f in files)
+            not needs_insert and not needs_refresh and any(f.description is None for f in files)
         )
 
         try:
@@ -232,8 +238,6 @@ async def mod_detail(
                         if not f.file_id:
                             continue
                         af = api_files.get(f.file_id)
-                        if af and f.content_preview_link is None:
-                            f.content_preview_link = af.get("content_preview_link")
                         if af and f.description is None:
                             f.description = af.get("description")
                     session.commit()
@@ -266,12 +270,28 @@ async def mod_detail(
             )
         ).first()
 
-    # Load requirements
-    from rippermod_manager.schemas.nexus import ModRequirementOut
-
+    # Backfill requirements for mods cached before this feature
     req_rows = session.exec(
         select(NexusModRequirement).where(NexusModRequirement.nexus_mod_id == mod_id)
     ).all()
+    if not req_rows and api_key and not meta.requirements_fetched_at:
+        try:
+            async with NexusGraphQLClient(api_key) as gql:
+                gql_mod = await gql.get_mod(game_domain, mod_id)
+            mod_reqs = gql_mod.get("modRequirements") or {}
+            gql_reqs = (mod_reqs.get("nexusRequirements") or {}).get("nodes") or []
+            if gql_reqs:
+                upsert_mod_requirements(session, mod_id, gql_reqs)
+                req_rows = session.exec(
+                    select(NexusModRequirement).where(NexusModRequirement.nexus_mod_id == mod_id)
+                ).all()
+            meta.requirements_fetched_at = datetime.now(UTC)
+            session.commit()
+        except Exception:
+            logger.debug("Failed to backfill requirements for mod %d", mod_id, exc_info=True)
+
+    from rippermod_manager.schemas.nexus import ModRequirementOut
+
     requirements = [
         ModRequirementOut(
             nexus_mod_id=r.nexus_mod_id,
@@ -429,9 +449,9 @@ async def search_nexus_mods(
             author=m.get("author", ""),
             version=m.get("version", ""),
             picture_url=m.get("pictureUrl", ""),
-            endorsement_count=m.get("endorsementCount", 0),
-            mod_downloads=m.get("modDownloads", 0),
-            category_id=m.get("categoryId"),
+            endorsement_count=m.get("endorsements", 0),
+            mod_downloads=m.get("downloads", 0),
+            category_id=m.get("category"),
             nexus_url=f"https://www.nexusmods.com/{game.domain_name}/mods/{m.get('modId', 0)}",
         )
         for m in results

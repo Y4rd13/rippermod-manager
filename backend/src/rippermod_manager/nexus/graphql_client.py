@@ -47,10 +47,10 @@ _MOD_FIELDS = """
     author
     createdAt
     updatedAt
-    endorsementCount
-    modDownloads: downloadCount
+    endorsements
+    downloads
     pictureUrl
-    categoryId
+    category
     modCategory {
         name
     }
@@ -59,11 +59,17 @@ _MOD_FIELDS = """
 
 _MOD_REQUIREMENT_FIELDS = """
     modRequirements {
-        id
-        modId
-        name
-        modUrl
-        notes
+        nexusRequirements {
+            nodes {
+                id
+                modId
+                modName
+                url
+                notes
+                externalRequirement
+                gameId
+            }
+        }
     }
 """
 
@@ -72,11 +78,10 @@ _MOD_FILE_FIELDS = """
     name
     version
     categoryId
-    categoryName
+    category
     size
-    uploadedAt
+    date
     description
-    contentPreviewLink
 """
 
 
@@ -145,7 +150,7 @@ class NexusGraphQLClient:
         """Fetch a single mod with requirements."""
         gid = self._game_id(game_domain)
         query = (
-            "query GetMod($modId: Int!, $gameId: Int!) {"
+            "query GetMod($modId: ID!, $gameId: ID!) {"
             "  mod(modId: $modId, gameId: $gameId) {"
             + _MOD_FIELDS
             + _MOD_REQUIREMENT_FIELDS
@@ -161,7 +166,7 @@ class NexusGraphQLClient:
         """Fetch file list for a mod."""
         gid = self._game_id(game_domain)
         query = (
-            "query GetModFiles($modId: Int!, $gameId: Int!) {"
+            "query GetModFiles($modId: ID!, $gameId: ID!) {"
             "  modFiles(modId: $modId, gameId: $gameId) {" + _MOD_FILE_FIELDS + "  }"
             "}"
         )
@@ -189,9 +194,9 @@ class NexusGraphQLClient:
                         name
                         version
                         categoryId
-                        categoryName
+                        category
                         size
-                        uploadedAt
+                        date
                         mod {
                             uid
                             modId
@@ -201,10 +206,10 @@ class NexusGraphQLClient:
                             author
                             createdAt
                             updatedAt
-                            endorsementCount
-                            modDownloads: downloadCount
+                            endorsements
+                            downloads
                             pictureUrl
-                            categoryId
+                            category
                             status
                         }
                     }
@@ -262,8 +267,8 @@ class NexusGraphQLClient:
         )
         variables = {
             "filter": {
-                "gameId": {"value": gid, "op": "EQUALS"},
-                "name": {"value": f"*{name}*", "op": "WILDCARD"},
+                "gameId": [{"value": str(gid), "op": "EQUALS"}],
+                "name": [{"value": f"*{name}*", "op": "WILDCARD"}],
             },
             "count": count,
         }
@@ -283,14 +288,14 @@ class NexusGraphQLClient:
     ) -> list[dict[str, Any]]:
         """Search inside mod archives by file path or extension."""
         gid = self._game_id(game_domain)
-        filter_obj: dict[str, Any] = {"gameId": {"value": gid, "op": "EQUALS"}}
+        filter_obj: dict[str, Any] = {"gameId": [{"value": str(gid), "op": "EQUALS"}]}
         if file_path_wildcard:
-            filter_obj["filePathWildcard"] = file_path_wildcard
+            filter_obj["filePathWildcard"] = [{"value": file_path_wildcard, "op": "WILDCARD"}]
         if file_extension:
-            filter_obj["fileExtensionExact"] = file_extension
+            filter_obj["fileExtensionExact"] = [{"value": file_extension, "op": "EQUALS"}]
 
         query = """
-        query SearchFileContents($filter: ModFileContentsFilter!, $count: Int!) {
+        query SearchFileContents($filter: ModFileContentSearchFilter!, $count: Int!) {
             modFileContents(filter: $filter, count: $count) {
                 nodes {
                     filePath
@@ -315,7 +320,7 @@ class NexusGraphQLClient:
 
     async def endorse_mod(self, mod_uid: str) -> dict[str, Any]:
         query = """
-        mutation EndorseMod($modUid: String!) {
+        mutation EndorseMod($modUid: ID!) {
             createModEndorsement(modUid: $modUid) {
                 success
             }
@@ -326,7 +331,7 @@ class NexusGraphQLClient:
 
     async def abstain_mod(self, mod_uid: str) -> dict[str, Any]:
         query = """
-        mutation AbstainMod($modUid: String!) {
+        mutation AbstainMod($modUid: ID!) {
             abstainFromModEndorsement(modUid: $modUid) {
                 success
             }
@@ -337,7 +342,7 @@ class NexusGraphQLClient:
 
     async def track_mod(self, mod_uid: str) -> dict[str, Any]:
         query = """
-        mutation TrackMod($modUid: String!) {
+        mutation TrackMod($modUid: ID!) {
             trackMod(modUid: $modUid) {
                 success
             }
@@ -348,7 +353,7 @@ class NexusGraphQLClient:
 
     async def untrack_mod(self, mod_uid: str) -> dict[str, Any]:
         query = """
-        mutation UntrackMod($modUid: String!) {
+        mutation UntrackMod($modUid: ID!) {
             untrackMod(modUid: $modUid) {
                 success
             }
@@ -363,7 +368,7 @@ class NexusGraphQLClient:
         """Fetch the global UID for a mod (needed for mutations)."""
         gid = self._game_id(game_domain)
         query = """
-        query GetModUid($modId: Int!, $gameId: Int!) {
+        query GetModUid($modId: ID!, $gameId: ID!) {
             mod(modId: $modId, gameId: $gameId) {
                 uid
             }
