@@ -598,7 +598,7 @@ async def check_all_updates(
         if gql:
             await _refresh_metadata(gql, game_domain, to_refresh, session)
         else:
-            async with NexusGraphQLClient(client._api_key) as gql_tmp:
+            async with NexusGraphQLClient(client.api_key) as gql_tmp:
                 await _refresh_metadata(gql_tmp, game_domain, to_refresh, session)
 
     # Reload metadata after refresh

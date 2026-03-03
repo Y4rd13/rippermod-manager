@@ -121,7 +121,7 @@ class NexusGraphQLClient:
 
     async def _execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
         payload: dict[str, Any] = {"query": query}
-        if variables:
+        if variables is not None:
             payload["variables"] = variables
 
         resp = await self.client.post(GQL_URL, json=payload)

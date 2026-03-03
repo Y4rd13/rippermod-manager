@@ -13,6 +13,7 @@ from rippermod_manager.models.settings import AppSetting
 
 if TYPE_CHECKING:
     from rippermod_manager.models.nexus import NexusDownload
+    from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
 from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.install import ArchiveContentsResult, ArchiveEntryOut
 from rippermod_manager.schemas.nexus import (
@@ -462,7 +463,13 @@ def _get_or_create_download(
     return dl
 
 
-async def _resolve_mod_uid(api_key: str, game_domain: str, mod_id: int, session: Session) -> str:
+async def _resolve_mod_uid(
+    api_key: str,
+    game_domain: str,
+    mod_id: int,
+    session: Session,
+    gql: "NexusGraphQLClient | None" = None,
+) -> str:
     """Get or fetch the mod UID needed for GraphQL mutations."""
     from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
     from rippermod_manager.services.nexus_helpers import get_stored_uid, store_uid_from_gql
@@ -471,8 +478,11 @@ async def _resolve_mod_uid(api_key: str, game_domain: str, mod_id: int, session:
     if uid:
         return uid
 
-    async with NexusGraphQLClient(api_key) as gql:
+    if gql:
         uid = await gql.fetch_mod_uid(game_domain, mod_id)
+    else:
+        async with NexusGraphQLClient(api_key) as tmp:
+            uid = await tmp.fetch_mod_uid(game_domain, mod_id)
     store_uid_from_gql(session, mod_id, uid)
     session.flush()
     return uid
@@ -491,8 +501,8 @@ async def endorse_mod(
     from rippermod_manager.nexus.graphql_client import NexusGraphQLClient, NexusGraphQLError
 
     try:
-        uid = await _resolve_mod_uid(api_key, game.domain_name, mod_id, session)
         async with NexusGraphQLClient(api_key) as gql:
+            uid = await _resolve_mod_uid(api_key, game.domain_name, mod_id, session, gql=gql)
             await gql.endorse_mod(uid)
     except NexusRateLimitError as e:
         raise HTTPException(429, f"Rate limited: {e}") from e
@@ -518,8 +528,8 @@ async def abstain_mod(
     from rippermod_manager.nexus.graphql_client import NexusGraphQLClient, NexusGraphQLError
 
     try:
-        uid = await _resolve_mod_uid(api_key, game.domain_name, mod_id, session)
         async with NexusGraphQLClient(api_key) as gql:
+            uid = await _resolve_mod_uid(api_key, game.domain_name, mod_id, session, gql=gql)
             await gql.abstain_mod(uid)
     except NexusRateLimitError as e:
         raise HTTPException(429, f"Rate limited: {e}") from e
@@ -545,8 +555,8 @@ async def track_mod(
     from rippermod_manager.nexus.graphql_client import NexusGraphQLClient, NexusGraphQLError
 
     try:
-        uid = await _resolve_mod_uid(api_key, game.domain_name, mod_id, session)
         async with NexusGraphQLClient(api_key) as gql:
+            uid = await _resolve_mod_uid(api_key, game.domain_name, mod_id, session, gql=gql)
             await gql.track_mod(uid)
     except NexusRateLimitError as e:
         raise HTTPException(429, f"Rate limited: {e}") from e
@@ -572,8 +582,8 @@ async def untrack_mod(
     from rippermod_manager.nexus.graphql_client import NexusGraphQLClient, NexusGraphQLError
 
     try:
-        uid = await _resolve_mod_uid(api_key, game.domain_name, mod_id, session)
         async with NexusGraphQLClient(api_key) as gql:
+            uid = await _resolve_mod_uid(api_key, game.domain_name, mod_id, session, gql=gql)
             await gql.untrack_mod(uid)
     except NexusRateLimitError as e:
         raise HTTPException(429, f"Rate limited: {e}") from e

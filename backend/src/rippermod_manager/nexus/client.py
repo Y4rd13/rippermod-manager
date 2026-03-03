@@ -35,6 +35,10 @@ class NexusClient:
         self.hourly_remaining: int | None = None
         self.daily_remaining: int | None = None
 
+    @property
+    def api_key(self) -> str:
+        return self._api_key
+
     async def __aenter__(self) -> Self:
         self._client = httpx.AsyncClient(
             base_url=BASE_URL,

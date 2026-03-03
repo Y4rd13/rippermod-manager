@@ -14,7 +14,11 @@ class NexusAPIClient:
 
     async def __aenter__(self) -> Self:
         await self.rest.__aenter__()
-        await self.gql.__aenter__()
+        try:
+            await self.gql.__aenter__()
+        except Exception:
+            await self.rest.__aexit__(None, None, None)
+            raise
         return self
 
     async def __aexit__(
