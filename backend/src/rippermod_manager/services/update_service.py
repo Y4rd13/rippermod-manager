@@ -34,8 +34,13 @@ from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.models.mod import ModFile, ModGroup
 from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 from rippermod_manager.nexus.client import NexusClient
+from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
 from rippermod_manager.services.download_dates import archive_download_dates
-from rippermod_manager.services.nexus_helpers import match_local_to_nexus_file
+from rippermod_manager.services.nexus_helpers import (
+    graphql_mod_to_rest_info,
+    match_local_to_nexus_file,
+    store_uid_from_gql,
+)
 from rippermod_manager.services.settings_helpers import get_setting, set_setting
 from rippermod_manager.utils.paths import build_file_path, to_native_path
 
@@ -304,50 +309,49 @@ def collect_tracked_mods(
 
 
 async def _refresh_metadata(
-    client: NexusClient,
+    gql: NexusGraphQLClient,
     game_domain: str,
     mod_ids: set[int],
     session: Session,
 ) -> None:
-    """Refresh NexusModMeta for a set of mod IDs via concurrent get_mod_info calls."""
+    """Refresh NexusModMeta for a set of mod IDs via GraphQL batch query."""
     if not mod_ids:
         return
 
-    sem = asyncio.Semaphore(_MAX_CONCURRENT)
+    try:
+        batch_result = await gql.batch_mods(game_domain, sorted(mod_ids))
+    except Exception:
+        logger.warning("Batch metadata refresh failed", exc_info=True)
+        return
 
-    async def refresh_one(mod_id: int) -> None:
-        async with sem:
-            try:
-                info = await client.get_mod_info(game_domain, mod_id)
-            except (httpx.HTTPError, ValueError):
-                logger.warning("Failed to refresh metadata for mod %d", mod_id)
-                return
-            meta = session.exec(
-                select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)
-            ).first()
-            if meta:
-                meta.version = info.get("version", meta.version)
-                ts = info.get("updated_timestamp")
-                if ts:
-                    meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)
-                session.add(meta)
-            else:
-                new_meta = NexusModMeta(
-                    nexus_mod_id=mod_id,
-                    game_domain=game_domain,
-                    name=info.get("name", ""),
-                    version=info.get("version", ""),
-                    author=info.get("author", ""),
-                    summary=info.get("summary", ""),
-                    endorsement_count=info.get("endorsement_count", 0),
-                    picture_url=info.get("picture_url", ""),
-                )
-                ts = info.get("updated_timestamp")
-                if ts:
-                    new_meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)
-                session.add(new_meta)
+    for mod_id, gql_mod in batch_result.items():
+        info = graphql_mod_to_rest_info(gql_mod)
+        if gql_mod.get("uid"):
+            store_uid_from_gql(session, mod_id, gql_mod["uid"])
 
-    await asyncio.gather(*(refresh_one(mid) for mid in mod_ids))
+        meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
+        if meta:
+            meta.version = info.get("version", meta.version)
+            ts = info.get("updated_timestamp")
+            if ts:
+                meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)
+            session.add(meta)
+        else:
+            new_meta = NexusModMeta(
+                nexus_mod_id=mod_id,
+                game_domain=game_domain,
+                name=info.get("name", ""),
+                version=info.get("version", ""),
+                author=info.get("author", ""),
+                summary=info.get("summary", ""),
+                endorsement_count=info.get("endorsement_count", 0),
+                picture_url=info.get("picture_url", ""),
+            )
+            ts = info.get("updated_timestamp")
+            if ts:
+                new_meta.updated_at = datetime.fromtimestamp(ts, tz=UTC)
+            session.add(new_meta)
+
     session.commit()
 
 
@@ -519,6 +523,7 @@ async def check_all_updates(
     client: NexusClient,
     session: Session,
     install_path: str = "",
+    gql: NexusGraphQLClient | None = None,
 ) -> UpdateResult:
     """Unified update check with timestamp-first detection.
 
@@ -590,7 +595,11 @@ async def check_all_updates(
     )
 
     if to_refresh:
-        await _refresh_metadata(client, game_domain, to_refresh, session)
+        if gql:
+            await _refresh_metadata(gql, game_domain, to_refresh, session)
+        else:
+            async with NexusGraphQLClient(client.api_key) as gql_tmp:
+                await _refresh_metadata(gql_tmp, game_domain, to_refresh, session)
 
     # Reload metadata after refresh
     meta_rows = session.exec(

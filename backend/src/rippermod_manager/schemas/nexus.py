@@ -106,6 +106,15 @@ class ModActionResult(BaseModel):
     is_tracked: bool | None = None
 
 
+class ModRequirementOut(BaseModel):
+    nexus_mod_id: int
+    required_mod_id: int | None = None
+    mod_name: str = ""
+    url: str = ""
+    notes: str = ""
+    is_external: bool = False
+
+
 class ModDetailOut(BaseModel):
     nexus_mod_id: int
     game_domain: str
@@ -123,8 +132,22 @@ class ModDetailOut(BaseModel):
     nexus_url: str
     changelogs: dict[str, list[str]]
     files: list[NexusModFileOut]
+    requirements: list[ModRequirementOut] = []
     is_tracked: bool = False
     is_endorsed: bool = False
+
+
+class NexusModSearchResult(BaseModel):
+    mod_id: int
+    name: str
+    summary: str = ""
+    author: str = ""
+    version: str = ""
+    picture_url: str = ""
+    endorsement_count: int = 0
+    mod_downloads: int = 0
+    category_id: int | None = None
+    nexus_url: str = ""
 
 
 class SSOStartResult(BaseModel):

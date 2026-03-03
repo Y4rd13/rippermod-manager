@@ -10,13 +10,147 @@ from typing import TYPE_CHECKING, Any
 
 from sqlmodel import Session, select
 
-from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
+from rippermod_manager.models.nexus import NexusDownload, NexusModMeta, NexusModRequirement
 from rippermod_manager.services.settings_helpers import get_setting, set_setting
 
 if TYPE_CHECKING:
     from rippermod_manager.nexus.client import NexusClient
 
 logger = logging.getLogger(__name__)
+
+
+# -- GraphQL → REST adapter functions ----------------------------------------
+
+
+def _iso_to_epoch(iso_str: str | None) -> int | None:
+    """Convert ISO 8601 timestamp to Unix epoch seconds."""
+    if not iso_str:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        return int(dt.timestamp())
+    except (ValueError, TypeError):
+        return None
+
+
+def graphql_mod_to_rest_info(gql_mod: dict[str, Any]) -> dict[str, Any]:
+    """Convert a GraphQL Mod object to a REST-compatible dict for upsert_nexus_mod()."""
+    return {
+        "name": gql_mod.get("name", ""),
+        "summary": gql_mod.get("summary", ""),
+        "description": gql_mod.get("description", ""),
+        "version": gql_mod.get("version", ""),
+        "author": gql_mod.get("author", ""),
+        "endorsement_count": gql_mod.get("endorsementCount", 0),
+        "mod_downloads": gql_mod.get("modDownloads", 0),
+        "category_id": gql_mod.get("categoryId"),
+        "picture_url": gql_mod.get("pictureUrl", ""),
+        "created_timestamp": _iso_to_epoch(gql_mod.get("createdAt")),
+        "updated_timestamp": _iso_to_epoch(gql_mod.get("updatedAt")),
+    }
+
+
+def graphql_file_to_rest_file(gql_file: dict[str, Any]) -> dict[str, Any]:
+    """Convert a GraphQL ModFile object to a REST-compatible file dict."""
+    return {
+        "file_id": gql_file.get("fileId"),
+        "file_name": gql_file.get("name", ""),
+        "version": gql_file.get("version", ""),
+        "category_id": gql_file.get("categoryId"),
+        "category_name": gql_file.get("categoryName", ""),
+        "uploaded_timestamp": _iso_to_epoch(gql_file.get("uploadedAt")),
+        "size_in_bytes": gql_file.get("size") or 0,
+        "content_preview_link": gql_file.get("contentPreviewLink"),
+        "description": gql_file.get("description"),
+    }
+
+
+def graphql_hash_to_mod_info(
+    hit: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], int | None]:
+    """Convert a GraphQL FileHash result to (mod_info, file_info, mod_id).
+
+    Returns REST-compatible dicts suitable for upsert_nexus_mod().
+    """
+    mod_file = hit.get("modFile") or {}
+    mod = mod_file.get("mod") or {}
+    mod_id = mod.get("modId")
+
+    mod_info = {
+        "name": mod.get("name", ""),
+        "summary": mod.get("summary", ""),
+        "version": mod.get("version", ""),
+        "author": mod.get("author", ""),
+        "endorsement_count": mod.get("endorsementCount", 0),
+        "mod_downloads": mod.get("modDownloads", 0),
+        "category_id": mod.get("categoryId"),
+        "picture_url": mod.get("pictureUrl", ""),
+        "created_timestamp": _iso_to_epoch(mod.get("createdAt")),
+        "updated_timestamp": _iso_to_epoch(mod.get("updatedAt")),
+    }
+
+    file_info = {
+        "file_id": mod_file.get("fileId"),
+        "file_name": mod_file.get("name") or hit.get("fileName", ""),
+        "version": mod_file.get("version", ""),
+        "category_id": mod_file.get("categoryId"),
+    }
+
+    return mod_info, file_info, mod_id
+
+
+def store_uid_from_gql(session: Session, nexus_mod_id: int, uid: str) -> None:
+    """Store the global UID in NexusModMeta if not already set."""
+    if not uid:
+        return
+    meta = session.exec(
+        select(NexusModMeta).where(NexusModMeta.nexus_mod_id == nexus_mod_id)
+    ).first()
+    if meta and not meta.uid:
+        meta.uid = uid
+
+
+def get_stored_uid(session: Session, nexus_mod_id: int) -> str | None:
+    """Get stored UID for a mod, or None if not yet stored."""
+    meta = session.exec(
+        select(NexusModMeta).where(NexusModMeta.nexus_mod_id == nexus_mod_id)
+    ).first()
+    if meta and meta.uid:
+        return meta.uid
+    return None
+
+
+def upsert_mod_requirements(
+    session: Session,
+    nexus_mod_id: int,
+    gql_requirements: list[dict[str, Any]],
+) -> None:
+    """Replace requirements for a mod from GraphQL modRequirements data."""
+    if not gql_requirements:
+        return
+
+    # Delete existing requirements for this mod
+    existing = session.exec(
+        select(NexusModRequirement).where(NexusModRequirement.nexus_mod_id == nexus_mod_id)
+    ).all()
+    for req in existing:
+        session.delete(req)
+
+    for req_data in gql_requirements:
+        url = req_data.get("modUrl", "")
+        required_mod_id = req_data.get("modId")
+        is_external = not url or "nexusmods.com" not in url
+
+        session.add(
+            NexusModRequirement(
+                nexus_mod_id=nexus_mod_id,
+                required_mod_id=required_mod_id,
+                mod_name=req_data.get("name", ""),
+                url=url,
+                notes=req_data.get("notes", ""),
+                is_external=is_external,
+            )
+        )
 
 
 def match_local_to_nexus_file(

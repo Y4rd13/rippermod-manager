@@ -481,15 +481,22 @@ class TestCheckAllUpdates:
             client.get_updated_mods.return_value = [
                 {"mod_id": 10, "latest_file_update": 9999, "latest_mod_activity": 9999},
             ]
-            client.get_mod_info.return_value = {"version": "2.0", "updated_timestamp": 9999}
             client.get_mod_files.return_value = {
                 "files": [{"file_id": 1, "category_id": 1, "uploaded_timestamp": 9999}]
             }
 
-            result = await check_all_updates(game.id, "g", client, s)
+            gql = AsyncMock()
+            gql.batch_mods.return_value = {
+                10: {
+                    "version": "2.0",
+                    "updatedAt": datetime.fromtimestamp(9999, tz=UTC).isoformat(),
+                }
+            }
+
+            result = await check_all_updates(game.id, "g", client, s, gql=gql)
 
             client.get_updated_mods.assert_called_once_with("g", "1m")
-            client.get_mod_info.assert_called_once_with("g", 10)
+            gql.batch_mods.assert_called_once()
             assert result.total_checked == 2
             assert len(result.updates) == 1
             assert result.updates[0]["nexus_mod_id"] == 10
@@ -556,18 +563,22 @@ class TestCheckAllUpdates:
             client.get_updated_mods.return_value = [
                 {"mod_id": 10, "latest_file_update": 5000},
             ]
-            client.get_mod_info.return_value = {
-                "version": "1.0",
-                "updated_timestamp": 5000,
-                "name": "SameVer",
-            }
             client.get_mod_files.return_value = {
                 "files": [
                     {"file_id": 99, "category_id": 1, "uploaded_timestamp": 5000, "version": "1.0"}
                 ]
             }
 
-            result = await check_all_updates(game.id, "g", client, s)
+            gql = AsyncMock()
+            gql.batch_mods.return_value = {
+                10: {
+                    "name": "SameVer",
+                    "version": "1.0",
+                    "updatedAt": datetime.fromtimestamp(5000, tz=UTC).isoformat(),
+                }
+            }
+
+            result = await check_all_updates(game.id, "g", client, s, gql=gql)
 
             assert result.total_checked == 1
             assert len(result.updates) == 0
@@ -678,22 +689,26 @@ class TestCheckAllUpdates:
             client.get_updated_mods.return_value = [
                 {"mod_id": 10, "latest_file_update": 5000},
             ]
-            # After refresh, version changes to 2.0
-            client.get_mod_info.return_value = {
-                "version": "2.0",
-                "updated_timestamp": 5000,
-                "name": "NullTs",
-            }
             client.get_mod_files.return_value = {
                 "files": [
                     {"file_id": 1, "category_id": 1, "uploaded_timestamp": 5000, "version": "2.0"}
                 ]
             }
 
-            result = await check_all_updates(game.id, "g", client, s)
+            # After refresh, version changes to 2.0
+            gql = AsyncMock()
+            gql.batch_mods.return_value = {
+                10: {
+                    "name": "NullTs",
+                    "version": "2.0",
+                    "updatedAt": datetime.fromtimestamp(5000, tz=UTC).isoformat(),
+                }
+            }
+
+            result = await check_all_updates(game.id, "g", client, s, gql=gql)
 
             # NULL updated_at should trigger refresh
-            client.get_mod_info.assert_called_once_with("g", 10)
+            gql.batch_mods.assert_called_once()
             assert result.total_checked == 1
             assert len(result.updates) == 1
 
@@ -729,19 +744,23 @@ class TestCheckAllUpdates:
             client.get_updated_mods.return_value = [
                 {"mod_id": 10, "latest_file_update": 5000},
             ]
-            client.get_mod_info.return_value = {
-                "version": "2.0",
-                "updated_timestamp": 5000,
-                "name": "CacheMod",
-            }
             client.get_mod_files.return_value = {
                 "files": [
                     {"file_id": 1, "category_id": 1, "uploaded_timestamp": 5000, "version": "2.0"}
                 ]
             }
 
+            gql = AsyncMock()
+            gql.batch_mods.return_value = {
+                10: {
+                    "name": "CacheMod",
+                    "version": "2.0",
+                    "updatedAt": datetime.fromtimestamp(5000, tz=UTC).isoformat(),
+                }
+            }
+
             # POST: check_all_updates caches result
-            post_result = await check_all_updates(game.id, "g", client, s)
+            post_result = await check_all_updates(game.id, "g", client, s, gql=gql)
             assert len(post_result.updates) == 1
 
             # GET: check_cached_updates reads the cache
@@ -901,11 +920,6 @@ class TestCheckAllUpdates:
             client.get_updated_mods.return_value = [
                 {"mod_id": 42, "latest_file_update": nexus_12h_ago},
             ]
-            client.get_mod_info.return_value = {
-                "version": "1.0",
-                "updated_timestamp": nexus_12h_ago,
-                "name": "Lizzie Braindances",
-            }
             client.get_mod_files.return_value = {
                 "files": [
                     {
@@ -918,7 +932,16 @@ class TestCheckAllUpdates:
                 "file_updates": [],
             }
 
-            result = await check_all_updates(game.id, "g", client, s)
+            gql = AsyncMock()
+            gql.batch_mods.return_value = {
+                42: {
+                    "name": "Lizzie Braindances",
+                    "version": "1.0",
+                    "updatedAt": datetime.fromtimestamp(nexus_12h_ago, tz=UTC).isoformat(),
+                }
+            }
+
+            result = await check_all_updates(game.id, "g", client, s, gql=gql)
 
             assert result.total_checked == 1
             assert len(result.updates) == 1, (
