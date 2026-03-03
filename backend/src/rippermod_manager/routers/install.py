@@ -43,6 +43,7 @@ from rippermod_manager.services.install_service import (
 )
 from rippermod_manager.services.redscript_analysis import check_redscript_conflicts
 from rippermod_manager.services.settings_helpers import get_setting
+from rippermod_manager.services.update_service import invalidate_update_cache
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +212,8 @@ async def install(
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
 
+    invalidate_update_cache(game.id, session)  # type: ignore[arg-type]
+
     # Best-effort background resolution of nexus_file_id (does not block response)
     api_key = get_setting(session, "nexus_api_key")
     if api_key:
@@ -239,7 +242,9 @@ async def uninstall(
     mod = session.get(InstalledMod, mod_id)
     if not mod or mod.game_id != game.id:
         raise HTTPException(404, "Installed mod not found")
-    return uninstall_mod(mod, game, session)
+    result = uninstall_mod(mod, game, session)
+    invalidate_update_cache(game.id, session)  # type: ignore[arg-type]
+    return result
 
 
 @router.patch("/installed/{mod_id}/toggle", response_model=ToggleResult)

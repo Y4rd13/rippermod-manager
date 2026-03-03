@@ -149,6 +149,7 @@ export function useInstallMod() {
     onSuccess: (result, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
+      qc.invalidateQueries({ queryKey: ["updates", gameName] });
       toast.success("Mod installed", `${result.files_extracted} files extracted`);
       if (result.files_overwritten > 0) {
         toast.warning(
@@ -169,6 +170,7 @@ export function useUninstallMod() {
     onSuccess: (_, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
+      qc.invalidateQueries({ queryKey: ["updates", gameName] });
       toast.success("Mod uninstalled");
     },
     onError: () => toast.error("Failed to uninstall mod"),
