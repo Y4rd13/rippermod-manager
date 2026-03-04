@@ -15,7 +15,7 @@ from rippermod_manager.models.game import Game
 from rippermod_manager.models.mod import ModGroup
 from rippermod_manager.models.nexus import NexusDownload
 from rippermod_manager.nexus.client import NexusRateLimitError
-from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
+from rippermod_manager.nexus.graphql_client import NexusGraphQLClient, NexusGraphQLError
 from rippermod_manager.schemas.mod import RequirementMatchResult
 from rippermod_manager.services.nexus_helpers import upsert_nexus_mod
 from rippermod_manager.services.progress import ProgressCallback, noop_progress
@@ -75,8 +75,8 @@ async def match_by_collections(
             # Search top collections for this game
             try:
                 collections = await gql.search_collections(game.domain_name, count=10)
-            except (NexusRateLimitError, httpx.HTTPError):
-                logger.warning("Failed to search collections")
+            except (NexusRateLimitError, NexusGraphQLError, httpx.HTTPError):
+                logger.warning("Failed to search collections", exc_info=True)
                 return RequirementMatchResult(requirements_checked=0, matched=0)
 
             newly_matched_groups: set[int] = set()
@@ -91,7 +91,7 @@ async def match_by_collections(
 
                 try:
                     revision = await gql.get_collection_revision(slug, rev_num, game.domain_name)
-                except (NexusRateLimitError, httpx.HTTPError):
+                except (NexusRateLimitError, NexusGraphQLError, httpx.HTTPError):
                     logger.debug("Failed to fetch collection %s rev %d", slug, rev_num)
                     continue
 
