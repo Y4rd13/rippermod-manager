@@ -8,6 +8,7 @@ import asyncio
 import logging
 import re
 
+import httpx
 from sqlmodel import Session, select
 
 from rippermod_manager.models.correlation import ModNexusCorrelation
@@ -129,7 +130,7 @@ async def search_unmatched_mods(
                 except NexusRateLimitError:
                     logger.warning("Rate limited during web search enrichment")
                     break
-                except Exception:
+                except httpx.HTTPError:
                     logger.warning("Failed to fetch mod info for %s/%d", game.domain_name, mod_id)
                     continue
 

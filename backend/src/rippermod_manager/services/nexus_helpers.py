@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
+import httpx
 from sqlmodel import Session, select
 
 from rippermod_manager.models.nexus import NexusDownload, NexusModMeta, NexusModRequirement
@@ -366,6 +367,6 @@ async def get_game_categories(
             )
             session.flush()
         return categories
-    except Exception:
+    except httpx.HTTPError:
         logger.warning("Failed to fetch game categories for %s", game_domain, exc_info=True)
         return {}

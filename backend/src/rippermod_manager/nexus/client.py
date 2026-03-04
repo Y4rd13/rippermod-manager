@@ -6,6 +6,7 @@ from types import TracebackType
 from typing import Any, Self
 
 import httpx
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from rippermod_manager.schemas.nexus import NexusKeyResult
 
@@ -26,6 +27,23 @@ class NexusRateLimitError(Exception):
 
 class NexusPremiumRequiredError(Exception):
     pass
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """Retry on 429, 5xx, and transient connection errors."""
+    if isinstance(exc, NexusRateLimitError):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code >= 500:
+        return True
+    return isinstance(exc, httpx.TransportError)
+
+
+_nexus_retry = retry(
+    retry=retry_if_exception(_is_retryable),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=2, max=30),
+    reraise=True,
+)
 
 
 class NexusClient:
@@ -79,23 +97,26 @@ class NexusClient:
                 reset=resp.headers.get("X-RL-Hourly-Reset", ""),
             )
 
-    async def _get(self, path: str) -> Any:
-        resp = await self.client.get(path)
+    @_nexus_retry
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        data: dict[str, Any] | None = None,
+    ) -> Any:
+        resp = await self.client.request(method, path, json=data)
         self._check_rate_limit(resp)
         resp.raise_for_status()
         return resp.json()
+
+    async def _get(self, path: str) -> Any:
+        return await self._request("GET", path)
 
     async def _post(self, path: str, data: dict[str, Any] | None = None) -> Any:
-        resp = await self.client.post(path, json=data or {})
-        self._check_rate_limit(resp)
-        resp.raise_for_status()
-        return resp.json()
+        return await self._request("POST", path, data or {})
 
     async def _delete(self, path: str, data: dict[str, Any] | None = None) -> Any:
-        resp = await self.client.request("DELETE", path, json=data or {})
-        self._check_rate_limit(resp)
-        resp.raise_for_status()
-        return resp.json()
+        return await self._request("DELETE", path, data or {})
 
     async def validate_key(self) -> NexusKeyResult:
         try:

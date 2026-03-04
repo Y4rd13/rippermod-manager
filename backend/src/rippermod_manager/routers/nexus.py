@@ -199,7 +199,7 @@ async def mod_detail(
             async with NexusClient(api_key) as rest_client:
                 try:
                     changelogs = await rest_client.get_changelogs(game_domain, mod_id)
-                except Exception:
+                except httpx.HTTPError:
                     logger.debug("Failed to fetch changelogs for mod %d", mod_id, exc_info=True)
 
             if needs_insert or needs_refresh or needs_backfill:
@@ -240,7 +240,7 @@ async def mod_detail(
                         if af and f.description is None:
                             f.description = af.get("description")
                     session.commit()
-        except Exception:
+        except httpx.HTTPError:
             logger.debug(
                 "Failed to fetch/backfill file metadata for mod %d",
                 mod_id,
@@ -286,7 +286,7 @@ async def mod_detail(
                 ).all()
             meta.requirements_fetched_at = datetime.now(UTC)
             session.commit()
-        except Exception:
+        except httpx.HTTPError:
             logger.debug("Failed to backfill requirements for mod %d", mod_id, exc_info=True)
 
     from rippermod_manager.schemas.nexus import ModRequirementOut
@@ -612,23 +612,13 @@ async def sso_poll(session_uuid: str, session: Session = Depends(get_session)) -
         raise HTTPException(404, "SSO session not found or expired")
 
     if sso.status.value == "success" and sso.api_key and not sso.result_persisted:
-        setting = session.exec(select(AppSetting).where(AppSetting.key == "nexus_api_key")).first()
-        if setting:
-            setting.value = sso.api_key
-        else:
-            setting = AppSetting(key="nexus_api_key", value=sso.api_key)
-            session.add(setting)
+        from rippermod_manager.services.settings_helpers import set_setting
+
+        set_setting(session, "nexus_api_key", sso.api_key)
 
         if sso.result and sso.result.username:
-            for k, v in [
-                ("nexus_username", sso.result.username),
-                ("nexus_is_premium", str(sso.result.is_premium).lower()),
-            ]:
-                row = session.exec(select(AppSetting).where(AppSetting.key == k)).first()
-                if row:
-                    row.value = v
-                else:
-                    session.add(AppSetting(key=k, value=v))
+            set_setting(session, "nexus_username", sso.result.username)
+            set_setting(session, "nexus_is_premium", str(sso.result.is_premium).lower())
 
         session.commit()
         sso.result_persisted = True

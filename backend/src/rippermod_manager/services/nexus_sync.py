@@ -1,5 +1,6 @@
 import logging
 
+import httpx
 from sqlmodel import Session, select
 
 from rippermod_manager.models.game import Game
@@ -56,7 +57,7 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
                         store_uid_from_gql(session, mod_id, gql_mod["uid"])
             except NexusRateLimitError:
                 logger.warning("Rate limited during batch mod fetch in sync")
-            except Exception:
+            except httpx.HTTPError:
                 logger.warning("Batch mod fetch failed in sync", exc_info=True)
 
         for mod_id in all_mod_ids:
@@ -91,7 +92,7 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
             except NexusRateLimitError:
                 logger.warning("Rate limited fetching files, stopping file sync")
                 break
-            except Exception:
+            except httpx.HTTPError:
                 logger.warning("Failed to fetch files for %s/%d", game.domain_name, mod_id)
                 continue
 

@@ -9,6 +9,7 @@ per-mod get_mod_files() for file resolution.
 
 import logging
 
+import httpx
 from sqlmodel import Session, select
 
 from rippermod_manager.matching.filename_parser import parse_mod_filename
@@ -118,7 +119,7 @@ async def enrich_from_filename_ids(
                                 break
                     except NexusRateLimitError:
                         logger.debug("Rate limited fetching files for mod %d", mod_id)
-                    except Exception:
+                    except httpx.HTTPError:
                         logger.debug("Could not fetch files for mod %d", mod_id)
 
                 upsert_nexus_mod(
@@ -138,7 +139,7 @@ async def enrich_from_filename_ids(
     except NexusRateLimitError:
         on_progress("enrich", "Rate limited during enrichment", 91)
         logger.warning("Rate limited during enrichment")
-    except Exception:
+    except httpx.HTTPError:
         logger.warning("Enrichment batch failed", exc_info=True)
 
     session.commit()

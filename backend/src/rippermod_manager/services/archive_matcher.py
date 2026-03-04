@@ -8,6 +8,7 @@ import hashlib
 import logging
 from pathlib import Path
 
+import httpx
 from sqlmodel import Session, select
 
 from rippermod_manager.models.game import Game
@@ -143,7 +144,7 @@ async def match_archives_by_md5(
     except NexusRateLimitError:
         on_progress("md5", "Rate limited during batch hash lookup", 95)
         unmatched = len(archive_hashes) - matched
-    except Exception:
+    except httpx.HTTPError:
         logger.warning("Batch MD5 search failed", exc_info=True)
         unmatched = len(archive_hashes) - matched
 

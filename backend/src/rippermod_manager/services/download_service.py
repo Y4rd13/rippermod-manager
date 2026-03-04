@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import unquote
 
+import httpx
 from sqlmodel import Session, col, select
 
 from rippermod_manager.database import engine
@@ -78,10 +79,10 @@ async def create_and_start_download(
                 file_name_from_api = True
                 file_size = target_file.get("size_in_bytes") or 0
             else:
-                file_name = f"{nexus_mod_id}-{nexus_file_id}"
-        except Exception:
+                file_name = f"mod-{nexus_mod_id}-file-{nexus_file_id}.unknown"
+        except httpx.HTTPError:
             logger.warning("Could not fetch file metadata for %d/%d", nexus_mod_id, nexus_file_id)
-            file_name = f"{nexus_mod_id}-{nexus_file_id}"
+            file_name = f"mod-{nexus_mod_id}-file-{nexus_file_id}.unknown"
 
         # Sanitize filename to prevent path traversal
         file_name = Path(file_name).name

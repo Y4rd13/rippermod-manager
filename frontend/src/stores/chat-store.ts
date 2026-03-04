@@ -34,6 +34,8 @@ interface ChatState {
   clearMessages: () => void;
 }
 
+const MAX_MESSAGES = 200;
+
 export const useChatStore = create<ChatState>((set) => ({
   messages: [],
   isStreaming: false,
@@ -41,7 +43,11 @@ export const useChatStore = create<ChatState>((set) => ({
   reasoningEffort: "none",
   suggestedActions: [],
   abortController: null,
-  addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),
+  addMessage: (msg) =>
+    set((s) => {
+      const messages = [...s.messages, msg];
+      return { messages: messages.length > MAX_MESSAGES ? messages.slice(-MAX_MESSAGES) : messages };
+    }),
   appendToLast: (content) =>
     set((s) => {
       const msgs = [...s.messages];

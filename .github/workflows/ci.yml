@@ -72,7 +72,7 @@ jobs:
         run: uv run ruff format --check src/ tests/
 
       - name: Tests
-        run: uv run pytest tests/ -v --tb=short
+        run: uv run pytest tests/ -v --tb=short --cov=rippermod_manager --cov-report=term-missing
 
   frontend:
     name: "Frontend: Lint & Build"

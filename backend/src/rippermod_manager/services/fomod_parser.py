@@ -63,7 +63,7 @@ def _parse_fomod_info_xml(xml_bytes: bytes) -> ArchiveMetadata | None:
             text = xml_bytes[3:]
 
         root = DefusedET.fromstring(text)
-    except Exception:
+    except (SyntaxError, ValueError, UnicodeDecodeError):
         return None
 
     def _get_text(tag: str) -> str | None:
