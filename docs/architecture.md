@@ -53,7 +53,7 @@ rippermod-manager/
 │   │   ├── nexus/                   # Nexus Mods API clients
 │   │   │   ├── client.py            # REST v1 API client (reads + mutations)
 │   │   │   └── graphql_client.py    # GraphQL v2 client (batch + search)
-│   │   ├── services/                # Business logic (35 modules)
+│   │   ├── services/                # Business logic (33 modules)
 │   │   │   ├── nexus_sync.py        # Sync tracked/endorsed mods
 │   │   │   ├── nexus_helpers.py     # GQL→REST adapters, game categories
 │   │   │   ├── download_service.py  # Download orchestration + shutdown

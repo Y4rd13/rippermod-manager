@@ -70,8 +70,8 @@ rippermod-manager/
 │   ├── src/rippermod_manager/
 │   │   ├── models/          # 12 SQLModel table modules
 │   │   ├── schemas/         # Pydantic request/response models
-│   │   ├── routers/         # 15 API routers (67 endpoints)
-│   │   ├── services/        # 35 business logic modules
+│   │   ├── routers/         # 15 API routers (91 endpoints)
+│   │   ├── services/        # 33 business logic modules
 │   │   ├── scanner/         # File discovery + grouping
 │   │   ├── matching/        # TF-IDF, correlation, filename parsing
 │   │   ├── nexus/           # REST v1 + GraphQL v2 API clients
