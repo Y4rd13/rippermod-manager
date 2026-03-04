@@ -320,7 +320,7 @@ async def _refresh_metadata(
 
     try:
         batch_result = await gql.batch_mods(game_domain, sorted(mod_ids))
-    except Exception:
+    except httpx.HTTPError:
         logger.warning("Batch metadata refresh failed", exc_info=True)
         return
 

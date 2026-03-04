@@ -188,7 +188,7 @@ class TestSyncNexusHistory:
         )
         with patch("rippermod_manager.services.nexus_sync.NexusGraphQLClient") as mock_gql_cls:
             mock_gql_cls.return_value = _make_gql_mock(
-                batch_mods_side_effect=Exception("GQL batch failed"),
+                batch_mods_side_effect=httpx.HTTPError("GQL batch failed"),
             )
             result = await sync_nexus_history(game, "key", session)
         assert result.total_stored == 0

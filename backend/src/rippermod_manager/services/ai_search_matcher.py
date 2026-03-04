@@ -10,6 +10,7 @@ import json
 import logging
 import re
 
+import httpx
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from sqlmodel import Session, select
@@ -272,7 +273,7 @@ async def ai_search_unmatched_mods(
                 except NexusRateLimitError:
                     logger.warning("Rate limited during AI search enrichment")
                     break
-                except Exception:
+                except httpx.HTTPError:
                     logger.warning("Failed to fetch mod info for %s/%d", game.domain_name, mod_id)
                     continue
 

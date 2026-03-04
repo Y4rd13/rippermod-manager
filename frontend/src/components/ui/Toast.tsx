@@ -25,8 +25,6 @@ const ACCENT_COLORS: Record<ToastType, string> = {
   info: "bg-accent",
 };
 
-const AUTO_DISMISS_MS = 4000;
-
 function ToastItem({ toast }: { toast: ToastData }) {
   const removeToast = useToastStore((s) => s.removeToast);
   const [visible, setVisible] = useState(false);
@@ -37,8 +35,8 @@ function ToastItem({ toast }: { toast: ToastData }) {
   const startTimer = useCallback(() => {
     timerRef.current = setTimeout(() => {
       setDismissing(true);
-    }, AUTO_DISMISS_MS);
-  }, []);
+    }, toast.duration);
+  }, [toast.duration]);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {

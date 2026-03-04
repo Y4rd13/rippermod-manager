@@ -11,6 +11,7 @@ import logging
 import os
 from pathlib import Path
 
+import httpx
 from sqlmodel import Session, select
 
 from rippermod_manager.archive.handler import ArchiveEntry, open_archive
@@ -379,7 +380,7 @@ async def resolve_installed_file_id(
                 nexus_mod_id,
                 category="main,update,optional,miscellaneous",
             )
-    except Exception:
+    except httpx.HTTPError:
         logger.debug("Could not fetch files for mod %d", nexus_mod_id)
         return
 

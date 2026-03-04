@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
 class LoadOrderPreference(SQLModel, table=True):
     __tablename__ = "load_order_preferences"
+    __table_args__ = (UniqueConstraint("game_id", "winner_mod_id", "loser_mod_id"),)
 
     id: int | None = Field(default=None, primary_key=True)
     game_id: int = Field(foreign_key="games.id", index=True)

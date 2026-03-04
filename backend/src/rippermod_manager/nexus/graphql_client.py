@@ -12,7 +12,7 @@ from typing import Any, Self
 
 import httpx
 
-from rippermod_manager.nexus.client import NexusRateLimitError
+from rippermod_manager.nexus.client import NexusRateLimitError, _nexus_retry
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +124,7 @@ class NexusGraphQLClient:
             raise ValueError(f"Unknown game domain: {game_domain}")
         return gid
 
+    @_nexus_retry
     async def _execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
         payload: dict[str, Any] = {"query": query}
         if variables is not None:

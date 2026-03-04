@@ -262,14 +262,18 @@ def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> S
 
                     on_progress("done", f"Done: {result.matched} matched", 100)
 
-                asyncio.run(_run_async_pipeline())
+                loop = asyncio.new_event_loop()
+                try:
+                    loop.run_until_complete(_run_async_pipeline())
+                finally:
+                    loop.close()
         except Exception:
             logger.exception("Scan failed for game '%s'", game_name)
             q.put({"phase": "error", "message": "Scan failed unexpectedly", "percent": 0})
         finally:
             q.put(None)
 
-    threading.Thread(target=run_scan, daemon=True).start()
+    threading.Thread(target=run_scan, daemon=False, name=f"scan-{game_name}").start()
 
     def event_stream():
         while True:

@@ -6,6 +6,7 @@ from sqlmodel import Field, Relationship, SQLModel
 
 class InstalledMod(SQLModel, table=True):
     __tablename__ = "installed_mods"
+    __table_args__ = (UniqueConstraint("game_id", "name"),)
 
     id: int | None = Field(default=None, primary_key=True)
     game_id: int = Field(foreign_key="games.id", index=True)
