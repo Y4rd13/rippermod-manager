@@ -25,7 +25,7 @@ jobs:
     outputs:
       new_release_version: ${{ steps.sr.outputs.new_release_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -51,7 +51,7 @@ jobs:
     env:
       VERSION: ${{ needs.release.outputs.new_release_version || github.event.inputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', github.event.inputs.version) || '' }}
 
