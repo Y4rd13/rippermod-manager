@@ -399,7 +399,7 @@ class NexusGraphQLClient:
             "filter": {
                 "gameDomain": [{"value": game_domain, "op": "EQUALS"}],
             },
-            "sort": [{"endorsements": "DESC"}],
+            "sort": [{"endorsements": {"direction": "DESC"}}],
             "count": count,
         }
         data = await self._execute(query, variables)
