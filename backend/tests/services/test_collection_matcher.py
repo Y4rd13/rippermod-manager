@@ -106,3 +106,69 @@ class TestMatchByCollections:
         assert len(corrs) == 1
         assert corrs[0].method == "collection"
         assert corrs[0].score == 0.85
+
+    @pytest.mark.asyncio
+    async def test_group_with_prior_correlation_skipped(self, session, make_game):
+        """Group that already has a correlation from a prior phase should be skipped."""
+        game = make_game()
+        # Create 3 correlated mods (meets threshold)
+        for i in range(3):
+            g = ModGroup(game_id=game.id, display_name=f"CorrelatedMod{i}")
+            session.add(g)
+            dl = NexusDownload(game_id=game.id, nexus_mod_id=100 + i, mod_name=f"CorrelatedMod{i}")
+            session.add(dl)
+            session.flush()
+            session.add(
+                ModNexusCorrelation(
+                    mod_group_id=g.id,
+                    nexus_download_id=dl.id,
+                    score=1.0,
+                    method="exact",
+                )
+            )
+
+        # "Unmatched" group that already has a correlation from a prior pipeline stage
+        prior_group = ModGroup(game_id=game.id, display_name="Cyber Engine Tweaks")
+        session.add(prior_group)
+        prior_dl = NexusDownload(game_id=game.id, nexus_mod_id=888, mod_name="CET")
+        session.add(prior_dl)
+        session.flush()
+        session.add(
+            ModNexusCorrelation(
+                mod_group_id=prior_group.id,
+                nexus_download_id=prior_dl.id,
+                score=0.95,
+                method="filename_id",
+            )
+        )
+        session.commit()
+
+        collections = [
+            {
+                "slug": "test-coll",
+                "name": "Test Collection",
+                "endorsements": 500,
+                "latestPublishedRevision": {"revisionNumber": 1},
+            }
+        ]
+        revision = {
+            "revisionNumber": 1,
+            "modFiles": [
+                {"file": {"mod": {"modId": 100, "name": "CorrelatedMod0"}}, "optional": False},
+                {"file": {"mod": {"modId": 101, "name": "CorrelatedMod1"}}, "optional": False},
+                {"file": {"mod": {"modId": 102, "name": "CorrelatedMod2"}}, "optional": False},
+                {
+                    "file": {"mod": {"modId": 999, "name": "Cyber Engine Tweaks"}},
+                    "optional": False,
+                },
+            ],
+        }
+
+        with patch("rippermod_manager.services.collection_matcher.NexusGraphQLClient") as mock_cls:
+            mock_cls.return_value = _make_gql_mock(
+                collections=collections, revision_return=revision
+            )
+            result = await match_by_collections(game, "key", session)
+
+        # Group already had a correlation — should not be matched again
+        assert result.matched == 0

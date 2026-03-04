@@ -5,6 +5,7 @@ from sqlmodel import select
 
 from rippermod_manager.models.correlation import ModNexusCorrelation
 from rippermod_manager.models.mod import ModFile, ModGroup
+from rippermod_manager.models.nexus import NexusDownload
 from rippermod_manager.nexus.client import NexusRateLimitError
 from rippermod_manager.services.file_content_matcher import (
     _pick_distinctive_file,
@@ -232,3 +233,91 @@ class TestMatchByFileContents:
 
         assert mock.search_file_contents.call_count == 2
         assert result.groups_searched == 2
+
+    @pytest.mark.asyncio
+    async def test_skips_group_with_existing_correlation(self, session, make_game):
+        """Group that already has a correlation from a prior phase should be skipped."""
+        game = make_game()
+        group = ModGroup(game_id=game.id, display_name="AlreadyMatched")
+        session.add(group)
+        session.flush()
+        session.add(
+            ModFile(
+                mod_group_id=group.id,
+                filename="already_matched_mod.archive",
+                file_path="mods/already_matched_mod.archive",
+                file_hash="abc",
+                file_size=100,
+            )
+        )
+        dl = NexusDownload(game_id=game.id, nexus_mod_id=99, mod_name="Prior Match")
+        session.add(dl)
+        session.flush()
+        session.add(
+            ModNexusCorrelation(
+                mod_group_id=group.id,
+                nexus_download_id=dl.id,
+                score=0.95,
+                method="filename_id",
+            )
+        )
+        session.commit()
+
+        with patch(
+            "rippermod_manager.services.file_content_matcher.NexusGraphQLClient"
+        ) as mock_cls:
+            mock_cls.return_value = self._make_gql_mock()
+            result = await match_by_file_contents(game, "key", session)
+
+        # Group already matched — should not be searched
+        assert result.groups_searched == 0
+        assert result.matched == 0
+
+    @pytest.mark.asyncio
+    async def test_cross_game_correlations_ignored(self, session, make_game):
+        """Correlations from another game should not affect unmatched-group calculation."""
+        game_a = make_game(name="GameA", domain_name="gamea")
+        game_b = make_game(name="GameB", domain_name="gameb")
+
+        # Group in game_a — correlated
+        group_a = ModGroup(game_id=game_a.id, display_name="ModA")
+        session.add(group_a)
+        dl_a = NexusDownload(game_id=game_a.id, nexus_mod_id=50, mod_name="ModA")
+        session.add(dl_a)
+        session.flush()
+        session.add(
+            ModNexusCorrelation(
+                mod_group_id=group_a.id,
+                nexus_download_id=dl_a.id,
+                score=1.0,
+                method="exact",
+            )
+        )
+
+        # Group in game_b — unmatched, should be searched
+        group_b = ModGroup(game_id=game_b.id, display_name="ModB")
+        session.add(group_b)
+        session.flush()
+        session.add(
+            ModFile(
+                mod_group_id=group_b.id,
+                filename="distinctive_mod_b.archive",
+                file_path="mods/distinctive_mod_b.archive",
+                file_hash="h",
+                file_size=100,
+            )
+        )
+        session.commit()
+
+        mock = AsyncMock()
+        mock.__aenter__.return_value = mock
+        mock.search_file_contents.return_value = []
+
+        with patch(
+            "rippermod_manager.services.file_content_matcher.NexusGraphQLClient"
+        ) as mock_cls:
+            mock_cls.return_value = mock
+            result = await match_by_file_contents(game_b, "key", session)
+
+        # game_a's correlation should NOT cause game_b's group to appear "matched"
+        assert result.groups_searched == 1

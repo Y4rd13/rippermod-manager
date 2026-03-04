@@ -189,6 +189,11 @@ def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> S
                 tavily_key = get_setting(session, "tavily_api_key")
 
                 async def _run_async_pipeline() -> None:
+                    fc_matched = 0
+                    fl_matched = 0
+                    en_matched = 0
+                    coll_matched = 0
+
                     if api_key:
                         # Tier 1 — Filename ID enrichment (82-88%)
                         on_progress("enrich", "Enriching from filename IDs...", 82)
@@ -203,10 +208,11 @@ def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> S
                         fc_result = await match_by_file_contents(
                             game, api_key, session, on_progress
                         )
-                        if fc_result.matched:
+                        fc_matched = fc_result.matched
+                        if fc_matched:
                             on_progress(
                                 "file-content",
-                                f"File content: {fc_result.matched} matched",
+                                f"File content: {fc_matched} matched",
                                 90,
                             )
 
@@ -222,20 +228,22 @@ def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> S
                         # File list matching (94%) — between sync and correlate
                         on_progress("file-list", "Matching endorsed mods to local files...", 94)
                         fl_result = match_endorsed_to_local(game, session, on_progress)
-                        if fl_result.matched:
+                        fl_matched = fl_result.matched
+                        if fl_matched:
                             on_progress(
                                 "file-list",
-                                f"File list: {fl_result.matched} endorsed mods matched",
+                                f"File list: {fl_matched} endorsed mods matched",
                                 94,
                             )
 
                         # Endorsed name matching (94-95%) — catch mods without archives
                         on_progress("endorsed-name", "Matching endorsed mods by name...", 94)
                         en_result = match_endorsed_by_name(game, session)
-                        if en_result.matched:
+                        en_matched = en_result.matched
+                        if en_matched:
                             on_progress(
                                 "endorsed-name",
-                                f"Endorsed name: {en_result.matched} mods matched",
+                                f"Endorsed name: {en_matched} mods matched",
                                 95,
                             )
 
@@ -272,10 +280,11 @@ def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> S
                         coll_result = await match_by_collections(
                             game, api_key, session, on_progress
                         )
-                        if coll_result.matched:
+                        coll_matched = coll_result.matched
+                        if coll_matched:
                             on_progress(
                                 "collections",
-                                f"Collections: {coll_result.matched} matched",
+                                f"Collections: {coll_matched} matched",
                                 98,
                             )
 
@@ -307,7 +316,14 @@ def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> S
                                 99,
                             )
 
-                    total_matched = result.matched + req_result.matched
+                    total_matched = (
+                        result.matched
+                        + req_result.matched
+                        + fc_matched
+                        + fl_matched
+                        + en_matched
+                        + coll_matched
+                    )
                     on_progress("done", f"Done: {total_matched} matched", 100)
 
                 loop = asyncio.new_event_loop()

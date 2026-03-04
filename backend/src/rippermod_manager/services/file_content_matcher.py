@@ -88,7 +88,13 @@ async def match_by_file_contents(
             select(ModGroup.id).where(ModGroup.game_id == game.id)  # type: ignore[arg-type]
         ).all()
     )
-    matched_group_ids = set(session.exec(select(ModNexusCorrelation.mod_group_id)).all())
+    matched_group_ids = set(
+        session.exec(
+            select(ModNexusCorrelation.mod_group_id)
+            .join(ModGroup, ModNexusCorrelation.mod_group_id == ModGroup.id)
+            .where(ModGroup.game_id == game.id)
+        ).all()
+    )
     unmatched_ids = all_group_ids - matched_group_ids
 
     if not unmatched_ids:
@@ -188,6 +194,13 @@ async def match_by_file_contents(
                     except (NexusRateLimitError, httpx.HTTPError):
                         logger.debug("Could not fetch mod %d for file content match", nexus_mod_id)
                         continue
+
+                # Check this group doesn't already have a correlation from a prior phase
+                existing_group_corr = session.exec(
+                    select(ModNexusCorrelation).where(ModNexusCorrelation.mod_group_id == group.id)
+                ).first()
+                if existing_group_corr:
+                    continue
 
                 # Check this nexus mod isn't already correlated to another group
                 existing_corr = session.exec(

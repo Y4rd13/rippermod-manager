@@ -51,7 +51,13 @@ async def match_by_collections(
             select(ModGroup.id).where(ModGroup.game_id == game.id)  # type: ignore[arg-type]
         ).all()
     )
-    matched_group_ids = set(session.exec(select(ModNexusCorrelation.mod_group_id)).all())
+    matched_group_ids = set(
+        session.exec(
+            select(ModNexusCorrelation.mod_group_id)
+            .join(ModGroup, ModNexusCorrelation.mod_group_id == ModGroup.id)
+            .where(ModGroup.game_id == game.id)
+        ).all()
+    )
     unmatched_ids = all_group_ids - matched_group_ids
 
     if not unmatched_ids:
@@ -156,6 +162,24 @@ async def match_by_collections(
                             {"name": best_name},
                         )
                         session.flush()
+
+                    # Guard: skip if group already has a correlation from a prior phase
+                    existing_group_corr = session.exec(
+                        select(ModNexusCorrelation).where(
+                            ModNexusCorrelation.mod_group_id == group.id
+                        )
+                    ).first()
+                    if existing_group_corr:
+                        continue
+
+                    # Guard: skip if nexus download already correlated to another group
+                    existing_dl_corr = session.exec(
+                        select(ModNexusCorrelation).where(
+                            ModNexusCorrelation.nexus_download_id == dl.id
+                        )
+                    ).first()
+                    if existing_dl_corr:
+                        continue
 
                     corr = ModNexusCorrelation(
                         mod_group_id=group.id,  # type: ignore[arg-type]

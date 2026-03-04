@@ -41,23 +41,18 @@ async def match_by_requirements(
     if not correlated_nexus_ids:
         return RequirementMatchResult(requirements_checked=0, matched=0)
 
-    # 2. Get requirements for correlated mods where required_mod_id is set
-    requirements = session.exec(
+    # 2+3. Get requirements for correlated mods whose required_mod_id is NOT already correlated
+    uncorrelated_reqs = session.exec(
         select(NexusModRequirement).where(
             NexusModRequirement.nexus_mod_id.in_(correlated_nexus_ids),  # type: ignore[union-attr]
             NexusModRequirement.required_mod_id.is_not(None),  # type: ignore[union-attr]
             NexusModRequirement.is_external.is_(False),  # type: ignore[union-attr]
+            NexusModRequirement.required_mod_id.notin_(correlated_nexus_ids),  # type: ignore[union-attr]
         )
     ).all()
 
-    if not requirements:
-        return RequirementMatchResult(requirements_checked=0, matched=0)
-
-    # 3. Filter to requirements whose required_mod_id is NOT already correlated
-    uncorrelated_reqs = [r for r in requirements if r.required_mod_id not in correlated_nexus_ids]
-
     if not uncorrelated_reqs:
-        return RequirementMatchResult(requirements_checked=len(requirements), matched=0)
+        return RequirementMatchResult(requirements_checked=0, matched=0)
 
     # 4. Get unmatched ModGroups (no correlation)
     all_group_ids = set(
@@ -65,7 +60,13 @@ async def match_by_requirements(
             select(ModGroup.id).where(ModGroup.game_id == game.id)  # type: ignore[arg-type]
         ).all()
     )
-    matched_group_ids = set(session.exec(select(ModNexusCorrelation.mod_group_id)).all())
+    matched_group_ids = set(
+        session.exec(
+            select(ModNexusCorrelation.mod_group_id)
+            .join(ModGroup, ModNexusCorrelation.mod_group_id == ModGroup.id)
+            .where(ModGroup.game_id == game.id)
+        ).all()
+    )
     unmatched_group_ids = all_group_ids - matched_group_ids
 
     if not unmatched_group_ids:

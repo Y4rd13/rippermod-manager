@@ -288,7 +288,7 @@ class NexusGraphQLClient:
                     mid = node.get("modId")
                     if mid is not None:
                         result[mid] = node
-        except NexusGraphQLError:
+        except (NexusGraphQLError, KeyError):
             logger.warning(
                 "legacyModsByDomain failed, falling back to batch_mods()",
                 exc_info=True,
@@ -407,7 +407,7 @@ class NexusGraphQLClient:
     ) -> dict[str, Any]:
         """Fetch a collection revision with its mod list."""
         query = """
-        query GetCollectionRevision($slug: String!, $revision: Int!, $gameDomain: String!) {
+        query GetCollectionRevision($slug: String!, $revision: Int!) {
             collectionRevision(slug: $slug, revision: $revision, viewAdultContent: true) {
                 revisionNumber
                 modFiles {
@@ -415,7 +415,6 @@ class NexusGraphQLClient:
                         mod {
                             modId
                             name
-                            gameDomain
                         }
                     }
                     optional
@@ -423,7 +422,5 @@ class NexusGraphQLClient:
             }
         }
         """
-        data = await self._execute(
-            query, {"slug": slug, "revision": revision, "gameDomain": game_domain}
-        )
+        data = await self._execute(query, {"slug": slug, "revision": revision})
         return data.get("collectionRevision") or {}

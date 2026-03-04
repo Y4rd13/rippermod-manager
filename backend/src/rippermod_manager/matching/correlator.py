@@ -224,8 +224,17 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
         if dl.nexus_mod_id:
             nexus_id_map.setdefault(dl.nexus_mod_id, dl)
 
-    # Build endorsement count map for popularity tiebreaking
-    meta_rows = session.exec(select(NexusModMeta)).all()
+    # Build endorsement count map for popularity tiebreaking (scoped to this game)
+    game_nexus_ids = {dl.nexus_mod_id for dl in downloads if dl.nexus_mod_id}
+    meta_rows = (
+        session.exec(
+            select(NexusModMeta).where(
+                NexusModMeta.nexus_mod_id.in_(game_nexus_ids)  # type: ignore[union-attr]
+            )
+        ).all()
+        if game_nexus_ids
+        else []
+    )
     endorsement_map: dict[int, int] = {m.nexus_mod_id: m.endorsement_count for m in meta_rows}
     # Build category map for Nexus mods
     nexus_category_map: dict[int, str] = {
