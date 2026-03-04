@@ -1,7 +1,7 @@
 """Nexus Mods GraphQL v2 API client.
 
 Provides batch operations (file hashes, mod info), text search,
-mod requirements, archive content search, and mutations (endorse/track).
+mod requirements, and archive content search.
 Uses raw httpx POST — no external GraphQL library needed.
 """
 
@@ -267,7 +267,7 @@ class NexusGraphQLClient:
         )
         variables = {
             "filter": {
-                "gameId": [{"value": str(gid), "op": "EQUALS"}],
+                "gameId": [{"value": gid, "op": "EQUALS"}],
                 "name": [{"value": f"*{name}*", "op": "WILDCARD"}],
             },
             "count": count,
@@ -288,7 +288,7 @@ class NexusGraphQLClient:
     ) -> list[dict[str, Any]]:
         """Search inside mod archives by file path or extension."""
         gid = self._game_id(game_domain)
-        filter_obj: dict[str, Any] = {"gameId": [{"value": str(gid), "op": "EQUALS"}]}
+        filter_obj: dict[str, Any] = {"gameId": [{"value": gid, "op": "EQUALS"}]}
         if file_path_wildcard:
             filter_obj["filePathWildcard"] = [{"value": file_path_wildcard, "op": "WILDCARD"}]
         if file_extension:
@@ -315,70 +315,3 @@ class NexusGraphQLClient:
         data = await self._execute(query, {"filter": filter_obj, "count": count})
         contents = data.get("modFileContents", {})
         return contents.get("nodes", [])
-
-    # -- Mutations -----------------------------------------------------------
-
-    async def endorse_mod(self, mod_uid: str) -> dict[str, Any]:
-        query = """
-        mutation EndorseMod($modUid: ID!) {
-            createModEndorsement(modUid: $modUid) {
-                success
-            }
-        }
-        """
-        data = await self._execute(query, {"modUid": mod_uid})
-        return data.get("createModEndorsement", {})
-
-    async def abstain_mod(self, mod_uid: str) -> dict[str, Any]:
-        query = """
-        mutation AbstainMod($modUid: ID!) {
-            abstainFromModEndorsement(modUid: $modUid) {
-                success
-            }
-        }
-        """
-        data = await self._execute(query, {"modUid": mod_uid})
-        return data.get("abstainFromModEndorsement", {})
-
-    async def track_mod(self, mod_uid: str) -> dict[str, Any]:
-        query = """
-        mutation TrackMod($modUid: ID!) {
-            trackMod(modUid: $modUid) {
-                success
-            }
-        }
-        """
-        data = await self._execute(query, {"modUid": mod_uid})
-        return data.get("trackMod", {})
-
-    async def untrack_mod(self, mod_uid: str) -> dict[str, Any]:
-        query = """
-        mutation UntrackMod($modUid: ID!) {
-            untrackMod(modUid: $modUid) {
-                success
-            }
-        }
-        """
-        data = await self._execute(query, {"modUid": mod_uid})
-        return data.get("untrackMod", {})
-
-    # -- UID helper ----------------------------------------------------------
-
-    async def fetch_mod_uid(self, game_domain: str, mod_id: int) -> str:
-        """Fetch the global UID for a mod (needed for mutations)."""
-        gid = self._game_id(game_domain)
-        query = """
-        query GetModUid($modId: ID!, $gameId: ID!) {
-            mod(modId: $modId, gameId: $gameId) {
-                uid
-            }
-        }
-        """
-        data = await self._execute(query, {"modId": mod_id, "gameId": gid})
-        mod = data.get("mod", {})
-        uid = mod.get("uid", "")
-        if not uid:
-            raise NexusGraphQLError(
-                [{"message": f"No UID returned for mod {mod_id} in {game_domain}"}]
-            )
-        return uid

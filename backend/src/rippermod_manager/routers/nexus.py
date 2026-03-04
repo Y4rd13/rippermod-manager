@@ -14,7 +14,6 @@ from rippermod_manager.models.settings import AppSetting
 
 if TYPE_CHECKING:
     from rippermod_manager.models.nexus import NexusDownload
-    from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
 from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.install import ArchiveContentsResult, ArchiveEntryOut
 from rippermod_manager.schemas.nexus import (
@@ -483,31 +482,6 @@ def _get_or_create_download(
     return dl
 
 
-async def _resolve_mod_uid(
-    api_key: str,
-    game_domain: str,
-    mod_id: int,
-    session: Session,
-    gql: "NexusGraphQLClient | None" = None,
-) -> str:
-    """Get or fetch the mod UID needed for GraphQL mutations."""
-    from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
-    from rippermod_manager.services.nexus_helpers import get_stored_uid, store_uid_from_gql
-
-    uid = get_stored_uid(session, mod_id)
-    if uid:
-        return uid
-
-    if gql:
-        uid = await gql.fetch_mod_uid(game_domain, mod_id)
-    else:
-        async with NexusGraphQLClient(api_key) as tmp:
-            uid = await tmp.fetch_mod_uid(game_domain, mod_id)
-    store_uid_from_gql(session, mod_id, uid)
-    session.flush()
-    return uid
-
-
 @router.post("/{game_name}/mods/{mod_id}/endorse", response_model=ModActionResult)
 async def endorse_mod(
     game_name: str, mod_id: int, session: Session = Depends(get_session)
@@ -517,17 +491,19 @@ async def endorse_mod(
     if not api_key:
         raise HTTPException(400, "Nexus API key not configured")
 
-    from rippermod_manager.nexus.client import NexusRateLimitError
-    from rippermod_manager.nexus.graphql_client import NexusGraphQLClient, NexusGraphQLError
+    from rippermod_manager.models.nexus import NexusModMeta
+    from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
+
+    meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
+    mod_version = meta.version if meta and meta.version else ""
 
     try:
-        async with NexusGraphQLClient(api_key) as gql:
-            uid = await _resolve_mod_uid(api_key, game.domain_name, mod_id, session, gql=gql)
-            await gql.endorse_mod(uid)
+        async with NexusClient(api_key) as client:
+            await client.endorse_mod(game.domain_name, mod_id, version=mod_version)
     except NexusRateLimitError as e:
         raise HTTPException(429, f"Rate limited: {e}") from e
-    except NexusGraphQLError as e:
-        raise HTTPException(400, f"GraphQL error: {e}") from e
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(e.response.status_code, f"Nexus API error: {e}") from e
 
     dl = _get_or_create_download(session, game.id, mod_id, game.domain_name)  # type: ignore[arg-type]
     dl.is_endorsed = True
@@ -544,17 +520,19 @@ async def abstain_mod(
     if not api_key:
         raise HTTPException(400, "Nexus API key not configured")
 
-    from rippermod_manager.nexus.client import NexusRateLimitError
-    from rippermod_manager.nexus.graphql_client import NexusGraphQLClient, NexusGraphQLError
+    from rippermod_manager.models.nexus import NexusModMeta
+    from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
+
+    meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
+    mod_version = meta.version if meta and meta.version else ""
 
     try:
-        async with NexusGraphQLClient(api_key) as gql:
-            uid = await _resolve_mod_uid(api_key, game.domain_name, mod_id, session, gql=gql)
-            await gql.abstain_mod(uid)
+        async with NexusClient(api_key) as client:
+            await client.abstain_mod(game.domain_name, mod_id, version=mod_version)
     except NexusRateLimitError as e:
         raise HTTPException(429, f"Rate limited: {e}") from e
-    except NexusGraphQLError as e:
-        raise HTTPException(400, f"GraphQL error: {e}") from e
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(e.response.status_code, f"Nexus API error: {e}") from e
 
     dl = _get_or_create_download(session, game.id, mod_id, game.domain_name)  # type: ignore[arg-type]
     dl.is_endorsed = False
@@ -571,17 +549,15 @@ async def track_mod(
     if not api_key:
         raise HTTPException(400, "Nexus API key not configured")
 
-    from rippermod_manager.nexus.client import NexusRateLimitError
-    from rippermod_manager.nexus.graphql_client import NexusGraphQLClient, NexusGraphQLError
+    from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
 
     try:
-        async with NexusGraphQLClient(api_key) as gql:
-            uid = await _resolve_mod_uid(api_key, game.domain_name, mod_id, session, gql=gql)
-            await gql.track_mod(uid)
+        async with NexusClient(api_key) as client:
+            await client.track_mod(game.domain_name, mod_id)
     except NexusRateLimitError as e:
         raise HTTPException(429, f"Rate limited: {e}") from e
-    except NexusGraphQLError as e:
-        raise HTTPException(400, f"GraphQL error: {e}") from e
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(e.response.status_code, f"Nexus API error: {e}") from e
 
     dl = _get_or_create_download(session, game.id, mod_id, game.domain_name)  # type: ignore[arg-type]
     dl.is_tracked = True
@@ -598,17 +574,15 @@ async def untrack_mod(
     if not api_key:
         raise HTTPException(400, "Nexus API key not configured")
 
-    from rippermod_manager.nexus.client import NexusRateLimitError
-    from rippermod_manager.nexus.graphql_client import NexusGraphQLClient, NexusGraphQLError
+    from rippermod_manager.nexus.client import NexusClient, NexusRateLimitError
 
     try:
-        async with NexusGraphQLClient(api_key) as gql:
-            uid = await _resolve_mod_uid(api_key, game.domain_name, mod_id, session, gql=gql)
-            await gql.untrack_mod(uid)
+        async with NexusClient(api_key) as client:
+            await client.untrack_mod(game.domain_name, mod_id)
     except NexusRateLimitError as e:
         raise HTTPException(429, f"Rate limited: {e}") from e
-    except NexusGraphQLError as e:
-        raise HTTPException(400, f"GraphQL error: {e}") from e
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(e.response.status_code, f"Nexus API error: {e}") from e
 
     dl = _get_or_create_download(session, game.id, mod_id, game.domain_name)  # type: ignore[arg-type]
     dl.is_tracked = False
