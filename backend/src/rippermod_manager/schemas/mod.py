@@ -69,6 +69,17 @@ class WebSearchResult(BaseModel):
     unmatched: int
 
 
+class RequirementMatchResult(BaseModel):
+    requirements_checked: int
+    matched: int
+
+
+class FileContentMatchResult(BaseModel):
+    groups_searched: int
+    matched: int
+    skipped_generic: int
+
+
 class CorrelationReassign(BaseModel):
     nexus_mod_id: int
 

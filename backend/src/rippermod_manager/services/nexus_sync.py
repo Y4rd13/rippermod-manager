@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 import httpx
@@ -12,6 +13,7 @@ from rippermod_manager.services.nexus_helpers import (
     graphql_file_to_rest_file,
     graphql_mod_to_rest_info,
     store_uid_from_gql,
+    upsert_mod_requirements,
     upsert_nexus_mod,
 )
 
@@ -48,13 +50,18 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
         batch_info: dict[int, dict] = {}
         if all_mod_ids:
             try:
-                batch_result = await gql.batch_mods(game.domain_name, sorted(all_mod_ids))
+                batch_result = await gql.batch_mods_by_domain(game.domain_name, sorted(all_mod_ids))
                 for mod_id, gql_mod in batch_result.items():
                     info = graphql_mod_to_rest_info(gql_mod)
                     batch_info[mod_id] = info
                     # Store UID
                     if gql_mod.get("uid"):
                         store_uid_from_gql(session, mod_id, gql_mod["uid"])
+                    # Store mod requirements
+                    mod_reqs = gql_mod.get("modRequirements") or {}
+                    nexus_reqs = (mod_reqs.get("nexusRequirements") or {}).get("nodes") or []
+                    if nexus_reqs:
+                        upsert_mod_requirements(session, mod_id, nexus_reqs)
             except NexusRateLimitError:
                 logger.warning("Rate limited during batch mod fetch in sync")
             except httpx.HTTPError:
@@ -85,17 +92,29 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
                 dl_record.is_tracked = mod_id in tracked_ids
                 dl_record.is_endorsed = mod_id in endorsed_ids
 
-        # Fetch file lists for endorsed/tracked mods via GraphQL
-        for mod_id in all_mod_ids:
-            try:
-                gql_files = await gql.get_mod_files(game.domain_name, mod_id)
-            except NexusRateLimitError:
-                logger.warning("Rate limited fetching files, stopping file sync")
-                break
-            except httpx.HTTPError:
-                logger.warning("Failed to fetch files for %s/%d", game.domain_name, mod_id)
-                continue
+        # Parallel file list fetching for endorsed/tracked mods
+        sem = asyncio.Semaphore(5)
+        files_map: dict[int, list[dict]] = {}
+        rate_limited = False
 
+        async def _fetch_files(mid: int) -> None:
+            nonlocal rate_limited
+            if rate_limited:
+                return
+            async with sem:
+                try:
+                    gql_files = await gql.get_mod_files(game.domain_name, mid)
+                    files_map[mid] = [graphql_file_to_rest_file(gf) for gf in gql_files]
+                except NexusRateLimitError:
+                    rate_limited = True
+                    logger.warning("Rate limited fetching files, stopping file sync")
+                except httpx.HTTPError:
+                    logger.warning("Failed to fetch files for %s/%d", game.domain_name, mid)
+
+        if all_mod_ids:
+            await asyncio.gather(*[_fetch_files(mid) for mid in all_mod_ids])
+
+        for mod_id, fetched_files in files_map.items():
             existing_file_ids = {
                 row.file_id
                 for row in session.exec(
@@ -103,8 +122,7 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
                 ).all()
             }
 
-            for gf in gql_files:
-                f = graphql_file_to_rest_file(gf)
+            for f in fetched_files:
                 fid = f.get("file_id")
                 if not fid or fid in existing_file_ids:
                     continue

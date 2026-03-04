@@ -13,13 +13,63 @@ from rippermod_manager.matching.normalization import (
 from rippermod_manager.models.correlation import ModNexusCorrelation
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod
-from rippermod_manager.models.mod import ModGroup
-from rippermod_manager.models.nexus import NexusDownload
+from rippermod_manager.models.mod import ModFile, ModGroup
+from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 from rippermod_manager.schemas.mod import CorrelateResult
 
 logger = logging.getLogger(__name__)
 # Characters that filesystem paths often strip (apostrophes, quotes, parens)
 PUNCTUATION_RE = re.compile(r"['\"\(\)]+")
+
+# Category classification by file extension patterns
+_CATEGORY_SCRIPTS = {"scripts", "reds"}
+_CATEGORY_TWEAKS = {"tweaks", "yaml"}
+_CATEGORY_ASSETS = {"archive", "assets"}
+
+_EXT_TO_CATEGORY: dict[str, str] = {
+    ".reds": "scripts",
+    ".lua": "scripts",
+    ".archive": "assets",
+    ".xl": "tweaks",
+    ".yaml": "tweaks",
+    ".yml": "tweaks",
+}
+
+# Nexus category IDs that conflict (penalty applied when local category != nexus category)
+_NEXUS_SCRIPT_CATEGORIES = {"script", "scripts", "gameplay", "gameplay effects and changes"}
+_NEXUS_ASSET_CATEGORIES = {
+    "models and textures",
+    "appearance",
+    "clothing",
+    "weapons",
+    "vehicles",
+    "hair",
+}
+
+_CATEGORY_PENALTY = 0.08
+
+
+def classify_group_category(files: list[ModFile]) -> str | None:
+    """Classify a mod group by its dominant file extension."""
+    counts: dict[str, int] = {}
+    for f in files:
+        ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+        cat = _EXT_TO_CATEGORY.get(f".{ext}")
+        if cat:
+            counts[cat] = counts.get(cat, 0) + 1
+    if not counts:
+        return None
+    return max(counts, key=counts.get)  # type: ignore[arg-type]
+
+
+def _categories_compatible(local_cat: str | None, nexus_cat: str) -> bool:
+    """Check if local file category is compatible with Nexus mod category."""
+    if not local_cat:
+        return True
+    nexus_lower = nexus_cat.lower()
+    if local_cat == "scripts" and nexus_lower in _NEXUS_ASSET_CATEGORIES:
+        return False
+    return not (local_cat == "assets" and nexus_lower in _NEXUS_SCRIPT_CATEGORIES)
 
 
 def normalize(s: str) -> str:
@@ -174,6 +224,29 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
         if dl.nexus_mod_id:
             nexus_id_map.setdefault(dl.nexus_mod_id, dl)
 
+    # Build endorsement count map for popularity tiebreaking (scoped to this game)
+    game_nexus_ids = {dl.nexus_mod_id for dl in downloads if dl.nexus_mod_id}
+    meta_rows = (
+        session.exec(
+            select(NexusModMeta).where(
+                NexusModMeta.nexus_mod_id.in_(game_nexus_ids)  # type: ignore[union-attr]
+            )
+        ).all()
+        if game_nexus_ids
+        else []
+    )
+    endorsement_map: dict[int, int] = {m.nexus_mod_id: m.endorsement_count for m in meta_rows}
+    # Build category map for Nexus mods
+    nexus_category_map: dict[int, str] = {
+        m.nexus_mod_id: m.category for m in meta_rows if m.category
+    }
+
+    # Build local group category map
+    group_category_map: dict[int, str | None] = {}
+    for g in groups:
+        _ = g.files
+        group_category_map[g.id] = classify_group_category(g.files)  # type: ignore[arg-type]
+
     # Auto-correlate from installed mods (source of truth)
     installed_mods = session.exec(
         select(InstalledMod).where(
@@ -228,13 +301,26 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
                     best_method = "filename_id"
                 break
 
-        # Slow path: fuzzy name matching
+        # Slow path: fuzzy name matching with category penalty + popularity tiebreaker
         if not best_download:
+            local_cat = group_category_map.get(group.id)  # type: ignore[arg-type]
             for dl in downloads:
                 if dl.nexus_mod_id in already_matched_nexus_ids:
                     continue
                 score, method = compute_name_score(group.display_name, dl.mod_name)
-                if score > best_score:
+                # Apply category penalty for incompatible types
+                nexus_cat = nexus_category_map.get(dl.nexus_mod_id, "")
+                if score > 0 and not _categories_compatible(local_cat, nexus_cat):
+                    score = max(0.0, score - _CATEGORY_PENALTY)
+                is_better = score > best_score
+                is_tiebreak = (
+                    best_download is not None
+                    and score > 0
+                    and abs(score - best_score) < 0.05
+                    and endorsement_map.get(dl.nexus_mod_id, 0)
+                    > endorsement_map.get(best_download.nexus_mod_id, 0)
+                )
+                if is_better or is_tiebreak:
                     best_score = score
                     best_download = dl
                     best_method = method

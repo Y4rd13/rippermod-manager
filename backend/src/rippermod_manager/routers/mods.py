@@ -189,48 +189,104 @@ def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> S
                 tavily_key = get_setting(session, "tavily_api_key")
 
                 async def _run_async_pipeline() -> None:
+                    fc_matched = 0
+                    fl_matched = 0
+                    en_matched = 0
+                    coll_matched = 0
+
                     if api_key:
-                        # Tier 1 — Filename ID enrichment (85-92%)
-                        on_progress("enrich", "Enriching from filename IDs...", 85)
+                        # Tier 1 — Filename ID enrichment (82-88%)
+                        on_progress("enrich", "Enriching from filename IDs...", 82)
                         await enrich_from_filename_ids(game, api_key, session, on_progress)
 
-                        # Tier 2 — MD5 archive matching (92-96%)
-                        on_progress("md5", "Matching archives by MD5...", 92)
+                        # Tier 1.5 — File content reverse lookup (88-90%)
+                        from rippermod_manager.services.file_content_matcher import (
+                            match_by_file_contents,
+                        )
+
+                        on_progress("file-content", "Searching by file contents...", 88)
+                        fc_result = await match_by_file_contents(
+                            game, api_key, session, on_progress
+                        )
+                        fc_matched = fc_result.matched
+                        if fc_matched:
+                            on_progress(
+                                "file-content",
+                                f"File content: {fc_matched} matched",
+                                90,
+                            )
+
+                        # Tier 2 — MD5 archive matching (90-93%)
+                        on_progress("md5", "Matching archives by MD5...", 90)
                         await match_archives_by_md5(game, api_key, session, on_progress)
 
-                        # Nexus sync (96-97%)
-                        on_progress("sync", "Syncing Nexus history...", 96)
+                        # Nexus sync (93-94%)
+                        on_progress("sync", "Syncing Nexus history...", 93)
                         await sync_nexus_history(game, api_key, session)
-                        on_progress("sync", "Nexus sync complete", 97)
+                        on_progress("sync", "Nexus sync complete", 94)
 
-                        # File list matching (97%) — between sync and correlate
-                        on_progress("file-list", "Matching endorsed mods to local files...", 97)
+                        # File list matching (94%) — between sync and correlate
+                        on_progress("file-list", "Matching endorsed mods to local files...", 94)
                         fl_result = match_endorsed_to_local(game, session, on_progress)
-                        if fl_result.matched:
+                        fl_matched = fl_result.matched
+                        if fl_matched:
                             on_progress(
                                 "file-list",
-                                f"File list: {fl_result.matched} endorsed mods matched",
-                                97,
+                                f"File list: {fl_matched} endorsed mods matched",
+                                94,
                             )
 
-                        # Endorsed name matching (97%) — catch mods without archives
-                        on_progress("endorsed-name", "Matching endorsed mods by name...", 97)
+                        # Endorsed name matching (94-95%) — catch mods without archives
+                        on_progress("endorsed-name", "Matching endorsed mods by name...", 94)
                         en_result = match_endorsed_by_name(game, session)
-                        if en_result.matched:
+                        en_matched = en_result.matched
+                        if en_matched:
                             on_progress(
                                 "endorsed-name",
-                                f"Endorsed name: {en_result.matched} mods matched",
-                                97,
+                                f"Endorsed name: {en_matched} mods matched",
+                                95,
                             )
 
-                    # Correlate (97-99%)
-                    on_progress("correlate", "Correlating mods...", 97)
+                    # Correlate (95-97%)
+                    on_progress("correlate", "Correlating mods...", 95)
                     result = correlate_game_mods(game, session)
                     on_progress(
                         "correlate",
                         f"Correlated: {result.matched} matched, {result.unmatched} unmatched",
-                        99,
+                        97,
                     )
+
+                    # Requirement propagation (97-98%)
+                    from rippermod_manager.services.requirement_matcher import (
+                        match_by_requirements,
+                    )
+
+                    on_progress("requirements", "Matching via mod requirements...", 97)
+                    req_result = await match_by_requirements(game, session, on_progress)
+                    if req_result.matched:
+                        on_progress(
+                            "requirements",
+                            f"Requirements: {req_result.matched} matched",
+                            98,
+                        )
+
+                    # Collection matching (98%)
+                    if api_key:
+                        from rippermod_manager.services.collection_matcher import (
+                            match_by_collections,
+                        )
+
+                        on_progress("collections", "Checking mod collections...", 98)
+                        coll_result = await match_by_collections(
+                            game, api_key, session, on_progress
+                        )
+                        coll_matched = coll_result.matched
+                        if coll_matched:
+                            on_progress(
+                                "collections",
+                                f"Collections: {coll_matched} matched",
+                                98,
+                            )
 
                     if use_ai_search and openai_key and api_key:
                         from rippermod_manager.services.ai_search_matcher import (
@@ -260,7 +316,15 @@ def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> S
                                 99,
                             )
 
-                    on_progress("done", f"Done: {result.matched} matched", 100)
+                    total_matched = (
+                        result.matched
+                        + req_result.matched
+                        + fc_matched
+                        + fl_matched
+                        + en_matched
+                        + coll_matched
+                    )
+                    on_progress("done", f"Done: {total_matched} matched", 100)
 
                 loop = asyncio.new_event_loop()
                 try:

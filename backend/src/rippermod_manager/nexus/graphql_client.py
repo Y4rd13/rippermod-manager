@@ -252,16 +252,73 @@ class NexusGraphQLClient:
 
         return result
 
+    # -- Batch mods by domain (legacyModsByDomain) ---------------------------
+
+    async def batch_mods_by_domain(
+        self, game_domain: str, mod_ids: list[int]
+    ) -> dict[int, dict[str, Any]]:
+        """Fetch mods using legacyModsByDomain which accepts domain+modId pairs.
+
+        Falls back to ``batch_mods()`` on GraphQL errors (schema changes).
+        """
+        result: dict[int, dict[str, Any]] = {}
+        chunks = math.ceil(len(mod_ids) / _BATCH_MOD_ALIAS_LIMIT)
+
+        try:
+            for i in range(chunks):
+                chunk = mod_ids[i * _BATCH_MOD_ALIAS_LIMIT : (i + 1) * _BATCH_MOD_ALIAS_LIMIT]
+                query = (
+                    """
+                query BatchModsByDomain($ids: [CompositeDomainWithIdInput!]!) {
+                    legacyModsByDomain(ids: $ids) {
+                        nodes {
+                """
+                    + _MOD_FIELDS
+                    + _MOD_REQUIREMENT_FIELDS
+                    + """
+                        }
+                    }
+                }
+                """
+                )
+                ids_input = [{"gameDomain": game_domain, "modId": mid} for mid in chunk]
+                data = await self._execute(query, {"ids": ids_input})
+                nodes = (data.get("legacyModsByDomain") or {}).get("nodes") or []
+                for node in nodes:
+                    mid = node.get("modId")
+                    if mid is not None:
+                        result[mid] = node
+        except (NexusGraphQLError, KeyError):
+            logger.warning(
+                "legacyModsByDomain failed, falling back to batch_mods()",
+                exc_info=True,
+            )
+            return await self.batch_mods(game_domain, mod_ids)
+
+        return result
+
     # -- Text search ---------------------------------------------------------
 
     async def search_mods(
-        self, game_domain: str, name: str, count: int = 20
+        self,
+        game_domain: str,
+        name: str,
+        count: int = 20,
+        sort_by: str | None = None,
+        sort_direction: str = "DESC",
     ) -> list[dict[str, Any]]:
-        """Search mods by name using wildcard filter."""
+        """Search mods by name using wildcard filter.
+
+        Optional ``sort_by`` accepts ``"endorsements"``, ``"downloads"``,
+        or ``"updatedAt"``.
+        """
         gid = self._game_id(game_domain)
+        sort_clause = ""
+        if sort_by:
+            sort_clause = f', sort: {{field: "{sort_by}", direction: {sort_direction}}}'
         query = (
             "query SearchMods($filter: ModsFilter!, $count: Int!) {"
-            "  mods(filter: $filter, count: $count) {"
+            f"  mods(filter: $filter, count: $count{sort_clause}) {{"
             "    nodes {" + _MOD_FIELDS + "    }"
             "  }"
             "}"
@@ -316,3 +373,54 @@ class NexusGraphQLClient:
         data = await self._execute(query, {"filter": filter_obj, "count": count})
         contents = data.get("modFileContents", {})
         return contents.get("nodes", [])
+
+    # -- Collections ---------------------------------------------------------
+
+    async def search_collections(self, game_domain: str, count: int = 10) -> list[dict[str, Any]]:
+        """Search collections for a game."""
+        gid = self._game_id(game_domain)
+        query = """
+        query SearchCollections($gameId: Int!, $count: Int!) {
+            collections(
+                filter: { gameId: { value: $gameId, op: EQUALS } }
+                count: $count
+                sort: { field: "endorsements", direction: DESC }
+            ) {
+                nodes {
+                    slug
+                    name
+                    summary
+                    endorsements
+                    totalDownloads
+                    latestPublishedRevision {
+                        revisionNumber
+                    }
+                }
+            }
+        }
+        """
+        data = await self._execute(query, {"gameId": gid, "count": count})
+        return (data.get("collections") or {}).get("nodes") or []
+
+    async def get_collection_revision(
+        self, slug: str, revision: int, game_domain: str
+    ) -> dict[str, Any]:
+        """Fetch a collection revision with its mod list."""
+        query = """
+        query GetCollectionRevision($slug: String!, $revision: Int!) {
+            collectionRevision(slug: $slug, revision: $revision, viewAdultContent: true) {
+                revisionNumber
+                modFiles {
+                    file {
+                        mod {
+                            modId
+                            name
+                        }
+                    }
+                    optional
+                }
+            }
+        }
+        """
+        data = await self._execute(query, {"slug": slug, "revision": revision})
+        return data.get("collectionRevision") or {}
