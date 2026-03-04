@@ -267,7 +267,7 @@ class NexusGraphQLClient:
         )
         variables = {
             "filter": {
-                "gameId": [{"value": str(gid), "op": "EQUALS"}],
+                "gameId": [{"value": gid, "op": "EQUALS"}],
                 "name": [{"value": f"*{name}*", "op": "WILDCARD"}],
             },
             "count": count,
@@ -315,24 +315,3 @@ class NexusGraphQLClient:
         data = await self._execute(query, {"filter": filter_obj, "count": count})
         contents = data.get("modFileContents", {})
         return contents.get("nodes", [])
-
-    # -- UID helper ----------------------------------------------------------
-
-    async def fetch_mod_uid(self, game_domain: str, mod_id: int) -> str:
-        """Fetch the global UID for a mod (needed for mutations)."""
-        gid = self._game_id(game_domain)
-        query = """
-        query GetModUid($modId: ID!, $gameId: ID!) {
-            mod(modId: $modId, gameId: $gameId) {
-                uid
-            }
-        }
-        """
-        data = await self._execute(query, {"modId": mod_id, "gameId": gid})
-        mod = data.get("mod", {})
-        uid = mod.get("uid", "")
-        if not uid:
-            raise NexusGraphQLError(
-                [{"message": f"No UID returned for mod {mod_id} in {game_domain}"}]
-            )
-        return uid

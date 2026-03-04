@@ -70,8 +70,7 @@ class NexusClient:
         if d_rem is not None:
             self.daily_remaining = int(d_rem)
 
-    async def _get(self, path: str) -> Any:
-        resp = await self.client.get(path)
+    def _check_rate_limit(self, resp: httpx.Response) -> None:
         self._read_rate_limit_headers(resp)
         if resp.status_code == 429:
             raise NexusRateLimitError(
@@ -79,30 +78,22 @@ class NexusClient:
                 daily_remaining=self.daily_remaining or 0,
                 reset=resp.headers.get("X-RL-Hourly-Reset", ""),
             )
+
+    async def _get(self, path: str) -> Any:
+        resp = await self.client.get(path)
+        self._check_rate_limit(resp)
         resp.raise_for_status()
         return resp.json()
 
     async def _post(self, path: str, data: dict[str, Any] | None = None) -> Any:
         resp = await self.client.post(path, json=data or {})
-        self._read_rate_limit_headers(resp)
-        if resp.status_code == 429:
-            raise NexusRateLimitError(
-                hourly_remaining=self.hourly_remaining or 0,
-                daily_remaining=self.daily_remaining or 0,
-                reset=resp.headers.get("X-RL-Hourly-Reset", ""),
-            )
+        self._check_rate_limit(resp)
         resp.raise_for_status()
         return resp.json()
 
     async def _delete(self, path: str, data: dict[str, Any] | None = None) -> Any:
         resp = await self.client.request("DELETE", path, json=data or {})
-        self._read_rate_limit_headers(resp)
-        if resp.status_code == 429:
-            raise NexusRateLimitError(
-                hourly_remaining=self.hourly_remaining or 0,
-                daily_remaining=self.daily_remaining or 0,
-                reset=resp.headers.get("X-RL-Hourly-Reset", ""),
-            )
+        self._check_rate_limit(resp)
         resp.raise_for_status()
         return resp.json()
 
