@@ -357,15 +357,10 @@ class NexusGraphQLClient:
             modFileContents(filter: $filter, count: $count) {
                 nodes {
                     filePath
+                    fileName
                     fileSize
-                    modFile {
-                        fileId
-                        name
-                        mod {
-                            modId
-                            name
-                        }
-                    }
+                    modId
+                    fileId
                 }
             }
         }
