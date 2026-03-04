@@ -151,15 +151,10 @@ async def match_by_file_contents(
 
                 # Check if all results point to the same mod
                 mod_ids = set()
-                mod_name = ""
                 for node in results:
-                    mod_file = node.get("modFile") or {}
-                    mod = mod_file.get("mod") or {}
-                    mid = mod.get("modId")
+                    mid = node.get("modId")
                     if mid:
                         mod_ids.add(mid)
-                        if not mod_name:
-                            mod_name = mod.get("name", "")
 
                 if len(mod_ids) != 1:
                     continue
@@ -211,6 +206,7 @@ async def match_by_file_contents(
                 if existing_corr:
                     continue
 
+                mod_name = existing_dl.mod_name
                 corr = ModNexusCorrelation(
                     mod_group_id=group.id,  # type: ignore[arg-type]
                     nexus_download_id=existing_dl.id,  # type: ignore[arg-type]
