@@ -130,9 +130,7 @@ def _migrate_unique_indexes() -> None:
             )
             session.exec(text(dedup_sql))  # type: ignore[arg-type]
 
-            create_sql = (
-                f"CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} ON {table} ({cols_csv})"
-            )
+            create_sql = f"CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} ON {table} ({cols_csv})"
             session.exec(text(create_sql))  # type: ignore[arg-type]
             logger.info("Created unique index %s on %s(%s)", idx_name, table, cols_csv)
         session.commit()
@@ -149,11 +147,11 @@ def _migrate_secrets_to_keyring() -> None:
                 params={"k": key},
             ).first()
             if row and row[0] and set_secret(key, row[0]):
-                    session.exec(
-                        text("UPDATE app_settings SET value = '' WHERE key = :k"),  # type: ignore[arg-type]
-                        params={"k": key},
-                    )
-                    logger.info("Migrated '%s' to OS keyring", key)
+                session.exec(
+                    text("UPDATE app_settings SET value = '' WHERE key = :k"),  # type: ignore[arg-type]
+                    params={"k": key},
+                )
+                logger.info("Migrated '%s' to OS keyring", key)
         session.commit()
 
 
