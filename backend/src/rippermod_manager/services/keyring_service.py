@@ -26,7 +26,7 @@ def _is_available() -> bool:
             logger.info("Keyring backend: %s", type(backend).__name__)
         else:
             logger.info("No usable keyring backend, falling back to SQLite")
-    except Exception:
+    except (ImportError, RuntimeError):
         _available = False
         logger.info("Keyring not available, falling back to SQLite")
     return _available
@@ -40,7 +40,7 @@ def get_secret(key: str) -> str | None:
         import keyring
 
         return keyring.get_password(SERVICE_NAME, key)
-    except Exception:
+    except (ImportError, RuntimeError, keyring.errors.KeyringError):
         logger.debug("Failed to read '%s' from keyring", key)
         return None
 
@@ -54,7 +54,7 @@ def set_secret(key: str, value: str) -> bool:
 
         keyring.set_password(SERVICE_NAME, key, value)
         return True
-    except Exception:
+    except (ImportError, RuntimeError, keyring.errors.KeyringError):
         logger.debug("Failed to write '%s' to keyring", key)
         return False
 
@@ -68,6 +68,6 @@ def delete_secret(key: str) -> bool:
 
         keyring.delete_password(SERVICE_NAME, key)
         return True
-    except Exception:
+    except (ImportError, RuntimeError, keyring.errors.KeyringError):
         logger.debug("Failed to delete '%s' from keyring", key)
         return False

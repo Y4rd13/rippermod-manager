@@ -39,12 +39,12 @@ def _configure_logging() -> None:
         logging.getLogger(name).setLevel(logging.WARNING)
 
 
-_configure_logging()
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    _configure_logging()
     create_db_and_tables()
     logger.info("Application started")
     yield
@@ -116,8 +116,9 @@ async def health_deep() -> dict[str, Any]:
 
             conn.execute(text("SELECT 1"))
         checks["database"] = "ok"
-    except Exception as exc:
-        checks["database"] = f"error: {exc}"
+    except Exception:
+        logger.exception("Health check: database unavailable")
+        checks["database"] = "unavailable"
         all_ok = False
 
     # ChromaDB heartbeat
@@ -127,8 +128,9 @@ async def health_deep() -> dict[str, Any]:
         client = get_chroma_client()
         client.heartbeat()
         checks["chromadb"] = "ok"
-    except Exception as exc:
-        checks["chromadb"] = f"error: {exc}"
+    except Exception:
+        logger.exception("Health check: chromadb unavailable")
+        checks["chromadb"] = "unavailable"
         all_ok = False
 
     # Data dir writability
@@ -137,8 +139,9 @@ async def health_deep() -> dict[str, Any]:
         probe.write_text("ok")
         probe.unlink()
         checks["data_dir"] = "ok"
-    except Exception as exc:
-        checks["data_dir"] = f"error: {exc}"
+    except Exception:
+        logger.exception("Health check: data_dir unavailable")
+        checks["data_dir"] = "unavailable"
         all_ok = False
 
     status_code = 200 if all_ok else 503

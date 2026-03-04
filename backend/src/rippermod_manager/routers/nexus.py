@@ -10,7 +10,6 @@ from sqlmodel import Session, col, select
 
 from rippermod_manager.database import get_session
 from rippermod_manager.models.game import Game
-from rippermod_manager.models.settings import AppSetting
 
 if TYPE_CHECKING:
     from rippermod_manager.models.nexus import NexusDownload
@@ -40,13 +39,13 @@ async def sync_history(game_name: str, session: Session = Depends(get_session)) 
     if not game:
         raise HTTPException(404, f"Game '{game_name}' not found")
 
-    key_setting = session.exec(select(AppSetting).where(AppSetting.key == "nexus_api_key")).first()
-    if not key_setting or not key_setting.value:
+    api_key = get_setting(session, "nexus_api_key")
+    if not api_key:
         raise HTTPException(400, "Nexus API key not configured")
 
     from rippermod_manager.services.nexus_sync import sync_nexus_history
 
-    return await sync_nexus_history(game, key_setting.value, session)
+    return await sync_nexus_history(game, api_key, session)
 
 
 @router.get("/downloads/{game_name}", response_model=list[NexusModEnrichedOut])
@@ -146,8 +145,7 @@ async def mod_detail(
 
     meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
 
-    key_setting = session.exec(select(AppSetting).where(AppSetting.key == "nexus_api_key")).first()
-    api_key = key_setting.value if key_setting else ""
+    api_key = get_setting(session, "nexus_api_key") or ""
 
     # Fetch mod info via GraphQL if missing
     if not meta or not meta.description:
