@@ -1,6 +1,8 @@
 name: Dependabot Auto-Merge
 
-on: pull_request
+on:
+  pull_request:
+    types: [opened, reopened]
 
 permissions:
   contents: write
@@ -14,7 +16,7 @@ jobs:
     steps:
       - name: Fetch Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@v2.2.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
