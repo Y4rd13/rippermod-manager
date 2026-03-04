@@ -77,12 +77,10 @@ class TestMatchByFileContents:
         search_results = [
             {
                 "filePath": "my_custom_textures.archive",
+                "fileName": "my_custom_textures.archive",
                 "fileSize": 100,
-                "modFile": {
-                    "fileId": 1,
-                    "name": "file.zip",
-                    "mod": {"modId": 42, "name": "Custom Textures Mod"},
-                },
+                "modId": 42,
+                "fileId": 1,
             }
         ]
 
@@ -122,21 +120,17 @@ class TestMatchByFileContents:
         search_results = [
             {
                 "filePath": "f1",
+                "fileName": "f1",
                 "fileSize": 100,
-                "modFile": {
-                    "fileId": 1,
-                    "name": "a",
-                    "mod": {"modId": 42, "name": "Mod A"},
-                },
+                "modId": 42,
+                "fileId": 1,
             },
             {
                 "filePath": "f2",
+                "fileName": "f2",
                 "fileSize": 200,
-                "modFile": {
-                    "fileId": 2,
-                    "name": "b",
-                    "mod": {"modId": 99, "name": "Mod B"},
-                },
+                "modId": 99,
+                "fileId": 2,
             },
         ]
 
