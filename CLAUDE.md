@@ -1,64 +1,95 @@
-# CLAUDE.md
+# RipperMod Manager
 
-## Project overview
+Desktop AI-powered mod manager for PC games (focused on Cyberpunk 2077). Scans, groups, correlates, and manages mods with Nexus Mods integration and an LLM chat agent.
 
-RipperMod Manager is a desktop AI-powered mod manager for PC games (focused on Cyberpunk 2077). It combines a chat agent backend with Nexus Mods integration to scan, group, correlate, and manage mods.
+## Stack
 
-- **Backend:** FastAPI (Python 3.12, uv, src layout at `backend/src/rippermod_manager/`)
-- **Frontend:** React 19 + TypeScript + Vite + Tailwind CSS v4 (`frontend/`)
-- **Desktop shell:** Tauri v2 (Rust, `frontend/src-tauri/`)
-- **State:** Zustand for client state, React Query for server state, SQLite for persistence
-- **Vector store:** ChromaDB for semantic mod search
+- **Backend:** FastAPI, Python 3.12, uv, src layout — `backend/src/rippermod_manager/`
+- **Frontend:** React 19, TypeScript 5.9 (strict), Vite, Tailwind CSS v4 — `frontend/src/`
+- **Desktop:** Tauri v2, Rust — `frontend/src-tauri/`
+- **State:** Zustand (client), React Query (server), SQLite (persistence), ChromaDB (vectors)
+- **Key deps:** httpx, tenacity (retry), keyring (OS secret store), scikit-learn, jellyfish, langchain
 
 ## Commands
 
 ```bash
 # Backend
-cd backend && uv run uvicorn rippermod_manager.main:app --reload --port 8425  # Dev server
-cd backend && uv run ruff check src/ tests/    # Lint
-cd backend && uv run ruff format src/ tests/   # Format
-cd backend && uv run pytest tests/ -v          # Tests
+cd backend && uv run uvicorn rippermod_manager.main:app --reload --port 8425
+cd backend && uv run ruff check src/ tests/
+cd backend && uv run ruff format src/ tests/
+cd backend && uv run pytest tests/ -v --tb=short
 
 # Frontend
-cd frontend && npm run dev         # Vite dev (port 1420)
-cd frontend && npm run build       # tsc + vite build
-cd frontend && npm run lint        # ESLint
-cd frontend && npx tauri dev       # Tauri desktop window
+cd frontend && npm run dev       # Vite dev (port 1420)
+cd frontend && npm run build     # tsc + vite build
+cd frontend && npm run lint      # ESLint
+cd frontend && npx tauri dev     # Tauri desktop (backend must be running)
 ```
 
 ## Code style
 
-### Python (backend)
+### Python
 - Ruff: line-length 100, rules `E F I UP B SIM RUF`
+- B008 ignored in `routers/*.py` (FastAPI `Depends()` pattern)
 - Type hints required on public functions
 - Async-first: use `async def` for route handlers
 - Imports sorted by isort via Ruff
 
-### TypeScript (frontend)
+### TypeScript
 - Strict mode enabled
-- Path alias: `@/*` maps to `./src/*`
+- Path alias: `@/*` → `./src/*`
 - Unused vars prefixed with `_` are allowed
 
-### General
+### Conventions
 - Commit messages: English, conventional commits (`feat:`, `fix:`, `perf:`, `refactor:`, `chore:`, `docs:`)
 - All code, comments, and commits in English
+- Squash merge — PR title becomes the commit on main (semantic-release reads it)
 
-## Architecture notes
+## Architecture
 
-- Backend API at `http://localhost:8425`, prefix `/api/v1/`
-- Chat agent uses LangChain + OpenAI with SSE streaming
-- Nexus Mods API client uses async httpx with `APIKEY` header
-- Scanner groups mod files using TF-IDF + DBSCAN clustering
-- Correlator matches local mods to Nexus downloads via Jaccard + Jaro-Winkler
-- ChromaDB stores embeddings for semantic search across mods, Nexus metadata, and correlations
+See @docs/architecture.md for a full inventory of routers, services, models.
+
+- Backend API: `http://localhost:8425/api/v1/`
+- **Nexus API:** dual-client — REST v1 (`nexus/client.py`) for CRUD, GraphQL v2 (`nexus/graphql_client.py`) for batch queries. Both use tenacity retry (3 attempts, exponential 2–30s) on 429/5xx
+- **Scan pipeline:** file discovery → TF-IDF + DBSCAN grouping → multi-tier matching → correlation
+- **Matching tiers:** (1) filename ID extraction, (2) MD5 hash batch lookup, (3) AI/web search, (4) Jaccard + Jaro-Winkler fuzzy
+- **Secrets:** keyring service attempts OS keychain, falls back to SQLite. Keys: `nexus_api_key`, `openai_api_key`, `tavily_api_key`
+- **Health:** `/health` (shallow), `/health/deep` (DB + ChromaDB + data_dir writability)
+- **Logging:** stderr + `RotatingFileHandler` at `data_dir/logs/rippermod.log` (5 MB × 3)
+- Chat agent: LangChain + OpenAI with SSE streaming
 - Tauri CSP restricts connections to `localhost:8425`
 
-## Review focus areas
+## Database
+
+- SQLite with WAL mode, `PRAGMA foreign_keys=ON`, `synchronous=NORMAL`
+- Single-writer — avoid long-running transactions and blocking operations
+- Migrations: column additions in `database.py:_migrate_missing_columns()`, unique indexes in `_migrate_unique_indexes()`
+- NEVER use raw SQL for queries accessible from user input — use SQLModel/SQLAlchemy parameterized queries
+
+## Nexus Mods API
+
+See @docs/nexus-api-usage.md for endpoint reference.
+
+- Rate limits: 2,500/day, 100/hour. Track via `X-RL-Hourly-Remaining` / `X-RL-Daily-Remaining`
+- REST v1 for mutations (endorse, track, download links); GraphQL v2 for batch reads (file hashes, mod info, search)
+- Retry on 429 and 5xx only — NEVER retry 401/403/404
+- `NexusRateLimitError` and `NexusPremiumRequiredError` are custom exceptions — catch them explicitly before generic `httpx.HTTPError`
+
+## Testing
+
+- 762+ tests across `backend/tests/` (routers, services, matching, scanner, vector, agents)
+- Fixtures in `tests/conftest.py` — in-memory SQLite, test games, mock clients
+- CI runs with `--cov=rippermod_manager --cov-report=term-missing`
+- Use `respx` for HTTP mocking — never make real API calls in tests
+- Prefer testing a single file: `uv run pytest tests/services/test_foo.py -v`
+
+## Review focus
 
 When reviewing PRs, pay extra attention to:
-- **Performance:** Desktop app — avoid unnecessary re-renders and heavy DOM operations
-- **SQLite concurrency:** Single-writer — watch for blocking operations
-- **Type safety:** Handle `undefined` from indexed access
-- **Security:** CSP compliance, no arbitrary eval, sanitize AI-generated content
-- **Nexus API:** Rate limiting, proper error handling for 429/5xx responses
+- **Performance:** Desktop app — avoid unnecessary re-renders, heavy DOM operations, virtualize long lists
+- **SQLite concurrency:** Single-writer — watch for blocking operations in async handlers
+- **Type safety:** Handle `undefined` from indexed access in TypeScript
+- **Security:** CSP compliance, no arbitrary eval, sanitize AI-generated content, no path traversal in archive extraction
+- **Nexus API:** Rate limiting, proper error handling, catch specific exceptions before broad ones
 - **Vector store:** ChromaDB collection lifecycle, index consistency after data mutations
+- **Exception handling:** Use specific types (`httpx.HTTPError`, `OSError`) — only use `except Exception` for shutdown/cleanup and ChromaDB operations

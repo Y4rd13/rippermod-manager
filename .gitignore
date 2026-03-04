@@ -22,7 +22,8 @@ backend/dist/
 backend/build/
 
 # Claude Code
-.claude/
+.claude/*
+!.claude/rules/
 
 # IDE
 .idea/
