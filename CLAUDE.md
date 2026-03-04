@@ -41,9 +41,11 @@ cd frontend && npx tauri dev     # Tauri desktop (backend must be running)
 - Unused vars prefixed with `_` are allowed
 
 ### Conventions
-- Commit messages: English, conventional commits (`feat:`, `fix:`, `perf:`, `refactor:`, `chore:`, `docs:`)
-- All code, comments, and commits in English
+- Commit messages: English, conventional commits
+- Allowed types: `feat`, `fix`, `perf`, `refactor`, `chore`, `docs`, `style`, `test`, `build`, `ci`, `revert`
+- Breaking changes: `feat!:` or `fix!:` → MAJOR bump. `feat:` → MINOR. `fix:` → PATCH. All others → no release
 - Squash merge — PR title becomes the commit on main (semantic-release reads it)
+- All code, comments, and commits in English
 
 ## Architecture
 
