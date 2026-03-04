@@ -411,7 +411,7 @@ class NexusGraphQLClient:
         """Fetch a collection revision with its mod list."""
         query = """
         query GetCollectionRevision(
-            $slug: String!, $revision: Int!, $domainName: String
+            $slug: String!, $revision: Int!, $domainName: String!
         ) {
             collectionRevision(
                 slug: $slug, revision: $revision,

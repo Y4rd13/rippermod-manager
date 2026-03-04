@@ -23,13 +23,23 @@ def _mask_secret(value: str) -> str:
 def list_settings(session: Session = Depends(get_session)) -> list[SettingOut]:
     settings = session.exec(select(AppSetting)).all()
     result: list[SettingOut] = []
+    seen_keys: set[str] = set()
     for s in settings:
+        seen_keys.add(s.key)
         value = s.value
         if s.key in SECRET_KEYS and not value:
             value = get_secret(s.key) or ""
         if s.key in HIDDEN_KEYS and value:
             value = _mask_secret(value)
         result.append(SettingOut(key=s.key, value=value))
+    for sk in SECRET_KEYS:
+        if sk not in seen_keys:
+            kr_val = get_secret(sk) or ""
+            if kr_val:
+                result.append(SettingOut(
+                    key=sk,
+                    value=_mask_secret(kr_val) if sk in HIDDEN_KEYS else kr_val,
+                ))
     return result
 
 
