@@ -23,9 +23,9 @@ def _make_gql_mock(batch_mods_return=None, batch_mods_side_effect=None):
     mock = AsyncMock()
     mock.__aenter__.return_value = mock
     if batch_mods_side_effect:
-        mock.batch_mods.side_effect = batch_mods_side_effect
+        mock.batch_mods_by_domain.side_effect = batch_mods_side_effect
     else:
-        mock.batch_mods.return_value = batch_mods_return or {}
+        mock.batch_mods_by_domain.return_value = batch_mods_return or {}
     mock.get_mod_files.return_value = []
     return mock
 

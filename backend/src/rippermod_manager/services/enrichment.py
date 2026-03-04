@@ -3,10 +3,11 @@
 Parses Nexus mod IDs from local filenames and fetches mod info from the API
 to expand the matching pool before fuzzy correlation runs.
 
-Uses GraphQL v2 batch_mods() for mod info (1 query per ~50 mods) and
-per-mod get_mod_files() for file resolution.
+Uses GraphQL v2 batch_mods_by_domain() for mod info and parallel
+get_mod_files() for file resolution.
 """
 
+import asyncio
 import logging
 
 import httpx
@@ -24,6 +25,7 @@ from rippermod_manager.services.nexus_helpers import (
     graphql_mod_to_rest_info,
     match_local_to_nexus_file,
     store_uid_from_gql,
+    upsert_mod_requirements,
     upsert_nexus_mod,
 )
 from rippermod_manager.services.progress import ProgressCallback, noop_progress
@@ -52,7 +54,7 @@ async def enrich_from_filename_ids(
             )
 
     if not candidate_ids:
-        on_progress("enrich", "No filename IDs found", 87)
+        on_progress("enrich", "No filename IDs found", 85)
         return EnrichResult(ids_found=0, ids_new=0, ids_failed=0)
 
     # Filter out IDs already in the NexusDownload table for this game
@@ -66,7 +68,7 @@ async def enrich_from_filename_ids(
     new_ids = candidate_ids - existing_ids
 
     ids_found = len(candidate_ids)
-    on_progress("enrich", f"Found {ids_found} IDs, {len(new_ids)} new", 86)
+    on_progress("enrich", f"Found {ids_found} IDs, {len(new_ids)} new", 84)
 
     if not new_ids:
         return EnrichResult(ids_found=ids_found, ids_new=0, ids_failed=0)
@@ -77,50 +79,80 @@ async def enrich_from_filename_ids(
     try:
         async with NexusGraphQLClient(api_key) as gql:
             # Batch fetch mod info (chunks of ~50 via aliases)
-            on_progress("enrich", f"Batch-fetching {len(new_ids)} mod infos...", 87)
+            on_progress("enrich", f"Batch-fetching {len(new_ids)} mod infos...", 84)
             try:
-                batch_result = await gql.batch_mods(game.domain_name, sorted(new_ids))
+                batch_result = await gql.batch_mods_by_domain(game.domain_name, sorted(new_ids))
             except NexusRateLimitError:
-                on_progress("enrich", "Rate limited during batch fetch", 91)
+                on_progress("enrich", "Rate limited during batch fetch", 88)
                 logger.warning("Rate limited during batch enrichment")
                 return EnrichResult(ids_found=ids_found, ids_new=0, ids_failed=len(new_ids))
 
-            for i, mod_id in enumerate(sorted(new_ids)):
+            # Process batch results: store metadata and requirements
+            sorted_new = sorted(new_ids)
+            mod_infos: dict[int, dict] = {}
+            mods_needing_files: list[int] = []
+
+            for mod_id in sorted_new:
                 gql_mod = batch_result.get(mod_id)
                 if not gql_mod:
                     ids_failed += 1
                     continue
 
                 info = graphql_mod_to_rest_info(gql_mod)
+                mod_infos[mod_id] = info
 
-                # Store UID
                 if gql_mod.get("uid"):
                     store_uid_from_gql(session, mod_id, gql_mod["uid"])
 
-                # Resolve file_id by matching local filenames against Nexus file list
+                mod_reqs = gql_mod.get("modRequirements") or {}
+                nexus_reqs = (mod_reqs.get("nexusRequirements") or {}).get("nodes") or []
+                if nexus_reqs:
+                    upsert_mod_requirements(session, mod_id, nexus_reqs)
+
+                if id_to_filenames.get(mod_id):
+                    mods_needing_files.append(mod_id)
+
+            # Parallel file list fetching with semaphore
+            sem = asyncio.Semaphore(5)
+            files_map: dict[int, list[dict]] = {}
+
+            async def _fetch_files(mid: int) -> None:
+                async with sem:
+                    try:
+                        gql_files = await gql.get_mod_files(game.domain_name, mid)
+                        files_map[mid] = [graphql_file_to_rest_file(gf) for gf in gql_files]
+                    except NexusRateLimitError:
+                        logger.debug("Rate limited fetching files for mod %d", mid)
+                    except httpx.HTTPError:
+                        logger.debug("Could not fetch files for mod %d", mid)
+
+            if mods_needing_files:
+                await asyncio.gather(*[_fetch_files(mid) for mid in mods_needing_files])
+
+            # Resolve file IDs and upsert
+            for i, mod_id in enumerate(sorted_new):
+                info = mod_infos.get(mod_id)
+                if not info:
+                    continue
+
                 file_name_resolved = ""
                 file_id_resolved: int | None = None
                 local_entries = id_to_filenames.get(mod_id, [])
-                if local_entries:
-                    try:
-                        gql_files = await gql.get_mod_files(game.domain_name, mod_id)
-                        nexus_files = [graphql_file_to_rest_file(gf) for gf in gql_files]
-                        for local_fn, local_ver, local_ts in local_entries:
-                            matched = match_local_to_nexus_file(
-                                local_fn,
-                                nexus_files,
-                                parsed_version=local_ver,
-                                parsed_timestamp=local_ts,
-                                strict=True,
-                            )
-                            if matched:
-                                file_name_resolved = matched.get("file_name", "")
-                                file_id_resolved = matched.get("file_id")
-                                break
-                    except NexusRateLimitError:
-                        logger.debug("Rate limited fetching files for mod %d", mod_id)
-                    except httpx.HTTPError:
-                        logger.debug("Could not fetch files for mod %d", mod_id)
+                nexus_files = files_map.get(mod_id, [])
+
+                if local_entries and nexus_files:
+                    for local_fn, local_ver, local_ts in local_entries:
+                        matched = match_local_to_nexus_file(
+                            local_fn,
+                            nexus_files,
+                            parsed_version=local_ver,
+                            parsed_timestamp=local_ts,
+                            strict=True,
+                        )
+                        if matched:
+                            file_name_resolved = matched.get("file_name", "")
+                            file_id_resolved = matched.get("file_id")
+                            break
 
                 upsert_nexus_mod(
                     session,
@@ -133,11 +165,11 @@ async def enrich_from_filename_ids(
                 )
 
                 ids_new += 1
-                pct = 87 + int((i + 1) / len(new_ids) * 4)  # 87-91%
+                pct = 84 + int((i + 1) / len(sorted_new) * 4)  # 84-88%
                 on_progress("enrich", f"Fetched: {info.get('name', f'mod {mod_id}')}", pct)
 
     except NexusRateLimitError:
-        on_progress("enrich", "Rate limited during enrichment", 91)
+        on_progress("enrich", "Rate limited during enrichment", 88)
         logger.warning("Rate limited during enrichment")
     except httpx.HTTPError:
         logger.warning("Enrichment batch failed", exc_info=True)

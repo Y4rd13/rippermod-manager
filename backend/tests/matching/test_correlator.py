@@ -1,12 +1,14 @@
 from rippermod_manager.matching.correlator import (
+    _categories_compatible,
+    classify_group_category,
     compute_name_score,
     correlate_game_mods,
     normalize,
     token_jaccard,
 )
 from rippermod_manager.models.correlation import ModNexusCorrelation
-from rippermod_manager.models.mod import ModGroup
-from rippermod_manager.models.nexus import NexusDownload
+from rippermod_manager.models.mod import ModFile, ModGroup
+from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 
 
 class TestTokenJaccard:
@@ -223,3 +225,107 @@ class TestCorrelateGameMods:
 
         result = correlate_game_mods(game, session)
         assert result.matched == 1  # preserved
+
+    def test_popularity_tiebreaker(self, session, make_game):
+        """When two candidates score within 0.05, the more endorsed one wins."""
+        from sqlmodel import select
+
+        game = make_game()
+        group = ModGroup(game_id=game.id, display_name="Enhanced Combat")
+        session.add(group)
+
+        dl_low = NexusDownload(game_id=game.id, nexus_mod_id=800, mod_name="Enhanced Combat")
+        dl_high = NexusDownload(game_id=game.id, nexus_mod_id=801, mod_name="Enhanced Combat")
+        session.add_all([dl_low, dl_high])
+
+        # Higher endorsements on dl_high
+        session.add(
+            NexusModMeta(nexus_mod_id=800, endorsement_count=10, game_domain="cyberpunk2077")
+        )
+        session.add(
+            NexusModMeta(nexus_mod_id=801, endorsement_count=5000, game_domain="cyberpunk2077")
+        )
+        session.commit()
+
+        result = correlate_game_mods(game, session)
+        assert result.matched == 1
+
+        corr = session.exec(
+            select(ModNexusCorrelation).where(ModNexusCorrelation.mod_group_id == group.id)
+        ).first()
+        # The more popular one should win
+        dl_matched = session.get(NexusDownload, corr.nexus_download_id)
+        assert dl_matched.nexus_mod_id == 801
+
+    def test_category_penalty_applied(self, session, make_game):
+        """Scripts group should penalize asset-category Nexus mod."""
+        game = make_game()
+        group = ModGroup(game_id=game.id, display_name="Combat Tweaks")
+        session.add(group)
+        session.flush()
+
+        # Add .reds files to classify as "scripts"
+        session.add(
+            ModFile(
+                mod_group_id=group.id,
+                filename="combat_tweaks_system.reds",
+                file_path="r6/scripts/combat_tweaks.reds",
+                file_hash="h",
+                file_size=100,
+            )
+        )
+
+        # Script mod (compatible)
+        dl_script = NexusDownload(game_id=game.id, nexus_mod_id=900, mod_name="Combat Tweaks Mod")
+        # Asset mod (incompatible)
+        dl_asset = NexusDownload(
+            game_id=game.id, nexus_mod_id=901, mod_name="Combat Tweaks Textures"
+        )
+        session.add_all([dl_script, dl_asset])
+        session.add(
+            NexusModMeta(
+                nexus_mod_id=901,
+                category="models and textures",
+                game_domain="cyberpunk2077",
+            )
+        )
+        session.commit()
+
+        result = correlate_game_mods(game, session)
+        assert result.matched == 1
+
+
+class TestCategoryClassification:
+    def test_scripts_classification(self):
+        files = [
+            ModFile(filename="mod.reds", file_path="p", file_hash="h", file_size=1),
+            ModFile(filename="helper.reds", file_path="p", file_hash="h", file_size=1),
+        ]
+        assert classify_group_category(files) == "scripts"
+
+    def test_assets_classification(self):
+        files = [
+            ModFile(filename="textures.archive", file_path="p", file_hash="h", file_size=1),
+        ]
+        assert classify_group_category(files) == "assets"
+
+    def test_tweaks_classification(self):
+        files = [
+            ModFile(filename="config.yaml", file_path="p", file_hash="h", file_size=1),
+            ModFile(filename="data.xl", file_path="p", file_hash="h", file_size=1),
+        ]
+        assert classify_group_category(files) == "tweaks"
+
+    def test_no_classification(self):
+        files = [
+            ModFile(filename="readme.txt", file_path="p", file_hash="h", file_size=1),
+        ]
+        assert classify_group_category(files) is None
+
+    def test_compatible_categories(self):
+        assert _categories_compatible("scripts", "gameplay") is True
+        assert _categories_compatible(None, "anything") is True
+
+    def test_incompatible_categories(self):
+        assert _categories_compatible("scripts", "models and textures") is False
+        assert _categories_compatible("assets", "scripts") is False
