@@ -23,15 +23,17 @@
 ## Features
 
 - **Mod Scanner** — Recursively discovers mod files from configured game paths, groups them by name similarity using TF-IDF + DBSCAN clustering, and computes file hashes for integrity tracking.
-- **Nexus Mods Integration** — Connects to your Nexus account via SSO, syncs tracked/endorsed mods, fetches mod metadata, and checks for available updates.
+- **Nexus Mods Integration** — Connects to your Nexus account via SSO, syncs tracked/endorsed mods, fetches mod metadata, and searches Nexus by name via GraphQL v2.
 - **Endorse & Track** — Toggle endorse/track status on any mod directly from card buttons, context menus, or the mod detail modal — syncs with the Nexus Mods API in real time.
-- **Auto-Correlation** — Matches local mod groups to Nexus downloads using Jaccard similarity + Jaro-Winkler distance scoring.
-- **Mod Installation** — Install mods from downloaded archives with conflict detection, skip/overwrite resolution, and enable/disable toggling. Includes FOMOD installer wizard for scripted mod packages.
-- **Archive Management** — Browse, delete, and clean up orphaned mod archives from the downloads staging folder.
+- **Auto-Correlation** — Matches local mod groups to Nexus downloads using Jaccard similarity + Jaro-Winkler distance scoring, with manual reassign and confirm/reject actions.
+- **Mod Installation** — Install mods from downloaded archives with pre-install preview, conflict detection, skip/overwrite resolution, and enable/disable toggling. Includes FOMOD installer wizard for scripted mod packages.
+- **Conflict Detection** — Multi-layer conflict engine: file-level overlap detection, redscript annotation analysis, TweakXL conflict scanning, and a conflict inbox for resolution.
+- **Load Order** — View and manage archive load order with preference rules, modlist.txt generation, and dry-run previews.
+- **Archive Management** — Browse archive contents, link/unlink archives to Nexus mods, delete, and clean up orphaned mod archives from the downloads staging folder.
 - **Download Manager** — Download mod archives directly from Nexus Mods with progress tracking, NXM deep link handling, and premium account support.
 - **Trending Mods** — Browse trending and recently updated mods from Nexus with one-click install, endorse, or track actions.
 - **Endorsed & Tracked Tabs** — Browse your endorsed and tracked mods from Nexus with install actions or direct Nexus links.
-- **Mod Detail Modal** — View full mod details including description, files, changelogs, and action buttons without leaving the app.
+- **Mod Detail Modal** — View full mod details including description, files, changelogs, requirements, and action buttons without leaving the app.
 - **Profile Manager** — Save, load, export, import, duplicate, and compare mod profiles to switch between mod configurations.
 - **Update Checker** — Compares local mod versions against Nexus metadata to surface available updates with one-click download.
 - **AI Search** — AI-powered mod matching with configurable OpenAI model and reasoning effort for enhanced scan accuracy.
@@ -47,7 +49,7 @@
 | Backend | Python 3.12, FastAPI, SQLModel, SQLite |
 | AI Agent | LangChain, OpenAI (configurable model) |
 | Vector Store | ChromaDB (persistent, cosine similarity) |
-| Nexus API | async httpx, respx (testing) |
+| Nexus API | REST v1 + GraphQL v2, async httpx, respx (testing) — [endpoint map](docs/nexus-api-usage.md) |
 | Matching | scikit-learn (TF-IDF, DBSCAN), jellyfish (Jaro-Winkler) |
 | Hashing | xxhash (xxh64) |
 | Frontend | React 19, TypeScript 5.9, Vite 7 |
@@ -64,103 +66,32 @@
 
 ```
 rippermod-manager/
-├── backend/
+├── backend/                 # FastAPI + Python 3.12
 │   ├── src/rippermod_manager/
-│   │   ├── __main__.py              # Standalone entry point (uvicorn)
-│   │   ├── main.py                  # FastAPI app, lifespan, CORS, /health
-│   │   ├── config.py                # Pydantic settings (AppData paths)
-│   │   ├── database.py              # SQLite engine, session factory
-│   │   ├── models/                  # SQLModel tables
-│   │   │   ├── game.py              #   Game, GameModPath
-│   │   │   ├── mod.py               #   ModGroup, ModFile, ModGroupAlias
-│   │   │   ├── nexus.py             #   NexusDownload, NexusModMeta
-│   │   │   ├── correlation.py       #   ModNexusCorrelation
-│   │   │   ├── download.py          #   DownloadJob
-│   │   │   ├── install.py           #   InstalledMod, InstalledFile
-│   │   │   ├── profile.py           #   ModProfile, ProfileEntry
-│   │   │   ├── settings.py          #   AppSetting, PCSpecs
-│   │   │   └── chat.py              #   ChatMessage
-│   │   ├── schemas/                 # Pydantic request/response models
-│   │   ├── routers/                 # FastAPI routers (prefix /api/v1/)
-│   │   │   ├── games.py             #   CRUD games + mod paths
-│   │   │   ├── mods.py              #   List, scan, correlate mods
-│   │   │   ├── nexus.py             #   Sync, search, endorse/track, SSO, mod detail
-│   │   │   ├── install.py           #   Install, uninstall, toggle, archive management
-│   │   │   ├── fomod.py             #   FOMOD installer wizard
-│   │   │   ├── downloads.py         #   Download mods from Nexus
-│   │   │   ├── profiles.py          #   Save, load, export/import, compare profiles
-│   │   │   ├── trending.py          #   Trending mods from Nexus
-│   │   │   ├── updates.py           #   Version diff + update check
-│   │   │   ├── settings.py          #   App settings + PC specs
-│   │   │   ├── onboarding.py        #   Onboarding status + completion
-│   │   │   ├── chat.py              #   SSE chat endpoint
-│   │   │   └── vector.py            #   Reindex, search, stats
-│   │   ├── scanner/service.py       # File discovery + grouping
-│   │   ├── matching/
-│   │   │   ├── grouper.py           # TF-IDF + DBSCAN file grouping
-│   │   │   └── correlator.py        # Local↔Nexus name matching
-│   │   ├── nexus/client.py          # Async Nexus Mods API client
-│   │   ├── services/
-│   │   │   ├── nexus_sync.py        # Sync tracked/endorsed mods
-│   │   │   ├── download_service.py  # Download orchestration + shutdown
-│   │   │   ├── install_service.py   # Mod install/uninstall/toggle logic
-│   │   │   ├── fomod_config_parser.py # FOMOD XML config parser
-│   │   │   ├── fomod_install_service.py # FOMOD step-based installation
-│   │   │   ├── profile_service.py   # Profile save/load/export/import
-│   │   │   ├── update_service.py    # Version comparison + update check
-│   │   │   ├── conflict_service.py  # File conflict detection
-│   │   │   ├── trending_service.py  # Trending mods fetching
-│   │   │   ├── ai_search_matcher.py # AI-powered mod matching
-│   │   │   ├── web_search_matcher.py # Web search fallback matching
-│   │   │   └── ...                  # 22+ services total
-│   │   ├── vector/
-│   │   │   ├── store.py             # ChromaDB client + collections
-│   │   │   ├── indexer.py           # Index mods/nexus/correlations
-│   │   │   └── search.py            # Semantic search queries
-│   │   └── agents/orchestrator.py   # LangChain agent + tools
-│   ├── rmm-backend.spec            # PyInstaller spec (--onefile)
-│   └── tests/                       # 480+ pytest tests across 32 files
-├── frontend/
+│   │   ├── models/          # 12 SQLModel table modules
+│   │   ├── schemas/         # Pydantic request/response models
+│   │   ├── routers/         # 15 API routers (67 endpoints)
+│   │   ├── services/        # 35 business logic modules
+│   │   ├── scanner/         # File discovery + grouping
+│   │   ├── matching/        # TF-IDF, correlation, filename parsing
+│   │   ├── nexus/           # REST v1 + GraphQL v2 API clients
+│   │   ├── vector/          # ChromaDB indexing + search
+│   │   └── agents/          # LangChain chat agent
+│   └── tests/               # 720+ tests across 45 files
+├── frontend/                # React 19 + TypeScript + Vite
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── BackendGate.tsx       # Waits for backend before rendering
-│   │   │   ├── ErrorBoundary.tsx     # Catches crashes, shows fallback UI
-│   │   │   ├── chat/                 #   ChatPanel
-│   │   │   ├── layout/              #   Sidebar, Titlebar
-│   │   │   ├── mods/                #   NexusModCard, NexusMatchedGrid,
-│   │   │   │                        #   InstalledModsTable, ArchivesList,
-│   │   │   │                        #   ProfileManager, FomodWizard,
-│   │   │   │                        #   TrendingGrid, NexusAccountGrid,
-│   │   │   │                        #   ModDetailModal, ModQuickActions,
-│   │   │   │                        #   UpdatesTable, ConflictDialog (21 components)
-│   │   │   └── ui/                  #   Badge, Button, Card, Input, Toast
-│   │   ├── pages/
-│   │   │   ├── DashboardPage.tsx
-│   │   │   ├── GamesPage.tsx
-│   │   │   ├── GameDetailPage.tsx
-│   │   │   ├── SettingsPage.tsx
-│   │   │   ├── UpdatesPage.tsx
-│   │   │   └── OnboardingPage.tsx
-│   │   ├── hooks/                   # React Query, useInstallFlow, useFomodWizard (10 hooks)
-│   │   ├── stores/                  # Zustand stores
-│   │   ├── lib/                     # API client, SSE parser, utils
-│   │   ├── router/                  # Routes + OnboardingGuard
-│   │   ├── layouts/                 # Root + Onboarding layouts
-│   │   └── types/                   # TypeScript API types
-│   └── src-tauri/                   # Tauri v2 Rust shell + sidecar lifecycle
-├── scripts/
-│   ├── build-backend.ps1            # PyInstaller build + sidecar copy
-│   └── ensure-dev-sidecar.ps1       # Dev placeholder for Tauri compile
-├── .github/workflows/
-│   ├── ci.yml                       # Consolidated CI (backend, frontend, Tauri + gate)
-│   ├── release.yml                  # Tag-triggered release pipeline
-│   ├── claude.yml                   # Claude Code interactive (@claude)
-│   ├── claude-pr-review.yml         # Automated PR review
-│   └── cla.yml                      # Contributor License Agreement check
-├── CLAUDE.md                        # AI assistant project context
-├── CLA.md                           # Contributor License Agreement
-└── LICENSE                          # GPL-3.0
+│   │   ├── components/      # 25 mod components, 24 UI primitives
+│   │   ├── pages/           # 6 pages
+│   │   ├── hooks/           # 12 hooks (React Query, install, FOMOD, ...)
+│   │   ├── stores/          # Zustand stores
+│   │   └── lib/             # API client, SSE parser, utils
+│   └── src-tauri/           # Tauri v2 Rust shell + sidecar lifecycle
+├── docs/                    # Architecture, Nexus API map
+├── scripts/                 # Build + release helpers
+└── .github/workflows/       # CI, release, PR review, CLA
 ```
+
+> Full file-level tree: [docs/architecture.md](docs/architecture.md)
 
 ## Prerequisites
 
@@ -226,7 +157,7 @@ cd backend
 uv run uvicorn rippermod_manager.main:app --reload --port 8425   # Dev server
 uv run ruff check src/ tests/                                         # Lint
 uv run ruff format src/ tests/                                        # Format
-uv run pytest tests/ -v                                               # Tests (477 tests)
+uv run pytest tests/ -v                                               # Tests (720+ tests)
 ```
 
 ### Frontend commands
@@ -259,13 +190,7 @@ npx tauri build
 # Output: frontend/src-tauri/target/release/bundle/nsis/*.exe
 ```
 
-Or push a version tag to trigger the automated release pipeline:
-
-```bash
-git tag v1.0.0
-git push --tags
-# → GitHub Actions builds and creates a draft release with the installer
-```
+Releases are handled automatically by `semantic-release` — merging a conventional commit to `main` triggers versioning, changelog generation, and a GitHub release with the installer attached.
 
 ### API Endpoints
 
@@ -294,6 +219,9 @@ All endpoints are prefixed with `/api/v1/`.
 | `POST` | `/games/{name}/mods/scan` | Scan and group mod files |
 | `POST` | `/games/{name}/mods/scan-stream` | Scan with SSE progress streaming |
 | `POST` | `/games/{name}/mods/correlate` | Match mods to Nexus downloads |
+| `PATCH` | `/games/{name}/mods/{id}/correlation/confirm` | Confirm a correlation |
+| `DELETE` | `/games/{name}/mods/{id}/correlation` | Reject correlation |
+| `PUT` | `/games/{name}/mods/{id}/correlation` | Reassign mod to different Nexus ID |
 
 </details>
 
@@ -307,9 +235,25 @@ All endpoints are prefixed with `/api/v1/`.
 | `POST` | `/games/{name}/install/` | Install a mod from an archive |
 | `DELETE` | `/games/{name}/install/installed/{id}` | Uninstall a mod |
 | `PATCH` | `/games/{name}/install/installed/{id}/toggle` | Enable/disable a mod |
+| `GET` | `/games/{name}/install/preview` | Preview files before installation |
 | `GET` | `/games/{name}/install/conflicts` | Check for file conflicts |
+| `GET` | `/games/{name}/install/archives/{filename}/contents` | Browse archive file tree |
+| `PUT` | `/games/{name}/install/archives/{filename}/nexus-link` | Link archive to Nexus mod |
+| `DELETE` | `/games/{name}/install/archives/{filename}/nexus-link` | Remove Nexus link |
 | `DELETE` | `/games/{name}/install/archives/{filename}` | Delete an archive |
 | `POST` | `/games/{name}/install/archives/cleanup-orphans` | Clean up unused archives |
+| `GET` | `/games/{name}/install/redscript-conflicts` | Analyze redscript annotation conflicts |
+
+</details>
+
+<details>
+<summary><strong>FOMOD</strong></summary>
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/games/{name}/install/fomod/config` | Parse and return FOMOD configuration |
+| `POST` | `/games/{name}/install/fomod/preview` | Preview files with FOMOD selections |
+| `POST` | `/games/{name}/install/fomod/install` | Install archive with FOMOD selections |
 
 </details>
 
@@ -353,7 +297,9 @@ All endpoints are prefixed with `/api/v1/`.
 | `POST` | `/nexus/sync-history/{name}` | Sync tracked/endorsed mods |
 | `GET` | `/nexus/downloads/{name}` | List synced downloads (filterable by `?source=endorsed\|tracked`) |
 | `GET` | `/nexus/downloads/{name}/search` | Search synced downloads by name |
+| `GET` | `/nexus/search/{name}` | Search Nexus Mods by name (GraphQL v2) |
 | `GET` | `/nexus/mods/{domain}/{mod_id}/detail` | Get full mod detail with files and changelogs |
+| `GET` | `/nexus/file-contents-preview?url=...` | Proxy Nexus file content preview |
 | `POST` | `/nexus/{name}/mods/{mod_id}/endorse` | Endorse a mod |
 | `POST` | `/nexus/{name}/mods/{mod_id}/abstain` | Remove endorsement |
 | `POST` | `/nexus/{name}/mods/{mod_id}/track` | Track a mod |
@@ -361,6 +307,40 @@ All endpoints are prefixed with `/api/v1/`.
 | `POST` | `/nexus/sso/start` | Start Nexus SSO session |
 | `GET` | `/nexus/sso/poll/{uuid}` | Poll SSO session status |
 | `DELETE` | `/nexus/sso/{uuid}` | Cancel SSO session |
+
+</details>
+
+<details>
+<summary><strong>Conflicts</strong></summary>
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/games/{name}/conflicts/` | Detect conflicts between installed mods |
+| `GET` | `/games/{name}/conflicts/between` | Compare two specific mods |
+| `GET` | `/games/{name}/conflicts/summary` | Persisted conflict report (filterable by kind/severity) |
+| `POST` | `/games/{name}/conflicts/reindex` | Trigger full conflict re-scan |
+| `GET` | `/games/{name}/conflicts/archive-summaries` | Per-archive conflict summaries |
+| `GET` | `/games/{name}/conflicts/archive-details/{filename}` | Per-resource conflict details |
+| `GET` | `/games/{name}/conflicts/graph` | Conflict graph visualization data |
+| `GET` | `/games/{name}/conflicts/inbox` | List conflict inbox summaries |
+| `GET` | `/games/{name}/conflicts/inbox/{mod_id}` | Detailed conflicts for a mod |
+| `POST` | `/games/{name}/conflicts/inbox/{mod_id}/resolve` | Resolve conflicts by reinstalling |
+| `POST` | `/games/{name}/conflicts/inbox/{mod_id}/dismiss` | Dismiss mod's conflicts |
+| `DELETE` | `/games/{name}/conflicts/inbox/{mod_id}/dismiss` | Restore dismissed mod to inbox |
+
+</details>
+
+<details>
+<summary><strong>Load Order</strong></summary>
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/games/{name}/load-order/` | Full archive load order with conflicts |
+| `GET` | `/games/{name}/load-order/modlist` | Ordered mod groups and preferences |
+| `POST` | `/games/{name}/load-order/prefer/preview` | Dry-run load order preference |
+| `POST` | `/games/{name}/load-order/prefer` | Add preference and write modlist.txt |
+| `DELETE` | `/games/{name}/load-order/preferences` | Remove all preferences |
+| `DELETE` | `/games/{name}/load-order/preferences/{winner}/{loser}` | Remove single preference |
 
 </details>
 
@@ -391,7 +371,6 @@ All endpoints are prefixed with `/api/v1/`.
 | `GET/PUT` | `/settings/` | Read/update app settings |
 | `GET` | `/settings/specs` | Get stored PC specs |
 | `POST` | `/settings/specs/capture` | Store PC specs |
-| `DELETE` | `/settings/nexus` | Disconnect Nexus account |
 | `GET` | `/onboarding/status` | Get onboarding progress |
 | `POST` | `/onboarding/complete` | Complete onboarding |
 | `POST` | `/onboarding/reset` | Reset onboarding status |
@@ -405,7 +384,7 @@ All endpoints are prefixed with `/api/v1/`.
 
 ### Testing
 
-The backend has a comprehensive test suite with 480+ tests across 32 test files covering all modules:
+The backend has a comprehensive test suite with 720+ tests across 45 test files covering all modules:
 
 ```bash
 cd backend
@@ -450,6 +429,7 @@ Tests use an in-memory SQLite database and patched ChromaDB for full isolation. 
 │                                                   │
 │  ┌─────────────────────────────────────────────┐  │
 │  │         Nexus Mods API (httpx)              │  │
+│  │  REST v1 (mutations) │ GraphQL v2 (queries) │  │
 │  └─────────────────────────────────────────────┘  │
 └───────────────────────────────────────────────────┘
 ```
