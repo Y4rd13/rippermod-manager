@@ -67,7 +67,7 @@ jobs:
         with:
           workspaces: frontend/src-tauri -> target
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           version: "0.9.x"
 
