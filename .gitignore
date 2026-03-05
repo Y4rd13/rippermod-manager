@@ -37,6 +37,7 @@ backend/build/
 # Docs (local strategy notes, except publishable files)
 docs/
 !docs/nexus-description.bbcode
+!docs/nexus-article-getting-started.bbcode
 !docs/nexus-api-usage.md
 !docs/architecture.md
 !docs/assets/
