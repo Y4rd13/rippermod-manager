@@ -313,23 +313,25 @@ class NexusGraphQLClient:
         or ``"updatedAt"``.
         """
         gid = self._game_id(game_domain)
-        sort_clause = ""
-        if sort_by:
-            sort_clause = f', sort: {{field: "{sort_by}", direction: {sort_direction}}}'
-        query = (
-            "query SearchMods($filter: ModsFilter!, $count: Int!) {"
-            f"  mods(filter: $filter, count: $count{sort_clause}) {{"
-            "    nodes {" + _MOD_FIELDS + "    }"
-            "  }"
-            "}"
-        )
-        variables = {
+        variables: dict[str, Any] = {
             "filter": {
                 "gameId": [{"value": gid, "op": "EQUALS"}],
                 "name": [{"value": f"*{name}*", "op": "WILDCARD"}],
             },
             "count": count,
         }
+        sort_decl = ""
+        if sort_by:
+            sort_decl = ", $sort: [ModsSort!]"
+            variables["sort"] = [{"field": sort_by, "direction": sort_direction}]
+        sort_arg = ", sort: $sort" if sort_by else ""
+        query = (
+            f"query SearchMods($filter: ModsFilter!, $count: Int!{sort_decl}) {{"
+            f"  mods(filter: $filter, count: $count{sort_arg}) {{"
+            "    nodes {" + _MOD_FIELDS + "    }"
+            "  }"
+            "}"
+        )
         data = await self._execute(query, variables)
         mods_data = data.get("mods", {})
         return mods_data.get("nodes", [])
@@ -372,15 +374,14 @@ class NexusGraphQLClient:
     # -- Collections ---------------------------------------------------------
 
     async def search_collections(self, game_domain: str, count: int = 10) -> list[dict[str, Any]]:
-        """Search collections for a game."""
-        gid = self._game_id(game_domain)
+        """Search collections for a game via collectionsV2."""
         query = """
-        query SearchCollections($gameId: Int!, $count: Int!) {
-            collections(
-                filter: { gameId: { value: $gameId, op: EQUALS } }
-                count: $count
-                sort: { field: "endorsements", direction: DESC }
-            ) {
+        query SearchCollections(
+            $filter: CollectionsSearchFilter,
+            $sort: [CollectionsSearchSort!],
+            $count: Int
+        ) {
+            collectionsV2(filter: $filter, sort: $sort, count: $count) {
                 nodes {
                     slug
                     name
@@ -394,16 +395,28 @@ class NexusGraphQLClient:
             }
         }
         """
-        data = await self._execute(query, {"gameId": gid, "count": count})
-        return (data.get("collections") or {}).get("nodes") or []
+        variables: dict[str, Any] = {
+            "filter": {
+                "gameDomain": [{"value": game_domain, "op": "EQUALS"}],
+            },
+            "sort": [{"endorsements": {"direction": "DESC"}}],
+            "count": count,
+        }
+        data = await self._execute(query, variables)
+        return (data.get("collectionsV2") or {}).get("nodes") or []
 
     async def get_collection_revision(
         self, slug: str, revision: int, game_domain: str
     ) -> dict[str, Any]:
         """Fetch a collection revision with its mod list."""
         query = """
-        query GetCollectionRevision($slug: String!, $revision: Int!) {
-            collectionRevision(slug: $slug, revision: $revision, viewAdultContent: true) {
+        query GetCollectionRevision(
+            $slug: String!, $revision: Int!, $domainName: String!
+        ) {
+            collectionRevision(
+                slug: $slug, revision: $revision,
+                viewAdultContent: true, domainName: $domainName
+            ) {
                 revisionNumber
                 modFiles {
                     file {
@@ -417,5 +430,7 @@ class NexusGraphQLClient:
             }
         }
         """
-        data = await self._execute(query, {"slug": slug, "revision": revision})
+        data = await self._execute(
+            query, {"slug": slug, "revision": revision, "domainName": game_domain}
+        )
         return data.get("collectionRevision") or {}

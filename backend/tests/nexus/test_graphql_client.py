@@ -101,8 +101,11 @@ class TestSearchMods:
             call_args = mock_post.call_args
             payload = call_args[1].get("json") or call_args[0][1]
             query = payload["query"]
-            assert "endorsements" in query
-            assert "DESC" in query
+            variables = payload.get("variables", {})
+            assert "$sort" in query
+            assert "ModsSort" in query
+            sort_var = variables.get("sort", [])
+            assert sort_var == [{"field": "endorsements", "direction": "DESC"}]
 
 
 class TestSearchCollections:
@@ -113,7 +116,7 @@ class TestSearchCollections:
             resp.status_code = 200
             resp.json.return_value = {
                 "data": {
-                    "collections": {
+                    "collectionsV2": {
                         "nodes": [
                             {"slug": "test-coll", "name": "Test Collection", "endorsements": 100}
                         ]

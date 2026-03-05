@@ -5,10 +5,9 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from rippermod_manager.database import get_session
-from rippermod_manager.models.settings import AppSetting
 from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.services.download_dates import archive_download_dates
 from rippermod_manager.services.update_service import (
@@ -88,16 +87,17 @@ async def check_updates(
     """
     game = get_game_or_404(game_name, session)
 
-    key_setting = session.exec(select(AppSetting).where(AppSetting.key == "nexus_api_key")).first()
-    has_key = bool(key_setting and key_setting.value)
+    from rippermod_manager.services.settings_helpers import get_setting
 
-    if has_key:
+    api_key = get_setting(session, "nexus_api_key")
+
+    if api_key:
         from rippermod_manager.nexus.client import NexusClient
         from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
 
         async with (
-            NexusClient(key_setting.value) as client,  # type: ignore[union-attr]
-            NexusGraphQLClient(key_setting.value) as gql,  # type: ignore[union-attr]
+            NexusClient(api_key) as client,
+            NexusGraphQLClient(api_key) as gql,
         ):
             result = await check_all_updates(
                 game.id,  # type: ignore[arg-type]

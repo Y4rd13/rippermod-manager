@@ -4,6 +4,8 @@ from sqlmodel import Session, select
 from rippermod_manager.database import get_session
 from rippermod_manager.models.settings import AppSetting, PCSpecs
 from rippermod_manager.schemas.settings import PCSpecsOut, SettingOut, SettingsUpdate
+from rippermod_manager.services.keyring_service import SECRET_KEYS, get_secret
+from rippermod_manager.services.settings_helpers import set_setting
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -20,13 +22,27 @@ def _mask_secret(value: str) -> str:
 @router.get("/", response_model=list[SettingOut])
 def list_settings(session: Session = Depends(get_session)) -> list[SettingOut]:
     settings = session.exec(select(AppSetting)).all()
-    return [
-        SettingOut(
-            key=s.key,
-            value=_mask_secret(s.value) if s.key in HIDDEN_KEYS and s.value else s.value,
-        )
-        for s in settings
-    ]
+    result: list[SettingOut] = []
+    seen_keys: set[str] = set()
+    for s in settings:
+        seen_keys.add(s.key)
+        value = s.value
+        if s.key in SECRET_KEYS and not value:
+            value = get_secret(s.key) or ""
+        if s.key in HIDDEN_KEYS and value:
+            value = _mask_secret(value)
+        result.append(SettingOut(key=s.key, value=value))
+    for sk in SECRET_KEYS:
+        if sk not in seen_keys:
+            kr_val = get_secret(sk) or ""
+            if kr_val:
+                result.append(
+                    SettingOut(
+                        key=sk,
+                        value=_mask_secret(kr_val) if sk in HIDDEN_KEYS else kr_val,
+                    )
+                )
+    return result
 
 
 @router.put("/", response_model=list[SettingOut])
@@ -35,12 +51,14 @@ def update_settings(
 ) -> list[SettingOut]:
     results: list[SettingOut] = []
     for key, value in data.settings.items():
-        setting = session.exec(select(AppSetting).where(AppSetting.key == key)).first()
-        if setting:
-            setting.value = value
+        if key in SECRET_KEYS:
+            set_setting(session, key, value)
         else:
-            setting = AppSetting(key=key, value=value)
-            session.add(setting)
+            setting = session.exec(select(AppSetting).where(AppSetting.key == key)).first()
+            if setting:
+                setting.value = value
+            else:
+                session.add(AppSetting(key=key, value=value))
         results.append(
             SettingOut(
                 key=key,

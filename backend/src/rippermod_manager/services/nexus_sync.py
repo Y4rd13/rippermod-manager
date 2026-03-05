@@ -70,7 +70,7 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
         for mod_id in all_mod_ids:
             info = batch_info.get(mod_id)
             if not info:
-                logger.warning("No batch info for mod %d, skipping", mod_id)
+                logger.debug("No batch info for mod %d (likely deleted/hidden), skipping", mod_id)
                 continue
 
             upsert_nexus_mod(
@@ -111,8 +111,9 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
                 except httpx.HTTPError:
                     logger.warning("Failed to fetch files for %s/%d", game.domain_name, mid)
 
-        if all_mod_ids:
-            await asyncio.gather(*[_fetch_files(mid) for mid in all_mod_ids])
+        resolved_mod_ids = set(batch_info.keys())
+        if resolved_mod_ids:
+            await asyncio.gather(*[_fetch_files(mid) for mid in resolved_mod_ids])
 
         for mod_id, fetched_files in files_map.items():
             existing_file_ids = {

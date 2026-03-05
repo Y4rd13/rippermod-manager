@@ -23,12 +23,20 @@ logger = logging.getLogger(__name__)
 # -- GraphQL → REST adapter functions ----------------------------------------
 
 
-def _iso_to_epoch(iso_str: str | None) -> int | None:
-    """Convert ISO 8601 timestamp to Unix epoch seconds."""
-    if not iso_str:
+def _iso_to_epoch(value: str | int | None) -> int | None:
+    """Convert ISO 8601 timestamp or Unix epoch to Unix epoch seconds.
+
+    The Nexus GraphQL API returns dates as ISO strings in some queries
+    (e.g. mod fields) but as Unix epoch integers in others (e.g. mod files).
+    """
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if not value:
         return None
     try:
-        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
         return int(dt.timestamp())
     except (ValueError, TypeError):
         return None

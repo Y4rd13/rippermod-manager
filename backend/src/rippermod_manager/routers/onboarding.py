@@ -5,11 +5,15 @@ from rippermod_manager.database import get_session
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.settings import AppSetting
 from rippermod_manager.schemas.onboarding import OnboardingComplete, OnboardingStatus
+from rippermod_manager.services.keyring_service import SECRET_KEYS, delete_secret, get_secret
+from rippermod_manager.services.settings_helpers import set_setting
 
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
 
 def _has_key(session: Session, key_name: str) -> bool:
+    if key_name in SECRET_KEYS and get_secret(key_name):
+        return True
     setting = session.exec(select(AppSetting).where(AppSetting.key == key_name)).first()
     return bool(setting and setting.value)
 
@@ -49,11 +53,7 @@ def complete_onboarding(
     data: OnboardingComplete, session: Session = Depends(get_session)
 ) -> OnboardingStatus:
     if data.openai_api_key:
-        setting = session.exec(select(AppSetting).where(AppSetting.key == "openai_api_key")).first()
-        if setting:
-            setting.value = data.openai_api_key
-        else:
-            session.add(AppSetting(key="openai_api_key", value=data.openai_api_key))
+        set_setting(session, "openai_api_key", data.openai_api_key)
 
     completed_setting = session.exec(
         select(AppSetting).where(AppSetting.key == "onboarding_completed")
@@ -70,9 +70,12 @@ def complete_onboarding(
 @router.post("/reset", response_model=OnboardingStatus)
 def reset_onboarding(session: Session = Depends(get_session)) -> OnboardingStatus:
     """Clear Nexus API key and reset onboarding so the user can reconnect."""
-    nexus_key = session.exec(select(AppSetting).where(AppSetting.key == "nexus_api_key")).first()
-    if nexus_key:
-        session.delete(nexus_key)
+    delete_secret("nexus_api_key")
+
+    for key in ("nexus_api_key", "nexus_username", "nexus_is_premium"):
+        setting = session.exec(select(AppSetting).where(AppSetting.key == key)).first()
+        if setting:
+            session.delete(setting)
 
     completed = session.exec(
         select(AppSetting).where(AppSetting.key == "onboarding_completed")

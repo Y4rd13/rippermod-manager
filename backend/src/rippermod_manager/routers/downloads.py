@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
 from rippermod_manager.database import get_session
-from rippermod_manager.models.settings import AppSetting
 from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.download import (
     DownloadFromModRequest,
@@ -21,10 +20,12 @@ router = APIRouter(prefix="/games/{game_name}/downloads", tags=["downloads"])
 
 
 def _get_api_key(session: Session) -> str:
-    setting = session.exec(select(AppSetting).where(AppSetting.key == "nexus_api_key")).first()
-    if not setting or not setting.value:
+    from rippermod_manager.services.settings_helpers import get_setting
+
+    api_key = get_setting(session, "nexus_api_key")
+    if not api_key:
         raise HTTPException(400, "Nexus API key not configured")
-    return setting.value
+    return api_key
 
 
 def _job_to_out(job) -> DownloadJobOut:
