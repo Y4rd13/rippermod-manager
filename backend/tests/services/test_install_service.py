@@ -242,6 +242,51 @@ class TestUninstallMod:
         assert unresult.files_deleted == 1
         assert not (game_dir / "mods" / "file.txt.disabled").exists()
 
+    def test_uninstall_with_profile_and_load_order_refs(self, session, game, game_dir, staging_dir):
+        """Uninstalling a mod referenced by profile entries / load order prefs must not FK-crash."""
+        from rippermod_manager.models.load_order import LoadOrderPreference
+        from rippermod_manager.models.profile import Profile, ProfileEntry
+
+        a1 = staging_dir / "ModA.zip"
+        _make_zip(a1, {"mods/a.txt": b"a"})
+        a2 = staging_dir / "ModB.zip"
+        _make_zip(a2, {"mods/b.txt": b"b"})
+        r1 = install_mod(game, a1, session)
+        r2 = install_mod(game, a2, session)
+
+        profile = Profile(game_id=game.id, name="test-profile")
+        session.add(profile)
+        session.flush()
+        session.add(ProfileEntry(profile_id=profile.id, installed_mod_id=r1.installed_mod_id))
+        session.add(
+            LoadOrderPreference(
+                game_id=game.id,
+                winner_mod_id=r1.installed_mod_id,
+                loser_mod_id=r2.installed_mod_id,
+            )
+        )
+        session.commit()
+
+        mod_a = session.get(InstalledMod, r1.installed_mod_id)
+        session.refresh(mod_a)
+        _ = mod_a.files
+
+        uninstall_mod(mod_a, game, session)
+
+        assert session.get(InstalledMod, r1.installed_mod_id) is None
+        pe = session.exec(
+            select(ProfileEntry).where(ProfileEntry.installed_mod_id == r1.installed_mod_id)
+        ).first()
+        assert pe is None
+        lop = session.exec(
+            select(LoadOrderPreference).where(
+                LoadOrderPreference.winner_mod_id == r1.installed_mod_id
+            )
+        ).first()
+        assert lop is None
+        # ModB (loser side) must NOT be affected
+        assert session.get(InstalledMod, r2.installed_mod_id) is not None
+
     def test_tolerates_already_missing_files(self, session, game, game_dir, staging_dir):
         archive = staging_dir / "GoneMod.zip"
         _make_zip(archive, {"mods/gone.txt": b"gone"})

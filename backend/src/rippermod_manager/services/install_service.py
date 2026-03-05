@@ -289,16 +289,29 @@ def uninstall_mod(
                 except OSError:
                     logger.warning("Could not delete %s", disabled_path)
 
-    # Clean up archive entry index before deleting the mod record
+    # Clean up dependent rows before deleting the mod record
+    from sqlalchemy import delete as sa_delete
+
+    from rippermod_manager.models.load_order import LoadOrderPreference
+    from rippermod_manager.models.profile import ProfileEntry
     from rippermod_manager.services.archive_index_service import remove_index_for_mod
+    from rippermod_manager.services.modlist_service import write_modlist
 
     remove_index_for_mod(session, installed_mod.id)  # type: ignore[arg-type]
 
+    mod_id = installed_mod.id
+    session.exec(
+        sa_delete(ProfileEntry).where(ProfileEntry.installed_mod_id == mod_id)  # type: ignore[arg-type]
+    )
+    session.exec(
+        sa_delete(LoadOrderPreference).where(  # type: ignore[arg-type]
+            (LoadOrderPreference.winner_mod_id == mod_id)
+            | (LoadOrderPreference.loser_mod_id == mod_id)
+        )
+    )
+
     session.delete(installed_mod)
     session.commit()
-
-    # Regenerate modlist.txt to remove uninstalled archives
-    from rippermod_manager.services.modlist_service import write_modlist
 
     write_modlist(game, session)
 
