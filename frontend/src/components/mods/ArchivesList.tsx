@@ -241,7 +241,6 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
     if (result.is_fomod) {
       setFomodArchive(filename);
       setSelectedArchive(null);
-      processNextInQueue();
       return;
     }
     if (result.conflicts.length > 0) {
@@ -708,8 +707,8 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
         <FomodWizard
           gameName={gameName}
           archiveFilename={fomodArchive}
-          onDismiss={() => setFomodArchive(null)}
-          onInstallComplete={() => setFomodArchive(null)}
+          onDismiss={() => { setFomodArchive(null); processNextInQueue(); }}
+          onInstallComplete={() => { setFomodArchive(null); processNextInQueue(); }}
         />
       )}
 
