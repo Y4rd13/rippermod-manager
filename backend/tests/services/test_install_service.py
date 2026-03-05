@@ -284,6 +284,8 @@ class TestUninstallMod:
             )
         ).first()
         assert lop is None
+        # ModB (loser side) must NOT be affected
+        assert session.get(InstalledMod, r2.installed_mod_id) is not None
 
     def test_tolerates_already_missing_files(self, session, game, game_dir, staging_dir):
         archive = staging_dir / "GoneMod.zip"
