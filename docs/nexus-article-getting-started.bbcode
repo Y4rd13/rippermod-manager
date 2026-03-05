@@ -1,0 +1,181 @@
+[img]https://raw.githubusercontent.com/Y4rd13/rippermod-manager/refs/heads/main/frontend/src-tauri/icons/128x128.png[/img]
+[size=4][b]Getting Started with RipperMod Manager[/b][/size]
+
+So you installed RipperMod and you're staring at the screen like a fresh corpo on their first day in Night City. Don't flatline — this guide will walk you through the whole setup in under five minutes. By the end you'll have your entire mod library scanned, matched to Nexus, and ready to manage like a preem netrunner.
+
+[size=3][b]Step 1 — Launch and Onboarding[/b][/size]
+
+First time you open the app, the onboarding wizard kicks in. It's four steps — no corpo red tape, just the essentials:
+
+[list=1]
+[*][b]Welcome[/b] — Nothing to do here, just hit Next.
+[*][b]AI Setup (Optional)[/b] — If you have an OpenAI API key and want AI-powered matching and chat features, enter it here. [b]Don't have one? Skip it.[/b] The app works fully without AI — you can always add the key later in Settings.
+[*][b]Nexus Mods Login[/b] — Click the SSO button and sign in with your Nexus account. This authorizes the app to access your endorsed/tracked mods, download files, and sync metadata. No manual Nexus API key needed — the SSO flow handles everything.
+[*][b]Add Your Game[/b] — The app auto-detects Steam, GOG, and Epic installs. If your game shows up, select it and hit Add. If not, click Browse and point it to your game folder manually.
+[/list]
+
+Once your game is added, the app runs an initial scan automatically. Sit back for a few seconds while it discovers your mods.
+
+[size=3][b]Step 2 — Understanding the Scan[/b][/size]
+
+The scan does two things:
+
+[b]1. File Discovery & Grouping[/b]
+The scanner walks through your game's mod directories (archive/pc/mod, mods, bin, r6, etc.) and finds every mod file. Files that belong to the same mod but are scattered across folders get grouped together using TF-IDF clustering — so even if a mod has files in three different places, the app sees them as one mod.
+
+[b]2. Nexus Correlation (Scan & Correlate)[/b]
+This is where the magic happens. The app tries to match each local mod group to its Nexus Mods page using a multi-tier pipeline:
+
+[list]
+[*][b]Filename IDs[/b] — If your archive has a Nexus mod ID in the filename (e.g. [i]Cool Mod-1234-1-0.zip[/i]), instant match.
+[*][b]MD5 Hashes[/b] — Archives are hashed and looked up against the Nexus database. Gold standard — zero guesswork.
+[*][b]File Content Lookup[/b] — Searches Nexus by distinctive internal file paths when no archive exists.
+[*][b]Endorsed & Tracked Sync[/b] — Cross-references your Nexus endorsed/tracked lists.
+[*][b]Collection Matching[/b] — If you installed from a Nexus collection, the app detects it and matches the rest.
+[*][b]Requirement Propagation[/b] — Already-matched mods reference their dependencies, matching those too.
+[*][b]Fuzzy Matching[/b] — Jaccard + Jaro-Winkler similarity scoring as a last resort.
+[*][b]AI Search (Optional)[/b] — Vector search with OpenAI embeddings for the hardest-to-match mods.
+[/list]
+
+Each match gets a confidence score so you know how reliable it is.
+
+[size=3][b]Step 3 — Reviewing Your Matches[/b][/size]
+
+After the scan, go to the [b]Nexus Matched[/b] tab in your game's detail page. You'll see cards for every matched mod showing the Nexus banner, author, version, and match confidence.
+
+[b]You're in control.[/b] The algorithm does the heavy lifting, but every match is reviewable:
+
+[list]
+[*][b]Accept[/b] — The match looks right? Confirm it with one click.
+[*][b]Reject[/b] — Wrong match? Remove it so the mod can be re-matched on the next scan.
+[*][b]Correct / Reassign[/b] — Know the right mod? Search by name, paste a Nexus URL, or enter the mod ID directly.
+[/list]
+
+[b]Pro tip:[/b] For best results, endorse the mods you have installed on the Nexus website before scanning. The matching pipeline is most effective when it can cross-reference your endorsed list with your local files.
+
+[size=3][b]Step 4 — Installing Mods[/b][/size]
+
+There are several ways to install mods through RipperMod:
+
+[b]From Nexus (One-Click Download)[/b]
+[list=1]
+[*]Find the mod in the [b]Trending[/b], [b]Endorsed[/b], or [b]Tracked[/b] tabs — or open the mod detail modal and browse its files.
+[*]Click [b]Download[/b]. If you're a Nexus Premium user, the download starts immediately. If not, the app provides a link to download manually.
+[*]Once downloaded, the archive appears in the [b]Archives[/b] tab.
+[*]Click [b]Install[/b] on the archive. If it contains a FOMOD config, the full FOMOD wizard launches with step-by-step options.
+[/list]
+
+[b]From the NXM Protocol[/b]
+Click any [i]"Download with manager"[/i] button on the Nexus Mods website. RipperMod handles [b]nxm://[/b] links automatically — the download starts in the app and the archive is ready for installation.
+
+[b]Manual Archives[/b]
+Drop your .zip, .7z, or .rar files into the [b]downloaded_mods[/b] folder inside your game directory (e.g. [i]Cyberpunk 2077/downloaded_mods/[/i]). They'll appear in the Archives tab automatically.
+
+[size=3][b]Step 5 — Managing Conflicts[/b][/size]
+
+When two mods touch the same files, RipperMod catches it. The conflict engine detects four types of conflicts:
+
+[list]
+[*][b]File-level overlaps[/b] — Two mods install the same file.
+[*][b]Archive resource conflicts[/b] — Two .archive files modify the same game resource.
+[*][b]Redscript collisions[/b] — Two mods wrap or replace the same function.
+[*][b]TweakXL conflicts[/b] — Two TweakXL YAML files modify the same tweak record.
+[/list]
+
+All conflicts show up in the [b]Conflict Inbox[/b] with severity levels. You can:
+[list]
+[*][b]Resolve[/b] — Reinstall the winning mod at a higher priority.
+[*][b]Dismiss[/b] — Acknowledge and ignore the conflict if you know it's harmless.
+[/list]
+
+The [b]Load Order[/b] view lets you reorder archive priorities, set preference rules, and preview changes before applying. The app generates a [b]modlist.txt[/b] for REDmod automatically.
+
+[size=3][b]Step 6 — Profiles[/b][/size]
+
+Got different mod setups for different playthroughs? Use profiles:
+
+[list]
+[*][b]Create[/b] — Snapshot your current setup (which mods are installed + enabled/disabled states).
+[*][b]Load[/b] — Restore a saved profile. The app shows a diff preview of what will change before applying.
+[*][b]Compare[/b] — Side-by-side comparison of two profiles.
+[*][b]Export/Import[/b] — Share profiles as JSON files with other chooms.
+[/list]
+
+[size=3][b]Step 7 — Keeping Mods Updated[/b][/size]
+
+Go to the [b]Updates[/b] page (or the Updates tab on your game's page) to see which mods have newer versions available on Nexus. The app compares your installed version against the latest on Nexus using download timestamps for accuracy — no false positives from version string quirks.
+
+Click [b]Download[/b] to grab the latest version, then install it from the Archives tab.
+
+[size=3][b]Quick Reference[/b][/size]
+
+[list]
+[*][b]Dashboard[/b] — Overview stats, quick actions, and conflict summary across all games.
+[*][b]Game Detail > Installed[/b] — All installed mods. Enable, disable, or uninstall. Bulk actions available.
+[*][b]Game Detail > Nexus Matched[/b] — Correlated mods with review actions.
+[*][b]Game Detail > Archives[/b] — Downloaded archives ready to install. Bulk install supported.
+[*][b]Game Detail > Endorsed/Tracked[/b] — Your Nexus lists with install buttons.
+[*][b]Game Detail > Trending[/b] — Popular and recently updated mods.
+[*][b]Game Detail > Profiles[/b] — Save, load, compare, and share mod loadouts.
+[*][b]Updates[/b] — Aggregated update checker across all games.
+[*][b]Settings[/b] — Nexus account, AI config, app updates, and About.
+[/list]
+
+[size=3][b]Tips & Tricks[/b][/size]
+
+[list]
+[*][b]Endorse your mods on Nexus[/b] — This dramatically improves scan accuracy. The endorsed list is one of the strongest signals in the matching pipeline.
+[*][b]Keep archives around[/b] — The app uses MD5 hashes from your archives for matching. Deleting them removes a gold-standard matching signal.
+[*][b]Use the detail modal[/b] — Click any mod card to see full Nexus info, files, requirements, and changelogs without leaving the app.
+[*][b]Right-click for context menus[/b] — Most lists and cards support right-click actions for quick operations.
+[*][b]Bulk select with checkboxes[/b] — Tables have checkboxes for selecting multiple items at once. A bulk action bar appears at the bottom.
+[*][b]Auto-updates[/b] — The app checks for its own updates on startup. When one is available, a badge appears on the Settings icon. Update from Settings > About.
+[/list]
+
+[size=3][b]Bug Reports[/b][/size]
+
+Found a glitch in the system? Don't just flatline and delta — report it so I can patch it. You can use the [b][url=https://www.nexusmods.com/cyberpunk2077/mods/27781?tab=bugs]Bugs[/url][/b] tab on this Nexus page or open an issue on [url=https://github.com/Y4rd13/rippermod-manager/issues]GitHub[/url].
+
+To help me zero in on the problem fast, include the following:
+
+[list]
+[*][b]App version[/b] — Check Settings > About (e.g. v1.16.5).
+[*][b]OS[/b] — Windows 10 or 11, and any relevant details (language, antivirus, etc.).
+[*][b]Steps to reproduce[/b] — What exactly did you do? Step by step, from launch to the bug.
+[*][b]Expected behavior[/b] — What should have happened.
+[*][b]Actual behavior[/b] — What actually happened. Include the full error message if there is one.
+[*][b]Screenshots or video[/b] — A picture is worth a thousand bug reports.
+[*][b]Logs[/b] (optional but preem) — App logs are stored in [i]%LOCALAPPDATA%\com.rippermod.app\logs\[/i]. Attach the latest log file if you can.
+[*][b]Mod context[/b] — If the bug involves a specific mod, mention which one (a Nexus link helps).
+[/list]
+
+[b]Before reporting:[/b]
+[list]
+[*]Make sure you're running the latest version — the app auto-updates, but double-check in Settings > About.
+[*]Search the [b][url=https://www.nexusmods.com/cyberpunk2077/mods/27781?tab=bugs]Bugs[/url][/b] tab and [url=https://github.com/Y4rd13/rippermod-manager/issues]GitHub Issues[/url] to see if someone already reported it.
+[*]If the bug involves AI features, mention whether you have an OpenAI API key configured and which model you're using.
+[/list]
+
+Clear reports = faster fixes. Don't be a gonk — give me the deets and I'll get it zeroed.
+
+[size=3][b]Contributing & Open Source[/b][/size]
+
+RipperMod Manager is free and open source under the GPL-3.0 license. The full source code is on [url=https://github.com/Y4rd13/rippermod-manager]GitHub[/url].
+
+Want to contribute? Here's how:
+
+[list]
+[*][b]Report bugs[/b] — Use the [url=https://www.nexusmods.com/cyberpunk2077/mods/27781?tab=bugs]Bugs[/url] tab here or open a [url=https://github.com/Y4rd13/rippermod-manager/issues]GitHub Issue[/url].
+[*][b]Request features[/b] — Open a GitHub Issue with the [i]feature request[/i] label and describe what you'd like to see.
+[*][b]Submit code[/b] — Fork the repo, create a branch, and open a Pull Request. The project uses conventional commits, Ruff for Python linting, ESLint for TypeScript, and has 780+ automated tests that must pass before merging.
+[*][b]Spread the word[/b] — Endorse the mod on Nexus, share it with your chooms, or leave a comment. Visibility helps the project grow.
+[/list]
+
+[size=2][i]RipperMod Manager is an independent project and is not affiliated with or endorsed by Nexus Mods or CD PROJEKT RED.
+[size=3][b]
+[url=https://ko-fi.com/y4rd13][img]https://cdn.prod.website-files.com/5c14e387dab576fe667689cf/670f5a01d7e459533e0905fd_support_me_on_kofi_badge_red.png[/img][/url]
+[/b][/size]
+If RipperMod Manager saves you time (or sanity) and you want to support ongoing development, you can leave an optional tip here:
+[url=https://ko-fi.com/y4rd13]Ko-fi — Support RipperMod Manager[/url]
+Your support helps cover development time, testing, and future features.
+No paywalls, no locked builds, and no exclusive files — just optional support to help keep the project growing.[/i][/size]
