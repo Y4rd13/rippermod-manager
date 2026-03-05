@@ -294,6 +294,23 @@ def uninstall_mod(
 
     remove_index_for_mod(session, installed_mod.id)  # type: ignore[arg-type]
 
+    # Clean up profile entries and load order preferences that reference this mod
+    from rippermod_manager.models.load_order import LoadOrderPreference
+    from rippermod_manager.models.profile import ProfileEntry
+
+    mod_id = installed_mod.id
+    for pe in session.exec(
+        select(ProfileEntry).where(ProfileEntry.installed_mod_id == mod_id)
+    ).all():
+        session.delete(pe)
+    for lop in session.exec(
+        select(LoadOrderPreference).where(
+            (LoadOrderPreference.winner_mod_id == mod_id)
+            | (LoadOrderPreference.loser_mod_id == mod_id)
+        )
+    ).all():
+        session.delete(lop)
+
     session.delete(installed_mod)
     session.commit()
 
