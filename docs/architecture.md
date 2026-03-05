@@ -13,18 +13,18 @@ rippermod-manager/
 │   │   ├── main.py                  # FastAPI app, lifespan, CORS, /health
 │   │   ├── config.py                # Pydantic settings (AppData paths)
 │   │   ├── database.py              # SQLite engine, session factory
-│   │   ├── models/                  # SQLModel tables (12 modules)
+│   │   ├── models/                  # SQLModel tables (12 modules, 18 tables)
 │   │   │   ├── game.py              #   Game, GameModPath
 │   │   │   ├── mod.py               #   ModGroup, ModFile, ModGroupAlias
-│   │   │   ├── nexus.py             #   NexusDownload, NexusModMeta, NexusModFile
+│   │   │   ├── nexus.py             #   NexusDownload, NexusModMeta, NexusModRequirement, NexusModFile
 │   │   │   ├── correlation.py       #   ModNexusCorrelation
 │   │   │   ├── download.py          #   DownloadJob
-│   │   │   ├── install.py           #   InstalledMod, InstalledFile
-│   │   │   ├── profile.py           #   ModProfile, ProfileEntry
+│   │   │   ├── install.py           #   InstalledMod, InstalledModFile, ArchiveNexusLink
+│   │   │   ├── profile.py           #   Profile, ProfileEntry
 │   │   │   ├── settings.py          #   AppSetting, PCSpecs
 │   │   │   ├── chat.py              #   ChatMessage
-│   │   │   ├── archive_index.py     #   ArchiveIndex (per-archive file listing)
-│   │   │   ├── conflict.py          #   ConflictReport, ConflictEntry
+│   │   │   ├── archive_index.py     #   ArchiveEntryIndex (per-archive file listing)
+│   │   │   ├── conflict.py          #   ConflictKind, Severity, ConflictEvidence
 │   │   │   └── load_order.py        #   LoadOrderPreference
 │   │   ├── schemas/                 # Pydantic request/response models
 │   │   ├── routers/                 # FastAPI routers, prefix /api/v1/ (15 routers)
@@ -53,7 +53,7 @@ rippermod-manager/
 │   │   ├── nexus/                   # Nexus Mods API clients
 │   │   │   ├── client.py            # REST v1 API client (reads + mutations)
 │   │   │   └── graphql_client.py    # GraphQL v2 client (batch + search)
-│   │   ├── services/                # Business logic (33 modules)
+│   │   ├── services/                # Business logic (37 modules)
 │   │   │   ├── nexus_sync.py        # Sync tracked/endorsed mods
 │   │   │   ├── nexus_helpers.py     # GQL→REST adapters, game categories
 │   │   │   ├── download_service.py  # Download orchestration + shutdown
@@ -77,7 +77,10 @@ rippermod-manager/
 │   │   │   ├── archive_layout.py    # Archive structure analysis
 │   │   │   ├── archive_matcher.py   # MD5 hash matching (Tier 2)
 │   │   │   ├── enrichment.py        # Filename ID extraction (Tier 1)
+│   │   │   ├── file_content_matcher.py # File content reverse lookup matching
 │   │   │   ├── file_list_matcher.py # File list similarity matching
+│   │   │   ├── collection_matcher.py # Nexus collection-based matching
+│   │   │   ├── requirement_matcher.py # Mod requirement propagation matching
 │   │   │   ├── trending_service.py  # Trending mods fetching
 │   │   │   ├── ai_search_matcher.py # AI-powered mod matching
 │   │   │   ├── web_search_matcher.py # Web search fallback matching
@@ -86,6 +89,7 @@ rippermod-manager/
 │   │   │   ├── tweakxl_conflict_analyzer.py # TweakXL conflict detection
 │   │   │   ├── sso_service.py       # Nexus SSO WebSocket handler
 │   │   │   ├── settings_helpers.py  # Settings read/write helpers
+│   │   │   ├── keyring_service.py   # OS keychain abstraction
 │   │   │   ├── game_version.py      # Game version detection
 │   │   │   └── progress.py          # SSE progress streaming
 │   │   ├── vector/                  # Semantic search
@@ -94,13 +98,16 @@ rippermod-manager/
 │   │   │   └── search.py            # Semantic search queries
 │   │   └── agents/orchestrator.py   # LangChain agent + tools
 │   ├── rmm-backend.spec            # PyInstaller spec (--onefile)
-│   └── tests/                       # 720+ pytest tests across 45 files
+│   └── tests/                       # 783+ pytest tests across 49 files
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── BackendGate.tsx       # Waits for backend before rendering
 │   │   │   ├── ErrorBoundary.tsx     # Catches crashes, shows fallback UI
 │   │   │   ├── chat/                 # ChatPanel
+│   │   │   ├── conflicts/           # 4 conflict UI components
+│   │   │   │                        #   ArchiveResourceConflicts, ConflictSummaryWidget,
+│   │   │   │                        #   LoadOrderView, ResourceDetailsPanel
 │   │   │   ├── layout/              # Sidebar, Titlebar
 │   │   │   ├── mods/                # 25 mod-related components
 │   │   │   │                        #   NexusModCard, NexusMatchedGrid,

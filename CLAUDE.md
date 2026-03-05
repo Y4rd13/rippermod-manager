@@ -54,7 +54,7 @@ See @docs/architecture.md for a full inventory of routers, services, models.
 - Backend API: `http://localhost:8425/api/v1/`
 - **Nexus API:** dual-client — REST v1 (`nexus/client.py`) for CRUD, GraphQL v2 (`nexus/graphql_client.py`) for batch queries. Both use tenacity retry (3 attempts, exponential 2–30s) on 429/5xx
 - **Scan pipeline:** file discovery → TF-IDF + DBSCAN grouping → multi-tier matching → correlation
-- **Matching tiers:** (1) filename ID extraction, (2) MD5 hash batch lookup, (3) AI/web search, (4) Jaccard + Jaro-Winkler fuzzy
+- **Matching tiers:** (1) filename ID extraction, (1.5) file content reverse lookup, (2) MD5 hash batch lookup, (3) endorsed/tracked + collection matching + requirement propagation, (4) Jaccard + Jaro-Winkler fuzzy, (5) AI/web search
 - **Secrets:** keyring service attempts OS keychain, falls back to SQLite. Keys: `nexus_api_key`, `openai_api_key`, `tavily_api_key`
 - **Health:** `/health` (shallow), `/health/deep` (DB + ChromaDB + data_dir writability)
 - **Logging:** stderr + `RotatingFileHandler` at `data_dir/logs/rippermod.log` (5 MB × 3)
@@ -79,7 +79,7 @@ See @docs/nexus-api-usage.md for endpoint reference.
 
 ## Testing
 
-- 762+ tests across `backend/tests/` (routers, services, matching, scanner, vector, agents)
+- 783+ tests across `backend/tests/` (routers, services, matching, scanner, nexus, archive, vector, agents)
 - Fixtures in `tests/conftest.py` — in-memory SQLite, test games, mock clients
 - CI runs with `--cov=rippermod_manager --cov-report=term-missing`
 - Use `respx` for HTTP mocking — never make real API calls in tests

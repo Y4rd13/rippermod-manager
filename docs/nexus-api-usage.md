@@ -90,13 +90,21 @@ Every call is `POST https://api.nexusmods.com/v2/graphql`.
 |--------|-----------|-----------|-------------|
 | `batch_file_hashes()` | `query BatchFileHashes` | `md5s` (up to 500) | MD5 lookup -- returns file info with nested mod data |
 | `batch_mods()` | `query BatchMods` | _(inline aliases)_ | Fetch up to 50 mods per query using GraphQL aliases |
+| `batch_mods_by_domain()` | `query BatchModsByDomain` | `ids` (`[{gameDomain, modId}]`) | Fetch mods using `legacyModsByDomain` (chunks of 50, falls back to `batch_mods()` on error) |
 
 ### Search
 
 | Method | Operation | Variables | Description |
 |--------|-----------|-----------|-------------|
-| `search_mods()` | `query SearchMods` | `filter` (gameId, name wildcard), `count` | Text search mods by name |
+| `search_mods()` | `query SearchMods` | `filter` (gameId, name wildcard), `count`, `sort` | Text search mods by name (optional sort by endorsements/downloads/updatedAt) |
 | `search_file_contents()` | `query SearchFileContents` | `filter` (gameId, filePathWildcard, fileExtensionExact), `count` | Search inside mod archives by file path or extension |
+
+### Collections
+
+| Method | Operation | Variables | Description |
+|--------|-----------|-----------|-------------|
+| `search_collections()` | `query SearchCollections` | `filter` (gameDomain), `count` | Search collections for a game via `collectionsV2` |
+| `get_collection_revision()` | `query GetCollectionRevision` | `slug`, `revision`, `gameDomain` | Fetch a collection revision with its full mod list |
 
 ### GraphQL field fragments
 

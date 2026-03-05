@@ -25,9 +25,9 @@
 - **Mod Scanner** — Recursively discovers mod files from configured game paths, groups them by name similarity using TF-IDF + DBSCAN clustering, and computes file hashes for integrity tracking.
 - **Nexus Mods Integration** — Connects to your Nexus account via SSO, syncs tracked/endorsed mods, fetches mod metadata, and searches Nexus by name via GraphQL v2.
 - **Endorse & Track** — Toggle endorse/track status on any mod directly from card buttons, context menus, or the mod detail modal — syncs with the Nexus Mods API in real time.
-- **Auto-Correlation** — Matches local mod groups to Nexus downloads using Jaccard similarity + Jaro-Winkler distance scoring, with manual reassign and confirm/reject actions.
+- **Auto-Correlation** — Multi-tier matching pipeline: filename ID extraction, MD5 hash batch lookup, file content reverse lookup, endorsed/tracked sync, Nexus collection matching, mod requirement propagation, Jaccard + Jaro-Winkler fuzzy matching, and AI/web search. Manual reassign, confirm, and reject actions.
 - **Mod Installation** — Install mods from downloaded archives with pre-install preview, conflict detection, skip/overwrite resolution, and enable/disable toggling. Includes FOMOD installer wizard for scripted mod packages.
-- **Conflict Detection** — Multi-layer conflict engine: file-level overlap detection, redscript annotation analysis, TweakXL conflict scanning, and a conflict inbox for resolution.
+- **Conflict Detection** — Multi-layer conflict engine: file-level overlap detection, archive-level resource conflicts, redscript annotation analysis, TweakXL conflict scanning, and a conflict inbox for resolution.
 - **Load Order** — View and manage archive load order with preference rules, modlist.txt generation, and dry-run previews.
 - **Archive Management** — Browse archive contents, link/unlink archives to Nexus mods, delete, and clean up orphaned mod archives from the downloads staging folder.
 - **Download Manager** — Download mod archives directly from Nexus Mods with progress tracking, NXM deep link handling, and premium account support.
@@ -50,7 +50,7 @@
 | AI Agent | LangChain, OpenAI (configurable model) |
 | Vector Store | ChromaDB (persistent, cosine similarity) |
 | Nexus API | REST v1 + GraphQL v2, async httpx, respx (testing) — [endpoint map](docs/nexus-api-usage.md) |
-| Matching | scikit-learn (TF-IDF, DBSCAN), jellyfish (Jaro-Winkler) |
+| Matching | scikit-learn (TF-IDF, DBSCAN), jellyfish (Jaro-Winkler), tenacity (retry) |
 | Hashing | xxhash (xxh64) |
 | Frontend | React 19, TypeScript 5.9, Vite 7 |
 | Styling | Tailwind CSS v4 |
@@ -68,16 +68,16 @@
 rippermod-manager/
 ├── backend/                 # FastAPI + Python 3.12
 │   ├── src/rippermod_manager/
-│   │   ├── models/          # 12 SQLModel table modules
+│   │   ├── models/          # 12 SQLModel table modules (18 tables)
 │   │   ├── schemas/         # Pydantic request/response models
 │   │   ├── routers/         # 15 API routers (91 endpoints)
-│   │   ├── services/        # 33 business logic modules
+│   │   ├── services/        # 37 business logic modules
 │   │   ├── scanner/         # File discovery + grouping
 │   │   ├── matching/        # TF-IDF, correlation, filename parsing
 │   │   ├── nexus/           # REST v1 + GraphQL v2 API clients
 │   │   ├── vector/          # ChromaDB indexing + search
 │   │   └── agents/          # LangChain chat agent
-│   └── tests/               # 720+ tests across 45 files
+│   └── tests/               # 783+ tests across 49 files
 ├── frontend/                # React 19 + TypeScript + Vite
 │   ├── src/
 │   │   ├── components/      # 25 mod components, 24 UI primitives
@@ -157,7 +157,7 @@ cd backend
 uv run uvicorn rippermod_manager.main:app --reload --port 8425   # Dev server
 uv run ruff check src/ tests/                                         # Lint
 uv run ruff format src/ tests/                                        # Format
-uv run pytest tests/ -v                                               # Tests (720+ tests)
+uv run pytest tests/ -v                                               # Tests (783+ tests)
 ```
 
 ### Frontend commands
@@ -384,7 +384,7 @@ All endpoints are prefixed with `/api/v1/`.
 
 ### Testing
 
-The backend has a comprehensive test suite with 720+ tests across 45 test files covering all modules:
+The backend has a comprehensive test suite with 783+ tests across 49 test files covering all modules:
 
 ```bash
 cd backend
