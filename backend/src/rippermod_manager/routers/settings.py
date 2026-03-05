@@ -36,10 +36,12 @@ def list_settings(session: Session = Depends(get_session)) -> list[SettingOut]:
         if sk not in seen_keys:
             kr_val = get_secret(sk) or ""
             if kr_val:
-                result.append(SettingOut(
-                    key=sk,
-                    value=_mask_secret(kr_val) if sk in HIDDEN_KEYS else kr_val,
-                ))
+                result.append(
+                    SettingOut(
+                        key=sk,
+                        value=_mask_secret(kr_val) if sk in HIDDEN_KEYS else kr_val,
+                    )
+                )
     return result
 
 
