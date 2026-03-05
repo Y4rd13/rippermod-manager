@@ -24,8 +24,11 @@ This is the preem stuff. RipperMod automatically links your locally installed mo
 [list]
 [*][b]Filename ID extraction[/b] — Parses mod IDs embedded in archive filenames.
 [*][b]MD5 hash matching[/b] — Matches downloaded archives against Nexus file hashes (gold standard, zero guesswork).
+[*][b]File content reverse lookup[/b] — Searches Nexus by distinctive internal file paths when no archive or ID is available.
 [*][b]Endorsed & Tracked sync[/b] — Cross-references your Nexus endorsed/tracked lists with local files.
-[*][b]Fuzzy matching[/b] — Jaccard + Jaro-Winkler similarity scoring as a fallback.
+[*][b]Collection matching[/b] — Detects shared Nexus collections and matches remaining mods from the collection's mod list.
+[*][b]Requirement propagation[/b] — Uses mod dependency data to match unmatched mods referenced as requirements by already-matched mods.
+[*][b]Fuzzy matching[/b] — Jaccard + Jaro-Winkler similarity scoring with popularity tiebreaking as a fallback.
 [*][b]AI semantic search[/b] — Optional ChromaDB-powered vector search for the hardest-to-match mods (requires OpenAI API key).
 [*]Displays a confidence score on every match so you know how reliable it is.
 [*]Deduplication ensures only the best match per Nexus mod is kept.
@@ -75,6 +78,15 @@ The algorithm does the heavy lifting, but you're the one calling the shots:
 [*][b]NXM protocol handler[/b] — Click "Download with manager" links on the Nexus Mods website and RipperMod handles them automatically.
 [*]Queue multiple downloads.
 [*]Downloaded archives appear in the Archives tab, ready for installation.
+[/list]
+
+[b]Conflict Engine & Load Order[/b]
+[list]
+[*][b]Multi-layer detection[/b] — File-level overlap, archive resource conflicts, redscript annotation analysis, and TweakXL conflict scanning.
+[*][b]Conflict inbox[/b] — Centralized view of all detected conflicts with resolve (reinstall with new priority) or dismiss actions.
+[*][b]Conflict graph[/b] — Visual graph of which mods conflict with each other.
+[*][b]Archive-level details[/b] — See exactly which resources overlap between archives, with per-resource severity.
+[*][b]Load order management[/b] — View and reorder archive load order with preference rules, dry-run previews, and automatic modlist.txt generation.
 [/list]
 
 [b]Update Checker[/b]
