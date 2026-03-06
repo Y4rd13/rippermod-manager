@@ -23,7 +23,7 @@ GAME_ID_MAP: dict[str, int] = {
 }
 
 _BATCH_HASH_LIMIT = 500
-_BATCH_DOMAIN_LIMIT = 12  # legacyModsByDomain: ~660 complexity/mod (with requirements)
+_BATCH_DOMAIN_LIMIT = 25  # legacyModsByDomain (mod fields only, no requirements)
 _BATCH_ALIAS_LIMIT = 10  # alias queries: ~820 complexity/mod
 
 
@@ -278,13 +278,16 @@ class NexusGraphQLClient:
     async def batch_mods_by_domain(
         self, game_domain: str, mod_ids: list[int]
     ) -> dict[int, dict[str, Any]]:
-        """Fetch mods using legacyModsByDomain which accepts domain+modId pairs.
+        """Fetch mods using legacyModsByDomain + alias queries for requirements.
 
-        Falls back to ``batch_mods()`` on GraphQL errors (schema changes).
+        Phase 1: ``legacyModsByDomain`` fetches basic mod fields (high throughput,
+        low complexity).  Phase 2: ``batch_mods()`` fetches requirements via alias
+        queries (10/chunk).  Falls back entirely to ``batch_mods()`` on errors.
         """
         result: dict[int, dict[str, Any]] = {}
         chunks = math.ceil(len(mod_ids) / _BATCH_DOMAIN_LIMIT)
 
+        # Phase 1: basic mod info (no requirements — avoids complexity ceiling)
         try:
             for i in range(chunks):
                 chunk = mod_ids[i * _BATCH_DOMAIN_LIMIT : (i + 1) * _BATCH_DOMAIN_LIMIT]
@@ -295,7 +298,6 @@ class NexusGraphQLClient:
                         nodes {
                 """
                     + _MOD_FIELDS
-                    + _MOD_REQUIREMENT_FIELDS
                     + """
                         }
                     }
@@ -309,12 +311,25 @@ class NexusGraphQLClient:
                     mid = node.get("modId")
                     if mid is not None:
                         result[mid] = node
-        except (NexusGraphQLError, KeyError):
+        except (NexusGraphQLError, NexusRateLimitError, KeyError, httpx.HTTPError):
             logger.warning(
                 "legacyModsByDomain failed, falling back to batch_mods()",
                 exc_info=True,
             )
             return await self.batch_mods(game_domain, mod_ids)
+
+        # Phase 2: requirements via alias queries (10/chunk, includes modRequirements)
+        if result:
+            try:
+                req_data = await self.batch_mods(game_domain, list(result.keys()))
+                for mid, mod_data in req_data.items():
+                    if mid in result:
+                        result[mid]["modRequirements"] = mod_data.get("modRequirements")
+            except (NexusGraphQLError, NexusRateLimitError, httpx.HTTPError):
+                logger.warning(
+                    "Requirements fetch failed, returning mods without requirements",
+                    exc_info=True,
+                )
 
         return result
 
