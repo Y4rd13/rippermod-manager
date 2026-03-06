@@ -311,7 +311,7 @@ class NexusGraphQLClient:
                     mid = node.get("modId")
                     if mid is not None:
                         result[mid] = node
-        except (NexusGraphQLError, KeyError):
+        except (NexusGraphQLError, KeyError, httpx.HTTPError):
             logger.warning(
                 "legacyModsByDomain failed, falling back to batch_mods()",
                 exc_info=True,
