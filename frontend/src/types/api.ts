@@ -582,6 +582,12 @@ export interface ModRequirement {
   is_external: boolean;
 }
 
+export interface DlcRequirement {
+  expansion_name: string;
+  expansion_id: number | null;
+  notes: string;
+}
+
 export interface ModDetail {
   nexus_mod_id: number;
   game_domain: string;
@@ -600,6 +606,7 @@ export interface ModDetail {
   changelogs: Record<string, string[]>;
   files: NexusModFileDetail[];
   requirements: ModRequirement[];
+  dlc_requirements: DlcRequirement[];
   is_tracked: boolean;
   is_endorsed: boolean;
 }
