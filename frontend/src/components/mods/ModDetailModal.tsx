@@ -8,6 +8,7 @@ import {
   Eye,
   EyeOff,
   FolderOpen,
+  Gamepad2,
   Heart,
   Loader2,
   Puzzle,
@@ -228,6 +229,26 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
               {/* About tab */}
               {activeTab === "about" && (
                 <>
+                  {detail.dlc_requirements && detail.dlc_requirements.length > 0 && (
+                    <div className="rounded-lg border border-warning/30 bg-warning/5 p-3">
+                      <div className="flex items-center gap-1.5 text-xs text-warning mb-2">
+                        <Gamepad2 size={12} />
+                        <span className="font-medium uppercase tracking-wide">Requires DLC</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {detail.dlc_requirements.map((dlc) => (
+                          <span
+                            key={dlc.expansion_id ?? dlc.expansion_name}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-warning/20 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning"
+                          >
+                            {dlc.expansion_name}
+                            {dlc.notes && <span className="text-warning/70 font-normal">{dlc.notes}</span>}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {detail.requirements && detail.requirements.length > 0 && (
                     <div className="rounded-lg border border-border bg-surface-1 p-3">
                       <div className="flex items-center gap-1.5 text-xs text-text-muted mb-2">
