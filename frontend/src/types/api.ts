@@ -584,7 +584,7 @@ export interface ModRequirement {
 
 export interface DlcRequirement {
   expansion_name: string;
-  expansion_id: number | null;
+  expansion_id: string | null;
   notes: string;
 }
 

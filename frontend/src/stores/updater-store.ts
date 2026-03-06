@@ -9,6 +9,8 @@ export type UpdateStatus =
   | "ready"
   | "error";
 
+export type ErrorKind = "network" | "generic";
+
 export interface UpdateInfo {
   version: string;
   date: string | null;
@@ -19,11 +21,12 @@ interface UpdaterState {
   status: UpdateStatus;
   updateInfo: UpdateInfo | null;
   error: string | null;
+  errorKind: ErrorKind | null;
   downloadProgress: number | null;
 
   setStatus: (status: UpdateStatus) => void;
   setUpdateInfo: (info: UpdateInfo | null) => void;
-  setError: (error: string | null) => void;
+  setError: (error: string | null, kind?: ErrorKind) => void;
   setDownloadProgress: (progress: number | null) => void;
   reset: () => void;
 }
@@ -32,12 +35,13 @@ export const useUpdaterStore = create<UpdaterState>((set) => ({
   status: "idle",
   updateInfo: null,
   error: null,
+  errorKind: null,
   downloadProgress: null,
 
   setStatus: (status) => set({ status }),
   setUpdateInfo: (updateInfo) => set({ updateInfo }),
-  setError: (error) => set({ error }),
+  setError: (error, kind) => set({ error, errorKind: kind ?? null }),
   setDownloadProgress: (downloadProgress) => set({ downloadProgress }),
   reset: () =>
-    set({ status: "idle", updateInfo: null, error: null, downloadProgress: null }),
+    set({ status: "idle", updateInfo: null, error: null, errorKind: null, downloadProgress: null }),
 }));

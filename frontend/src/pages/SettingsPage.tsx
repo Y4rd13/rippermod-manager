@@ -58,6 +58,7 @@ function UpdateSection() {
     status,
     updateInfo,
     error,
+    errorKind,
     downloadProgress,
     checkForUpdate,
     downloadAndInstall,
@@ -93,7 +94,7 @@ function UpdateSection() {
       )}
 
       {status === "error" && error && (
-        <p className="text-xs text-danger">{error}</p>
+        <p className={`text-xs ${errorKind === "network" ? "text-warning" : "text-danger"}`}>{error}</p>
       )}
 
       {status === "up-to-date" && (

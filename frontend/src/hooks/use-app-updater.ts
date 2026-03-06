@@ -16,6 +16,7 @@ export function useAppUpdater() {
     status,
     updateInfo,
     error,
+    errorKind,
     downloadProgress,
     setStatus,
     setUpdateInfo,
@@ -54,10 +55,15 @@ export function useAppUpdater() {
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Update check failed";
-        setError(msg);
+        const kind = msg.includes("status code") ? "network" as const : "generic" as const;
+        setError(kind === "network" ? "Could not reach update server. Try again later." : msg, kind);
         setStatus("error");
         if (!opts?.silent) {
-          toast.error("Update check failed", msg);
+          if (kind === "network") {
+            toast.warning("Update unavailable", "Could not reach update server. Try again later.");
+          } else {
+            toast.error("Update check failed", msg);
+          }
         }
       }
     },
@@ -131,6 +137,7 @@ export function useAppUpdater() {
     status,
     updateInfo,
     error,
+    errorKind,
     downloadProgress,
     checkForUpdate,
     downloadAndInstall,
