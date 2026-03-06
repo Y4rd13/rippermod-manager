@@ -72,6 +72,7 @@ class TestBatchModsByDomain:
     @pytest.mark.asyncio
     async def test_phase2_merges_requirements(self):
         async with NexusGraphQLClient("key") as gql:
+
             async def _mock_post(url, json):
                 query = json.get("query", "")
 
@@ -79,11 +80,7 @@ class TestBatchModsByDomain:
                     resp = MagicMock()
                     resp.status_code = 200
                     resp.json.return_value = {
-                        "data": {
-                            "legacyModsByDomain": {
-                                "nodes": [{"modId": 10, "name": "ModA"}]
-                            }
-                        }
+                        "data": {"legacyModsByDomain": {"nodes": [{"modId": 10, "name": "ModA"}]}}
                     }
                     resp.raise_for_status = MagicMock()
                     return resp
