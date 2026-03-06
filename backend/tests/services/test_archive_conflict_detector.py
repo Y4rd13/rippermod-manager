@@ -371,12 +371,20 @@ class TestDependencySeverity:
         mod_b = self._make_mod(session, game.id, "Mod B", 200)
         self._add_req(session, 200, 100)  # B requires A
         _add_entry(
-            session, game.id, "b_mod.archive", 50,
-            installed_mod_id=mod_b.id, sha1_hex="x" * 40,
+            session,
+            game.id,
+            "b_mod.archive",
+            50,
+            installed_mod_id=mod_b.id,
+            sha1_hex="x" * 40,
         )
         _add_entry(
-            session, game.id, "a_mod.archive", 50,
-            installed_mod_id=mod_a.id, sha1_hex="y" * 40,
+            session,
+            game.id,
+            "a_mod.archive",
+            50,
+            installed_mod_id=mod_a.id,
+            sha1_hex="y" * 40,
         )
 
         result = detect_archive_conflicts(session, game.id)
