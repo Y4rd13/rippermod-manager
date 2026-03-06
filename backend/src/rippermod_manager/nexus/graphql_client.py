@@ -59,7 +59,7 @@ _MOD_FIELDS = """
 
 _MOD_REQUIREMENT_FIELDS = """
     modRequirements {
-        nexusRequirements {
+        nexusRequirements(offset: 0, count: 50) {
             nodes {
                 id
                 modId
@@ -69,6 +69,24 @@ _MOD_REQUIREMENT_FIELDS = """
                 externalRequirement
                 gameId
             }
+        }
+        modsRequiringThisMod(offset: 0, count: 50) {
+            nodes {
+                id
+                modId
+                modName
+                url
+                notes
+                externalRequirement
+                gameId
+            }
+        }
+        dlcRequirements {
+            gameExpansion {
+                id
+                name
+            }
+            notes
         }
     }
 """

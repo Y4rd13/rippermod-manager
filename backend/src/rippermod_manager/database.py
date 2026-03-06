@@ -94,6 +94,16 @@ def _migrate_missing_columns() -> None:
             "requirements_fetched_at",
             "ALTER TABLE nexus_mod_meta ADD COLUMN requirements_fetched_at TIMESTAMP",
         ),
+        (
+            "nexus_mod_requirements",
+            "is_reverse",
+            "ALTER TABLE nexus_mod_requirements ADD COLUMN is_reverse BOOLEAN DEFAULT 0",
+        ),
+        (
+            "nexus_mod_meta",
+            "dlc_requirements",
+            "ALTER TABLE nexus_mod_meta ADD COLUMN dlc_requirements TEXT DEFAULT '[]'",
+        ),
     ]
     with Session(engine) as session:
         for table, column, ddl in migrations:
@@ -133,6 +143,14 @@ def _migrate_unique_indexes() -> None:
             create_sql = f"CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} ON {table} ({cols_csv})"
             session.exec(text(create_sql))  # type: ignore[arg-type]
             logger.info("Created unique index %s on %s(%s)", idx_name, table, cols_csv)
+
+        # Non-unique index for reverse-dependency lookups
+        session.exec(  # type: ignore[arg-type]
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_nexus_mod_requirements_required_mod_id "
+                "ON nexus_mod_requirements(required_mod_id)"
+            )
+        )
         session.commit()
 
 

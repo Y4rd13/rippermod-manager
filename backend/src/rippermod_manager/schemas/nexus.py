@@ -115,6 +115,12 @@ class ModRequirementOut(BaseModel):
     is_external: bool = False
 
 
+class DlcRequirementOut(BaseModel):
+    expansion_name: str = ""
+    expansion_id: int | None = None
+    notes: str = ""
+
+
 class ModDetailOut(BaseModel):
     nexus_mod_id: int
     game_domain: str
@@ -133,6 +139,7 @@ class ModDetailOut(BaseModel):
     changelogs: dict[str, list[str]]
     files: list[NexusModFileOut]
     requirements: list[ModRequirementOut] = []
+    dlc_requirements: list[DlcRequirementOut] = []
     is_tracked: bool = False
     is_endorsed: bool = False
 

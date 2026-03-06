@@ -21,6 +21,7 @@ from rippermod_manager.nexus.client import NexusRateLimitError
 from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
 from rippermod_manager.schemas.mod import EnrichResult
 from rippermod_manager.services.nexus_helpers import (
+    extract_dlc_requirements,
     graphql_file_to_rest_file,
     graphql_mod_to_rest_info,
     match_local_to_nexus_file,
@@ -106,8 +107,16 @@ async def enrich_from_filename_ids(
 
                 mod_reqs = gql_mod.get("modRequirements") or {}
                 nexus_reqs = (mod_reqs.get("nexusRequirements") or {}).get("nodes") or []
-                if nexus_reqs:
-                    upsert_mod_requirements(session, mod_id, nexus_reqs)
+                reverse_reqs = (mod_reqs.get("modsRequiringThisMod") or {}).get("nodes") or []
+                dlc_reqs = extract_dlc_requirements(gql_mod)
+                if nexus_reqs or reverse_reqs or dlc_reqs:
+                    upsert_mod_requirements(
+                        session,
+                        mod_id,
+                        nexus_reqs,
+                        reverse_requirements=reverse_reqs,
+                        dlc_requirements=dlc_reqs,
+                    )
 
                 if id_to_filenames.get(mod_id):
                     mods_needing_files.append(mod_id)

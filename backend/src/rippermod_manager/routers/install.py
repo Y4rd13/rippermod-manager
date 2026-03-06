@@ -20,6 +20,8 @@ from rippermod_manager.schemas.install import (
     ArchivePreviewResult,
     AvailableArchive,
     ConflictCheckResult,
+    DependentModOut,
+    DependentsResult,
     InstalledModOut,
     InstallRequest,
     InstallResult,
@@ -245,6 +247,53 @@ async def uninstall(
     result = uninstall_mod(mod, game, session)
     invalidate_update_cache(game.id, session)  # type: ignore[arg-type]
     return result
+
+
+@router.get("/installed/{mod_id}/dependents", response_model=DependentsResult)
+async def dependents(
+    game_name: str,
+    mod_id: int,
+    session: Session = Depends(get_session),
+) -> DependentsResult:
+    """List installed mods that depend on the given mod (reverse requirements)."""
+    from rippermod_manager.models.nexus import NexusModRequirement
+
+    game = get_game_or_404(game_name, session)
+    mod = session.get(InstalledMod, mod_id)
+    if not mod or mod.game_id != game.id:
+        raise HTTPException(404, "Installed mod not found")
+
+    if not mod.nexus_mod_id:
+        return DependentsResult(dependents=[], count=0)
+
+    # Find mods that require this mod (forward reqs where required_mod_id = this mod)
+    req_rows = session.exec(
+        select(NexusModRequirement).where(
+            NexusModRequirement.required_mod_id == mod.nexus_mod_id,
+            NexusModRequirement.is_external.is_(False),  # type: ignore[union-attr]
+        )
+    ).all()
+    requiring_nexus_ids = {r.nexus_mod_id for r in req_rows}
+
+    if not requiring_nexus_ids:
+        return DependentsResult(dependents=[], count=0)
+
+    installed_deps = session.exec(
+        select(InstalledMod).where(
+            InstalledMod.game_id == game.id,
+            InstalledMod.nexus_mod_id.in_(requiring_nexus_ids),  # type: ignore[union-attr]
+        )
+    ).all()
+
+    result = [
+        DependentModOut(
+            installed_mod_id=m.id,  # type: ignore[arg-type]
+            name=m.name,
+            nexus_mod_id=m.nexus_mod_id,
+        )
+        for m in installed_deps
+    ]
+    return DependentsResult(dependents=result, count=len(result))
 
 
 @router.patch("/installed/{mod_id}/toggle", response_model=ToggleResult)
