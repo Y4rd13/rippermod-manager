@@ -93,7 +93,7 @@ function UpdateSection() {
       )}
 
       {status === "error" && error && (
-        <p className="text-xs text-danger">{error}</p>
+        <p className={`text-xs ${error.includes("Try again later") ? "text-warning" : "text-danger"}`}>{error}</p>
       )}
 
       {status === "up-to-date" && (

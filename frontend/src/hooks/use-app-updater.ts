@@ -54,10 +54,15 @@ export function useAppUpdater() {
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Update check failed";
-        setError(msg);
+        const isEndpointError = msg.includes("status code");
+        setError(isEndpointError ? "Could not reach update server. Try again later." : msg);
         setStatus("error");
         if (!opts?.silent) {
-          toast.error("Update check failed", msg);
+          if (isEndpointError) {
+            toast.warning("Update unavailable", "Could not reach update server. Try again later.");
+          } else {
+            toast.error("Update check failed", msg);
+          }
         }
       }
     },
