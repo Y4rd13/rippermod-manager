@@ -18,6 +18,7 @@ from rippermod_manager.models.conflict import ConflictEvidence, ConflictKind, Se
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.services.archive_conflict_detector import detect_archive_conflicts
+from rippermod_manager.services.conflicts.dependency_graph import DependencyPairs
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,8 @@ class ConflictDetector(Protocol):
         game: Game,
         installed_mods: list[InstalledMod],
         session: Session,
+        *,
+        dependency_pairs: DependencyPairs | None = None,
     ) -> list[ConflictEvidence]: ...
 
 
@@ -74,6 +77,28 @@ def _archive_entry_severity(path: str) -> Severity:
     return Severity.low
 
 
+_SEVERITY_DOWNGRADE: dict[Severity, Severity] = {
+    Severity.high: Severity.medium,
+    Severity.medium: Severity.low,
+    Severity.low: Severity.low,
+}
+
+
+def _adjust_for_dependency(
+    severity: Severity,
+    mod_ids: list[int],
+    dependency_pairs: DependencyPairs | None,
+) -> tuple[Severity, bool]:
+    """Lower severity by one level if any pair of mod_ids is a dependency pair."""
+    if not dependency_pairs or len(mod_ids) < 2:
+        return severity, False
+    for i, a in enumerate(mod_ids):
+        for b in mod_ids[i + 1 :]:
+            if (min(a, b), max(a, b)) in dependency_pairs:
+                return _SEVERITY_DOWNGRADE[severity], True
+    return severity, False
+
+
 # ---------------------------------------------------------------------------
 # Built-in detectors
 # ---------------------------------------------------------------------------
@@ -90,6 +115,8 @@ class ArchiveEntryDetector:
         game: Game,
         installed_mods: list[InstalledMod],
         session: Session,
+        *,
+        dependency_pairs: DependencyPairs | None = None,
     ) -> list[ConflictEvidence]:
         path_owners: dict[str, list[int]] = {}
         for mod in installed_mods:
@@ -103,15 +130,17 @@ class ArchiveEntryDetector:
         for path, mod_ids in path_owners.items():
             if len(mod_ids) < 2:
                 continue
+            severity = _archive_entry_severity(path)
+            severity, dep_overlap = _adjust_for_dependency(severity, mod_ids, dependency_pairs)
             evidence.append(
                 ConflictEvidence(
                     game_id=game.id,  # type: ignore[arg-type]
                     kind=self.kind,
-                    severity=_archive_entry_severity(path),
+                    severity=severity,
                     key=path,
                     mod_ids=",".join(str(m) for m in mod_ids),
                     winner_mod_id=mod_ids[-1],
-                    detail=json.dumps({"count": len(mod_ids)}),
+                    detail=json.dumps({"count": len(mod_ids), "dependency_overlap": dep_overlap}),
                 )
             )
         return evidence
@@ -136,6 +165,8 @@ class RedscriptTargetDetector:
         game: Game,
         installed_mods: list[InstalledMod],
         session: Session,
+        *,
+        dependency_pairs: DependencyPairs | None = None,
     ) -> list[ConflictEvidence]:
         game_dir = Path(game.install_path)
         target_owners: dict[str, list[tuple[int, str]]] = {}
@@ -163,6 +194,7 @@ class RedscriptTargetDetector:
             ann_types = list(dict.fromkeys(o[1] for o in owners))
             has_replace_or_wrap = any(a in ("wrapMethod", "replaceMethod") for a in ann_types)
             severity = Severity.high if has_replace_or_wrap else Severity.medium
+            severity, dep_overlap = _adjust_for_dependency(severity, mod_ids, dependency_pairs)
             evidence.append(
                 ConflictEvidence(
                     game_id=game.id,  # type: ignore[arg-type]
@@ -171,7 +203,9 @@ class RedscriptTargetDetector:
                     key=key,
                     mod_ids=",".join(str(m) for m in mod_ids),
                     winner_mod_id=None,
-                    detail=json.dumps({"annotations": ann_types}),
+                    detail=json.dumps(
+                        {"annotations": ann_types, "dependency_overlap": dep_overlap}
+                    ),
                 )
             )
         return evidence
@@ -225,6 +259,8 @@ class TweakKeyDetector:
         game: Game,
         installed_mods: list[InstalledMod],
         session: Session,
+        *,
+        dependency_pairs: DependencyPairs | None = None,
     ) -> list[ConflictEvidence]:
         game_dir = Path(game.install_path)
         key_owners: dict[str, list[tuple[int, bool]]] = {}
@@ -258,6 +294,7 @@ class TweakKeyDetector:
                 continue
             all_append = all(o[1] for o in owners)
             severity = Severity.low if all_append else Severity.medium
+            severity, dep_overlap = _adjust_for_dependency(severity, mod_ids, dependency_pairs)
             evidence.append(
                 ConflictEvidence(
                     game_id=game.id,  # type: ignore[arg-type]
@@ -266,7 +303,9 @@ class TweakKeyDetector:
                     key=key,
                     mod_ids=",".join(str(m) for m in mod_ids),
                     winner_mod_id=None,
-                    detail=json.dumps({"all_append": all_append}),
+                    detail=json.dumps(
+                        {"all_append": all_append, "dependency_overlap": dep_overlap}
+                    ),
                 )
             )
         return evidence
@@ -297,5 +336,18 @@ class ArchiveResourceDetector:
         game: Game,
         installed_mods: list[InstalledMod],
         session: Session,
+        *,
+        dependency_pairs: DependencyPairs | None = None,
     ) -> list[ConflictEvidence]:
-        return detect_archive_conflicts(session, game.id)  # type: ignore[arg-type]
+        evidences = detect_archive_conflicts(session, game.id)  # type: ignore[arg-type]
+        if not dependency_pairs:
+            return evidences
+        for ev in evidences:
+            mod_ids = [int(m) for m in ev.mod_ids.split(",") if m]
+            severity, dep_overlap = _adjust_for_dependency(ev.severity, mod_ids, dependency_pairs)
+            if dep_overlap:
+                ev.severity = severity
+                detail = json.loads(ev.detail)
+                detail["dependency_overlap"] = True
+                ev.detail = json.dumps(detail)
+        return evidences

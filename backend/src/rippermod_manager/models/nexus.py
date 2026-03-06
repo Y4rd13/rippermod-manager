@@ -40,6 +40,7 @@ class NexusModMeta(SQLModel, table=True):
     picture_url: str = ""
     files_updated_at: datetime | None = None
     requirements_fetched_at: datetime | None = None
+    dlc_requirements: str = "[]"
 
 
 class NexusModRequirement(SQLModel, table=True):
@@ -47,11 +48,12 @@ class NexusModRequirement(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     nexus_mod_id: int = Field(index=True)
-    required_mod_id: int | None = None
+    required_mod_id: int | None = Field(default=None, index=True)
     mod_name: str = ""
     url: str = ""
     notes: str = ""
     is_external: bool = False
+    is_reverse: bool = False
     game_id: int | None = None
 
 

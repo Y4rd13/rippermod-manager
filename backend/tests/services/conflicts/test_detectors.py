@@ -1,5 +1,7 @@
 """Unit tests for individual conflict detectors."""
 
+import json
+
 import pytest
 
 from rippermod_manager.models.archive_index import ArchiveEntryIndex
@@ -11,6 +13,7 @@ from rippermod_manager.services.conflicts.detectors import (
     ArchiveResourceDetector,
     RedscriptTargetDetector,
     TweakKeyDetector,
+    _adjust_for_dependency,
     _archive_entry_severity,
     get_all_detectors,
 )
@@ -356,3 +359,147 @@ class TestArchiveResourceDetector:
         detectors = get_all_detectors()
         kinds = [d.kind for d in detectors]
         assert ConflictKind.archive_resource in kinds
+
+
+# ---------------------------------------------------------------------------
+# Dependency severity adjustment
+# ---------------------------------------------------------------------------
+
+
+class TestAdjustForDependency:
+    def test_no_change_without_pairs(self):
+        severity, dep = _adjust_for_dependency(Severity.high, [1, 2], None)
+        assert severity == Severity.high
+        assert dep is False
+
+    def test_no_change_when_no_match(self):
+        pairs = {(1, 3)}
+        severity, dep = _adjust_for_dependency(Severity.high, [1, 2], pairs)
+        assert severity == Severity.high
+        assert dep is False
+
+    def test_downgrades_high_to_medium(self):
+        pairs = {(1, 2)}
+        severity, dep = _adjust_for_dependency(Severity.high, [1, 2], pairs)
+        assert severity == Severity.medium
+        assert dep is True
+
+    def test_downgrades_medium_to_low(self):
+        pairs = {(1, 2)}
+        severity, dep = _adjust_for_dependency(Severity.medium, [1, 2], pairs)
+        assert severity == Severity.low
+        assert dep is True
+
+    def test_low_stays_low(self):
+        pairs = {(1, 2)}
+        severity, dep = _adjust_for_dependency(Severity.low, [1, 2], pairs)
+        assert severity == Severity.low
+        assert dep is True
+
+    def test_normalises_pair_order(self):
+        pairs = {(1, 2)}
+        _severity, dep = _adjust_for_dependency(Severity.high, [2, 1], pairs)
+        assert dep is True
+
+
+# ---------------------------------------------------------------------------
+# Dependency-aware detectors
+# ---------------------------------------------------------------------------
+
+
+class TestArchiveEntryDetectorWithDeps:
+    def test_lowers_severity_for_dependent_mods(self, session, game_with_dir):
+        game, _ = game_with_dir
+        path = "archive/pc/mod/shared.archive"
+        mod_a = _add_mod(session, game, "A", [path])
+        mod_b = _add_mod(session, game, "B", [path])
+
+        dep_pairs = {(min(mod_a.id, mod_b.id), max(mod_a.id, mod_b.id))}
+        detector = ArchiveEntryDetector()
+        evidence = detector.detect(game, [mod_a, mod_b], session, dependency_pairs=dep_pairs)
+        assert len(evidence) == 1
+        # high → medium due to dependency
+        assert evidence[0].severity == Severity.medium
+        detail = json.loads(evidence[0].detail)
+        assert detail["dependency_overlap"] is True
+
+    def test_no_change_without_dependency(self, session, game_with_dir):
+        game, _ = game_with_dir
+        path = "archive/pc/mod/shared.archive"
+        mod_a = _add_mod(session, game, "A", [path])
+        mod_b = _add_mod(session, game, "B", [path])
+
+        detector = ArchiveEntryDetector()
+        evidence = detector.detect(game, [mod_a, mod_b], session, dependency_pairs=set())
+        assert len(evidence) == 1
+        assert evidence[0].severity == Severity.high
+        detail = json.loads(evidence[0].detail)
+        assert detail["dependency_overlap"] is False
+
+
+class TestRedscriptTargetDetectorWithDeps:
+    def test_lowers_severity_for_dependent_mods(self, session, game_with_dir):
+        game, game_dir = game_with_dir
+        scripts = game_dir / "r6" / "scripts"
+
+        d1 = scripts / "m1"
+        d1.mkdir(parents=True)
+        (d1 / "a.reds").write_text("@wrapMethod(Foo)\nfunc Bar() {}\n")
+        mod_a = _add_mod(session, game, "A", ["r6/scripts/m1/a.reds"])
+
+        d2 = scripts / "m2"
+        d2.mkdir(parents=True)
+        (d2 / "b.reds").write_text("@wrapMethod(Foo)\nfunc Bar() {}\n")
+        mod_b = _add_mod(session, game, "B", ["r6/scripts/m2/b.reds"])
+
+        dep_pairs = {(min(mod_a.id, mod_b.id), max(mod_a.id, mod_b.id))}
+        detector = RedscriptTargetDetector()
+        evidence = detector.detect(game, [mod_a, mod_b], session, dependency_pairs=dep_pairs)
+        assert len(evidence) == 1
+        # high → medium
+        assert evidence[0].severity == Severity.medium
+        detail = json.loads(evidence[0].detail)
+        assert detail["dependency_overlap"] is True
+
+
+class TestTweakKeyDetectorWithDeps:
+    def test_lowers_severity_for_dependent_mods(self, session, game_with_dir):
+        game, game_dir = game_with_dir
+        tweaks = game_dir / "r6" / "tweaks"
+
+        ta = tweaks / "a"
+        ta.mkdir(parents=True)
+        (ta / "t.yaml").write_text("Items.Weapon.damage:\n  100\n")
+        mod_a = _add_mod(session, game, "A", ["r6/tweaks/a/t.yaml"])
+
+        tb = tweaks / "b"
+        tb.mkdir(parents=True)
+        (tb / "t.yaml").write_text("Items.Weapon.damage:\n  200\n")
+        mod_b = _add_mod(session, game, "B", ["r6/tweaks/b/t.yaml"])
+
+        dep_pairs = {(min(mod_a.id, mod_b.id), max(mod_a.id, mod_b.id))}
+        detector = TweakKeyDetector()
+        evidence = detector.detect(game, [mod_a, mod_b], session, dependency_pairs=dep_pairs)
+        assert len(evidence) == 1
+        # medium → low
+        assert evidence[0].severity == Severity.low
+        detail = json.loads(evidence[0].detail)
+        assert detail["dependency_overlap"] is True
+
+
+class TestArchiveResourceDetectorWithDeps:
+    def test_lowers_severity_for_dependent_mods(self, session, game_with_dir):
+        game, _ = game_with_dir
+        mod_a = _add_mod(session, game, "A", ["archive/pc/mod/a.archive"])
+        mod_b = _add_mod(session, game, "B", ["archive/pc/mod/b.archive"])
+        _add_archive_entry(session, game.id, "a.archive", 100, mod_a.id)
+        _add_archive_entry(session, game.id, "b.archive", 100, mod_b.id)
+
+        dep_pairs = {(min(mod_a.id, mod_b.id), max(mod_a.id, mod_b.id))}
+        detector = ArchiveResourceDetector()
+        evidence = detector.detect(game, [mod_a, mod_b], session, dependency_pairs=dep_pairs)
+        assert len(evidence) == 1
+        # high → medium
+        assert evidence[0].severity == Severity.medium
+        detail = json.loads(evidence[0].detail)
+        assert detail["dependency_overlap"] is True

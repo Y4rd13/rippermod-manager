@@ -128,41 +128,101 @@ def get_stored_uid(session: Session, nexus_mod_id: int) -> str | None:
     return None
 
 
+def extract_dlc_requirements(gql_mod: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract DLC requirements from a GraphQL mod response into a serialisable list."""
+    mod_reqs = gql_mod.get("modRequirements") or {}
+    dlc_nodes = mod_reqs.get("dlcRequirements") or []
+    result: list[dict[str, Any]] = []
+    for node in dlc_nodes:
+        expansion = node.get("gameExpansion") or {}
+        result.append(
+            {
+                "expansion_name": expansion.get("name", ""),
+                "expansion_id": expansion.get("id"),
+                "notes": node.get("notes", ""),
+            }
+        )
+    return result
+
+
 def upsert_mod_requirements(
     session: Session,
     nexus_mod_id: int,
     gql_requirements: list[dict[str, Any]],
+    *,
+    reverse_requirements: list[dict[str, Any]] | None = None,
+    dlc_requirements: list[dict[str, Any]] | None = None,
 ) -> None:
     """Replace requirements for a mod from GraphQL modRequirements data."""
-    if not gql_requirements:
-        return
-
-    # Delete existing requirements for this mod
-    existing = session.exec(
-        select(NexusModRequirement).where(NexusModRequirement.nexus_mod_id == nexus_mod_id)
-    ).all()
-    for req in existing:
-        session.delete(req)
-
-    for req_data in gql_requirements:
-        url = req_data.get("url", "")
-        raw_mod_id = req_data.get("modId")
-        try:
-            required_mod_id = int(raw_mod_id) if raw_mod_id else None
-        except (ValueError, TypeError):
-            required_mod_id = None
-        is_external = req_data.get("externalRequirement", False)
-
-        session.add(
-            NexusModRequirement(
-                nexus_mod_id=nexus_mod_id,
-                required_mod_id=required_mod_id,
-                mod_name=req_data.get("modName", ""),
-                url=url,
-                notes=req_data.get("notes", ""),
-                is_external=is_external,
+    # Delete existing forward requirements (None = no fresh data, skip; [] = cleared upstream)
+    if gql_requirements is not None:
+        existing_fwd = session.exec(
+            select(NexusModRequirement).where(
+                NexusModRequirement.nexus_mod_id == nexus_mod_id,
+                NexusModRequirement.is_reverse.is_(False),  # type: ignore[union-attr]
             )
-        )
+        ).all()
+        for req in existing_fwd:
+            session.delete(req)
+
+        for req_data in gql_requirements:
+            url = req_data.get("url", "")
+            raw_mod_id = req_data.get("modId")
+            try:
+                required_mod_id = int(raw_mod_id) if raw_mod_id else None
+            except (ValueError, TypeError):
+                required_mod_id = None
+            is_external = req_data.get("externalRequirement", False)
+
+            session.add(
+                NexusModRequirement(
+                    nexus_mod_id=nexus_mod_id,
+                    required_mod_id=required_mod_id,
+                    mod_name=req_data.get("modName", ""),
+                    url=url,
+                    notes=req_data.get("notes", ""),
+                    is_external=is_external,
+                    is_reverse=False,
+                )
+            )
+
+    # Reverse requirements: mods that depend on this mod
+    if reverse_requirements is not None:
+        existing_rev = session.exec(
+            select(NexusModRequirement).where(
+                NexusModRequirement.nexus_mod_id == nexus_mod_id,
+                NexusModRequirement.is_reverse.is_(True),  # type: ignore[union-attr]
+            )
+        ).all()
+        for req in existing_rev:
+            session.delete(req)
+
+        for req_data in reverse_requirements:
+            raw_mod_id = req_data.get("modId")
+            try:
+                required_mod_id = int(raw_mod_id) if raw_mod_id else None
+            except (ValueError, TypeError):
+                required_mod_id = None
+
+            session.add(
+                NexusModRequirement(
+                    nexus_mod_id=nexus_mod_id,
+                    required_mod_id=required_mod_id,
+                    mod_name=req_data.get("modName", ""),
+                    url=req_data.get("url", ""),
+                    notes=req_data.get("notes", ""),
+                    is_external=req_data.get("externalRequirement", False),
+                    is_reverse=True,
+                )
+            )
+
+    # DLC requirements: store as JSON on NexusModMeta
+    if dlc_requirements is not None:
+        meta = session.exec(
+            select(NexusModMeta).where(NexusModMeta.nexus_mod_id == nexus_mod_id)
+        ).first()
+        if meta:
+            meta.dlc_requirements = json.dumps(dlc_requirements)
 
 
 def match_local_to_nexus_file(
