@@ -325,7 +325,7 @@ class NexusGraphQLClient:
                 for mid, mod_data in req_data.items():
                     if mid in result:
                         result[mid]["modRequirements"] = mod_data.get("modRequirements")
-            except (NexusGraphQLError, NexusRateLimitError):
+            except (NexusGraphQLError, NexusRateLimitError, httpx.HTTPError):
                 logger.warning(
                     "Requirements fetch failed, returning mods without requirements",
                     exc_info=True,
