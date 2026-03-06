@@ -54,7 +54,7 @@ class TestBatchModsByDomain:
             with patch.object(gql.client, "post", side_effect=_mock_post):
                 result = await gql.batch_mods_by_domain("cyberpunk2077", mod_ids)
 
-        assert call_count == 3  # 60 mods / 25 per chunk = 3 batches
+        assert call_count == 5  # 60 mods / 12 per chunk = 5 batches
         assert len(result) == 60
 
     @pytest.mark.asyncio
