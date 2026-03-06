@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 from datetime import UTC, datetime
@@ -136,6 +137,7 @@ async def mod_detail(
     from rippermod_manager.nexus.client import NexusClient
     from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
     from rippermod_manager.services.nexus_helpers import (
+        extract_dlc_requirements,
         graphql_file_to_rest_file,
         graphql_mod_to_rest_info,
         store_uid_from_gql,
@@ -160,11 +162,18 @@ async def mod_detail(
         upsert_nexus_mod(session, game.id, game_domain, mod_id, info)
         if gql_mod.get("uid"):
             store_uid_from_gql(session, mod_id, gql_mod["uid"])
-        # Store requirements
+        # Store requirements (forward + reverse + DLC)
         mod_reqs = gql_mod.get("modRequirements") or {}
         gql_reqs = (mod_reqs.get("nexusRequirements") or {}).get("nodes") or []
-        if gql_reqs:
-            upsert_mod_requirements(session, mod_id, gql_reqs)
+        reverse_reqs = (mod_reqs.get("modsRequiringThisMod") or {}).get("nodes") or []
+        dlc_reqs = extract_dlc_requirements(gql_mod)
+        upsert_mod_requirements(
+            session,
+            mod_id,
+            gql_reqs,
+            reverse_requirements=reverse_reqs,
+            dlc_requirements=dlc_reqs,
+        )
         # Mark requirements as fetched (even if empty) to avoid repeated API calls
         fresh_meta = session.exec(
             select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)
@@ -277,17 +286,24 @@ async def mod_detail(
                 gql_mod = await gql.get_mod(game_domain, mod_id)
             mod_reqs = gql_mod.get("modRequirements") or {}
             gql_reqs = (mod_reqs.get("nexusRequirements") or {}).get("nodes") or []
-            if gql_reqs:
-                upsert_mod_requirements(session, mod_id, gql_reqs)
-                req_rows = session.exec(
-                    select(NexusModRequirement).where(NexusModRequirement.nexus_mod_id == mod_id)
-                ).all()
+            reverse_reqs = (mod_reqs.get("modsRequiringThisMod") or {}).get("nodes") or []
+            dlc_reqs = extract_dlc_requirements(gql_mod)
+            upsert_mod_requirements(
+                session,
+                mod_id,
+                gql_reqs,
+                reverse_requirements=reverse_reqs,
+                dlc_requirements=dlc_reqs,
+            )
+            req_rows = session.exec(
+                select(NexusModRequirement).where(NexusModRequirement.nexus_mod_id == mod_id)
+            ).all()
             meta.requirements_fetched_at = datetime.now(UTC)
             session.commit()
         except httpx.HTTPError:
             logger.debug("Failed to backfill requirements for mod %d", mod_id, exc_info=True)
 
-    from rippermod_manager.schemas.nexus import ModRequirementOut
+    from rippermod_manager.schemas.nexus import DlcRequirementOut, ModRequirementOut
 
     requirements = [
         ModRequirementOut(
@@ -299,7 +315,22 @@ async def mod_detail(
             is_external=r.is_external,
         )
         for r in req_rows
+        if not r.is_reverse
     ]
+
+    dlc_requirements: list[DlcRequirementOut] = []
+    try:
+        dlc_raw = json.loads(meta.dlc_requirements) if meta.dlc_requirements else []
+        dlc_requirements = [
+            DlcRequirementOut(
+                expansion_name=d.get("expansion_name", ""),
+                expansion_id=d.get("expansion_id"),
+                notes=d.get("notes", ""),
+            )
+            for d in dlc_raw
+        ]
+    except (json.JSONDecodeError, TypeError):
+        pass
 
     nexus_url = f"https://www.nexusmods.com/{game_domain}/mods/{mod_id}"
 
@@ -333,6 +364,7 @@ async def mod_detail(
             for f in files
         ],
         requirements=requirements,
+        dlc_requirements=dlc_requirements,
         is_tracked=dl.is_tracked if dl else False,
         is_endorsed=dl.is_endorsed if dl else False,
     )

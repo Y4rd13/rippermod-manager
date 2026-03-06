@@ -121,3 +121,14 @@ class ArchivePreviewResult(BaseModel):
     total_files: int
     is_fomod: bool
     files: list[ArchiveFileEntry]
+
+
+class DependentModOut(BaseModel):
+    installed_mod_id: int
+    name: str
+    nexus_mod_id: int | None = None
+
+
+class DependentsResult(BaseModel):
+    dependents: list[DependentModOut]
+    count: int

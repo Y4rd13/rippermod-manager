@@ -57,9 +57,11 @@ _MOD_FIELDS = """
     status
 """
 
+# NOTE: Hard-coded count=50 may truncate results for popular framework mods.
+# Consider cursor-based pagination if modsRequiringThisMod exceeds 50.
 _MOD_REQUIREMENT_FIELDS = """
     modRequirements {
-        nexusRequirements {
+        nexusRequirements(offset: 0, count: 50) {
             nodes {
                 id
                 modId
@@ -69,6 +71,24 @@ _MOD_REQUIREMENT_FIELDS = """
                 externalRequirement
                 gameId
             }
+        }
+        modsRequiringThisMod(offset: 0, count: 50) {
+            nodes {
+                id
+                modId
+                modName
+                url
+                notes
+                externalRequirement
+                gameId
+            }
+        }
+        dlcRequirements {
+            gameExpansion {
+                id
+                name
+            }
+            notes
         }
     }
 """

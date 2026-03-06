@@ -10,6 +10,7 @@ from sqlmodel import Session, select
 from rippermod_manager.models.conflict import ConflictEvidence
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod
+from rippermod_manager.services.conflicts.dependency_graph import build_dependency_pairs
 from rippermod_manager.services.conflicts.detectors import get_all_detectors
 
 logger = logging.getLogger(__name__)
@@ -36,10 +37,14 @@ class ConflictEngine:
         for mod in installed_mods:
             _ = mod.files  # eager-load within session
 
+        dependency_pairs = build_dependency_pairs(installed_mods, session)
+
         all_evidence: list[ConflictEvidence] = []
         for detector in get_all_detectors():
             try:
-                evidence = detector.detect(game, installed_mods, session)
+                evidence = detector.detect(
+                    game, installed_mods, session, dependency_pairs=dependency_pairs
+                )
             except Exception:
                 logger.exception("Detector %s failed for game %s", detector.kind, game.name)
                 continue
