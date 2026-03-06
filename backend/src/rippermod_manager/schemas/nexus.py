@@ -117,7 +117,7 @@ class ModRequirementOut(BaseModel):
 
 class DlcRequirementOut(BaseModel):
     expansion_name: str = ""
-    expansion_id: int | None = None
+    expansion_id: str | None = None
     notes: str = ""
 
 
