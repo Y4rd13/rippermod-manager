@@ -134,7 +134,7 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
           break;
         }
         case "conflicts":
-          cmp = (a.real_count + a.identical_count) - (b.real_count + b.identical_count);
+          cmp = (a.real_count + a.identical_count + a.dependency_count) - (b.real_count + b.identical_count + b.dependency_count);
           break;
         case "severity":
           cmp = (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3);

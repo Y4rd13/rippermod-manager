@@ -71,6 +71,7 @@ def _build_dependency_pairs(
     req_rows = session.exec(
         select(NexusModRequirement.nexus_mod_id, NexusModRequirement.required_mod_id).where(
             NexusModRequirement.required_mod_id.is_not(None),  # type: ignore[union-attr]
+            NexusModRequirement.nexus_mod_id.in_(list(nexus_ids)),  # type: ignore[union-attr]
         )
     ).all()
 
