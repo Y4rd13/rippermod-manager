@@ -167,14 +167,13 @@ async def mod_detail(
         gql_reqs = (mod_reqs.get("nexusRequirements") or {}).get("nodes") or []
         reverse_reqs = (mod_reqs.get("modsRequiringThisMod") or {}).get("nodes") or []
         dlc_reqs = extract_dlc_requirements(gql_mod)
-        if gql_reqs or reverse_reqs or dlc_reqs:
-            upsert_mod_requirements(
-                session,
-                mod_id,
-                gql_reqs,
-                reverse_requirements=reverse_reqs,
-                dlc_requirements=dlc_reqs,
-            )
+        upsert_mod_requirements(
+            session,
+            mod_id,
+            gql_reqs,
+            reverse_requirements=reverse_reqs,
+            dlc_requirements=dlc_reqs,
+        )
         # Mark requirements as fetched (even if empty) to avoid repeated API calls
         fresh_meta = session.exec(
             select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)
@@ -289,17 +288,16 @@ async def mod_detail(
             gql_reqs = (mod_reqs.get("nexusRequirements") or {}).get("nodes") or []
             reverse_reqs = (mod_reqs.get("modsRequiringThisMod") or {}).get("nodes") or []
             dlc_reqs = extract_dlc_requirements(gql_mod)
-            if gql_reqs or reverse_reqs or dlc_reqs:
-                upsert_mod_requirements(
-                    session,
-                    mod_id,
-                    gql_reqs,
-                    reverse_requirements=reverse_reqs,
-                    dlc_requirements=dlc_reqs,
-                )
-                req_rows = session.exec(
-                    select(NexusModRequirement).where(NexusModRequirement.nexus_mod_id == mod_id)
-                ).all()
+            upsert_mod_requirements(
+                session,
+                mod_id,
+                gql_reqs,
+                reverse_requirements=reverse_reqs,
+                dlc_requirements=dlc_reqs,
+            )
+            req_rows = session.exec(
+                select(NexusModRequirement).where(NexusModRequirement.nexus_mod_id == mod_id)
+            ).all()
             meta.requirements_fetched_at = datetime.now(UTC)
             session.commit()
         except httpx.HTTPError:

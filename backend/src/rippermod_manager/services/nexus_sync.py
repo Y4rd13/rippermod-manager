@@ -63,14 +63,13 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
                     nexus_reqs = (mod_reqs.get("nexusRequirements") or {}).get("nodes") or []
                     reverse_reqs = (mod_reqs.get("modsRequiringThisMod") or {}).get("nodes") or []
                     dlc_reqs = extract_dlc_requirements(gql_mod)
-                    if nexus_reqs or reverse_reqs or dlc_reqs:
-                        upsert_mod_requirements(
-                            session,
-                            mod_id,
-                            nexus_reqs,
-                            reverse_requirements=reverse_reqs,
-                            dlc_requirements=dlc_reqs,
-                        )
+                    upsert_mod_requirements(
+                        session,
+                        mod_id,
+                        nexus_reqs,
+                        reverse_requirements=reverse_reqs,
+                        dlc_requirements=dlc_reqs,
+                    )
             except NexusRateLimitError:
                 logger.warning("Rate limited during batch mod fetch in sync")
             except httpx.HTTPError:
