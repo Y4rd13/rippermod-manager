@@ -154,8 +154,8 @@ def upsert_mod_requirements(
     dlc_requirements: list[dict[str, Any]] | None = None,
 ) -> None:
     """Replace requirements for a mod from GraphQL modRequirements data."""
-    # Delete existing forward requirements
-    if gql_requirements:
+    # Delete existing forward requirements (None = no fresh data, skip; [] = cleared upstream)
+    if gql_requirements is not None:
         existing_fwd = session.exec(
             select(NexusModRequirement).where(
                 NexusModRequirement.nexus_mod_id == nexus_mod_id,

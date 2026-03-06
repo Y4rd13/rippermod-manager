@@ -57,6 +57,8 @@ _MOD_FIELDS = """
     status
 """
 
+# NOTE: Hard-coded count=50 may truncate results for popular framework mods.
+# Consider cursor-based pagination if modsRequiringThisMod exceeds 50.
 _MOD_REQUIREMENT_FIELDS = """
     modRequirements {
         nexusRequirements(offset: 0, count: 50) {
