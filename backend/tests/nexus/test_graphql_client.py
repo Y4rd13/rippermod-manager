@@ -70,6 +70,49 @@ class TestBatchModsByDomain:
         assert len(result) == 60
 
     @pytest.mark.asyncio
+    async def test_phase2_merges_requirements(self):
+        async with NexusGraphQLClient("key") as gql:
+            async def _mock_post(url, json):
+                query = json.get("query", "")
+
+                if "legacyModsByDomain" in query:
+                    resp = MagicMock()
+                    resp.status_code = 200
+                    resp.json.return_value = {
+                        "data": {
+                            "legacyModsByDomain": {
+                                "nodes": [{"modId": 10, "name": "ModA"}]
+                            }
+                        }
+                    }
+                    resp.raise_for_status = MagicMock()
+                    return resp
+
+                # Phase 2: alias query returns requirements
+                resp = MagicMock()
+                resp.status_code = 200
+                resp.json.return_value = {
+                    "data": {
+                        "mod_10": {
+                            "modId": 10,
+                            "name": "ModA",
+                            "modRequirements": {
+                                "nexusRequirements": {"nodes": [{"modId": 99, "modName": "Dep"}]},
+                            },
+                        }
+                    }
+                }
+                resp.raise_for_status = MagicMock()
+                return resp
+
+            with patch.object(gql.client, "post", side_effect=_mock_post):
+                result = await gql.batch_mods_by_domain("cyberpunk2077", [10])
+
+        assert 10 in result
+        reqs = result[10].get("modRequirements", {})
+        assert reqs["nexusRequirements"]["nodes"][0]["modName"] == "Dep"
+
+    @pytest.mark.asyncio
     async def test_fallback_on_graphql_error(self):
         async with NexusGraphQLClient("key") as gql:
             # First call fails with GraphQL error
