@@ -623,6 +623,7 @@ export interface ArchiveConflictSummaryOut {
   severity: "high" | "medium" | "low";
   identical_count: number;
   real_count: number;
+  dependency_count: number;
 }
 
 export interface ArchiveConflictSummariesResult {
@@ -636,6 +637,7 @@ export interface ResourceConflictDetail {
   winner_archive: string;
   loser_archives: string[];
   is_identical: boolean;
+  is_dependency: boolean;
   severity: "high" | "medium" | "low";
 }
 
@@ -645,6 +647,7 @@ export interface ResourceConflictGroup {
   is_winner: boolean;
   identical_count: number;
   real_count: number;
+  dependency_count: number;
   resources: ResourceConflictDetail[];
 }
 

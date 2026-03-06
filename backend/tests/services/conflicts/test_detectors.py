@@ -315,7 +315,7 @@ class TestTweakKeyDetector:
 # ---------------------------------------------------------------------------
 
 
-def _add_archive_entry(session, game_id, archive_filename, resource_hash, mod_id=None):
+def _add_archive_entry(session, game_id, archive_filename, resource_hash, mod_id=None, sha1_hex=""):
     """Helper to insert an ArchiveEntryIndex row."""
     session.add(
         ArchiveEntryIndex(
@@ -324,7 +324,7 @@ def _add_archive_entry(session, game_id, archive_filename, resource_hash, mod_id
             archive_filename=archive_filename,
             archive_relative_path=f"archive/pc/mod/{archive_filename}",
             resource_hash=resource_hash,
-            sha1_hex="0" * 40,
+            sha1_hex=sha1_hex,
         )
     )
     session.flush()
@@ -346,8 +346,8 @@ class TestArchiveResourceDetector:
         game, _ = game_with_dir
         mod_a = _add_mod(session, game, "A", ["archive/pc/mod/a.archive"])
         mod_b = _add_mod(session, game, "B", ["archive/pc/mod/b.archive"])
-        _add_archive_entry(session, game.id, "a.archive", 100, mod_a.id)
-        _add_archive_entry(session, game.id, "b.archive", 100, mod_b.id)
+        _add_archive_entry(session, game.id, "a.archive", 100, mod_a.id, sha1_hex="a" * 40)
+        _add_archive_entry(session, game.id, "b.archive", 100, mod_b.id, sha1_hex="b" * 40)
 
         detector = ArchiveResourceDetector()
         evidence = detector.detect(game, [mod_a, mod_b], session)

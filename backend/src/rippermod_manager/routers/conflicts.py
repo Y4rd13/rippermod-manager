@@ -189,6 +189,7 @@ def archive_conflict_summaries(
             severity=s.severity,
             identical_count=s.identical_count,
             real_count=s.real_count,
+            dependency_count=s.dependency_count,
         )
         for s in summaries
     ]

@@ -6,6 +6,8 @@ import json
 
 from rippermod_manager.models.archive_index import ArchiveEntryIndex
 from rippermod_manager.models.conflict import ConflictKind, Severity
+from rippermod_manager.models.install import InstalledMod
+from rippermod_manager.models.nexus import NexusModRequirement
 from rippermod_manager.services.archive_conflict_detector import (
     detect_archive_conflicts,
     summarize_conflicts,
@@ -18,7 +20,7 @@ def _add_entry(
     archive_filename: str,
     resource_hash: int,
     installed_mod_id: int | None = None,
-    sha1_hex: str = "0" * 40,
+    sha1_hex: str = "",
 ) -> None:
     session.add(
         ArchiveEntryIndex(
@@ -44,8 +46,8 @@ class TestDetectArchiveConflicts:
 
     def test_single_hash_collision(self, session, make_game):
         game = make_game()
-        _add_entry(session, game.id, "a.archive", 100, installed_mod_id=1)
-        _add_entry(session, game.id, "b.archive", 100, installed_mod_id=2)
+        _add_entry(session, game.id, "a.archive", 100, installed_mod_id=1, sha1_hex="a" * 40)
+        _add_entry(session, game.id, "b.archive", 100, installed_mod_id=2, sha1_hex="b" * 40)
 
         result = detect_archive_conflicts(session, game.id)
         assert len(result) == 1
@@ -129,8 +131,8 @@ class TestDetectArchiveConflicts:
 
     def test_severity_is_high(self, session, make_game):
         game = make_game()
-        _add_entry(session, game.id, "a.archive", 100, installed_mod_id=1)
-        _add_entry(session, game.id, "b.archive", 100, installed_mod_id=2)
+        _add_entry(session, game.id, "a.archive", 100, installed_mod_id=1, sha1_hex="a" * 40)
+        _add_entry(session, game.id, "b.archive", 100, installed_mod_id=2, sha1_hex="b" * 40)
 
         result = detect_archive_conflicts(session, game.id)
         assert result[0].severity == Severity.high
@@ -266,3 +268,158 @@ class TestSummarizeConflicts:
         a = next(s for s in summaries if s.archive_filename == "a.archive")
         assert a.identical_count == 1
         assert a.real_count == 1
+
+
+class TestDependencySeverity:
+    """Tests for dependency-aware severity in detect_archive_conflicts."""
+
+    @staticmethod
+    def _make_mod(session, game_id, name, nexus_mod_id):
+        mod = InstalledMod(game_id=game_id, name=name, nexus_mod_id=nexus_mod_id)
+        session.add(mod)
+        session.flush()
+        return mod
+
+    @staticmethod
+    def _add_req(session, nexus_mod_id, required_mod_id):
+        session.add(NexusModRequirement(nexus_mod_id=nexus_mod_id, required_mod_id=required_mod_id))
+        session.flush()
+
+    def test_identical_sha1_is_low(self, session, make_game):
+        """Different mods with identical SHA1 -> LOW severity."""
+        game = make_game()
+        mod_a = self._make_mod(session, game.id, "Mod A", 100)
+        mod_b = self._make_mod(session, game.id, "Mod B", 200)
+        same = "a" * 40
+        _add_entry(session, game.id, "a.archive", 50, installed_mod_id=mod_a.id, sha1_hex=same)
+        _add_entry(session, game.id, "b.archive", 50, installed_mod_id=mod_b.id, sha1_hex=same)
+
+        result = detect_archive_conflicts(session, game.id)
+        assert len(result) == 1
+        assert result[0].severity == Severity.low
+        detail = json.loads(result[0].detail)
+        assert detail["is_identical"] is True
+
+    def test_dependency_is_medium(self, session, make_game):
+        """Mod B requires Mod A with different SHA1 -> MEDIUM severity."""
+        game = make_game()
+        mod_a = self._make_mod(session, game.id, "Mod A", 100)
+        mod_b = self._make_mod(session, game.id, "Mod B", 200)
+        self._add_req(session, 200, 100)
+        _add_entry(session, game.id, "a.archive", 50, installed_mod_id=mod_a.id, sha1_hex="a" * 40)
+        _add_entry(session, game.id, "b.archive", 50, installed_mod_id=mod_b.id, sha1_hex="b" * 40)
+
+        result = detect_archive_conflicts(session, game.id)
+        assert len(result) == 1
+        assert result[0].severity == Severity.medium
+        detail = json.loads(result[0].detail)
+        assert detail["is_dependency"] is True
+        assert detail["is_identical"] is False
+
+    def test_no_dependency_different_sha1_is_high(self, session, make_game):
+        """Different mods, different SHA1, no dependency -> HIGH severity."""
+        game = make_game()
+        mod_a = self._make_mod(session, game.id, "Mod A", 100)
+        mod_b = self._make_mod(session, game.id, "Mod B", 200)
+        _add_entry(session, game.id, "a.archive", 50, installed_mod_id=mod_a.id, sha1_hex="a" * 40)
+        _add_entry(session, game.id, "b.archive", 50, installed_mod_id=mod_b.id, sha1_hex="b" * 40)
+
+        result = detect_archive_conflicts(session, game.id)
+        assert len(result) == 1
+        assert result[0].severity == Severity.high
+        detail = json.loads(result[0].detail)
+        assert detail["is_dependency"] is False
+
+    def test_identical_trumps_dependency(self, session, make_game):
+        """Identical SHA1 stays LOW even when dependency exists."""
+        game = make_game()
+        mod_a = self._make_mod(session, game.id, "Mod A", 100)
+        mod_b = self._make_mod(session, game.id, "Mod B", 200)
+        self._add_req(session, 200, 100)
+        same = "c" * 40
+        _add_entry(session, game.id, "a.archive", 50, installed_mod_id=mod_a.id, sha1_hex=same)
+        _add_entry(session, game.id, "b.archive", 50, installed_mod_id=mod_b.id, sha1_hex=same)
+
+        result = detect_archive_conflicts(session, game.id)
+        assert len(result) == 1
+        assert result[0].severity == Severity.low
+        detail = json.loads(result[0].detail)
+        assert detail["is_identical"] is True
+
+    def test_null_nexus_mod_id_no_dependency(self, session, make_game):
+        """Mods without nexus_mod_id cannot have dependency -> HIGH severity."""
+        game = make_game()
+        mod_a = InstalledMod(game_id=game.id, name="Mod A")
+        session.add(mod_a)
+        session.flush()
+        mod_b = InstalledMod(game_id=game.id, name="Mod B")
+        session.add(mod_b)
+        session.flush()
+        _add_entry(session, game.id, "a.archive", 50, installed_mod_id=mod_a.id, sha1_hex="a" * 40)
+        _add_entry(session, game.id, "b.archive", 50, installed_mod_id=mod_b.id, sha1_hex="b" * 40)
+
+        result = detect_archive_conflicts(session, game.id)
+        assert len(result) == 1
+        assert result[0].severity == Severity.high
+        detail = json.loads(result[0].detail)
+        assert detail["is_dependency"] is False
+
+    def test_reverse_dependency(self, session, make_game):
+        """B requires A, conflict A<->B -> MEDIUM (direction doesn't matter)."""
+        game = make_game()
+        mod_a = self._make_mod(session, game.id, "Mod A", 100)
+        mod_b = self._make_mod(session, game.id, "Mod B", 200)
+        self._add_req(session, 200, 100)  # B requires A
+        _add_entry(
+            session,
+            game.id,
+            "b_mod.archive",
+            50,
+            installed_mod_id=mod_b.id,
+            sha1_hex="x" * 40,
+        )
+        _add_entry(
+            session,
+            game.id,
+            "a_mod.archive",
+            50,
+            installed_mod_id=mod_a.id,
+            sha1_hex="y" * 40,
+        )
+
+        result = detect_archive_conflicts(session, game.id)
+        assert len(result) == 1
+        assert result[0].severity == Severity.medium
+
+    def test_three_mods_partial_dependency(self, session, make_game):
+        """3 mods, A<->B has dependency, A<->C does not -> MEDIUM (any pair suffices)."""
+        game = make_game()
+        mod_a = self._make_mod(session, game.id, "Mod A", 100)
+        mod_b = self._make_mod(session, game.id, "Mod B", 200)
+        mod_c = self._make_mod(session, game.id, "Mod C", 300)
+        self._add_req(session, 200, 100)
+        _add_entry(session, game.id, "a.archive", 50, installed_mod_id=mod_a.id, sha1_hex="a" * 40)
+        _add_entry(session, game.id, "b.archive", 50, installed_mod_id=mod_b.id, sha1_hex="b" * 40)
+        _add_entry(session, game.id, "c.archive", 50, installed_mod_id=mod_c.id, sha1_hex="c" * 40)
+
+        result = detect_archive_conflicts(session, game.id)
+        assert len(result) == 1
+        assert result[0].severity == Severity.medium
+
+    def test_mixed_resources(self, session, make_game):
+        """One resource identical, one different with dependency -> different severities."""
+        game = make_game()
+        mod_a = self._make_mod(session, game.id, "Mod A", 100)
+        mod_b = self._make_mod(session, game.id, "Mod B", 200)
+        self._add_req(session, 200, 100)
+        same = "f" * 40
+        _add_entry(session, game.id, "a.archive", 50, installed_mod_id=mod_a.id, sha1_hex=same)
+        _add_entry(session, game.id, "b.archive", 50, installed_mod_id=mod_b.id, sha1_hex=same)
+        _add_entry(session, game.id, "a.archive", 60, installed_mod_id=mod_a.id, sha1_hex="g" * 40)
+        _add_entry(session, game.id, "b.archive", 60, installed_mod_id=mod_b.id, sha1_hex="h" * 40)
+
+        result = detect_archive_conflicts(session, game.id)
+        assert len(result) == 2
+        by_key = {ev.key: ev for ev in result}
+        assert by_key[hex(50)].severity == Severity.low
+        assert by_key[hex(60)].severity == Severity.medium
