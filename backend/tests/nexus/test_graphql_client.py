@@ -35,26 +35,38 @@ class TestBatchModsByDomain:
     @pytest.mark.asyncio
     async def test_chunking_for_large_batches(self):
         async with NexusGraphQLClient("key") as gql:
-            # Create 60 mod IDs to force 2 chunks
+            # Create 60 mod IDs to force multiple chunks
             mod_ids = list(range(1, 61))
 
-            call_count = 0
+            phase1_calls = 0
 
             async def _mock_post(url, json):
-                nonlocal call_count
-                call_count += 1
-                ids_input = json.get("variables", {}).get("ids", [])
-                nodes = [{"modId": i["modId"], "name": f"Mod{i['modId']}"} for i in ids_input]
+                nonlocal phase1_calls
+                query = json.get("query", "")
+                variables = json.get("variables", {})
+
+                # Phase 1: legacyModsByDomain
+                if "legacyModsByDomain" in query:
+                    phase1_calls += 1
+                    ids_input = variables.get("ids", [])
+                    nodes = [{"modId": i["modId"], "name": f"Mod{i['modId']}"} for i in ids_input]
+                    resp = MagicMock()
+                    resp.status_code = 200
+                    resp.json.return_value = {"data": {"legacyModsByDomain": {"nodes": nodes}}}
+                    resp.raise_for_status = MagicMock()
+                    return resp
+
+                # Phase 2: batch_mods alias queries — return empty data
                 resp = MagicMock()
                 resp.status_code = 200
-                resp.json.return_value = {"data": {"legacyModsByDomain": {"nodes": nodes}}}
+                resp.json.return_value = {"data": {}}
                 resp.raise_for_status = MagicMock()
                 return resp
 
             with patch.object(gql.client, "post", side_effect=_mock_post):
                 result = await gql.batch_mods_by_domain("cyberpunk2077", mod_ids)
 
-        assert call_count == 5  # 60 mods / 12 per chunk = 5 batches
+        assert phase1_calls == 3  # 60 mods / 25 per chunk = 3 batches
         assert len(result) == 60
 
     @pytest.mark.asyncio
