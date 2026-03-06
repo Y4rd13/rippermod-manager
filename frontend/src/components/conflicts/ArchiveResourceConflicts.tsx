@@ -32,7 +32,7 @@ interface Props {
 }
 
 type SeverityFilter = "all" | "high" | "medium" | "low";
-type ConflictTypeFilter = "all" | "real" | "cosmetic";
+type ConflictTypeFilter = "all" | "real" | "dependency" | "cosmetic";
 
 const SEVERITY_CHIPS: { key: SeverityFilter; label: string }[] = [
   { key: "all", label: "All" },
@@ -44,6 +44,7 @@ const SEVERITY_CHIPS: { key: SeverityFilter; label: string }[] = [
 const TYPE_CHIPS: { key: ConflictTypeFilter; label: string }[] = [
   { key: "all", label: "All types" },
   { key: "real", label: "Real" },
+  { key: "dependency", label: "Dependency" },
   { key: "cosmetic", label: "Cosmetic" },
 ];
 
@@ -83,7 +84,7 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [detailsOpenFor, setDetailsOpenFor] = useState<{
     archive: string;
-    filter: "all" | "real" | "cosmetic";
+    filter: "all" | "real" | "cosmetic" | "dependency";
   } | null>(null);
   const [previewState, setPreviewState] = useState<PreferPreviewState | null>(null);
   const [previewResult, setPreviewResult] = useState<PreferModResult | null>(null);
@@ -100,8 +101,10 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
 
     if (typeFilter === "real") {
       items = items.filter((s) => s.real_count > 0);
+    } else if (typeFilter === "dependency") {
+      items = items.filter((s) => s.dependency_count > 0);
     } else if (typeFilter === "cosmetic") {
-      items = items.filter((s) => s.identical_count > 0 && s.real_count === 0);
+      items = items.filter((s) => s.identical_count > 0 && s.real_count === 0 && s.dependency_count === 0);
     }
 
     // Text search (skip when search is a resource hash — already filtered server-side)
@@ -154,7 +157,8 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
   const typeCounts = useMemo(() => ({
     all: summaries.length,
     real: summaries.filter((s) => s.real_count > 0).length,
-    cosmetic: summaries.filter((s) => s.identical_count > 0 && s.real_count === 0).length,
+    dependency: summaries.filter((s) => s.dependency_count > 0).length,
+    cosmetic: summaries.filter((s) => s.identical_count > 0 && s.real_count === 0 && s.dependency_count === 0).length,
   }), [summaries]);
 
   const handleSort = useCallback((key: string) => {
@@ -177,7 +181,7 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
   }, []);
 
   const openDetails = useCallback(
-    (archive: string, filter: "all" | "real" | "cosmetic") => {
+    (archive: string, filter: "all" | "real" | "cosmetic" | "dependency") => {
       setExpandedRows((prev) => {
         const next = new Set(prev);
         next.add(archive);
@@ -325,7 +329,7 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
           )}
           renderRow={(item: ArchiveConflictSummaryOut) => {
             const isExpanded = expandedRows.has(item.archive_filename);
-            const totalConflicts = item.real_count + item.identical_count;
+            const totalConflicts = item.real_count + item.identical_count + item.dependency_count;
             const impactRatio = item.total_entries > 0
               ? ((item.winning_entries + item.losing_entries) / item.total_entries) * 100
               : 0;
@@ -380,7 +384,16 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
                             {item.real_count} real
                           </button>
                         )}
-                        {item.real_count > 0 && item.identical_count > 0 && ", "}
+                        {item.real_count > 0 && item.dependency_count > 0 && ", "}
+                        {item.dependency_count > 0 && (
+                          <button
+                            className="text-warning hover:underline"
+                            onClick={() => openDetails(item.archive_filename, "dependency")}
+                          >
+                            {item.dependency_count} dependency
+                          </button>
+                        )}
+                        {(item.real_count > 0 || item.dependency_count > 0) && item.identical_count > 0 && ", "}
                         {item.identical_count > 0 && (
                           <button
                             className="text-text-muted hover:underline"
@@ -396,6 +409,10 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
                           <div
                             className="bg-danger h-full"
                             style={{ width: `${(item.real_count / totalConflicts) * 100}%` }}
+                          />
+                          <div
+                            className="bg-warning/50 h-full"
+                            style={{ width: `${(item.dependency_count / totalConflicts) * 100}%` }}
                           />
                           <div
                             className="bg-success/30 h-full"
@@ -661,6 +678,10 @@ function ConflictHelpModal({ onClose }: { onClose: () => void }) {
           <p>
             <Badge variant="danger">real</Badge>{" "}
             Archives contain different data. The winner&apos;s version is used in-game.
+          </p>
+          <p>
+            <Badge variant="warning">dependency</Badge>{" "}
+            One mod requires the other — the override is intentional. Usually safe to leave as-is.
           </p>
           <p>
             <Badge variant="success">wins over</Badge>{" "}

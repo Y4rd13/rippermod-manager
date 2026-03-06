@@ -57,6 +57,7 @@ class ArchiveConflictSummaryOut(BaseModel):
     severity: Severity
     identical_count: int = 0
     real_count: int = 0
+    dependency_count: int = 0
 
 
 class ArchiveConflictSummariesResult(BaseModel):
@@ -74,6 +75,7 @@ class ResourceConflictDetail(BaseModel):
     winner_archive: str
     loser_archives: list[str]
     is_identical: bool
+    is_dependency: bool = False
     severity: Severity
 
 
@@ -85,6 +87,7 @@ class ResourceConflictGroup(BaseModel):
     is_winner: bool
     identical_count: int
     real_count: int
+    dependency_count: int = 0
     resources: list[ResourceConflictDetail]
 
 

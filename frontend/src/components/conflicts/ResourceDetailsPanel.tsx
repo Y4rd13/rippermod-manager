@@ -6,11 +6,12 @@ import { FilterChips } from "@/components/ui/FilterChips";
 import { useArchiveResourceDetails } from "@/hooks/queries";
 import type { ResourceConflictDetail, ResourceConflictGroup } from "@/types/api";
 
-type ResourceFilter = "all" | "real" | "cosmetic";
+type ResourceFilter = "all" | "real" | "cosmetic" | "dependency";
 
 const FILTER_CHIPS: { key: ResourceFilter; label: string }[] = [
   { key: "all", label: "All" },
   { key: "real", label: "Real" },
+  { key: "dependency", label: "Dependency" },
   { key: "cosmetic", label: "Cosmetic" },
 ];
 
@@ -25,7 +26,8 @@ function filterResources(
   filter: ResourceFilter,
 ): ResourceConflictDetail[] {
   if (filter === "all") return resources;
-  if (filter === "real") return resources.filter((r) => !r.is_identical);
+  if (filter === "real") return resources.filter((r) => !r.is_identical && !r.is_dependency);
+  if (filter === "dependency") return resources.filter((r) => r.is_dependency && !r.is_identical);
   return resources.filter((r) => r.is_identical);
 }
 
@@ -81,6 +83,8 @@ function GroupSection({
               <code className="font-mono text-text-primary">{r.resource_hash}</code>
               {r.is_identical ? (
                 <Badge variant="success">cosmetic</Badge>
+              ) : r.is_dependency ? (
+                <Badge variant="warning">dependency</Badge>
               ) : (
                 <Badge variant="danger">real</Badge>
               )}
@@ -99,11 +103,12 @@ export function ResourceDetailsPanel({ gameName, archiveFilename, initialFilter 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const counts = useMemo(() => {
-    if (!data) return { all: 0, real: 0, cosmetic: 0 };
+    if (!data) return { all: 0, real: 0, dependency: 0, cosmetic: 0 };
     const all = data.groups.reduce((s, g) => s + g.resources.length, 0);
     const real = data.groups.reduce((s, g) => s + g.real_count, 0);
+    const dependency = data.groups.reduce((s, g) => s + g.dependency_count, 0);
     const cosmetic = data.groups.reduce((s, g) => s + g.identical_count, 0);
-    return { all, real, cosmetic };
+    return { all, real, dependency, cosmetic };
   }, [data]);
 
   const toggleGroup = (partner: string) => {
@@ -137,6 +142,7 @@ export function ResourceDetailsPanel({ gameName, archiveFilename, initialFilter 
   }
 
   const realPct = counts.all > 0 ? (counts.real / counts.all) * 100 : 0;
+  const depPct = counts.all > 0 ? (counts.dependency / counts.all) * 100 : 0;
   const cosmeticPct = counts.all > 0 ? (counts.cosmetic / counts.all) * 100 : 0;
 
   return (
@@ -149,11 +155,14 @@ export function ResourceDetailsPanel({ gameName, archiveFilename, initialFilter 
           </span>
           <div className="flex h-1.5 w-20 rounded-full overflow-hidden bg-surface-2">
             <div className="bg-danger h-full" style={{ width: `${realPct}%` }} />
+            <div className="bg-warning/50 h-full" style={{ width: `${depPct}%` }} />
             <div className="bg-success/30 h-full" style={{ width: `${cosmeticPct}%` }} />
           </div>
           <span className="text-xs text-text-muted">
             {counts.real > 0 && <span className="text-danger">{counts.real} real</span>}
-            {counts.real > 0 && counts.cosmetic > 0 && ", "}
+            {counts.real > 0 && counts.dependency > 0 && ", "}
+            {counts.dependency > 0 && <span className="text-warning">{counts.dependency} dependency</span>}
+            {(counts.real > 0 || counts.dependency > 0) && counts.cosmetic > 0 && ", "}
             {counts.cosmetic > 0 && <span>{counts.cosmetic} cosmetic</span>}
           </span>
         </div>

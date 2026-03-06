@@ -17,6 +17,8 @@ from sqlmodel import Session, select
 
 from rippermod_manager.models.archive_index import ArchiveEntryIndex
 from rippermod_manager.models.conflict import ConflictEvidence, ConflictKind, Severity
+from rippermod_manager.models.install import InstalledMod
+from rippermod_manager.models.nexus import NexusModRequirement
 from rippermod_manager.schemas.conflict import (
     ArchiveResourceDetailsResult,
     ResourceConflictDetail,
@@ -39,6 +41,45 @@ class ArchiveConflictSummary:
     severity: Severity
     identical_count: int = 0
     real_count: int = 0
+    dependency_count: int = 0
+
+
+def _build_dependency_pairs(
+    session: Session,
+    game_id: int,
+) -> tuple[dict[int, int], set[frozenset[int]]]:
+    """Map installed mods to Nexus IDs and find dependency pairs.
+
+    Returns a tuple of (installed_mod_id → nexus_mod_id mapping,
+    set of frozenset pairs of nexus_mod_ids that have a dependency).
+    """
+    installed_rows = session.exec(
+        select(InstalledMod.id, InstalledMod.nexus_mod_id).where(
+            InstalledMod.game_id == game_id,
+            InstalledMod.nexus_mod_id.is_not(None),  # type: ignore[union-attr]
+        )
+    ).all()
+    mod_nexus_map: dict[int, int] = {}
+    for mid, nid in installed_rows:
+        if mid is not None and nid is not None:
+            mod_nexus_map[mid] = nid
+
+    nexus_ids = set(mod_nexus_map.values())
+    if len(nexus_ids) < 2:
+        return mod_nexus_map, set()
+
+    req_rows = session.exec(
+        select(NexusModRequirement.nexus_mod_id, NexusModRequirement.required_mod_id).where(
+            NexusModRequirement.required_mod_id.is_not(None),  # type: ignore[union-attr]
+        )
+    ).all()
+
+    dep_pairs: set[frozenset[int]] = set()
+    for nmod_id, req_id in req_rows:
+        if req_id is not None and nmod_id in nexus_ids and req_id in nexus_ids:
+            dep_pairs.add(frozenset({nmod_id, req_id}))
+
+    return mod_nexus_map, dep_pairs
 
 
 def detect_archive_conflicts(
@@ -67,6 +108,7 @@ def detect_archive_conflicts(
         .order_by(ArchiveEntryIndex.resource_hash, ArchiveEntryIndex.archive_filename)
     )
     rows = session.exec(stmt).all()
+    mod_nexus_map, dep_pairs = _build_dependency_pairs(session, game_id)
 
     hash_groups: dict[int, list[ArchiveEntryIndex]] = defaultdict(list)
     for row in rows:
@@ -88,16 +130,31 @@ def detect_archive_conflicts(
             e.installed_mod_id for _, e in sorted_archives if e.installed_mod_id is not None
         ]
 
-        # Same-mod internal override — intentional, not actionable.
-        # Also covers mod-vs-unmanaged (vanilla) which is typically intentional.
         unique_mod_ids = set(all_mod_ids)
-        severity = Severity.low if len(unique_mod_ids) <= 1 else Severity.high
-
         sha1s = {name: entry.sha1_hex for name, entry in sorted_archives if entry.sha1_hex}
+        sha1_values = set(sha1s.values())
+        all_sha1_identical = len(sha1_values) == 1 and len(sha1s) >= 2
+
+        nexus_ids = [mod_nexus_map[mid] for mid in unique_mod_ids if mid in mod_nexus_map]
+        is_dep = any(
+            frozenset({nexus_ids[i], nexus_ids[j]}) in dep_pairs
+            for i in range(len(nexus_ids))
+            for j in range(i + 1, len(nexus_ids))
+        )
+
+        if len(unique_mod_ids) <= 1 or all_sha1_identical:
+            severity = Severity.low
+        elif is_dep:
+            severity = Severity.medium
+        else:
+            severity = Severity.high
+
         detail = {
             "winner_archive": winner_name,
             "loser_archives": [name for name, _ in loser_entries],
             "sha1s": sha1s,
+            "is_identical": all_sha1_identical,
+            "is_dependency": is_dep,
         }
 
         evidences.append(
@@ -168,15 +225,17 @@ def summarize_conflicts(
     wins: dict[str, set[str]] = defaultdict(set)
     losses: dict[str, set[str]] = defaultdict(set)
     conflicts_with: dict[str, set[str]] = defaultdict(set)
-    # Track per-archive identical vs real conflict counts
+    # Track per-archive conflict type counts
     identical: dict[str, int] = defaultdict(int)
     real: dict[str, int] = defaultdict(int)
+    dependency: dict[str, int] = defaultdict(int)
 
     for ev in evidences:
         detail = json.loads(ev.detail)
         winner_archive = detail["winner_archive"]
         loser_archives = detail["loser_archives"]
         sha1s: dict[str, str] = detail.get("sha1s", {})
+        is_dep = detail.get("is_dependency", False)
 
         winner_sha1 = sha1s.get(winner_archive, "")
 
@@ -191,6 +250,9 @@ def summarize_conflicts(
                 if winner_sha1 == loser_sha1:
                     identical[winner_archive] += 1
                     identical[loser] += 1
+                elif is_dep:
+                    dependency[winner_archive] += 1
+                    dependency[loser] += 1
                 else:
                     real[winner_archive] += 1
                     real[loser] += 1
@@ -220,6 +282,7 @@ def summarize_conflicts(
                 severity=severity,
                 identical_count=identical.get(archive, 0),
                 real_count=real.get(archive, 0),
+                dependency_count=dependency.get(archive, 0),
             )
         )
 
@@ -264,6 +327,7 @@ def get_archive_resource_details(
         winner = detail.get("winner_archive", "")
         losers: list[str] = detail.get("loser_archives", [])
         sha1s: dict[str, str] = detail.get("sha1s", {})
+        is_dep = detail.get("is_dependency", False)
 
         partners = losers if winner == archive_filename else [winner]
 
@@ -277,7 +341,12 @@ def get_archive_resource_details(
             is_identical = bool(this_sha1 and partner_sha1 and this_sha1 == partner_sha1)
 
             unique_sha1s = set(sha1s.values()) - {""}
-            severity = Severity.low if len(unique_sha1s) <= 1 else Severity.high
+            if len(unique_sha1s) <= 1:
+                severity = Severity.low
+            elif is_dep:
+                severity = Severity.medium
+            else:
+                severity = Severity.high
 
             partner_resources[partner].append(
                 ResourceConflictDetail(
@@ -285,6 +354,7 @@ def get_archive_resource_details(
                     winner_archive=winner,
                     loser_archives=losers,
                     is_identical=is_identical,
+                    is_dependency=is_dep,
                     severity=severity,
                 )
             )
@@ -294,13 +364,15 @@ def get_archive_resource_details(
     for partner, resources in sorted(partner_resources.items()):
         is_winner = archive_filename.lower() < partner.lower()
         identical = sum(1 for r in resources if r.is_identical)
-        real = len(resources) - identical
+        dep = sum(1 for r in resources if r.is_dependency and not r.is_identical)
+        real = len(resources) - identical - dep
         groups.append(
             ResourceConflictGroup(
                 partner_archive=partner,
                 is_winner=is_winner,
                 identical_count=identical,
                 real_count=real,
+                dependency_count=dep,
                 resources=resources,
             )
         )
