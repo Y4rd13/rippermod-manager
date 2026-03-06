@@ -5,6 +5,7 @@ import { ChatPanel } from "@/components/chat/ChatPanel";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Titlebar } from "@/components/layout/Titlebar";
+import { UpdateBanner } from "@/components/layout/UpdateBanner";
 import { DownloadQueueFooter } from "@/components/ui/DownloadQueueFooter";
 import { KeyboardShortcutsModal } from "@/components/ui/KeyboardShortcutsModal";
 import { ToastContainer } from "@/components/ui/Toast";
@@ -62,6 +63,7 @@ export function RootLayout() {
         Skip to content
       </a>
       <Titlebar />
+      <UpdateBanner />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <main ref={mainRef} id="main-content" className={`flex-1 overflow-y-auto bg-surface-0 p-6 ${hasDownloads && activeGameName ? "pb-16" : ""}`}>

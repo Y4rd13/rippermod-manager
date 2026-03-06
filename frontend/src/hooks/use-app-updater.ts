@@ -42,9 +42,6 @@ export function useAppUpdater() {
             body: update.body ?? null,
           });
           setStatus("available");
-          if (!opts?.silent) {
-            toast.info("Update available", `Version ${update.version} is ready to download.`);
-          }
         } else {
           updateRef.current = null;
           setUpdateInfo(null);
