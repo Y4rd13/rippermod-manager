@@ -24,7 +24,7 @@ GAME_ID_MAP: dict[str, int] = {
 
 _BATCH_HASH_LIMIT = 500
 _BATCH_DOMAIN_LIMIT = 25  # legacyModsByDomain: ~330 complexity/mod
-_BATCH_ALIAS_LIMIT = 10   # alias queries: ~820 complexity/mod
+_BATCH_ALIAS_LIMIT = 10  # alias queries: ~820 complexity/mod
 
 
 class NexusGraphQLError(Exception):
