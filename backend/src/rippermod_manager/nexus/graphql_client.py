@@ -23,7 +23,8 @@ GAME_ID_MAP: dict[str, int] = {
 }
 
 _BATCH_HASH_LIMIT = 500
-_BATCH_MOD_ALIAS_LIMIT = 50
+_BATCH_DOMAIN_LIMIT = 25  # legacyModsByDomain: ~330 complexity/mod
+_BATCH_ALIAS_LIMIT = 10   # alias queries: ~820 complexity/mod
 
 
 class NexusGraphQLError(Exception):
@@ -253,9 +254,9 @@ class NexusGraphQLClient:
         gid = self._game_id(game_domain)
         result: dict[int, dict[str, Any]] = {}
 
-        chunks = math.ceil(len(mod_ids) / _BATCH_MOD_ALIAS_LIMIT)
+        chunks = math.ceil(len(mod_ids) / _BATCH_ALIAS_LIMIT)
         for i in range(chunks):
-            chunk = mod_ids[i * _BATCH_MOD_ALIAS_LIMIT : (i + 1) * _BATCH_MOD_ALIAS_LIMIT]
+            chunk = mod_ids[i * _BATCH_ALIAS_LIMIT : (i + 1) * _BATCH_ALIAS_LIMIT]
             aliases = "\n".join(
                 f"mod_{mid}: mod(modId: {mid}, gameId: {gid}) {{"
                 + _MOD_FIELDS
@@ -282,11 +283,11 @@ class NexusGraphQLClient:
         Falls back to ``batch_mods()`` on GraphQL errors (schema changes).
         """
         result: dict[int, dict[str, Any]] = {}
-        chunks = math.ceil(len(mod_ids) / _BATCH_MOD_ALIAS_LIMIT)
+        chunks = math.ceil(len(mod_ids) / _BATCH_DOMAIN_LIMIT)
 
         try:
             for i in range(chunks):
-                chunk = mod_ids[i * _BATCH_MOD_ALIAS_LIMIT : (i + 1) * _BATCH_MOD_ALIAS_LIMIT]
+                chunk = mod_ids[i * _BATCH_DOMAIN_LIMIT : (i + 1) * _BATCH_DOMAIN_LIMIT]
                 query = (
                     """
                 query BatchModsByDomain($ids: [CompositeDomainWithIdInput!]!) {
