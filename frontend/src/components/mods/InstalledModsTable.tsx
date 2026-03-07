@@ -244,6 +244,17 @@ function ManagedModsGrid({
   };
 
   const executeFileActionAll = async (type: FileActionType, entries: InstalledModOut[]) => {
+    if (type === "redownload") {
+      // All entries share the same nexus_mod_id — only download once
+      const nexusModId = entries[0]?.nexus_mod_id;
+      if (nexusModId) {
+        startModDownload.mutate(
+          { gameName, nexusModId },
+          { onSuccess: (r) => { if (r.requires_file_selection) onFileSelect?.(nexusModId); } },
+        );
+      }
+      return;
+    }
     for (const entry of entries) {
       switch (type) {
         case "toggle":
@@ -251,14 +262,6 @@ function ManagedModsGrid({
           break;
         case "delete":
           await uninstallMod.mutateAsync({ gameName, modId: entry.id });
-          break;
-        case "redownload":
-          if (entry.nexus_mod_id) {
-            startModDownload.mutate(
-              { gameName, nexusModId: entry.nexus_mod_id },
-              { onSuccess: (r) => { if (r.requires_file_selection) onFileSelect?.(entry.nexus_mod_id!); } },
-            );
-          }
           break;
       }
     }
@@ -296,9 +299,7 @@ function ManagedModsGrid({
     return items;
   };
 
-  const handleContextMenuSelect = (key: string) => {
-    const group = menuState.data;
-    if (!group) return;
+  const handleMenuAction = (key: string, group: GroupedMod) => {
     const mod = group.primary;
     switch (key) {
       case "enable":
@@ -530,41 +531,7 @@ function ManagedModsGrid({
                 overflowMenu={
                   <OverflowMenuButton
                     items={buildContextMenuItems(group)}
-                    onSelect={(key) => {
-                      switch (key) {
-                        case "enable":
-                        case "disable":
-                          runOrSelect("toggle", group);
-                          break;
-                        case "nexus":
-                          if (mod.nexus_url) openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
-                          break;
-                        case "redownload":
-                          runOrSelect("redownload", group);
-                          break;
-                        case "copy":
-                          void navigator.clipboard.writeText(mod.nexus_name || mod.name).then(
-                            () => toast.success("Copied to clipboard"),
-                            () => toast.error("Failed to copy"),
-                          );
-                          break;
-                        case "endorse":
-                          if (mod.nexus_mod_id) {
-                            if (mod.is_endorsed) abstainMod.mutate({ gameName, modId: mod.nexus_mod_id });
-                            else endorseMod.mutate({ gameName, modId: mod.nexus_mod_id });
-                          }
-                          break;
-                        case "track":
-                          if (mod.nexus_mod_id) {
-                            if (mod.is_tracked) untrackMod.mutate({ gameName, modId: mod.nexus_mod_id });
-                            else trackMod.mutate({ gameName, modId: mod.nexus_mod_id });
-                          }
-                          break;
-                        case "delete":
-                          runOrSelect("delete", group);
-                          break;
-                      }
-                    }}
+                    onSelect={(key) => handleMenuAction(key, group)}
                   />
                 }
                 onClick={mod.nexus_mod_id ? () => onModClick?.(mod.nexus_mod_id!) : undefined}
@@ -579,7 +546,7 @@ function ManagedModsGrid({
         <ContextMenu
           items={buildContextMenuItems(menuState.data)}
           position={menuState.position}
-          onSelect={handleContextMenuSelect}
+          onSelect={(key) => handleMenuAction(key, menuState.data!)}
           onClose={closeMenu}
         />
       )}
