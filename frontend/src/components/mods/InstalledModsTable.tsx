@@ -144,7 +144,8 @@ const MANAGED_SORT_OPTIONS: { value: SortKey; label: string }[] = [
 ];
 
 function ManagedModsGrid({
-  mods,
+  groups,
+  allMods,
   gameName,
   downloadJobs,
   updateByInstalledId,
@@ -152,7 +153,8 @@ function ManagedModsGrid({
   onModClick,
   onFileSelect,
 }: {
-  mods: InstalledModOut[];
+  groups: GroupedMod[];
+  allMods: InstalledModOut[];
   gameName: string;
   downloadJobs: DownloadJobOut[];
   updateByInstalledId: Map<number, ModUpdate>;
@@ -183,11 +185,9 @@ function ManagedModsGrid({
     return map;
   }, [downloadJobs]);
 
-  const grouped = useMemo(() => groupByNexusId(mods), [mods]);
-
   const sorted = useMemo(
     () =>
-      [...grouped].sort((a, b) => {
+      [...groups].sort((a, b) => {
         const ap = a.primary;
         const bp = b.primary;
         switch (sortKey) {
@@ -205,7 +205,7 @@ function ManagedModsGrid({
             return 0;
         }
       }),
-    [grouped, sortKey],
+    [groups, sortKey],
   );
 
   const sortedIds = useMemo(() => sorted.map((g) => g.key), [sorted]);
@@ -214,29 +214,27 @@ function ManagedModsGrid({
   const { menuState, openMenu, closeMenu } = useContextMenu<GroupedMod>();
 
   // Helper: run action on a single entry, or show file selector for multi-entry groups
-  const runOrSelect = (type: FileActionType, group: GroupedMod) => {
+  const runOrSelect = (type: FileActionType, group: GroupedMod): Promise<void> => {
     if (group.entries.length === 1) {
-      executeFileAction(type, group.entries[0].id);
-    } else {
-      setFileAction({ type, group });
+      return executeFileAction(type, group.entries[0].id);
     }
+    setFileAction({ type, group });
+    return Promise.resolve();
   };
 
-  const executeFileAction = (type: FileActionType, modId: number) => {
+  const executeFileAction = async (type: FileActionType, modId: number) => {
     switch (type) {
       case "toggle":
-        toggleMod.mutate({ gameName, modId });
+        await toggleMod.mutateAsync({ gameName, modId });
         break;
       case "delete":
         setConfirmDeleteModId(modId);
         break;
       case "redownload": {
-        const entry = mods.find((m) => m.id === modId);
+        const entry = allMods.find((m) => m.id === modId);
         if (entry?.nexus_mod_id) {
-          startModDownload.mutate(
-            { gameName, nexusModId: entry.nexus_mod_id },
-            { onSuccess: (r) => { if (r.requires_file_selection) onFileSelect?.(entry.nexus_mod_id!); } },
-          );
+          const r = await startModDownload.mutateAsync({ gameName, nexusModId: entry.nexus_mod_id });
+          if (r.requires_file_selection) onFileSelect?.(entry.nexus_mod_id!);
         }
         break;
       }
@@ -380,7 +378,7 @@ function ManagedModsGrid({
   const hasDisabledSelected = selectedGroups.some((g) => g.entries.some((e) => e.disabled));
   const hasEnabledSelected = selectedGroups.some((g) => g.entries.some((e) => !e.disabled));
   const confirmDeleteMod = confirmDeleteModId != null
-    ? mods.find((m) => m.id === confirmDeleteModId)
+    ? allMods.find((m) => m.id === confirmDeleteModId)
     : null;
 
   const fileActionLabel: Record<FileActionType, string> = {
@@ -522,8 +520,8 @@ function ManagedModsGrid({
                         disabled={allDisabled}
                         isToggling={group.entries.some((e) => toggleMod.isPending && toggleMod.variables?.modId === e.id)}
                         isUninstalling={group.entries.some((e) => uninstallMod.isPending && uninstallMod.variables?.modId === e.id)}
-                        onToggle={() => Promise.resolve(runOrSelect("toggle", group))}
-                        onUninstall={() => Promise.resolve(runOrSelect("delete", group))}
+                        onToggle={() => runOrSelect("toggle", group)}
+                        onUninstall={() => runOrSelect("delete", group)}
                       />
                     );
                   })()
@@ -859,10 +857,10 @@ export function InstalledModsTable({
     return items;
   }, [recognized, q, recognizedSort]);
 
-  const groupedModCount = useMemo(() => groupByNexusId(filteredMods).length, [filteredMods]);
+  const groupedFilteredMods = useMemo(() => groupByNexusId(filteredMods), [filteredMods]);
 
   const totalCount =
-    (scope !== "detected" ? groupedModCount : 0) +
+    (scope !== "detected" ? groupedFilteredMods.length : 0) +
     (scope !== "installed" ? filteredRecognized.length : 0);
 
   if (isLoading) {
@@ -913,7 +911,7 @@ export function InstalledModsTable({
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-text-primary" title="Mods installed and managed through this app — you can enable, disable, or uninstall them">
-              Installed Mods ({groupedModCount})
+              Installed Mods ({groupedFilteredMods.length})
             </h3>
             <FilterChips
               chips={CHIP_OPTIONS}
@@ -923,7 +921,8 @@ export function InstalledModsTable({
           </div>
           {filteredMods.length > 0 ? (
             <ManagedModsGrid
-              mods={filteredMods}
+              groups={groupedFilteredMods}
+              allMods={filteredMods}
               gameName={gameName}
               downloadJobs={downloadJobs}
               updateByInstalledId={updateByInstalledId}
