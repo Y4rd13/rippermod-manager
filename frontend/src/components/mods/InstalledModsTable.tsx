@@ -3,6 +3,7 @@ import {
   Copy,
   Eye,
   ExternalLink,
+  Files,
   Heart,
   Package,
   Power,
@@ -15,6 +16,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { FomodWizard } from "@/components/mods/FomodWizard";
+import { InstalledFileSelector } from "@/components/mods/InstalledFileSelector";
 import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { CorrelationActions } from "@/components/mods/CorrelationActions";
 import { InstalledModCardAction } from "@/components/mods/InstalledModCardAction";
@@ -42,6 +44,55 @@ import { isoToEpoch, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import type { AvailableArchive, DownloadJobOut, InstalledModOut, ModGroup, ModUpdate } from "@/types/api";
+
+interface GroupedMod {
+  key: string;
+  primary: InstalledModOut;
+  entries: InstalledModOut[];
+  totalFiles: number;
+}
+
+type FileActionType = "toggle" | "delete" | "redownload";
+
+function groupByNexusId(mods: InstalledModOut[]): GroupedMod[] {
+  const byNexusId = new Map<number, InstalledModOut[]>();
+  const ungrouped: InstalledModOut[] = [];
+
+  for (const mod of mods) {
+    if (mod.nexus_mod_id != null) {
+      const list = byNexusId.get(mod.nexus_mod_id);
+      if (list) list.push(mod);
+      else byNexusId.set(mod.nexus_mod_id, [mod]);
+    } else {
+      ungrouped.push(mod);
+    }
+  }
+
+  const result: GroupedMod[] = [];
+
+  for (const [, entries] of byNexusId) {
+    const sorted = [...entries].sort(
+      (a, b) => isoToEpoch(b.last_downloaded_at) - isoToEpoch(a.last_downloaded_at),
+    );
+    result.push({
+      key: `nexus-${sorted[0].nexus_mod_id}`,
+      primary: sorted[0],
+      entries: sorted,
+      totalFiles: sorted.reduce((s, e) => s + e.file_count, 0),
+    });
+  }
+
+  for (const mod of ungrouped) {
+    result.push({
+      key: `mod-${mod.id}`,
+      primary: mod,
+      entries: [mod],
+      totalFiles: mod.file_count,
+    });
+  }
+
+  return result;
+}
 
 interface Props {
   mods: InstalledModOut[];
@@ -112,6 +163,7 @@ function ManagedModsGrid({
   const [sortKey, setSortKey] = useState<SortKey>("updated");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmDeleteModId, setConfirmDeleteModId] = useState<number | null>(null);
+  const [fileAction, setFileAction] = useState<{ type: FileActionType; group: GroupedMod } | null>(null);
   const toggleMod = useToggleMod();
   const uninstallMod = useUninstallMod();
   const startModDownload = useStartModDownload();
@@ -131,33 +183,89 @@ function ManagedModsGrid({
     return map;
   }, [downloadJobs]);
 
+  const grouped = useMemo(() => groupByNexusId(mods), [mods]);
+
   const sorted = useMemo(
     () =>
-      [...mods].sort((a, b) => {
+      [...grouped].sort((a, b) => {
+        const ap = a.primary;
+        const bp = b.primary;
         switch (sortKey) {
           case "name":
-            return (a.nexus_name || a.name).localeCompare(b.nexus_name || b.name);
+            return (ap.nexus_name || ap.name).localeCompare(bp.nexus_name || bp.name);
           case "version":
-            return a.installed_version.localeCompare(b.installed_version);
+            return ap.installed_version.localeCompare(bp.installed_version);
           case "files":
-            return b.file_count - a.file_count;
+            return b.totalFiles - a.totalFiles;
           case "disabled":
-            return Number(a.disabled) - Number(b.disabled);
+            return Number(ap.disabled) - Number(bp.disabled);
           case "updated":
-            return isoToEpoch(b.nexus_updated_at) - isoToEpoch(a.nexus_updated_at);
+            return isoToEpoch(bp.nexus_updated_at) - isoToEpoch(ap.nexus_updated_at);
           default:
             return 0;
         }
       }),
-    [mods, sortKey],
+    [grouped, sortKey],
   );
 
-  const sortedIds = useMemo(() => sorted.map((m) => m.id), [sorted]);
+  const sortedIds = useMemo(() => sorted.map((g) => g.key), [sorted]);
   const bulk = useBulkSelect(sortedIds);
 
-  const { menuState, openMenu, closeMenu } = useContextMenu<InstalledModOut>();
+  const { menuState, openMenu, closeMenu } = useContextMenu<GroupedMod>();
 
-  const buildContextMenuItems = (mod: InstalledModOut): ContextMenuItem[] => {
+  // Helper: run action on a single entry, or show file selector for multi-entry groups
+  const runOrSelect = (type: FileActionType, group: GroupedMod) => {
+    if (group.entries.length === 1) {
+      executeFileAction(type, group.entries[0].id);
+    } else {
+      setFileAction({ type, group });
+    }
+  };
+
+  const executeFileAction = (type: FileActionType, modId: number) => {
+    switch (type) {
+      case "toggle":
+        toggleMod.mutate({ gameName, modId });
+        break;
+      case "delete":
+        setConfirmDeleteModId(modId);
+        break;
+      case "redownload": {
+        const entry = mods.find((m) => m.id === modId);
+        if (entry?.nexus_mod_id) {
+          startModDownload.mutate(
+            { gameName, nexusModId: entry.nexus_mod_id },
+            { onSuccess: (r) => { if (r.requires_file_selection) onFileSelect?.(entry.nexus_mod_id!); } },
+          );
+        }
+        break;
+      }
+    }
+  };
+
+  const executeFileActionAll = async (type: FileActionType, entries: InstalledModOut[]) => {
+    for (const entry of entries) {
+      switch (type) {
+        case "toggle":
+          await toggleMod.mutateAsync({ gameName, modId: entry.id });
+          break;
+        case "delete":
+          await uninstallMod.mutateAsync({ gameName, modId: entry.id });
+          break;
+        case "redownload":
+          if (entry.nexus_mod_id) {
+            startModDownload.mutate(
+              { gameName, nexusModId: entry.nexus_mod_id },
+              { onSuccess: (r) => { if (r.requires_file_selection) onFileSelect?.(entry.nexus_mod_id!); } },
+            );
+          }
+          break;
+      }
+    }
+  };
+
+  const buildContextMenuItems = (group: GroupedMod): ContextMenuItem[] => {
+    const mod = group.primary;
     const items: ContextMenuItem[] = [
       {
         key: mod.disabled ? "enable" : "disable",
@@ -189,21 +297,19 @@ function ManagedModsGrid({
   };
 
   const handleContextMenuSelect = (key: string) => {
-    const mod = menuState.data;
-    if (!mod) return;
+    const group = menuState.data;
+    if (!group) return;
+    const mod = group.primary;
     switch (key) {
       case "enable":
       case "disable":
-        toggleMod.mutate({ gameName, modId: mod.id });
+        runOrSelect("toggle", group);
         break;
       case "nexus":
         if (mod.nexus_url) openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
         break;
       case "redownload":
-        if (mod.nexus_mod_id) startModDownload.mutate(
-          { gameName, nexusModId: mod.nexus_mod_id },
-          { onSuccess: (r) => { if (r.requires_file_selection) onFileSelect?.(mod.nexus_mod_id!); } },
-        );
+        runOrSelect("redownload", group);
         break;
       case "copy":
         void navigator.clipboard.writeText(mod.nexus_name || mod.name).then(
@@ -224,13 +330,15 @@ function ManagedModsGrid({
         }
         break;
       case "delete":
-        setConfirmDeleteModId(mod.id);
+        runOrSelect("delete", group);
         break;
     }
   };
 
   const handleBulkEnable = async () => {
-    const targets = sorted.filter((m) => bulk.selectedIds.has(m.id) && m.disabled);
+    const targets = sorted
+      .filter((g) => bulk.selectedIds.has(g.key))
+      .flatMap((g) => g.entries.filter((e) => e.disabled));
     try {
       for (const mod of targets) {
         await toggleMod.mutateAsync({ gameName, modId: mod.id });
@@ -241,7 +349,9 @@ function ManagedModsGrid({
   };
 
   const handleBulkDisable = async () => {
-    const targets = sorted.filter((m) => bulk.selectedIds.has(m.id) && !m.disabled);
+    const targets = sorted
+      .filter((g) => bulk.selectedIds.has(g.key))
+      .flatMap((g) => g.entries.filter((e) => !e.disabled));
     try {
       for (const mod of targets) {
         await toggleMod.mutateAsync({ gameName, modId: mod.id });
@@ -253,7 +363,9 @@ function ManagedModsGrid({
 
   const handleBulkDelete = async () => {
     setConfirmDelete(false);
-    const targets = sorted.filter((m) => bulk.selectedIds.has(m.id));
+    const targets = sorted
+      .filter((g) => bulk.selectedIds.has(g.key))
+      .flatMap((g) => g.entries);
     try {
       for (const mod of targets) {
         await uninstallMod.mutateAsync({ gameName, modId: mod.id });
@@ -263,12 +375,18 @@ function ManagedModsGrid({
     }
   };
 
-  const selectedMods = sorted.filter((m) => bulk.selectedIds.has(m.id));
-  const hasDisabledSelected = selectedMods.some((m) => m.disabled);
-  const hasEnabledSelected = selectedMods.some((m) => !m.disabled);
+  const selectedGroups = sorted.filter((g) => bulk.selectedIds.has(g.key));
+  const hasDisabledSelected = selectedGroups.some((g) => g.entries.some((e) => e.disabled));
+  const hasEnabledSelected = selectedGroups.some((g) => g.entries.some((e) => !e.disabled));
   const confirmDeleteMod = confirmDeleteModId != null
-    ? sorted.find((m) => m.id === confirmDeleteModId)
+    ? mods.find((m) => m.id === confirmDeleteModId)
     : null;
+
+  const fileActionLabel: Record<FileActionType, string> = {
+    toggle: "Toggle",
+    delete: "Delete",
+    redownload: "Re-download",
+  };
 
   return (
     <>
@@ -304,17 +422,21 @@ function ManagedModsGrid({
 
       <VirtualCardGrid
         items={sorted}
-        renderItem={(mod) => {
+        renderItem={(group) => {
+          const mod = group.primary;
+          const isMulti = group.entries.length > 1;
+          const anyDisabled = group.entries.some((e) => e.disabled);
+          const allDisabled = group.entries.every((e) => e.disabled);
           const update =
             updateByInstalledId.get(mod.id) ??
             (mod.nexus_mod_id ? updateByNexusId.get(mod.nexus_mod_id) : undefined);
           return (
-            <div className={cn("relative grid", mod.disabled && "opacity-60")}>
+            <div className={cn("relative grid", allDisabled && "opacity-60")}>
               <div className="absolute top-2 left-2 z-10">
                 <input
                   type="checkbox"
-                  checked={bulk.isSelected(mod.id)}
-                  onChange={() => bulk.toggle(mod.id)}
+                  checked={bulk.isSelected(group.key)}
+                  onChange={() => bulk.toggle(group.key)}
                   onClick={(e) => e.stopPropagation()}
                   className="shrink-0"
                 />
@@ -327,24 +449,38 @@ function ManagedModsGrid({
                 endorsementCount={mod.endorsement_count ?? undefined}
                 pictureUrl={mod.picture_url ?? undefined}
                 badge={
-                  update ? (
-                    <span title={update.reason || `Update: v${update.local_version} → v${update.nexus_version}`}>
-                      <Badge variant="warning" prominent>
-                        <ArrowUp size={10} className="mr-0.5" />
-                        v{update.nexus_version}
+                  <>
+                    {isMulti && (
+                      <Badge variant="neutral">
+                        <Files size={10} className="mr-0.5" />
+                        {group.entries.length} files
                       </Badge>
-                    </span>
-                  ) : undefined
+                    )}
+                    {update && (
+                      <span title={update.reason || `Update: v${update.local_version} → v${update.nexus_version}`}>
+                        <Badge variant="warning" prominent>
+                          <ArrowUp size={10} className="mr-0.5" />
+                          v{update.nexus_version}
+                        </Badge>
+                      </span>
+                    )}
+                  </>
                 }
                 footer={
                   <div className="flex items-center gap-1.5">
-                    <Badge variant={mod.disabled ? "danger" : "success"}>
-                      {mod.disabled ? (
-                        <><PowerOff size={10} className="mr-0.5" /> Disabled</>
-                      ) : (
-                        <><Power size={10} className="mr-0.5" /> Enabled</>
-                      )}
-                    </Badge>
+                    {isMulti && anyDisabled && !allDisabled ? (
+                      <Badge variant="warning">
+                        <Power size={10} className="mr-0.5" /> Mixed
+                      </Badge>
+                    ) : (
+                      <Badge variant={allDisabled ? "danger" : "success"}>
+                        {allDisabled ? (
+                          <><PowerOff size={10} className="mr-0.5" /> Disabled</>
+                        ) : (
+                          <><Power size={10} className="mr-0.5" /> Enabled</>
+                        )}
+                      </Badge>
+                    )}
                     {mod.nexus_updated_at && (
                       <span className="text-xs text-text-muted">
                         {timeAgo(isoToEpoch(mod.nexus_updated_at))}
@@ -382,32 +518,29 @@ function ManagedModsGrid({
                       </div>
                     ) : (
                       <InstalledModCardAction
-                        disabled={mod.disabled}
-                        isToggling={toggleMod.isPending && toggleMod.variables?.modId === mod.id}
-                        isUninstalling={uninstallMod.isPending && uninstallMod.variables?.modId === mod.id}
-                        onToggle={() => toggleMod.mutateAsync({ gameName, modId: mod.id })}
-                        onUninstall={() => uninstallMod.mutateAsync({ gameName, modId: mod.id })}
+                        disabled={allDisabled}
+                        isToggling={group.entries.some((e) => toggleMod.isPending && toggleMod.variables?.modId === e.id)}
+                        isUninstalling={group.entries.some((e) => uninstallMod.isPending && uninstallMod.variables?.modId === e.id)}
+                        onToggle={() => runOrSelect("toggle", group)}
+                        onUninstall={() => runOrSelect("delete", group)}
                       />
                     );
                   })()
                 }
                 overflowMenu={
                   <OverflowMenuButton
-                    items={buildContextMenuItems(mod)}
+                    items={buildContextMenuItems(group)}
                     onSelect={(key) => {
                       switch (key) {
                         case "enable":
                         case "disable":
-                          toggleMod.mutate({ gameName, modId: mod.id });
+                          runOrSelect("toggle", group);
                           break;
                         case "nexus":
                           if (mod.nexus_url) openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
                           break;
                         case "redownload":
-                          if (mod.nexus_mod_id) startModDownload.mutate(
-                            { gameName, nexusModId: mod.nexus_mod_id },
-                            { onSuccess: (r) => { if (r.requires_file_selection) onFileSelect?.(mod.nexus_mod_id!); } },
-                          );
+                          runOrSelect("redownload", group);
                           break;
                         case "copy":
                           void navigator.clipboard.writeText(mod.nexus_name || mod.name).then(
@@ -428,14 +561,14 @@ function ManagedModsGrid({
                           }
                           break;
                         case "delete":
-                          setConfirmDeleteModId(mod.id);
+                          runOrSelect("delete", group);
                           break;
                       }
                     }}
                   />
                 }
                 onClick={mod.nexus_mod_id ? () => onModClick?.(mod.nexus_mod_id!) : undefined}
-                onContextMenu={(e) => openMenu(e, mod)}
+                onContextMenu={(e) => openMenu(e, group)}
               />
             </div>
           );
@@ -448,6 +581,25 @@ function ManagedModsGrid({
           position={menuState.position}
           onSelect={handleContextMenuSelect}
           onClose={closeMenu}
+        />
+      )}
+
+      {fileAction && (
+        <InstalledFileSelector
+          modName={fileAction.group.primary.nexus_name || fileAction.group.primary.name}
+          entries={fileAction.group.entries}
+          actionLabel={fileActionLabel[fileAction.type]}
+          actionVariant={fileAction.type === "delete" ? "danger" : "primary"}
+          onSelect={(modId) => {
+            setFileAction(null);
+            executeFileAction(fileAction.type, modId);
+          }}
+          onSelectAll={() => {
+            const { type, group } = fileAction;
+            setFileAction(null);
+            void executeFileActionAll(type, group.entries);
+          }}
+          onCancel={() => setFileAction(null)}
         />
       )}
 
@@ -740,8 +892,10 @@ export function InstalledModsTable({
     return items;
   }, [recognized, q, recognizedSort]);
 
+  const groupedModCount = useMemo(() => groupByNexusId(filteredMods).length, [filteredMods]);
+
   const totalCount =
-    (scope !== "detected" ? filteredMods.length : 0) +
+    (scope !== "detected" ? groupedModCount : 0) +
     (scope !== "installed" ? filteredRecognized.length : 0);
 
   if (isLoading) {
@@ -792,7 +946,7 @@ export function InstalledModsTable({
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-text-primary" title="Mods installed and managed through this app — you can enable, disable, or uninstall them">
-              Installed Mods ({filteredMods.length})
+              Installed Mods ({groupedModCount})
             </h3>
             <FilterChips
               chips={CHIP_OPTIONS}
