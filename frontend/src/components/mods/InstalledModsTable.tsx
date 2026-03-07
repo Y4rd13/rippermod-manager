@@ -99,6 +99,7 @@ function ManagedModsGrid({
   updateByInstalledId,
   updateByNexusId,
   onModClick,
+  onFileSelect,
 }: {
   mods: InstalledModOut[];
   gameName: string;
@@ -200,9 +201,9 @@ function ManagedModsGrid({
         break;
       case "redownload":
         if (mod.nexus_mod_id) startModDownload.mutate(
-              { gameName, nexusModId: mod.nexus_mod_id },
-              { onSuccess: (r) => { if (r.requires_file_selection) onFileSelect?.(mod.nexus_mod_id!); } },
-            );
+          { gameName, nexusModId: mod.nexus_mod_id },
+          { onSuccess: (r) => { if (r.requires_file_selection) onFileSelect?.(mod.nexus_mod_id!); } },
+        );
         break;
       case "copy":
         void navigator.clipboard.writeText(mod.nexus_name || mod.name).then(
@@ -404,9 +405,9 @@ function ManagedModsGrid({
                           break;
                         case "redownload":
                           if (mod.nexus_mod_id) startModDownload.mutate(
-              { gameName, nexusModId: mod.nexus_mod_id },
-              { onSuccess: (r) => { if (r.requires_file_selection) onFileSelect?.(mod.nexus_mod_id!); } },
-            );
+                            { gameName, nexusModId: mod.nexus_mod_id },
+                            { onSuccess: (r) => { if (r.requires_file_selection) onFileSelect?.(mod.nexus_mod_id!); } },
+                          );
                           break;
                         case "copy":
                           void navigator.clipboard.writeText(mod.nexus_name || mod.name).then(

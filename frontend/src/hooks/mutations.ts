@@ -435,7 +435,6 @@ export function useStartModDownload() {
       api.post(`/api/v1/games/${gameName}/downloads/from-mod`, { nexus_mod_id: nexusModId }),
     onSuccess: (result, { gameName }) => {
       if (result.requires_file_selection) {
-        toast.info("Multiple files available", "Choose the file you want to download");
         return;
       }
       if (result.requires_nxm) {
