@@ -67,9 +67,12 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        if (previewFileId != null) setPreviewFileId(null);
+        else onClose();
+      }
     },
-    [onClose],
+    [onClose, previewFileId],
   );
 
   useEffect(() => {
