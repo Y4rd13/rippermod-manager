@@ -737,7 +737,7 @@ async def check_all_updates(
                 {
                     "installed_mod_id": mod.installed_mod_id,
                     "mod_group_id": mod.mod_group_id,
-                    "display_name": mod.display_name,
+                    "display_name": meta.name or mod.display_name,
                     "local_version": mod.local_version,
                     "nexus_version": meta.version,
                     "_initial_nexus_version": meta.version,
@@ -906,7 +906,7 @@ def check_cached_updates(
                 {
                     "installed_mod_id": mod.installed_mod_id,
                     "mod_group_id": mod.mod_group_id,
-                    "display_name": mod.display_name,
+                    "display_name": meta.name or mod.display_name,
                     "local_version": mod.local_version,
                     "nexus_version": meta.version,
                     "nexus_mod_id": mid,

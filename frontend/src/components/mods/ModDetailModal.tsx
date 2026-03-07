@@ -118,7 +118,12 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
   const visibleFiles = useMemo(
     () => detail?.files
       ?.filter((f) => f.category_id !== 7)
-      .sort((a, b) => (b.uploaded_timestamp ?? 0) - (a.uploaded_timestamp ?? 0)),
+      .sort((a, b) => {
+        const aMain = a.category_id === 1 || a.category_id === 2 || a.category_id === 3 ? 0 : 1;
+        const bMain = b.category_id === 1 || b.category_id === 2 || b.category_id === 3 ? 0 : 1;
+        if (aMain !== bMain) return aMain - bMain;
+        return (b.uploaded_timestamp ?? 0) - (a.uploaded_timestamp ?? 0);
+      }),
     [detail?.files],
   );
 
@@ -364,7 +369,7 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                             <div className="flex items-center gap-3 text-xs text-text-muted mt-1 flex-wrap">
                               {f.version && <span>v{f.version}</span>}
                               {f.category_id != null && (
-                                <Badge variant="neutral">
+                                <Badge variant={f.category_id === 1 ? "success" : "neutral"}>
                                   {FILE_CATEGORY_LABELS[f.category_id] ?? `Cat ${f.category_id}`}
                                 </Badge>
                               )}

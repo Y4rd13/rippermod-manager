@@ -1,6 +1,8 @@
 import { Download, ExternalLink, RefreshCw } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { cn } from "@/lib/utils";
+
 import { SourceBadge } from "@/components/mods/SourceBadge";
 import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { Button } from "@/components/ui/Button";
@@ -164,10 +166,10 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
             variant="ghost"
             size="sm"
             onClick={() => checkUpdates.mutate(gameName)}
-            loading={checkUpdates.isPending}
+            disabled={checkUpdates.isPending}
             title="Check Nexus for newer versions of your mods"
           >
-            <RefreshCw className="h-3.5 w-3.5 mr-1" />
+            <RefreshCw className={cn("h-3.5 w-3.5 mr-1", checkUpdates.isPending && "animate-spin")} />
             Check Now
           </Button>
         </div>

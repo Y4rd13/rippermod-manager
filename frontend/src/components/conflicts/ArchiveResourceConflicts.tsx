@@ -14,6 +14,8 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+
+import { cn } from "@/lib/utils";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Badge } from "@/components/ui/Badge";
@@ -264,9 +266,9 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
             variant="secondary"
             size="sm"
             onClick={() => reindex.mutate(gameName)}
-            loading={reindex.isPending}
+            disabled={reindex.isPending}
           >
-            <RefreshCw size={14} /> Reindex
+            <RefreshCw size={14} className={cn(reindex.isPending && "animate-spin")} /> Reindex
           </Button>
         </div>
         <EmptyState
@@ -311,9 +313,9 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
             variant="secondary"
             size="sm"
             onClick={() => reindex.mutate(gameName)}
-            loading={reindex.isPending}
+            disabled={reindex.isPending}
           >
-            <RefreshCw size={14} /> Reindex
+            <RefreshCw size={14} className={cn(reindex.isPending && "animate-spin")} /> Reindex
           </Button>
         </div>
       </div>
