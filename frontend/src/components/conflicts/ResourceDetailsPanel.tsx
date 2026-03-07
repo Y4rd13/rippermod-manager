@@ -147,7 +147,7 @@ function GroupSection({
               className="rounded p-1.5 text-text-muted hover:text-accent hover:bg-surface-2 transition-colors"
               title="View on Nexus Mods"
               onClick={() =>
-                openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${group.partner_nexus_mod_id}`)
+                openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${group.partner_nexus_mod_id}`).catch(() => {})
               }
             >
               <ExternalLink size={12} />

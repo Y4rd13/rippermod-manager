@@ -376,7 +376,7 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
                           title="View on Nexus Mods"
                           onClick={(e) => {
                             e.stopPropagation();
-                            openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${item.nexus_mod_id}`);
+                            openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${item.nexus_mod_id}`).catch(() => {});
                           }}
                         >
                           <ExternalLink size={12} />
@@ -563,7 +563,7 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
                                       className="rounded p-1.5 text-text-muted hover:text-accent hover:bg-surface-2 transition-colors"
                                       title="View on Nexus Mods"
                                       onClick={() =>
-                                        openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${partner.nexus_mod_id}`)
+                                        openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${partner.nexus_mod_id}`).catch(() => {})
                                       }
                                     >
                                       <ExternalLink size={12} />
