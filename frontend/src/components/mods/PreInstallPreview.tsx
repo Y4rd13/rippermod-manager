@@ -264,7 +264,7 @@ export function PreInstallPreview({ gameName, archiveFilename, onConfirm, onCanc
               Click the <Pencil size={10} className="inline mx-0.5" /> icon to rename a file before install.
             </p>
 
-            <div className="max-h-80 overflow-y-auto rounded border border-border bg-surface-0 p-1">
+            <div className="max-h-[60vh] overflow-y-auto rounded border border-border bg-surface-0 p-3">
               {tree.map((node) => (
                 <PreviewTreeNode
                   key={node.name}

@@ -67,9 +67,12 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        if (previewFileId != null) setPreviewFileId(null);
+        else onClose();
+      }
     },
-    [onClose],
+    [onClose, previewFileId],
   );
 
   useEffect(() => {
@@ -347,7 +350,6 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                       ? f.description.replace(/<[^>]*>/g, "").trim()
                       : "";
                     const isDescExpanded = expandedDescriptions.has(f.file_id);
-                    const isPreviewOpen = previewFileId === f.file_id;
 
                     return (
                       <div
@@ -377,11 +379,8 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() =>
-                                  setPreviewFileId(isPreviewOpen ? null : f.file_id)
-                                }
+                                onClick={() => setPreviewFileId(f.file_id)}
                                 title="Preview contents"
-                                className={isPreviewOpen ? "text-accent" : ""}
                               >
                                 <FolderOpen size={12} />
                               </Button>
@@ -429,26 +428,6 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                               >
                                 {isDescExpanded ? "Show less" : "Show more"}
                               </button>
-                            )}
-                          </div>
-                        )}
-
-                        {isPreviewOpen && (
-                          <div className="mt-2 border-t border-border pt-2">
-                            {previewLoading && (
-                              <div className="flex items-center gap-2 text-xs text-text-muted py-2">
-                                <Loader2 size={14} className="animate-spin" />
-                                Loading preview...
-                              </div>
-                            )}
-                            {previewData && (
-                              <div className="max-h-60 overflow-y-auto">
-                                <div className="flex items-center gap-2 text-xs text-text-muted mb-1">
-                                  <span>{previewData.total_files} files</span>
-                                  <span>{formatBytes(previewData.total_size)}</span>
-                                </div>
-                                <FileTreeView tree={previewData.tree} />
-                              </div>
                             )}
                           </div>
                         )}
@@ -506,6 +485,71 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
           </>
         )}
       </div>
+
+      {/* File contents preview modal */}
+      {previewFileId != null && (() => {
+        const previewFile = detail?.files?.find((f) => f.file_id === previewFileId);
+        return (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setPreviewFileId(null);
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="file-preview-title"
+              className="w-full max-w-2xl rounded-xl border border-border bg-surface-1 p-6 animate-modal-in"
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <div className="min-w-0 mr-4">
+                  <h3
+                    id="file-preview-title"
+                    className="text-lg font-semibold text-text-primary truncate"
+                    title={previewFile?.file_name}
+                  >
+                    {previewFile?.file_name}
+                  </h3>
+                  {previewData && (
+                    <p className="text-xs text-text-muted mt-0.5">
+                      {previewData.total_files} file{previewData.total_files !== 1 ? "s" : ""}{" "}
+                      &middot; {formatBytes(previewData.total_size)}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPreviewFileId(null)}
+                  className="shrink-0 rounded p-1 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"
+                  aria-label="Close"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="max-h-[60vh] overflow-y-auto rounded border border-border bg-surface-0 p-3">
+                {previewLoading && (
+                  <div className="flex items-center justify-center py-8 text-text-muted">
+                    <Loader2 size={20} className="animate-spin mr-2" />
+                    <span className="text-sm">Loading file contents...</span>
+                  </div>
+                )}
+
+                {previewData && previewData.tree.length > 0 && (
+                  <FileTreeView tree={previewData.tree} />
+                )}
+
+                {previewData && previewData.tree.length === 0 && (
+                  <p className="text-sm text-text-muted py-4 text-center">
+                    No files in preview.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

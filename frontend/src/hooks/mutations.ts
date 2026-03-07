@@ -172,6 +172,9 @@ export function useUninstallMod() {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
       qc.invalidateQueries({ queryKey: ["updates", gameName] });
+      qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
+      qc.invalidateQueries({ queryKey: ["archive-resource-details", gameName] });
+      qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
       toast.success("Mod uninstalled");
     },
     onError: () => toast.error("Failed to uninstall mod"),
@@ -185,6 +188,9 @@ export function useToggleMod() {
       api.patch(`/api/v1/games/${gameName}/install/installed/${modId}/toggle`),
     onSuccess: (_, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
+      qc.invalidateQueries({ queryKey: ["archive-resource-details", gameName] });
+      qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
     },
     onError: () => toast.error("Failed to toggle mod"),
   });

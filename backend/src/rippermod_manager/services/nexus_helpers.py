@@ -70,6 +70,7 @@ def graphql_file_to_rest_file(gql_file: dict[str, Any]) -> dict[str, Any]:
         "uploaded_timestamp": _iso_to_epoch(gql_file.get("date")),
         "size_in_bytes": gql_file.get("size") or 0,
         "description": gql_file.get("description"),
+        "content_preview_link": gql_file.get("contentPreviewLink"),
     }
 
 

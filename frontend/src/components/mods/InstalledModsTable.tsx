@@ -99,6 +99,7 @@ function ManagedModsGrid({
   updateByInstalledId,
   updateByNexusId,
   onModClick,
+  onFileSelect,
 }: {
   mods: InstalledModOut[];
   gameName: string;
@@ -106,6 +107,7 @@ function ManagedModsGrid({
   updateByInstalledId: Map<number, ModUpdate>;
   updateByNexusId: Map<number, ModUpdate>;
   onModClick?: (nexusModId: number) => void;
+  onFileSelect?: (nexusModId: number) => void;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("updated");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -198,7 +200,10 @@ function ManagedModsGrid({
         if (mod.nexus_url) openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
         break;
       case "redownload":
-        if (mod.nexus_mod_id) startModDownload.mutate({ gameName, nexusModId: mod.nexus_mod_id });
+        if (mod.nexus_mod_id) startModDownload.mutate(
+          { gameName, nexusModId: mod.nexus_mod_id },
+          { onSuccess: (r) => { if (r.requires_file_selection) onFileSelect?.(mod.nexus_mod_id!); } },
+        );
         break;
       case "copy":
         void navigator.clipboard.writeText(mod.nexus_name || mod.name).then(
@@ -399,7 +404,10 @@ function ManagedModsGrid({
                           if (mod.nexus_url) openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
                           break;
                         case "redownload":
-                          if (mod.nexus_mod_id) startModDownload.mutate({ gameName, nexusModId: mod.nexus_mod_id });
+                          if (mod.nexus_mod_id) startModDownload.mutate(
+                            { gameName, nexusModId: mod.nexus_mod_id },
+                            { onSuccess: (r) => { if (r.requires_file_selection) onFileSelect?.(mod.nexus_mod_id!); } },
+                          );
                           break;
                         case "copy":
                           void navigator.clipboard.writeText(mod.nexus_name || mod.name).then(
@@ -800,6 +808,7 @@ export function InstalledModsTable({
               updateByInstalledId={updateByInstalledId}
               updateByNexusId={updateByNexusId}
               onModClick={onModClick}
+              onFileSelect={onFileSelect}
             />
           ) : (
             <p className="py-4 text-sm text-text-muted text-center">
