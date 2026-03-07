@@ -521,8 +521,8 @@ function ManagedModsGrid({
                         disabled={allDisabled}
                         isToggling={group.entries.some((e) => toggleMod.isPending && toggleMod.variables?.modId === e.id)}
                         isUninstalling={group.entries.some((e) => uninstallMod.isPending && uninstallMod.variables?.modId === e.id)}
-                        onToggle={() => runOrSelect("toggle", group)}
-                        onUninstall={() => runOrSelect("delete", group)}
+                        onToggle={() => Promise.resolve(runOrSelect("toggle", group))}
+                        onUninstall={() => Promise.resolve(runOrSelect("delete", group))}
                       />
                     );
                   })()
