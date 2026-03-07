@@ -27,15 +27,15 @@
 - **Endorse & Track** — Toggle endorse/track status on any mod directly from card buttons, context menus, or the mod detail modal — syncs with the Nexus Mods API in real time.
 - **Auto-Correlation** — Multi-tier matching pipeline: filename ID extraction, MD5 hash batch lookup, file content reverse lookup, endorsed/tracked sync, Nexus collection matching, mod requirement propagation, Jaccard + Jaro-Winkler fuzzy matching, and AI/web search. Manual reassign, confirm, and reject actions.
 - **Mod Installation** — Install mods from downloaded archives with pre-install preview, conflict detection, skip/overwrite resolution, and enable/disable toggling. Includes FOMOD installer wizard for scripted mod packages.
-- **Conflict Detection** — Multi-layer conflict engine: file-level overlap detection, archive-level resource conflicts, redscript annotation analysis, TweakXL conflict scanning, and a conflict inbox for resolution.
+- **Conflict Detection** — Multi-layer conflict engine: file-level overlap detection, archive-level resource conflicts with dependency-aware severity classification, redscript annotation analysis, TweakXL conflict scanning, and a conflict inbox for resolution. Disable, uninstall, or set load order preferences directly from the conflict view with Nexus Mods links on every archive.
 - **Load Order** — View and manage archive load order with preference rules, modlist.txt generation, and dry-run previews.
 - **Archive Management** — Browse archive contents, link/unlink archives to Nexus mods, delete, and clean up orphaned mod archives from the downloads staging folder.
 - **Download Manager** — Download mod archives directly from Nexus Mods with progress tracking, NXM deep link handling, and premium account support.
 - **Trending Mods** — Browse trending and recently updated mods from Nexus with one-click install, endorse, or track actions.
 - **Endorsed & Tracked Tabs** — Browse your endorsed and tracked mods from Nexus with install actions or direct Nexus links.
-- **Mod Detail Modal** — View full mod details including description, files, changelogs, requirements, and action buttons without leaving the app.
+- **Mod Detail Modal** — View full mod details including description, files, changelogs, requirements, DLC requirements, and action buttons without leaving the app.
 - **Profile Manager** — Save, load, export, import, duplicate, and compare mod profiles to switch between mod configurations.
-- **Update Checker** — Compares local mod versions against Nexus metadata to surface available updates with one-click download.
+- **Update Checker** — Compares local mod versions against Nexus metadata to surface available updates with one-click download. A persistent update banner notifies you when a new app version is available.
 - **AI Search** — AI-powered mod matching with configurable OpenAI model and reasoning effort for enhanced scan accuracy.
 - **Semantic Search** — ChromaDB vector store indexes mods, Nexus metadata, and correlations for natural-language queries.
 - **Chat Assistant** — LangChain-powered agent with tool access to the local mod database and Nexus data, streamed via SSE.
@@ -71,22 +71,22 @@ rippermod-manager/
 │   │   ├── models/          # 12 SQLModel table modules (18 tables)
 │   │   ├── schemas/         # Pydantic request/response models
 │   │   ├── routers/         # 15 API routers (91 endpoints)
-│   │   ├── services/        # 37 business logic modules
+│   │   ├── services/        # 38 business logic modules
 │   │   ├── scanner/         # File discovery + grouping
 │   │   ├── matching/        # TF-IDF, correlation, filename parsing
 │   │   ├── nexus/           # REST v1 + GraphQL v2 API clients
 │   │   ├── vector/          # ChromaDB indexing + search
 │   │   └── agents/          # LangChain chat agent
-│   └── tests/               # 783+ tests across 49 files
+│   └── tests/               # 822+ tests across 51 files
 ├── frontend/                # React 19 + TypeScript + Vite
 │   ├── src/
-│   │   ├── components/      # 25 mod components, 24 UI primitives
+│   │   ├── components/      # 25 mod components, 5 conflict components, 24 UI primitives
 │   │   ├── pages/           # 6 pages
 │   │   ├── hooks/           # 12 hooks (React Query, install, FOMOD, ...)
 │   │   ├── stores/          # Zustand stores
 │   │   └── lib/             # API client, SSE parser, utils
 │   └── src-tauri/           # Tauri v2 Rust shell + sidecar lifecycle
-├── docs/                    # Architecture, Nexus API map
+├── docs/                    # Architecture, Nexus API map, Nexus articles
 ├── scripts/                 # Build + release helpers
 └── .github/workflows/       # CI, release, PR review, CLA
 ```
@@ -157,7 +157,7 @@ cd backend
 uv run uvicorn rippermod_manager.main:app --reload --port 8425   # Dev server
 uv run ruff check src/ tests/                                         # Lint
 uv run ruff format src/ tests/                                        # Format
-uv run pytest tests/ -v                                               # Tests (783+ tests)
+uv run pytest tests/ -v                                               # Tests (822+ tests)
 ```
 
 ### Frontend commands
@@ -235,6 +235,7 @@ All endpoints are prefixed with `/api/v1/`.
 | `POST` | `/games/{name}/install/` | Install a mod from an archive |
 | `DELETE` | `/games/{name}/install/installed/{id}` | Uninstall a mod |
 | `PATCH` | `/games/{name}/install/installed/{id}/toggle` | Enable/disable a mod |
+| `GET` | `/games/{name}/install/installed/{id}/dependents` | List mods that depend on this mod |
 | `GET` | `/games/{name}/install/preview` | Preview files before installation |
 | `GET` | `/games/{name}/install/conflicts` | Check for file conflicts |
 | `GET` | `/games/{name}/install/archives/{filename}/contents` | Browse archive file tree |
@@ -384,7 +385,7 @@ All endpoints are prefixed with `/api/v1/`.
 
 ### Testing
 
-The backend has a comprehensive test suite with 783+ tests across 49 test files covering all modules:
+The backend has a comprehensive test suite with 822+ tests across 51 test files covering all modules:
 
 ```bash
 cd backend

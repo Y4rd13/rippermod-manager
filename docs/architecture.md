@@ -53,7 +53,7 @@ rippermod-manager/
 │   │   ├── nexus/                   # Nexus Mods API clients
 │   │   │   ├── client.py            # REST v1 API client (reads + mutations)
 │   │   │   └── graphql_client.py    # GraphQL v2 client (batch + search)
-│   │   ├── services/                # Business logic (37 modules)
+│   │   ├── services/                # Business logic (38 modules)
 │   │   │   ├── nexus_sync.py        # Sync tracked/endorsed mods
 │   │   │   ├── nexus_helpers.py     # GQL→REST adapters, game categories
 │   │   │   ├── download_service.py  # Download orchestration + shutdown
@@ -68,6 +68,7 @@ rippermod-manager/
 │   │   │   ├── conflict_graph_service.py # Conflict graph builder
 │   │   │   ├── conflicts_inbox_service.py # Conflict inbox + resolution
 │   │   │   ├── conflicts/           # Multi-layer conflict engine
+│   │   │   │   ├── dependency_graph.py #   Installed mod dependency pair builder
 │   │   │   │   ├── detectors.py     #   REDmod, TweakXL, archive overlap
 │   │   │   │   └── engine.py        #   Orchestrates all detectors
 │   │   │   ├── load_order.py        # Load order + modlist.txt writer
@@ -98,17 +99,18 @@ rippermod-manager/
 │   │   │   └── search.py            # Semantic search queries
 │   │   └── agents/orchestrator.py   # LangChain agent + tools
 │   ├── rmm-backend.spec            # PyInstaller spec (--onefile)
-│   └── tests/                       # 783+ pytest tests across 49 files
+│   └── tests/                       # 822+ pytest tests across 51 files
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── BackendGate.tsx       # Waits for backend before rendering
 │   │   │   ├── ErrorBoundary.tsx     # Catches crashes, shows fallback UI
 │   │   │   ├── chat/                 # ChatPanel
-│   │   │   ├── conflicts/           # 4 conflict UI components
+│   │   │   ├── conflicts/           # 5 conflict UI components
 │   │   │   │                        #   ArchiveResourceConflicts, ConflictSummaryWidget,
-│   │   │   │                        #   LoadOrderView, ResourceDetailsPanel
-│   │   │   ├── layout/              # Sidebar, Titlebar
+│   │   │   │                        #   DisableConfirmDialog, LoadOrderView,
+│   │   │   │                        #   ResourceDetailsPanel
+│   │   │   ├── layout/              # Sidebar, Titlebar, UpdateBanner
 │   │   │   ├── mods/                # 25 mod-related components
 │   │   │   │                        #   NexusModCard, NexusMatchedGrid,
 │   │   │   │                        #   InstalledModsTable, ModsTable,
@@ -147,6 +149,7 @@ rippermod-manager/
 │   └── bump-version.sh             # Patch version bump helper
 ├── docs/
 │   ├── nexus-api-usage.md           # Nexus Mods REST v1 + GraphQL v2 endpoint map
+│   ├── nexus-article-getting-started.bbcode  # Nexus Mods Getting Started article
 │   └── nexus-description.bbcode     # Nexus Mods page description
 ├── .github/workflows/
 │   ├── ci.yml                       # Consolidated CI (backend, frontend, Tauri + gate)

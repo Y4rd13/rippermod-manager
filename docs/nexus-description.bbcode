@@ -68,7 +68,7 @@ The algorithm does the heavy lifting, but you're the one calling the shots:
 [*][b]Trending mods tab[/b] — See popular and recently updated mods for your game.
 [*][b]Endorse / Abstain[/b] — Toggle endorsement on any mod directly from the app.
 [*][b]Track / Untrack[/b] — Toggle tracking on any mod directly from the app.
-[*][b]Mod detail view[/b] — Full mod info: banner image, description, author, category, endorsement count, version history, file listings (Main/Update/Optional/Old/Misc), changelogs, and a direct link to the Nexus page.
+[*][b]Mod detail view[/b] — Full mod info: banner image, description, author, category, endorsement count, version history, file listings (Main/Update/Optional/Old/Misc), changelogs, DLC requirements, and a direct link to the Nexus page.
 [/list]
 
 [b]Download Manager[/b]
@@ -83,9 +83,11 @@ The algorithm does the heavy lifting, but you're the one calling the shots:
 [b]Conflict Engine & Load Order[/b]
 [list]
 [*][b]Multi-layer detection[/b] — File-level overlap, archive resource conflicts, redscript annotation analysis, and TweakXL conflict scanning.
+[*][b]Dependency-aware severity[/b] — Conflicts between mods with a dependency relationship are classified as medium severity (intentional override). Identical content across archives is classified as low (cosmetic, safe to ignore).
+[*][b]Conflict actions[/b] — Disable, uninstall, or set load order preferences on conflicting mods directly from the conflict view. Each archive links to its Nexus Mods page. Confirmation dialogs explain what will happen before you act.
 [*][b]Conflict inbox[/b] — Centralized view of all detected conflicts with resolve (reinstall with new priority) or dismiss actions.
 [*][b]Conflict graph[/b] — Visual graph of which mods conflict with each other.
-[*][b]Archive-level details[/b] — See exactly which resources overlap between archives, with per-resource severity.
+[*][b]Archive-level details[/b] — See exactly which resources overlap between archives, with per-resource severity and auto-collapsed hash lists.
 [*][b]Load order management[/b] — View and reorder archive load order with preference rules, dry-run previews, and automatic modlist.txt generation.
 [/list]
 
@@ -131,6 +133,7 @@ This is where RipperMod gets its chrome. All AI features are optional — the ap
 [b]App Auto-Update (since v0.3.2)[/b]
 [list]
 [*]Automatically checks for new versions of RipperMod Manager on startup.
+[*]Persistent update banner between the titlebar and content area — shows version, release notes, and a Download & Install button. Tracks progress through download → ready to restart.
 [*]Download and install updates directly from Settings with a progress bar.
 [*]One-click restart when the update is ready.
 [*]Badge on the Settings icon when an update is available.
@@ -204,7 +207,7 @@ Found a glitch in the system? Don't just flatline and delta — report it so I c
 To help me zero in on the problem fast, include the following:
 
 [list]
-[*][b]App version[/b] — Check Settings > About (e.g. v1.16.5).
+[*][b]App version[/b] — Check Settings > About (e.g. v1.20.0).
 [*][b]OS[/b] — Windows 10 or 11, and any relevant details (language, antivirus, etc.).
 [*][b]Steps to reproduce[/b] — What exactly did you do? Step by step, from launch to the bug.
 [*][b]Expected behavior[/b] — What should have happened.
