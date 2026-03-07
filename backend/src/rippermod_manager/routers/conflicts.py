@@ -16,6 +16,7 @@ from rippermod_manager.schemas.conflict import (
     ArchiveConflictSummaryOut,
     ArchiveResourceDetailsResult,
     ConflictEvidenceOut,
+    ConflictingArchiveRef,
     ConflictSummary,
     ModRef,
     ReindexResult,
@@ -188,7 +189,13 @@ def archive_conflict_summaries(
             total_entries=s.total_entries,
             winning_entries=s.winning_entries,
             losing_entries=s.losing_entries,
-            conflicting_archives=list(s.conflicting_archives),
+            conflicting_archives=[
+                ConflictingArchiveRef(
+                    archive_filename=ca,
+                    is_winner=s.archive_filename.lower() < ca.lower(),
+                )
+                for ca in s.conflicting_archives
+            ],
             severity=s.severity,
             identical_count=s.identical_count,
             real_count=s.real_count,

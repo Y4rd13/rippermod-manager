@@ -44,6 +44,13 @@ class ReindexResult(BaseModel):
     duration_ms: int
 
 
+class ConflictingArchiveRef(BaseModel):
+    """Reference to an archive that conflicts with the subject archive."""
+
+    archive_filename: str
+    is_winner: bool
+
+
 class ArchiveConflictSummaryOut(BaseModel):
     """Per-archive conflict summary for the archive resources view."""
 
@@ -54,7 +61,7 @@ class ArchiveConflictSummaryOut(BaseModel):
     total_entries: int
     winning_entries: int
     losing_entries: int
-    conflicting_archives: list[str]
+    conflicting_archives: list[ConflictingArchiveRef]
     severity: Severity
     identical_count: int = 0
     real_count: int = 0

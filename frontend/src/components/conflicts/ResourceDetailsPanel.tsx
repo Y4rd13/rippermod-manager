@@ -1,12 +1,12 @@
-import { ChevronDown, ChevronRight, ExternalLink, Loader2, Power, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, Loader2, Power } from "lucide-react";
 import { useMemo, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { FilterChips } from "@/components/ui/FilterChips";
+import { DisableConfirmDialog } from "@/components/conflicts/DisableConfirmDialog";
 import { useArchiveResourceDetails } from "@/hooks/queries";
-import { useToggleMod, useUninstallMod } from "@/hooks/mutations";
 import type { ResourceConflictDetail, ResourceConflictGroup } from "@/types/api";
 
 type ResourceFilter = "all" | "real" | "cosmetic" | "dependency";
@@ -187,8 +187,6 @@ function GroupSection({
 
 export function ResourceDetailsPanel({ gameName, gameDomain, archiveFilename, initialFilter = "all" }: Props) {
   const { data, isLoading, isError } = useArchiveResourceDetails(gameName, archiveFilename);
-  const toggleMod = useToggleMod();
-  const uninstallMod = useUninstallMod();
   const [resourceFilter, setResourceFilter] = useState<ResourceFilter>(initialFilter);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [disableConfirm, setDisableConfirm] = useState<DisableConfirmState | null>(null);
@@ -281,94 +279,38 @@ export function ResourceDetailsPanel({ gameName, gameDomain, archiveFilename, in
 
       {/* Disable Confirmation Dialog */}
       {disableConfirm && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
-          onClick={() => setDisableConfirm(null)}
+        <DisableConfirmDialog
+          gameName={gameName}
+          modId={disableConfirm.modId}
+          modName={disableConfirm.modName}
+          onClose={() => setDisableConfirm(null)}
         >
-          <div
-            className="w-full max-w-md rounded-xl border border-border bg-surface-1 p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-2 mb-4 text-danger">
-              <Power size={20} />
-              <h3 className="text-lg font-semibold text-text-primary">
-                Disable &ldquo;{disableConfirm.modName}&rdquo;?
-              </h3>
-            </div>
-
-            <div className="text-sm text-text-secondary space-y-3 mb-4">
-              <p>
-                This will disable the mod and all its archives.
-                The following conflicts with{" "}
-                <code className="text-xs bg-surface-2 px-1 rounded">{archiveFilename}</code>{" "}
-                will be resolved:
-              </p>
-              <div className="rounded border border-border p-2 bg-surface-0 space-y-1">
-                {disableConfirm.realCount > 0 && (
-                  <div className="flex items-center gap-2 text-xs">
-                    <Badge variant="danger">real</Badge>
-                    <span>{disableConfirm.realCount} conflict{disableConfirm.realCount !== 1 ? "s" : ""}</span>
-                  </div>
-                )}
-                {disableConfirm.dependencyCount > 0 && (
-                  <div className="flex items-center gap-2 text-xs">
-                    <Badge variant="warning">dependency</Badge>
-                    <span>{disableConfirm.dependencyCount} conflict{disableConfirm.dependencyCount !== 1 ? "s" : ""}</span>
-                  </div>
-                )}
-                {disableConfirm.cosmeticCount > 0 && (
-                  <div className="flex items-center gap-2 text-xs">
-                    <Badge variant="success">cosmetic</Badge>
-                    <span>{disableConfirm.cosmeticCount} conflict{disableConfirm.cosmeticCount !== 1 ? "s" : ""}</span>
-                  </div>
-                )}
+          <p>
+            The following conflicts with{" "}
+            <code className="text-xs bg-surface-2 px-1 rounded">{archiveFilename}</code>{" "}
+            will be resolved:
+          </p>
+          <div className="rounded border border-border p-2 bg-surface-0 space-y-1">
+            {disableConfirm.realCount > 0 && (
+              <div className="flex items-center gap-2 text-xs">
+                <Badge variant="danger">real</Badge>
+                <span>{disableConfirm.realCount} conflict{disableConfirm.realCount !== 1 ? "s" : ""}</span>
               </div>
-              <p className="text-xs text-text-muted">
-                The mod can be re-enabled later from the Installed Mods or Archives tab.
-                If uninstalled, it can be reinstalled from the Archives tab.
-              </p>
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={toggleMod.isPending || uninstallMod.isPending}
-                onClick={() => setDisableConfirm(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                size="sm"
-                loading={uninstallMod.isPending}
-                disabled={toggleMod.isPending}
-                onClick={() => {
-                  uninstallMod.mutate(
-                    { gameName, modId: disableConfirm.modId },
-                    { onSuccess: () => setDisableConfirm(null) },
-                  );
-                }}
-              >
-                <Trash2 size={14} /> Uninstall
-              </Button>
-              <Button
-                variant="danger"
-                size="sm"
-                loading={toggleMod.isPending}
-                disabled={uninstallMod.isPending}
-                onClick={() => {
-                  toggleMod.mutate(
-                    { gameName, modId: disableConfirm.modId },
-                    { onSuccess: () => setDisableConfirm(null) },
-                  );
-                }}
-              >
-                <Power size={14} /> Disable
-              </Button>
-            </div>
+            )}
+            {disableConfirm.dependencyCount > 0 && (
+              <div className="flex items-center gap-2 text-xs">
+                <Badge variant="warning">dependency</Badge>
+                <span>{disableConfirm.dependencyCount} conflict{disableConfirm.dependencyCount !== 1 ? "s" : ""}</span>
+              </div>
+            )}
+            {disableConfirm.cosmeticCount > 0 && (
+              <div className="flex items-center gap-2 text-xs">
+                <Badge variant="success">cosmetic</Badge>
+                <span>{disableConfirm.cosmeticCount} conflict{disableConfirm.cosmeticCount !== 1 ? "s" : ""}</span>
+              </div>
+            )}
           </div>
-        </div>
+        </DisableConfirmDialog>
       )}
     </div>
   );
