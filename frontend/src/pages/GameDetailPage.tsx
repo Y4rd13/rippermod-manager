@@ -84,7 +84,7 @@ const MATCHED_SUB_TABS: { key: MatchedSubTab; label: string }[] = [
 
 type ConflictSubTab = "file-conflicts" | "archive-resources" | "cluster-details" | "load-order";
 
-function ConflictSubTabs({ gameName }: { gameName: string }) {
+function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomain: string }) {
   const [subTab, setSubTab] = useState<ConflictSubTab>("file-conflicts");
   const subTabs: { key: ConflictSubTab; label: string }[] = [
     { key: "file-conflicts", label: "File Conflicts" },
@@ -114,7 +114,7 @@ function ConflictSubTabs({ gameName }: { gameName: string }) {
       {subTab === "file-conflicts" && <ConflictsInbox gameName={gameName} />}
       {subTab === "archive-resources" && (
         <Suspense fallback={<SkeletonCardGrid count={3} />}>
-          <ArchiveResourceConflicts gameName={gameName} />
+          <ArchiveResourceConflicts gameName={gameName} gameDomain={gameDomain} />
         </Suspense>
       )}
       {subTab === "cluster-details" && <ClusterDetailsPanel gameName={gameName} />}
@@ -683,7 +683,7 @@ export function GameDetailPage() {
         />
       )}
       {tab === "conflicts" && (
-        <ConflictSubTabs gameName={name} />
+        <ConflictSubTabs gameName={name} gameDomain={game?.domain_name ?? ""} />
       )}
       {tab === "installed" && (
         <InstalledModsTable

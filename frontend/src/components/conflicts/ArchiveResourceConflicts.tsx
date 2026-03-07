@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronRight,
   Crown,
+  ExternalLink,
   HelpCircle,
   List,
   Power,
@@ -13,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -22,13 +24,15 @@ import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { SortableHeader } from "@/components/ui/SortableHeader";
 import { VirtualTable } from "@/components/ui/VirtualTable";
+import { DisableConfirmDialog } from "@/components/conflicts/DisableConfirmDialog";
 import { ResourceDetailsPanel } from "@/components/conflicts/ResourceDetailsPanel";
 import { useArchiveConflictSummaries } from "@/hooks/queries";
-import { usePreferMod, usePreferModPreview, useReindexConflicts, useToggleMod } from "@/hooks/mutations";
+import { usePreferMod, usePreferModPreview, useReindexConflicts } from "@/hooks/mutations";
 import type { ArchiveConflictSummaryOut, PreferModResult } from "@/types/api";
 
 interface Props {
   gameName: string;
+  gameDomain: string;
 }
 
 type SeverityFilter = "all" | "high" | "medium" | "low";
@@ -66,7 +70,15 @@ interface PreferPreviewState {
   losers: { modId: number; modName: string }[];
 }
 
-export function ArchiveResourceConflicts({ gameName }: Props) {
+interface DisableConfirmState {
+  modId: number;
+  modName: string;
+  partnerArchive: string;
+  currentArchive: string;
+  currentModName: string;
+}
+
+export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<SeverityFilter>("all");
   const [typeFilter, setTypeFilter] = useState<ConflictTypeFilter>("all");
@@ -78,7 +90,6 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
 
   const { data: result, isLoading } = useArchiveConflictSummaries(gameName, resourceHash);
   const reindex = useReindexConflicts();
-  const toggleMod = useToggleMod();
   const preferPreview = usePreferModPreview();
   const preferMod = usePreferMod();
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -88,9 +99,10 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
   } | null>(null);
   const [previewState, setPreviewState] = useState<PreferPreviewState | null>(null);
   const [previewResult, setPreviewResult] = useState<PreferModResult | null>(null);
+  const [disableConfirm, setDisableConfirm] = useState<DisableConfirmState | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
 
-  const summaries = result?.summaries ?? [];
+  const summaries = useMemo(() => result?.summaries ?? [], [result?.summaries]);
 
   const filtered = useMemo(() => {
     let items = summaries;
@@ -114,7 +126,7 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
         (s) =>
           s.archive_filename.toLowerCase().includes(q) ||
           s.mod_name?.toLowerCase().includes(q) ||
-          s.conflicting_archives.some((a) => a.toLowerCase().includes(q)),
+          s.conflicting_archives.some((a) => a.archive_filename.toLowerCase().includes(q)),
       );
     }
 
@@ -352,9 +364,23 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
                     <code className="text-xs text-accent font-mono">{item.archive_filename}</code>
                   </td>
                   <td className="py-2.5 pr-4">
-                    <span className="text-sm text-text-primary truncate block max-w-[180px]">
-                      {item.mod_name ?? "Unmanaged"}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm text-text-primary truncate block max-w-[180px]">
+                        {item.mod_name ?? "Unmanaged"}
+                      </span>
+                      {item.nexus_mod_id != null && (
+                        <button
+                          className="shrink-0 text-text-muted hover:text-accent transition-colors"
+                          title="View on Nexus Mods"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${item.nexus_mod_id}`).catch(() => {});
+                          }}
+                        >
+                          <ExternalLink size={12} />
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td className="py-2.5 pr-4">
                     <div className="flex items-center gap-2">
@@ -441,9 +467,9 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
                       {item.installed_mod_id != null && item.losing_entries > 0 && (() => {
                         // Collect ALL mods whose archives beat this one
                         const losingMods = new Map<number, string>();
-                        for (const conflictArchive of item.conflicting_archives) {
-                          if (item.archive_filename.toLowerCase() > conflictArchive.toLowerCase()) {
-                            const partner = summaryMap.get(conflictArchive);
+                        for (const ca of item.conflicting_archives) {
+                          if (!ca.is_winner) {
+                            const partner = summaryMap.get(ca.archive_filename);
                             if (partner?.installed_mod_id && !losingMods.has(partner.installed_mod_id)) {
                               losingMods.set(partner.installed_mod_id, partner.mod_name ?? partner.archive_filename);
                             }
@@ -474,7 +500,15 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
                           variant="secondary"
                           size="sm"
                           title="Disable this mod"
-                          onClick={() => toggleMod.mutate({ gameName, modId: item.installed_mod_id! })}
+                          onClick={() =>
+                            setDisableConfirm({
+                              modId: item.installed_mod_id!,
+                              modName: item.mod_name ?? item.archive_filename,
+                              partnerArchive: item.archive_filename,
+                              currentArchive: item.archive_filename,
+                              currentModName: item.mod_name ?? item.archive_filename,
+                            })
+                          }
                         >
                           <Power size={12} />
                         </Button>
@@ -496,30 +530,65 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
                         <p className="text-text-muted font-medium mb-2">
                           Conflicting archives ({item.conflicting_archives.length}):
                         </p>
-                        {item.conflicting_archives.map((conflictArchive) => {
-                          const partner = summaryMap.get(conflictArchive);
-                          // First-loaded-wins: lower ASCII filename wins
-                          const isWinner = item.archive_filename.toLowerCase() < conflictArchive.toLowerCase();
-                          return (
-                            <div
-                              key={conflictArchive}
-                              className="flex items-center gap-2 text-text-secondary"
-                            >
-                              <Shuffle size={12} className="text-text-muted shrink-0" />
-                              <code className="font-mono text-accent">{conflictArchive}</code>
-                              {partner?.mod_name ? (
-                                <span className="text-text-muted">({partner.mod_name})</span>
-                              ) : (
-                                <span className="text-text-muted/50">(Unmanaged)</span>
-                              )}
-                              {isWinner ? (
-                                <Badge variant="success">wins over</Badge>
-                              ) : (
-                                <Badge variant="danger">loses to</Badge>
-                              )}
-                            </div>
-                          );
-                        })}
+                        <div className="grid gap-2 max-w-xl">
+                          {item.conflicting_archives.map((ca) => {
+                            const partner = summaryMap.get(ca.archive_filename);
+                            return (
+                              <div
+                                key={ca.archive_filename}
+                                className="flex items-center gap-3 rounded-lg border border-border/40 bg-surface-0/50 px-3 py-2"
+                              >
+                                <Shuffle size={12} className="text-text-muted shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <code className="font-mono text-accent text-xs truncate">{ca.archive_filename}</code>
+                                    {ca.is_winner ? (
+                                      <Badge variant="success">wins over</Badge>
+                                    ) : (
+                                      <Badge variant="danger">loses to</Badge>
+                                    )}
+                                  </div>
+                                  {partner?.mod_name ? (
+                                    <p className="text-text-muted text-xs mt-0.5 truncate">{partner.mod_name}</p>
+                                  ) : (
+                                    <p className="text-text-muted/50 text-xs mt-0.5">Unmanaged</p>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {partner?.nexus_mod_id != null && (
+                                    <button
+                                      className="rounded p-1.5 text-text-muted hover:text-accent hover:bg-surface-2 transition-colors"
+                                      title="View on Nexus Mods"
+                                      onClick={() =>
+                                        openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${partner.nexus_mod_id}`).catch(() => {})
+                                      }
+                                    >
+                                      <ExternalLink size={12} />
+                                    </button>
+                                  )}
+                                  {partner?.installed_mod_id != null && (
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      title={`Disable ${partner.mod_name ?? ca.archive_filename}`}
+                                      onClick={() =>
+                                        setDisableConfirm({
+                                          modId: partner.installed_mod_id!,
+                                          modName: partner.mod_name ?? ca.archive_filename,
+                                          partnerArchive: ca.archive_filename,
+                                          currentArchive: item.archive_filename,
+                                          currentModName: item.mod_name ?? item.archive_filename,
+                                        })
+                                      }
+                                    >
+                                      <Power size={12} />
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
 
                         <button
                           className="flex items-center gap-1 mt-2 text-xs text-accent hover:text-accent/80 transition-colors"
@@ -539,6 +608,7 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
                         {detailsOpenFor?.archive === item.archive_filename && (
                           <ResourceDetailsPanel
                             gameName={gameName}
+                            gameDomain={gameDomain}
                             archiveFilename={item.archive_filename}
                             initialFilter={detailsOpenFor.filter}
                           />
@@ -622,6 +692,25 @@ export function ArchiveResourceConflicts({ gameName }: Props) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Disable Confirmation Dialog */}
+      {disableConfirm && (
+        <DisableConfirmDialog
+          gameName={gameName}
+          modId={disableConfirm.modId}
+          modName={disableConfirm.modName}
+          onClose={() => setDisableConfirm(null)}
+        >
+          {disableConfirm.modId !== (summaryMap.get(disableConfirm.currentArchive)?.installed_mod_id ?? -1) && (
+            <p>
+              Conflicts between{" "}
+              <strong>{disableConfirm.currentModName}</strong> and{" "}
+              <code className="text-xs bg-surface-2 px-1 rounded">{disableConfirm.partnerArchive}</code>{" "}
+              will be resolved.
+            </p>
+          )}
+        </DisableConfirmDialog>
       )}
 
       {helpOpen && (
