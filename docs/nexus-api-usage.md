@@ -89,8 +89,8 @@ Every call is `POST https://api.nexusmods.com/v2/graphql`.
 | Method | Operation | Variables | Description |
 |--------|-----------|-----------|-------------|
 | `batch_file_hashes()` | `query BatchFileHashes` | `md5s` (up to 500) | MD5 lookup -- returns file info with nested mod data |
-| `batch_mods()` | `query BatchMods` | _(inline aliases)_ | Fetch up to 50 mods per query using GraphQL aliases |
-| `batch_mods_by_domain()` | `query BatchModsByDomain` | `ids` (`[{gameDomain, modId}]`) | Fetch mods using `legacyModsByDomain` (chunks of 50, falls back to `batch_mods()` on error) |
+| `batch_mods()` | `query BatchMods` | _(inline aliases)_ | Fetch up to 10 mods per query using GraphQL aliases (includes requirements) |
+| `batch_mods_by_domain()` | `query BatchModsByDomain` | `ids` (`[{gameDomain, modId}]`) | Two-phase: (1) `legacyModsByDomain` chunks of 25 for mod fields, (2) `batch_mods()` for requirements. Falls back to `batch_mods()` on phase 1 error |
 
 ### Search
 
@@ -116,8 +116,14 @@ category, modCategory { name }, status
 
 # _MOD_REQUIREMENT_FIELDS -- reused by get_mod, batch_mods
 modRequirements {
-  nexusRequirements {
+  nexusRequirements(count: 50) {
     nodes { id, modId, modName, url, notes, externalRequirement, gameId }
+  }
+  modsRequiringThisMod(count: 50) {
+    nodes { modId, modName }
+  }
+  dlcRequirements {
+    dlcName, expansionId
   }
 }
 

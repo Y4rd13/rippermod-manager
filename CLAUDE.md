@@ -79,7 +79,7 @@ See @docs/nexus-api-usage.md for endpoint reference.
 
 ## Testing
 
-- 783+ tests across `backend/tests/` (routers, services, matching, scanner, nexus, archive, vector, agents)
+- 822+ tests across `backend/tests/` (routers, services, matching, scanner, nexus, archive, vector, agents)
 - Fixtures in `tests/conftest.py` — in-memory SQLite, test games, mock clients
 - CI runs with `--cov=rippermod_manager --cov-report=term-missing`
 - Use `respx` for HTTP mocking — never make real API calls in tests
