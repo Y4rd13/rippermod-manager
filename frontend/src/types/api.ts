@@ -623,6 +623,7 @@ export interface ArchiveConflictSummaryOut {
   archive_filename: string;
   installed_mod_id: number | null;
   mod_name: string | null;
+  nexus_mod_id: number | null;
   total_entries: number;
   winning_entries: number;
   losing_entries: number;
@@ -651,6 +652,8 @@ export interface ResourceConflictDetail {
 export interface ResourceConflictGroup {
   partner_archive: string;
   partner_mod_name: string | null;
+  partner_installed_mod_id: number | null;
+  partner_nexus_mod_id: number | null;
   is_winner: boolean;
   identical_count: number;
   real_count: number;

@@ -50,6 +50,7 @@ class ArchiveConflictSummaryOut(BaseModel):
     archive_filename: str
     installed_mod_id: int | None
     mod_name: str | None = None
+    nexus_mod_id: int | None = None
     total_entries: int
     winning_entries: int
     losing_entries: int
@@ -84,6 +85,8 @@ class ResourceConflictGroup(BaseModel):
 
     partner_archive: str
     partner_mod_name: str | None = None
+    partner_installed_mod_id: int | None = None
+    partner_nexus_mod_id: int | None = None
     is_winner: bool
     identical_count: int
     real_count: int

@@ -168,20 +168,23 @@ def archive_conflict_summaries(
     game = get_game_or_404(game_name, session)
     summaries = summarize_conflicts(session, game.id, resource_hash=resource_hash)
 
-    # Resolve mod names from installed_mod_id
+    # Resolve mod names and nexus_mod_id from installed_mod_id
     mod_ids = {s.installed_mod_id for s in summaries if s.installed_mod_id is not None}
     mod_name_map: dict[int, str] = {}
+    mod_nexus_map: dict[int, int | None] = {}
     if mod_ids:
         mods = session.exec(
             select(InstalledMod).where(InstalledMod.id.in_(list(mod_ids)))  # type: ignore[union-attr]
         ).all()
         mod_name_map = {m.id: m.name for m in mods}  # type: ignore[misc]
+        mod_nexus_map = {m.id: m.nexus_mod_id for m in mods}  # type: ignore[misc]
 
     out = [
         ArchiveConflictSummaryOut(
             archive_filename=s.archive_filename,
             installed_mod_id=s.installed_mod_id,
             mod_name=mod_name_map.get(s.installed_mod_id) if s.installed_mod_id else None,
+            nexus_mod_id=mod_nexus_map.get(s.installed_mod_id) if s.installed_mod_id else None,
             total_entries=s.total_entries,
             winning_entries=s.winning_entries,
             losing_entries=s.losing_entries,
@@ -218,7 +221,7 @@ def archive_resource_details(
     game = get_game_or_404(game_name, session)
     result = get_archive_resource_details(session, game.id, archive_filename)
 
-    # Resolve mod names for partner archives
+    # Resolve mod names, installed_mod_id, and nexus_mod_id for partner archives
     archive_names = [g.partner_archive for g in result.groups]
     if archive_names:
         from rippermod_manager.models.archive_index import ArchiveEntryIndex
@@ -242,6 +245,7 @@ def archive_resource_details(
 
         mod_ids = set(mod_id_map.values())
         mod_name_map: dict[int, str] = {}
+        mod_nexus_map: dict[int, int | None] = {}
         if mod_ids:
             mods = session.exec(
                 select(InstalledMod).where(
@@ -249,11 +253,14 @@ def archive_resource_details(
                 )
             ).all()
             mod_name_map = {m.id: m.name for m in mods}  # type: ignore[misc]
+            mod_nexus_map = {m.id: m.nexus_mod_id for m in mods}  # type: ignore[misc]
 
         for group in result.groups:
             mid = mod_id_map.get(group.partner_archive)
             if mid is not None:
+                group.partner_installed_mod_id = mid
                 group.partner_mod_name = mod_name_map.get(mid)
+                group.partner_nexus_mod_id = mod_nexus_map.get(mid)
 
     return result
 
