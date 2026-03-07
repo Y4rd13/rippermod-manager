@@ -155,7 +155,10 @@ export function NexusAccountGrid({
     const mod = menuState.data;
     if (!mod) return;
     if (key === "details") onModClick?.(mod.nexus_mod_id);
-    else if (key === "download") startModDownload.mutate({ gameName, nexusModId: mod.nexus_mod_id });
+    else if (key === "download") startModDownload.mutate(
+      { gameName, nexusModId: mod.nexus_mod_id },
+      { onSuccess: (r) => { if (r.requires_file_selection) onFileSelect?.(mod.nexus_mod_id); } },
+    );
     else if (key === "nexus") openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
     else if (key === "copy-name") void navigator.clipboard.writeText(mod.mod_name).then(
       () => toast.success("Copied to clipboard"),
@@ -317,7 +320,10 @@ export function NexusAccountGrid({
                   items={getContextMenuItems(mod)}
                   onSelect={(key) => {
                     if (key === "details") onModClick?.(nexusModId);
-                    else if (key === "download") startModDownload.mutate({ gameName, nexusModId });
+                    else if (key === "download") startModDownload.mutate(
+                      { gameName, nexusModId },
+                      { onSuccess: (r) => { if (r.requires_file_selection) onFileSelect?.(nexusModId); } },
+                    );
                     else if (key === "nexus") openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
                     else if (key === "copy-name") void navigator.clipboard.writeText(mod.mod_name).then(
                       () => toast.success("Copied to clipboard"),

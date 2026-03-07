@@ -2,7 +2,7 @@ import json
 import logging
 import re
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlparse
 
 import httpx
@@ -138,7 +138,6 @@ async def mod_detail(
     from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
     from rippermod_manager.services.nexus_helpers import (
         extract_dlc_requirements,
-        graphql_file_to_rest_file,
         graphql_mod_to_rest_info,
         store_uid_from_gql,
         upsert_mod_requirements,
@@ -198,22 +197,28 @@ async def mod_detail(
             and (meta.files_updated_at is None or meta.updated_at > meta.files_updated_at)
         )
         needs_backfill = (
-            not needs_insert and not needs_refresh and any(f.description is None for f in files)
+            not needs_insert
+            and not needs_refresh
+            and any(f.description is None or f.content_preview_link is None for f in files)
         )
 
         try:
-            # REST for changelogs (no GQL equivalent), GQL for file list
+            # REST v1 for changelogs + file list (content_preview_link only in REST)
+            api_file_list: list[dict[str, Any]] = []
             async with NexusClient(api_key) as rest_client:
                 try:
                     changelogs = await rest_client.get_changelogs(game_domain, mod_id)
                 except httpx.HTTPError:
                     logger.debug("Failed to fetch changelogs for mod %d", mod_id, exc_info=True)
 
-            if needs_insert or needs_refresh or needs_backfill:
-                async with NexusGraphQLClient(api_key) as gql:
-                    gql_files = await gql.get_mod_files(game_domain, mod_id)
-                api_file_list = [graphql_file_to_rest_file(gf) for gf in gql_files]
+                if needs_insert or needs_refresh or needs_backfill:
+                    try:
+                        rest_files = await rest_client.get_mod_files(game_domain, mod_id)
+                        api_file_list = rest_files.get("files", [])
+                    except httpx.HTTPError:
+                        logger.debug("Failed to fetch files for mod %d", mod_id, exc_info=True)
 
+            if api_file_list:
                 if needs_insert or needs_refresh:
                     existing_file_ids = {f.file_id for f in files}
                     for af in api_file_list:
@@ -224,11 +229,11 @@ async def mod_detail(
                             NexusModFile(
                                 nexus_mod_id=mod_id,
                                 file_id=fid,
-                                file_name=af.get("file_name", ""),
+                                file_name=af.get("file_name") or af.get("name", ""),
                                 version=af.get("version", ""),
                                 category_id=af.get("category_id"),
                                 uploaded_timestamp=af.get("uploaded_timestamp"),
-                                file_size=af.get("size_in_bytes") or 0,
+                                file_size=af.get("size_in_bytes") or af.get("size") or 0,
                                 content_preview_link=af.get("content_preview_link"),
                                 description=af.get("description"),
                             )
@@ -244,8 +249,12 @@ async def mod_detail(
                         if not f.file_id:
                             continue
                         af = api_files.get(f.file_id)
-                        if af and f.description is None:
+                        if not af:
+                            continue
+                        if f.description is None:
                             f.description = af.get("description")
+                        if f.content_preview_link is None:
+                            f.content_preview_link = af.get("content_preview_link")
                     session.commit()
         except httpx.HTTPError:
             logger.debug(

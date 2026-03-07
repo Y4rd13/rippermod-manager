@@ -45,6 +45,7 @@ interface Props {
   gameDomain: string;
   installPath: string;
   isLoading?: boolean;
+  onFileSelect?: (nexusModId: number) => void;
 }
 
 type ArchiveSortKey = "archive" | "name" | "version" | "size" | "nexusId" | "downloaded" | "status";
@@ -78,7 +79,7 @@ function buildContextItems(archive: AvailableArchive): ContextMenuItem[] {
   return items;
 }
 
-export function ArchivesList({ archives, gameName, gameDomain, installPath, isLoading }: Props) {
+export function ArchivesList({ archives, gameName, gameDomain, installPath, isLoading, onFileSelect }: Props) {
   const installMod = useInstallMod();
   const uninstallMod = useUninstallMod();
   const checkConflicts = useCheckConflicts();
@@ -87,6 +88,23 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
   const linkArchive = useLinkArchiveToNexus();
   const startModDownload = useStartModDownload();
   const { data: downloadJobs = [] } = useDownloadJobs(gameName);
+
+  const handleRedownload = useCallback((nexusModId: number) => {
+    startModDownload.mutate(
+      { gameName, nexusModId },
+      {
+        onSuccess: (result) => {
+          if (result.requires_file_selection) {
+            if (onFileSelect) {
+              onFileSelect(nexusModId);
+            } else {
+              toast.info("Multiple files available", "Open the mod on Nexus to choose which file to download");
+            }
+          }
+        },
+      },
+    );
+  }, [gameName, startModDownload, onFileSelect]);
 
   const activeDownloadByModId = useMemo(() => {
     const map = new Map<number, { status: string }>();
@@ -335,7 +353,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
         () => toast.error("Failed to copy"),
       );
     } else if (key === "redownload" && archive.nexus_mod_id) {
-      startModDownload.mutate({ gameName, nexusModId: archive.nexus_mod_id });
+      handleRedownload(archive.nexus_mod_id);
     } else if (key === "nexus" && archive.nexus_mod_id) {
       openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${archive.nexus_mod_id}?tab=files`).catch(() => toast.error("Failed to open URL"));
     } else if (key === "delete") {
@@ -527,7 +545,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
                       variant="ghost"
                       size="sm"
                       disabled={activeDownloadByModId.has(a.nexus_mod_id)}
-                      onClick={() => startModDownload.mutate({ gameName, nexusModId: a.nexus_mod_id! })}
+                      onClick={() => handleRedownload(a.nexus_mod_id!)}
                       title={activeDownloadByModId.has(a.nexus_mod_id) ? "Downloading..." : "Re-download from Nexus"}
                       aria-label="Re-download"
                     >
