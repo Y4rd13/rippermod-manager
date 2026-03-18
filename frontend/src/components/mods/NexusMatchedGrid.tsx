@@ -1,5 +1,6 @@
 import { CheckCircle, ExternalLink, FileText, Link2, Pencil, X, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { toast } from "@/stores/toast-store";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -243,7 +244,7 @@ export function NexusMatchedGrid({
     if (!mod) return;
     const match = mod.nexus_match;
     if (key === "open-nexus" && match?.nexus_url) {
-      window.open(match.nexus_url, "_blank", "noopener,noreferrer");
+      openUrl(match.nexus_url).catch(() => {});
     } else if (key === "copy-name" && match?.mod_name) {
       void navigator.clipboard.writeText(match.mod_name).then(
         () => toast.success("Copied to clipboard"),
@@ -313,7 +314,7 @@ export function NexusMatchedGrid({
                   modName={match.mod_name}
                   author={match.author}
                   version={match.version}
-                  onClick={match.nexus_url ? () => window.open(match.nexus_url, "_blank", "noopener,noreferrer") : undefined}
+                  onClick={match.nexus_url ? () => openUrl(match.nexus_url).catch(() => {}) : undefined}
                   onContextMenu={(e) => openMenu(e, mod)}
                   action={
                     <ModCardAction
@@ -350,7 +351,7 @@ export function NexusMatchedGrid({
                     <OverflowMenuButton
                       items={contextMenuItems}
                       onSelect={(key) => {
-                        if (key === "open-nexus" && match.nexus_url) window.open(match.nexus_url, "_blank", "noopener,noreferrer");
+                        if (key === "open-nexus" && match.nexus_url) openUrl(match.nexus_url).catch(() => {});
                         else if (key === "copy-name") void navigator.clipboard.writeText(match.mod_name).then(
                           () => toast.success("Copied to clipboard"),
                           () => toast.error("Failed to copy"),

@@ -144,10 +144,10 @@ async def mod_summary(mod_id: int, session: Session = Depends(get_session)) -> M
             upsert_nexus_mod,
         )
 
-        game_domain = "cyberpunk2077"
-        game = session.exec(select(Game).where(Game.domain_name == game_domain)).first()
+        game = session.exec(select(Game)).first()
         if not game:
             raise HTTPException(404, "No game configured")
+        game_domain = game.domain_name
 
         async with NexusGraphQLClient(api_key) as gql:
             gql_mod = await gql.get_mod(game_domain, mod_id)
