@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { useAbstainMod, useDisconnectNexus, useEndorseMod, useSaveSettings, useTrackMod, useUntrackMod } from "@/hooks/mutations";
 import { useAppUpdater } from "@/hooks/use-app-updater";
 import { useNexusSSO } from "@/hooks/use-nexus-sso";
-import { useGames, useModDetail, useSettings } from "@/hooks/queries";
+import { useGames, useModSummary, useSettings } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
 
 function ApiKeyField({
@@ -140,8 +140,7 @@ const RIPPERMOD_NEXUS_URL = `https://www.nexusmods.com/${RIPPERMOD_NEXUS_DOMAIN}
 function AboutCard() {
   const { data: games = [] } = useGames();
   const gameName = games[0]?.name;
-  const { data: detail } = useModDetail(
-    RIPPERMOD_NEXUS_DOMAIN,
+  const { data: detail } = useModSummary(
     RIPPERMOD_NEXUS_MOD_ID > 0 ? RIPPERMOD_NEXUS_MOD_ID : null,
   );
 

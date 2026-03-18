@@ -161,8 +161,11 @@ async def mod_summary(mod_id: int, session: Session = Depends(get_session)) -> M
         reverse_reqs = (mod_reqs.get("modsRequiringThisMod") or {}).get("nodes") or []
         dlc_reqs = extract_dlc_requirements(gql_mod)
         upsert_mod_requirements(
-            session, mod_id, gql_reqs,
-            reverse_requirements=reverse_reqs, dlc_requirements=dlc_reqs,
+            session,
+            mod_id,
+            gql_reqs,
+            reverse_requirements=reverse_reqs,
+            dlc_requirements=dlc_reqs,
         )
         fresh_meta = session.exec(
             select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)
@@ -170,9 +173,7 @@ async def mod_summary(mod_id: int, session: Session = Depends(get_session)) -> M
         if fresh_meta:
             fresh_meta.requirements_fetched_at = datetime.now(UTC)
         session.commit()
-        meta = session.exec(
-            select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)
-        ).first()
+        meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
 
     if not meta:
         raise HTTPException(404, "Mod metadata not found")
@@ -190,9 +191,7 @@ async def mod_summary(mod_id: int, session: Session = Depends(get_session)) -> M
         pass
 
     # Get tracked/endorsed state
-    dl = session.exec(
-        select(NexusDownload).where(NexusDownload.nexus_mod_id == mod_id)
-    ).first()
+    dl = session.exec(select(NexusDownload).where(NexusDownload.nexus_mod_id == mod_id)).first()
 
     # Backfill requirements if needed
     req_rows = session.exec(
@@ -215,8 +214,11 @@ async def mod_summary(mod_id: int, session: Session = Depends(get_session)) -> M
                 reverse_reqs = (mod_reqs.get("modsRequiringThisMod") or {}).get("nodes") or []
                 dlc_reqs = extract_dlc_requirements(gql_mod)
                 upsert_mod_requirements(
-                    session, mod_id, gql_reqs,
-                    reverse_requirements=reverse_reqs, dlc_requirements=dlc_reqs,
+                    session,
+                    mod_id,
+                    gql_reqs,
+                    reverse_requirements=reverse_reqs,
+                    dlc_requirements=dlc_reqs,
                 )
                 req_rows = session.exec(
                     select(NexusModRequirement).where(NexusModRequirement.nexus_mod_id == mod_id)
