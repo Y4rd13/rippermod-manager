@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import {
   useCancelDownload,
@@ -13,7 +14,6 @@ export function useInstallFlow(
   gameName: string,
   archives: AvailableArchive[],
   downloadJobs: DownloadJobOut[] = [],
-  onFileSelect?: (nexusModId: number) => void,
 ) {
   const [installingModIds, setInstallingModIds] = useState<Set<number>>(new Set());
   const [downloadingModId, setDownloadingModId] = useState<number | null>(null);
@@ -267,15 +267,14 @@ export function useInstallFlow(
       try {
         const result = await startModDownload.mutateAsync({ gameName, nexusModId });
         if (result.requires_file_selection) {
-          setFileSelectModId(nexusModId);
-          onFileSelect?.(nexusModId);
-          toast.info("Multiple files available", "Choose the file you want to download");
+          toast.info("Multiple files available", "Pick the one you need on Nexus Mods");
+          openUrl(`https://www.nexusmods.com/cyberpunk2077/mods/${nexusModId}?tab=files`).catch(() => {});
         }
       } finally {
         setDownloadingModId(null);
       }
     },
-    [gameName, startModDownload, onFileSelect],
+    [gameName, startModDownload],
   );
 
   const dismissFileSelect = useCallback(() => setFileSelectModId(null), []);

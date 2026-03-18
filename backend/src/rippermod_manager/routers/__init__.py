@@ -12,7 +12,6 @@ from rippermod_manager.routers.nexus import router as nexus_router
 from rippermod_manager.routers.onboarding import router as onboarding_router
 from rippermod_manager.routers.profiles import router as profiles_router
 from rippermod_manager.routers.settings import router as settings_router
-from rippermod_manager.routers.trending import router as trending_router
 from rippermod_manager.routers.updates import router as updates_router
 from rippermod_manager.routers.vector import router as vector_router
 
@@ -27,7 +26,6 @@ api_router.include_router(settings_router)
 api_router.include_router(chat_router)
 api_router.include_router(conflicts_router)
 api_router.include_router(onboarding_router)
-api_router.include_router(trending_router)
 api_router.include_router(updates_router)
 api_router.include_router(downloads_router)
 api_router.include_router(fomod_router)

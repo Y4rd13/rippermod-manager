@@ -40,11 +40,8 @@ export interface CorrelationBrief {
   method: string;
   confirmed: boolean;
   author: string;
-  summary: string;
   version: string;
-  endorsement_count: number;
   category: string;
-  picture_url: string;
   nexus_url: string;
   updated_at: string | null;
 }
@@ -109,9 +106,6 @@ export interface NexusDownload {
   is_tracked: boolean;
   is_endorsed: boolean;
   author: string;
-  summary: string;
-  endorsement_count: number;
-  picture_url: string;
   updated_at: string | null;
 }
 
@@ -534,39 +528,6 @@ export interface DownloadStartResult {
   requires_file_selection: boolean;
 }
 
-// Trending feature types
-
-export interface TrendingMod {
-  mod_id: number;
-  name: string;
-  summary: string;
-  author: string;
-  version: string;
-  picture_url: string;
-  endorsement_count: number;
-  mod_downloads: number;
-  mod_unique_downloads: number;
-  created_timestamp: number;
-  updated_timestamp: number;
-  category_id: number | null;
-  category_name: string;
-  nexus_url: string;
-  is_installed: boolean;
-  is_tracked: boolean;
-  is_endorsed: boolean;
-}
-
-export interface NexusModFileDetail {
-  file_id: number;
-  file_name: string;
-  version: string;
-  category_id: number | null;
-  uploaded_timestamp: number | null;
-  file_size: number;
-  content_preview_link: string | null;
-  description: string | null;
-}
-
 export interface ModActionResult {
   success: boolean;
   is_endorsed?: boolean;
@@ -588,33 +549,17 @@ export interface DlcRequirement {
   notes: string;
 }
 
-export interface ModDetail {
+export interface ModSummary {
   nexus_mod_id: number;
-  game_domain: string;
   name: string;
-  summary: string;
-  description: string;
-  author: string;
-  version: string;
-  created_at: string | null;
-  updated_at: string | null;
-  endorsement_count: number;
-  mod_downloads: number;
-  category: string;
-  picture_url: string;
+  author: string | null;
+  version: string | null;
+  category: string | null;
   nexus_url: string;
-  changelogs: Record<string, string[]>;
-  files: NexusModFileDetail[];
-  requirements: ModRequirement[];
-  dlc_requirements: DlcRequirement[];
   is_tracked: boolean;
   is_endorsed: boolean;
-}
-
-export interface TrendingResult {
-  trending: TrendingMod[];
-  latest_updated: TrendingMod[];
-  cached: boolean;
+  requirements: ModRequirement[];
+  dlc_requirements: DlcRequirement[];
 }
 
 // Archive conflict summary types

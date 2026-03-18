@@ -57,47 +57,7 @@ class NexusModEnrichedOut(BaseModel):
     is_tracked: bool
     is_endorsed: bool
     author: str = ""
-    summary: str = ""
-    endorsement_count: int = 0
-    picture_url: str = ""
     updated_at: datetime | None = None
-
-
-class TrendingModOut(BaseModel):
-    mod_id: int
-    name: str
-    summary: str = ""
-    author: str = ""
-    version: str = ""
-    picture_url: str = ""
-    endorsement_count: int = 0
-    mod_downloads: int = 0
-    mod_unique_downloads: int = 0
-    created_timestamp: int = 0
-    updated_timestamp: int = 0
-    category_id: int | None = None
-    category_name: str = ""
-    nexus_url: str = ""
-    is_installed: bool = False
-    is_tracked: bool = False
-    is_endorsed: bool = False
-
-
-class TrendingResult(BaseModel):
-    trending: list[TrendingModOut]
-    latest_updated: list[TrendingModOut]
-    cached: bool
-
-
-class NexusModFileOut(BaseModel):
-    file_id: int
-    file_name: str
-    version: str
-    category_id: int | None
-    uploaded_timestamp: int | None
-    file_size: int
-    content_preview_link: str | None = None
-    description: str | None = None
 
 
 class ModActionResult(BaseModel):
@@ -121,40 +81,17 @@ class DlcRequirementOut(BaseModel):
     notes: str = ""
 
 
-class ModDetailOut(BaseModel):
+class ModSummaryOut(BaseModel):
     nexus_mod_id: int
-    game_domain: str
     name: str
-    summary: str
-    description: str
-    author: str
-    version: str
-    created_at: datetime | None
-    updated_at: datetime | None
-    endorsement_count: int
-    mod_downloads: int
-    category: str
-    picture_url: str
+    author: str | None = None
+    version: str | None = None
+    category: str | None = None
     nexus_url: str
-    changelogs: dict[str, list[str]]
-    files: list[NexusModFileOut]
-    requirements: list[ModRequirementOut] = []
-    dlc_requirements: list[DlcRequirementOut] = []
     is_tracked: bool = False
     is_endorsed: bool = False
-
-
-class NexusModSearchResult(BaseModel):
-    mod_id: int
-    name: str
-    summary: str = ""
-    author: str = ""
-    version: str = ""
-    picture_url: str = ""
-    endorsement_count: int = 0
-    mod_downloads: int = 0
-    category_id: int | None = None
-    nexus_url: str = ""
+    requirements: list[ModRequirementOut] = []
+    dlc_requirements: list[DlcRequirementOut] = []
 
 
 class SSOStartResult(BaseModel):

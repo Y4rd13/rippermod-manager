@@ -16,15 +16,14 @@ import type {
   GameVersion,
   InstalledModOut,
   ModConflictDetail,
-  ModDetail,
   ModGroup,
   ModlistViewResult,
+  ModSummary,
   NexusDownload,
   NexusDownloadBrief,
   OnboardingStatus,
   ProfileOut,
   Setting,
-  TrendingResult,
   UpdateCheckResult,
 } from "@/types/api";
 
@@ -157,21 +156,12 @@ export function useDownloadJobs(gameName: string) {
   });
 }
 
-export function useModDetail(gameDomain: string, modId: number | null) {
-  return useQuery<ModDetail>({
-    queryKey: ["mod-detail", gameDomain, modId],
-    queryFn: () => api.get(`/api/v1/nexus/mods/${gameDomain}/${modId}/detail`),
-    enabled: !!gameDomain && modId != null,
+export function useModSummary(modId: number | null) {
+  return useQuery<ModSummary>({
+    queryKey: ["mod-summary", modId],
+    queryFn: () => api.get(`/api/v1/nexus/mods/${modId}/summary`),
+    enabled: modId != null,
     staleTime: 10 * 60 * 1000,
-  });
-}
-
-export function useTrendingMods(gameName: string) {
-  return useQuery<TrendingResult>({
-    queryKey: ["trending", gameName],
-    queryFn: () => api.get(`/api/v1/games/${gameName}/trending/`),
-    enabled: !!gameName,
-    staleTime: 15 * 60 * 1000,
   });
 }
 
@@ -212,15 +202,6 @@ export function useArchivePreview(gameName: string, archiveFilename: string | nu
   });
 }
 
-export function useFileContentsPreview(url: string | null) {
-  return useQuery<ArchiveContentsResult>({
-    queryKey: ["file-contents-preview", url],
-    queryFn: () =>
-      api.get(`/api/v1/nexus/file-contents-preview?url=${encodeURIComponent(url!)}`),
-    enabled: !!url,
-    staleTime: 30 * 60 * 1000,
-  });
-}
 
 export function useArchiveResourceDetails(gameName: string, archiveFilename: string | null) {
   return useQuery<ArchiveResourceDetailsResult>({

@@ -11,7 +11,6 @@ import {
   RefreshCw,
   Scan,
   Sparkles,
-  TrendingUp,
   UserCheck,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
@@ -31,7 +30,6 @@ import { ModDetailModal } from "@/components/mods/ModDetailModal";
 import { ModsTable } from "@/components/mods/ModsTable";
 import { NexusAccountGrid } from "@/components/mods/NexusAccountGrid";
 import { NexusMatchedGrid } from "@/components/mods/NexusMatchedGrid";
-import { TrendingGrid } from "@/components/mods/TrendingGrid";
 import { ProfileManager } from "@/components/mods/ProfileManager";
 import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { UpdatesTable } from "@/components/mods/UpdatesTable";
@@ -52,7 +50,6 @@ import {
   useProfiles,
   useHasOpenaiKey,
   useTrackedMods,
-  useTrendingMods,
   useUpdates,
 } from "@/hooks/queries";
 import { api } from "@/lib/api-client";
@@ -127,7 +124,7 @@ function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomai
   );
 }
 
-type Tab = "installed" | "matched" | "archives" | "updates" | "conflicts" | "profiles" | "trending" | "endorsed" | "tracked";
+type Tab = "installed" | "matched" | "archives" | "updates" | "conflicts" | "profiles" | "endorsed" | "tracked";
 
 const TABS: { key: Tab; label: string; Icon: typeof Package; tooltip: string }[] = [
   // Management
@@ -138,7 +135,6 @@ const TABS: { key: Tab; label: string; Icon: typeof Package; tooltip: string }[]
   { key: "profiles", label: "Profiles", Icon: FolderOpen, tooltip: "Saved snapshots of your mod enabled/disabled states" },
   // Discovery & Nexus account
   { key: "matched", label: "Matched", Icon: Link2, tooltip: "Nexus-matched mods and scan details" },
-  { key: "trending", label: "Trending", Icon: TrendingUp, tooltip: "Popular and recently updated mods on Nexus" },
   { key: "endorsed", label: "Endorsed", Icon: Heart, tooltip: "Mods you've endorsed on your Nexus account" },
   { key: "tracked", label: "Tracked", Icon: Eye, tooltip: "Mods you're tracking on your Nexus account" },
 ];
@@ -158,7 +154,6 @@ export function GameDetailPage() {
   const { data: profiles = [], isLoading: profilesLoading } = useProfiles(name);
   const { data: endorsedMods = [], isLoading: endorsedLoading, dataUpdatedAt: endorsedUpdatedAt } = useEndorsedMods(name);
   const { data: trackedMods = [], isLoading: trackedLoading, dataUpdatedAt: trackedUpdatedAt } = useTrackedMods(name);
-  const { data: trendingResult, isLoading: trendingLoading, dataUpdatedAt: trendingUpdatedAt } = useTrendingMods(name);
   const { data: updates, isLoading: updatesLoading } = useUpdates(name);
   const { data: conflictsOverview, isLoading: conflictsLoading } = useConflictsOverview(name);
   const { data: downloadJobs = [] } = useDownloadJobs(name);
@@ -167,7 +162,6 @@ export function GameDetailPage() {
   const [tab, setTab] = useState<Tab>("installed");
   const [matchedSubTab, setMatchedSubTab] = useState<MatchedSubTab>("nexus-matched");
   const [selectedModId, setSelectedModId] = useState<number | null>(null);
-  const [fileSelectModId, setFileSelectModId] = useState<number | null>(null);
   const [aiSearch, setAiSearch] = useState(() => {
     try {
       const stored = localStorage.getItem("ai-search-enabled");
@@ -186,11 +180,6 @@ export function GameDetailPage() {
   };
 
   const modalFlow = useInstallFlow(name, archives, downloadJobs);
-
-  const handleFileSelect = useCallback((modId: number) => {
-    setSelectedModId(modId);
-    setFileSelectModId(modId);
-  }, []);
 
   const installedModIds = useMemo(
     () => new Set(installedMods.filter((m) => m.nexus_mod_id != null).map((m) => m.nexus_mod_id!)),
@@ -345,7 +334,6 @@ export function GameDetailPage() {
     updates: updatesLoading ? undefined : updates?.updates_available,
     conflicts: conflictsLoading ? undefined : conflictsOverview?.mods_affected,
     profiles: profilesLoading ? undefined : profiles.length,
-    trending: trendingLoading ? undefined : (trendingResult?.trending.length ?? 0) + (trendingResult?.latest_updated.length ?? 0),
     endorsed: endorsedLoading ? undefined : endorsedMods.length,
     tracked: trackedLoading ? undefined : trackedMods.length,
   }), [
@@ -355,7 +343,6 @@ export function GameDetailPage() {
     updates?.updates_available, updatesLoading,
     conflictsOverview?.mods_affected, conflictsLoading,
     profiles.length, profilesLoading,
-    trendingResult, trendingLoading,
     endorsedMods.length, endorsedLoading,
     trackedMods.length, trackedLoading,
   ]);
@@ -625,8 +612,6 @@ export function GameDetailPage() {
               gameName={name}
               downloadJobs={downloadJobs}
               isLoading={modsLoading}
-              onModClick={setSelectedModId}
-              onFileSelect={handleFileSelect}
             />
           )}
           {matchedSubTab === "scan-details" && (
@@ -646,8 +631,6 @@ export function GameDetailPage() {
           downloadJobs={downloadJobs}
           isLoading={endorsedLoading}
           dataUpdatedAt={endorsedUpdatedAt}
-          onModClick={setSelectedModId}
-          onFileSelect={handleFileSelect}
           hideBadges={["endorsed", "installed"]}
         />
       )}
@@ -663,23 +646,7 @@ export function GameDetailPage() {
           downloadJobs={downloadJobs}
           isLoading={trackedLoading}
           dataUpdatedAt={trackedUpdatedAt}
-          onModClick={setSelectedModId}
-          onFileSelect={handleFileSelect}
           hideBadges={["tracked", "installed", "endorsed"]}
-        />
-      )}
-      {tab === "trending" && (
-        <TrendingGrid
-          trendingMods={trendingResult?.trending ?? []}
-          latestUpdatedMods={trendingResult?.latest_updated ?? []}
-          archives={archives}
-          installedMods={installedMods}
-          gameName={name}
-          downloadJobs={downloadJobs}
-          isLoading={trendingLoading}
-          dataUpdatedAt={trendingUpdatedAt}
-          onModClick={setSelectedModId}
-          onFileSelect={handleFileSelect}
         />
       )}
       {tab === "conflicts" && (
@@ -695,12 +662,11 @@ export function GameDetailPage() {
           updates={updates?.updates ?? []}
           isLoading={installedLoading}
           onModClick={setSelectedModId}
-          onFileSelect={handleFileSelect}
           onTabChange={(t) => setTab(t as Tab)}
         />
       )}
       {tab === "archives" && (
-        <ArchivesList archives={archives} gameName={name} gameDomain={game.domain_name} installPath={game.install_path} isLoading={archivesLoading} onFileSelect={handleFileSelect} />
+        <ArchivesList archives={archives} gameName={name} gameDomain={game.domain_name} installPath={game.install_path} isLoading={archivesLoading} />
       )}
       {tab === "profiles" && (
         <ProfileManager profiles={profiles} gameName={name} isLoading={profilesLoading} installedCount={installedMods.length} recognizedCount={recognizedNotInstalled} />
@@ -711,9 +677,8 @@ export function GameDetailPage() {
       </div>
 
       {(() => {
-        const effectiveModId = selectedModId ?? modalFlow.fileSelectModId;
+        const effectiveModId = selectedModId;
         if (effectiveModId == null) return null;
-        const effectiveDefaultTab = fileSelectModId === effectiveModId ? "files" as const : undefined;
         const modUpdate = updateByNexusId.get(effectiveModId);
         const archive = modalFlow.archiveByModId.get(effectiveModId);
         const dl = modalFlow.completedDownloadByModId.get(effectiveModId);
@@ -723,7 +688,6 @@ export function GameDetailPage() {
             gameName={name}
             modId={effectiveModId}
             update={modUpdate}
-            defaultTab={effectiveDefaultTab}
             action={
               modUpdate ? (
                 <UpdateDownloadCell
@@ -761,8 +725,6 @@ export function GameDetailPage() {
             }
             onClose={() => {
               setSelectedModId(null);
-              setFileSelectModId(null);
-              modalFlow.dismissFileSelect();
             }}
           />
         );

@@ -1,12 +1,10 @@
-import { AlertTriangle, Download, Gamepad2, Heart, Link2, Package, RefreshCw, Scan, TrendingUp } from "lucide-react";
+import { AlertTriangle, Gamepad2, Link2, Package, RefreshCw, Scan } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
-import { useConflictsOverview, useGames, useInstalledMods, useMods, useTrendingMods, useUpdates } from "@/hooks/queries";
-import { formatCount } from "@/lib/format";
-import type { TrendingMod } from "@/types/api";
+import { useConflictsOverview, useGames, useInstalledMods, useMods, useUpdates } from "@/hooks/queries";
 
 interface GameStatsData {
   totalInstalled: number;
@@ -75,66 +73,6 @@ function GameStatsReporter({ gameName, onReport }: { gameName: string; onReport:
   }, [serialized, gameName, stats, onReport]);
 
   return null;
-}
-
-const PLACEHOLDER_IMG =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' fill='%231a1a2e'%3E%3Crect width='48' height='48'/%3E%3C/svg%3E";
-
-function TrendingMiniCard({ mod }: { mod: TrendingMod }) {
-  return (
-    <div className="flex items-center gap-3 rounded-lg border border-border p-2 hover:bg-surface-2 transition-colors">
-      <img
-        src={mod.picture_url || PLACEHOLDER_IMG}
-        alt={mod.name}
-        loading="lazy"
-        className="w-12 h-12 rounded-md object-cover bg-surface-2 shrink-0"
-        onError={(e) => {
-          (e.target as HTMLImageElement).src = PLACEHOLDER_IMG;
-        }}
-      />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-text-primary truncate">
-          {mod.name}
-        </p>
-        <p className="text-xs text-text-muted truncate">{mod.author}</p>
-        <div className="flex items-center gap-2 mt-0.5">
-          <span className="inline-flex items-center gap-0.5 text-xs text-text-muted">
-            <Download size={10} />
-            {formatCount(mod.mod_downloads)}
-          </span>
-          {mod.endorsement_count > 0 && (
-            <span className="inline-flex items-center gap-0.5 text-xs text-text-muted">
-              <Heart size={10} />
-              {formatCount(mod.endorsement_count)}
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CommunityActivity({ gameName }: { gameName: string }) {
-  const { data: trending } = useTrendingMods(gameName);
-  const mods = trending?.trending ?? [];
-
-  if (mods.length === 0) return null;
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <TrendingUp size={14} className="text-accent" />
-        <h3 className="text-sm font-medium text-text-secondary">{gameName}</h3>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {mods.map((mod) => (
-          <Link key={mod.mod_id} to={`/games/${gameName}`}>
-            <TrendingMiniCard mod={mod} />
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 export function DashboardPage() {
@@ -307,18 +245,6 @@ export function DashboardPage() {
         )}
       </Card>
 
-      {games.length > 0 && (
-        <Card>
-          <h2 className="text-lg font-semibold text-text-primary mb-4">
-            Community Activity
-          </h2>
-          <div className="space-y-4">
-            {games.map((game) => (
-              <CommunityActivity key={game.id} gameName={game.name} />
-            ))}
-          </div>
-        </Card>
-      )}
     </div>
   );
 }

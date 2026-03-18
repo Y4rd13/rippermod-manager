@@ -45,7 +45,6 @@ interface Props {
   gameDomain: string;
   installPath: string;
   isLoading?: boolean;
-  onFileSelect?: (nexusModId: number) => void;
 }
 
 type ArchiveSortKey = "archive" | "name" | "version" | "size" | "nexusId" | "downloaded" | "status";
@@ -79,7 +78,7 @@ function buildContextItems(archive: AvailableArchive): ContextMenuItem[] {
   return items;
 }
 
-export function ArchivesList({ archives, gameName, gameDomain, installPath, isLoading, onFileSelect }: Props) {
+export function ArchivesList({ archives, gameName, gameDomain, installPath, isLoading }: Props) {
   const installMod = useInstallMod();
   const uninstallMod = useUninstallMod();
   const checkConflicts = useCheckConflicts();
@@ -93,18 +92,16 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
     startModDownload.mutate(
       { gameName, nexusModId },
       {
-        onSuccess: (result) => {
+        onSuccess: async (result) => {
           if (result.requires_file_selection) {
-            if (onFileSelect) {
-              onFileSelect(nexusModId);
-            } else {
-              toast.info("Multiple files available", "Open the mod on Nexus to choose which file to download");
-            }
+            toast.info("Multiple files available", "Pick the one you need on Nexus Mods");
+            const { openUrl } = await import("@tauri-apps/plugin-opener");
+            openUrl(`https://www.nexusmods.com/cyberpunk2077/mods/${nexusModId}?tab=files`).catch(() => {});
           }
         },
       },
     );
-  }, [gameName, startModDownload, onFileSelect]);
+  }, [gameName, startModDownload]);
 
   const activeDownloadByModId = useMemo(() => {
     const map = new Map<number, { status: string }>();

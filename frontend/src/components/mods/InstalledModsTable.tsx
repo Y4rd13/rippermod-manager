@@ -103,7 +103,6 @@ interface Props {
   updates?: ModUpdate[];
   isLoading?: boolean;
   onModClick?: (nexusModId: number) => void;
-  onFileSelect?: (nexusModId: number) => void;
   onTabChange?: (tab: string) => void;
 }
 
@@ -151,7 +150,6 @@ function ManagedModsGrid({
   updateByInstalledId,
   updateByNexusId,
   onModClick,
-  onFileSelect,
 }: {
   groups: GroupedMod[];
   allMods: InstalledModOut[];
@@ -160,7 +158,6 @@ function ManagedModsGrid({
   updateByInstalledId: Map<number, ModUpdate>;
   updateByNexusId: Map<number, ModUpdate>;
   onModClick?: (nexusModId: number) => void;
-  onFileSelect?: (nexusModId: number) => void;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("updated");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -234,7 +231,10 @@ function ManagedModsGrid({
         const entry = allMods.find((m) => m.id === modId);
         if (entry?.nexus_mod_id) {
           const r = await startModDownload.mutateAsync({ gameName, nexusModId: entry.nexus_mod_id });
-          if (r.requires_file_selection) onFileSelect?.(entry.nexus_mod_id!);
+          if (r.requires_file_selection && entry.nexus_url) {
+            const { openUrl } = await import("@tauri-apps/plugin-opener");
+            openUrl(entry.nexus_url).catch(() => {});
+          }
         }
         break;
       }
@@ -248,7 +248,12 @@ function ManagedModsGrid({
       if (nexusModId) {
         startModDownload.mutate(
           { gameName, nexusModId },
-          { onSuccess: (r) => { if (r.requires_file_selection) onFileSelect?.(nexusModId); } },
+          { onSuccess: async (r) => {
+            if (r.requires_file_selection && nexusModId) {
+              const { openUrl } = await import("@tauri-apps/plugin-opener");
+              openUrl(`https://www.nexusmods.com/cyberpunk2077/mods/${nexusModId}?tab=files`).catch(() => {});
+            }
+          } },
         );
       }
       return;
@@ -607,7 +612,6 @@ function RecognizedModsGrid({
   downloadJobs,
   updateByNexusId,
   onModClick,
-  onFileSelect,
 }: {
   mods: ModGroup[];
   archives: AvailableArchive[];
@@ -616,9 +620,8 @@ function RecognizedModsGrid({
   downloadJobs: DownloadJobOut[];
   updateByNexusId: Map<number, ModUpdate>;
   onModClick?: (nexusModId: number) => void;
-  onFileSelect?: (nexusModId: number) => void;
 }) {
-  const flow = useInstallFlow(gameName, archives, downloadJobs, onFileSelect);
+  const flow = useInstallFlow(gameName, archives, downloadJobs);
 
   const modIds = useMemo(() => mods.map((m) => String(m.id)), [mods]);
   const bulk = useBulkSelect(modIds);
@@ -768,7 +771,6 @@ export function InstalledModsTable({
   updates = [],
   isLoading,
   onModClick,
-  onFileSelect,
   onTabChange,
 }: Props) {
   const [filter, setFilter] = useState("");
@@ -928,7 +930,7 @@ export function InstalledModsTable({
               updateByInstalledId={updateByInstalledId}
               updateByNexusId={updateByNexusId}
               onModClick={onModClick}
-              onFileSelect={onFileSelect}
+
             />
           ) : (
             <p className="py-4 text-sm text-text-muted text-center">

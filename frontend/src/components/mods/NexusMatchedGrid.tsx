@@ -1,4 +1,4 @@
-import { CheckCircle, FileText, Link2, Pencil, X, XCircle } from "lucide-react";
+import { CheckCircle, ExternalLink, FileText, Link2, Pencil, X, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "@/stores/toast-store";
 
@@ -75,13 +75,12 @@ function FilesModal({ group, onClose }: { group: ModGroup; onClose: () => void }
   );
 }
 
-type SortKey = "score" | "name" | "endorsements" | "author" | "updated";
+type SortKey = "score" | "name" | "author" | "updated";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "score", label: "Match Score" },
   { value: "updated", label: "Recently Updated" },
   { value: "name", label: "Mod Name" },
-  { value: "endorsements", label: "Endorsements" },
   { value: "author", label: "Author" },
 ];
 
@@ -113,8 +112,6 @@ interface Props {
   gameName: string;
   downloadJobs?: DownloadJobOut[];
   isLoading?: boolean;
-  onModClick?: (nexusModId: number) => void;
-  onFileSelect?: (nexusModId: number) => void;
 }
 
 export function NexusMatchedGrid({
@@ -124,8 +121,6 @@ export function NexusMatchedGrid({
   gameName,
   downloadJobs = [],
   isLoading,
-  onModClick,
-  onFileSelect,
 }: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useSessionState<SortKey>(`matched-sort-${gameName}`, "updated");
@@ -133,7 +128,7 @@ export function NexusMatchedGrid({
   const [methodChip, setMethodChip] = useSessionState(`matched-method-${gameName}`, "all");
   const [installChip, setInstallChip] = useSessionState(`matched-install-${gameName}`, "all");
 
-  const flow = useInstallFlow(gameName, archives, downloadJobs, onFileSelect);
+  const flow = useInstallFlow(gameName, archives, downloadJobs);
   const { menuState, openMenu, closeMenu } = useContextMenu<ModGroup>();
 
   const installedModIds = useMemo(
@@ -220,8 +215,6 @@ export function NexusMatchedGrid({
           return isoToEpoch(mb.updated_at) - isoToEpoch(ma.updated_at);
         case "name":
           return ma.mod_name.localeCompare(mb.mod_name);
-        case "endorsements":
-          return mb.endorsement_count - ma.endorsement_count;
         case "author":
           return ma.author.localeCompare(mb.author);
       }
@@ -237,8 +230,7 @@ export function NexusMatchedGrid({
   const [filesModalGroupId, setFilesModalGroupId] = useState<number | null>(null);
 
   const contextMenuItems: ContextMenuItem[] = [
-    { key: "view", label: "View Details" },
-    { key: "open-nexus", label: "Open on Nexus" },
+    { key: "open-nexus", label: "View on Nexus", icon: ExternalLink },
     { key: "copy-name", label: "Copy Name" },
     { key: "sep-corr", label: "", separator: true },
     { key: "accept-match", label: "Accept Match", icon: CheckCircle },
@@ -250,9 +242,7 @@ export function NexusMatchedGrid({
     const mod = menuState.data;
     if (!mod) return;
     const match = mod.nexus_match;
-    if (key === "view" && match?.nexus_mod_id != null) {
-      onModClick?.(match.nexus_mod_id);
-    } else if (key === "open-nexus" && match?.nexus_url) {
+    if (key === "open-nexus" && match?.nexus_url) {
       window.open(match.nexus_url, "_blank", "noopener,noreferrer");
     } else if (key === "copy-name" && match?.mod_name) {
       void navigator.clipboard.writeText(match.mod_name).then(
@@ -321,12 +311,9 @@ export function NexusMatchedGrid({
               <div className="flex-1 grid">
                 <NexusModCard
                   modName={match.mod_name}
-                  summary={match.summary}
                   author={match.author}
                   version={match.version}
-                  endorsementCount={match.endorsement_count}
-                  pictureUrl={match.picture_url}
-                  onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
+                  onClick={match.nexus_url ? () => window.open(match.nexus_url, "_blank", "noopener,noreferrer") : undefined}
                   onContextMenu={(e) => openMenu(e, mod)}
                   action={
                     <ModCardAction
@@ -363,8 +350,7 @@ export function NexusMatchedGrid({
                     <OverflowMenuButton
                       items={contextMenuItems}
                       onSelect={(key) => {
-                        if (key === "view" && nexusModId != null) onModClick?.(nexusModId);
-                        else if (key === "open-nexus" && match.nexus_url) window.open(match.nexus_url, "_blank", "noopener,noreferrer");
+                        if (key === "open-nexus" && match.nexus_url) window.open(match.nexus_url, "_blank", "noopener,noreferrer");
                         else if (key === "copy-name") void navigator.clipboard.writeText(match.mod_name).then(
                           () => toast.success("Copied to clipboard"),
                           () => toast.error("Failed to copy"),

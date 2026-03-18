@@ -27,17 +27,16 @@ rippermod-manager/
 │   │   │   ├── conflict.py          #   ConflictKind, Severity, ConflictEvidence
 │   │   │   └── load_order.py        #   LoadOrderPreference
 │   │   ├── schemas/                 # Pydantic request/response models
-│   │   ├── routers/                 # FastAPI routers, prefix /api/v1/ (15 routers)
+│   │   ├── routers/                 # FastAPI routers, prefix /api/v1/ (14 routers)
 │   │   │   ├── games.py             #   CRUD games + mod paths
 │   │   │   ├── mods.py              #   List, scan, correlate, confirm/reject/reassign
-│   │   │   ├── nexus.py             #   Sync, search, endorse/track, SSO, mod detail
+│   │   │   ├── nexus.py             #   Sync, endorse/track, SSO, mod summary
 │   │   │   ├── install.py           #   Install, uninstall, toggle, preview, archives
 │   │   │   ├── fomod.py             #   FOMOD installer wizard
 │   │   │   ├── conflicts.py         #   Conflict engine, inbox, graph
 │   │   │   ├── load_order.py        #   Load order + preferences
 │   │   │   ├── downloads.py         #   Download mods from Nexus
 │   │   │   ├── profiles.py          #   Save, load, export/import, compare profiles
-│   │   │   ├── trending.py          #   Trending mods from Nexus
 │   │   │   ├── updates.py           #   Version diff + update check
 │   │   │   ├── settings.py          #   App settings + PC specs
 │   │   │   ├── onboarding.py        #   Onboarding status + completion
@@ -53,7 +52,7 @@ rippermod-manager/
 │   │   ├── nexus/                   # Nexus Mods API clients
 │   │   │   ├── client.py            # REST v1 API client (reads + mutations)
 │   │   │   └── graphql_client.py    # GraphQL v2 client (batch + search)
-│   │   ├── services/                # Business logic (38 modules)
+│   │   ├── services/                # Business logic (37 modules)
 │   │   │   ├── nexus_sync.py        # Sync tracked/endorsed mods
 │   │   │   ├── nexus_helpers.py     # GQL→REST adapters, game categories
 │   │   │   ├── download_service.py  # Download orchestration + shutdown
@@ -82,7 +81,6 @@ rippermod-manager/
 │   │   │   ├── file_list_matcher.py # File list similarity matching
 │   │   │   ├── collection_matcher.py # Nexus collection-based matching
 │   │   │   ├── requirement_matcher.py # Mod requirement propagation matching
-│   │   │   ├── trending_service.py  # Trending mods fetching
 │   │   │   ├── ai_search_matcher.py # AI-powered mod matching
 │   │   │   ├── web_search_matcher.py # Web search fallback matching
 │   │   │   ├── redscript_analysis.py # Redscript annotation conflict analysis
@@ -117,7 +115,7 @@ rippermod-manager/
 │   │   │   │                        #   ArchivesList, ArchiveTreeModal,
 │   │   │   │                        #   ProfileManager, ProfileCompareDialog,
 │   │   │   │                        #   ProfileDiffDialog, FomodWizard,
-│   │   │   │                        #   TrendingGrid, NexusAccountGrid,
+│   │   │   │                        #   NexusAccountGrid,
 │   │   │   │                        #   ModDetailModal, ModQuickActions,
 │   │   │   │                        #   ModCardAction, InstalledModCardAction,
 │   │   │   │                        #   UpdatesTable, UpdateDownloadCell,
