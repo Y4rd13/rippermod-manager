@@ -123,6 +123,36 @@ def search_downloads(
     ]
 
 
+async def _fetch_requirements(
+    api_key: str, game_domain: str, mod_id: int, session: Session
+) -> None:
+    """Fetch mod requirements from GraphQL and store them."""
+    from rippermod_manager.models.nexus import NexusModMeta
+    from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
+    from rippermod_manager.services.nexus_helpers import (
+        extract_dlc_requirements,
+        upsert_mod_requirements,
+    )
+
+    async with NexusGraphQLClient(api_key) as gql:
+        gql_mod = await gql.get_mod(game_domain, mod_id)
+    mod_reqs = gql_mod.get("modRequirements") or {}
+    gql_reqs = (mod_reqs.get("nexusRequirements") or {}).get("nodes") or []
+    reverse_reqs = (mod_reqs.get("modsRequiringThisMod") or {}).get("nodes") or []
+    dlc_reqs = extract_dlc_requirements(gql_mod)
+    upsert_mod_requirements(
+        session,
+        mod_id,
+        gql_reqs,
+        reverse_requirements=reverse_reqs,
+        dlc_requirements=dlc_reqs,
+    )
+    meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
+    if meta:
+        meta.requirements_fetched_at = datetime.now(UTC)
+    session.commit()
+
+
 @router.get("/mods/{mod_id}/summary", response_model=ModSummaryOut)
 async def mod_summary(mod_id: int, session: Session = Depends(get_session)) -> ModSummaryOut:
     """Lightweight mod summary for management UI (no description, changelogs, or file lists)."""
@@ -137,10 +167,8 @@ async def mod_summary(mod_id: int, session: Session = Depends(get_session)) -> M
 
         from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
         from rippermod_manager.services.nexus_helpers import (
-            extract_dlc_requirements,
             graphql_mod_to_rest_info,
             store_uid_from_gql,
-            upsert_mod_requirements,
             upsert_nexus_mod,
         )
 
@@ -156,23 +184,7 @@ async def mod_summary(mod_id: int, session: Session = Depends(get_session)) -> M
         if gql_mod.get("uid"):
             store_uid_from_gql(session, mod_id, gql_mod["uid"])
 
-        mod_reqs = gql_mod.get("modRequirements") or {}
-        gql_reqs = (mod_reqs.get("nexusRequirements") or {}).get("nodes") or []
-        reverse_reqs = (mod_reqs.get("modsRequiringThisMod") or {}).get("nodes") or []
-        dlc_reqs = extract_dlc_requirements(gql_mod)
-        upsert_mod_requirements(
-            session,
-            mod_id,
-            gql_reqs,
-            reverse_requirements=reverse_reqs,
-            dlc_requirements=dlc_reqs,
-        )
-        fresh_meta = session.exec(
-            select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)
-        ).first()
-        if fresh_meta:
-            fresh_meta.requirements_fetched_at = datetime.now(UTC)
-        session.commit()
+        await _fetch_requirements(api_key, game_domain, mod_id, session)
         meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
 
     if not meta:
@@ -201,30 +213,10 @@ async def mod_summary(mod_id: int, session: Session = Depends(get_session)) -> M
         api_key = get_setting(session, "nexus_api_key") or ""
         if api_key:
             try:
-                from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
-                from rippermod_manager.services.nexus_helpers import (
-                    extract_dlc_requirements,
-                    upsert_mod_requirements,
-                )
-
-                async with NexusGraphQLClient(api_key) as gql:
-                    gql_mod = await gql.get_mod(meta.game_domain, mod_id)
-                mod_reqs = gql_mod.get("modRequirements") or {}
-                gql_reqs = (mod_reqs.get("nexusRequirements") or {}).get("nodes") or []
-                reverse_reqs = (mod_reqs.get("modsRequiringThisMod") or {}).get("nodes") or []
-                dlc_reqs = extract_dlc_requirements(gql_mod)
-                upsert_mod_requirements(
-                    session,
-                    mod_id,
-                    gql_reqs,
-                    reverse_requirements=reverse_reqs,
-                    dlc_requirements=dlc_reqs,
-                )
+                await _fetch_requirements(api_key, meta.game_domain, mod_id, session)
                 req_rows = session.exec(
                     select(NexusModRequirement).where(NexusModRequirement.nexus_mod_id == mod_id)
                 ).all()
-                meta.requirements_fetched_at = datetime.now(UTC)
-                session.commit()
             except httpx.HTTPError:
                 logger.debug("Failed to backfill requirements for mod %d", mod_id, exc_info=True)
 
