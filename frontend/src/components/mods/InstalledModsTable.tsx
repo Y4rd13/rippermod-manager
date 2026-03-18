@@ -248,9 +248,12 @@ function ManagedModsGrid({
         startModDownload.mutate(
           { gameName, nexusModId },
           { onSuccess: async (r) => {
-            if (r.requires_file_selection && nexusModId) {
-              const { openUrl } = await import("@tauri-apps/plugin-opener");
-              openUrl(`https://www.nexusmods.com/cyberpunk2077/mods/${nexusModId}?tab=files`).catch(() => {});
+            if (r.requires_file_selection) {
+              const url = entries[0]?.nexus_url;
+              if (url) {
+                const { openUrl } = await import("@tauri-apps/plugin-opener");
+                openUrl(url).catch(() => {});
+              }
             }
           } },
         );

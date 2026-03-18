@@ -179,7 +179,7 @@ export function GameDetailPage() {
     try { localStorage.setItem("ai-search-enabled", JSON.stringify(v)); } catch { /* ignore */ }
   };
 
-  const modalFlow = useInstallFlow(name, archives, downloadJobs);
+  const modalFlow = useInstallFlow(name, archives, downloadJobs, game?.domain_name);
 
   const installedModIds = useMemo(
     () => new Set(installedMods.filter((m) => m.nexus_mod_id != null).map((m) => m.nexus_mod_id!)),

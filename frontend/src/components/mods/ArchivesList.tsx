@@ -96,7 +96,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
           if (result.requires_file_selection) {
             toast.info("Multiple files available", "Pick the one you need on Nexus Mods");
             const { openUrl } = await import("@tauri-apps/plugin-opener");
-            openUrl(`https://www.nexusmods.com/cyberpunk2077/mods/${nexusModId}?tab=files`).catch(() => {});
+            openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${nexusModId}?tab=files`).catch(() => {});
           }
         },
       },

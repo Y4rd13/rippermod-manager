@@ -14,6 +14,7 @@ export function useInstallFlow(
   gameName: string,
   archives: AvailableArchive[],
   downloadJobs: DownloadJobOut[] = [],
+  gameDomain?: string,
 ) {
   const [installingModIds, setInstallingModIds] = useState<Set<number>>(new Set());
   const [downloadingModId, setDownloadingModId] = useState<number | null>(null);
@@ -268,7 +269,8 @@ export function useInstallFlow(
         const result = await startModDownload.mutateAsync({ gameName, nexusModId });
         if (result.requires_file_selection) {
           toast.info("Multiple files available", "Pick the one you need on Nexus Mods");
-          openUrl(`https://www.nexusmods.com/cyberpunk2077/mods/${nexusModId}?tab=files`).catch(() => {});
+          const domain = gameDomain || "cyberpunk2077";
+          openUrl(`https://www.nexusmods.com/${domain}/mods/${nexusModId}?tab=files`).catch(() => {});
         }
       } finally {
         setDownloadingModId(null);
