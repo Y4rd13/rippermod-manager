@@ -276,7 +276,7 @@ export function useInstallFlow(
         setDownloadingModId(null);
       }
     },
-    [gameName, startModDownload],
+    [gameName, gameDomain, startModDownload],
   );
 
   const dismissFileSelect = useCallback(() => setFileSelectModId(null), []);
