@@ -107,6 +107,7 @@ These files diverge between branches and may conflict during sync:
 | `frontend/src/types/api.ts` | Full types vs slimmed types |
 | `backend/src/rippermod_manager/routers/nexus.py` | Full endpoints vs summary-only |
 | `backend/src/rippermod_manager/schemas/nexus.py` | Full schemas vs reduced schemas |
+| `frontend/src-tauri/tauri.conf.json` | Updater endpoint: `stable.json` vs `nexus.json` |
 
 Files that will **never conflict** (most of the codebase):
 - Scan/correlation pipeline, matching services
@@ -154,6 +155,32 @@ concurrency:
 ```
 
 This allows releases on both branches to run independently without blocking each other.
+
+## Auto-Updater Channels
+
+Each edition checks a separate JSON endpoint for updates, hosted in a shared [GitHub Gist](https://gist.github.com/Y4rd13/94a555b2a282fca409c1eb0e0b828eb6):
+
+| Edition | Gist File | Tauri Endpoint |
+|---------|-----------|---------------|
+| Full | `stable.json` | `https://gist.githubusercontent.com/Y4rd13/.../raw/stable.json` |
+| Nexus | `nexus.json` | `https://gist.githubusercontent.com/Y4rd13/.../raw/nexus.json` |
+
+### How it works
+
+1. The release workflow builds the Tauri installer and generates `latest.json`
+2. After uploading release assets, a final step updates the correct Gist file:
+   - `main` → writes `stable.json`
+   - `nexus-compliant` → writes `nexus.json`
+3. Each edition's `tauri.conf.json` points to its own Gist URL
+4. The Tauri updater plugin checks this endpoint on launch and prompts the user if a new version is available
+
+### Why a Gist instead of `/releases/latest/`
+
+GitHub's `/releases/latest/download/latest.json` always points to the **most recent release globally**, regardless of channel. If a nexus release is published after a stable release, both editions would receive the nexus update (or vice versa). The Gist provides stable, channel-specific URLs that each workflow updates independently.
+
+### Authentication
+
+The Gist update step uses a classic PAT (`GIST_TOKEN` repository secret) with `gist` scope. Fine-grained tokens have a [known bug](https://github.com/cli/cli/issues/7803) with Gist operations and should not be used.
 
 ## Publishing to Nexus Mods
 
