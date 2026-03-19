@@ -312,8 +312,11 @@ export function NexusMatchedGrid({
               <div className="flex-1 grid">
                 <NexusModCard
                   modName={match.mod_name}
+                  summary={match.summary}
                   author={match.author}
                   version={match.version}
+                  endorsementCount={match.endorsement_count}
+                  pictureUrl={match.picture_url}
                   onClick={match.nexus_url ? () => openUrl(match.nexus_url).catch(() => {}) : undefined}
                   onContextMenu={(e) => openMenu(e, mod)}
                   action={

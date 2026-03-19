@@ -230,8 +230,11 @@ export function NexusAccountGrid({
           return (
             <NexusModCard
               modName={mod.mod_name}
+              summary={mod.summary}
               author={mod.author}
               version={mod.version}
+              endorsementCount={mod.endorsement_count}
+              pictureUrl={mod.picture_url}
               onClick={() => openUrl(mod.nexus_url).catch(() => {})}
               onContextMenu={(e) => openMenu(e, mod)}
               badge={
