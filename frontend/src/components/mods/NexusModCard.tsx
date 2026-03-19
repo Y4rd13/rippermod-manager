@@ -1,10 +1,10 @@
-import { Heart, Package, User } from "lucide-react";
+import { Heart, User } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
 const PLACEHOLDER_IMG =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' fill='%231a1a2e'%3E%3Crect width='48' height='48'/%3E%3C/svg%3E";
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='180' fill='%231a1a2e'%3E%3Crect width='320' height='180'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23555' font-size='14'%3ENo Image%3C/text%3E%3C/svg%3E";
 
 interface Props {
   modName: string;
@@ -45,43 +45,45 @@ export function NexusModCard({
       onClick={onClick}
       onContextMenu={onContextMenu}
     >
+      <div className="relative">
+        <img
+          src={pictureUrl || PLACEHOLDER_IMG}
+          alt={modName}
+          loading="lazy"
+          className="w-full h-40 object-cover bg-surface-2"
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = PLACEHOLDER_IMG;
+          }}
+        />
+        {badge && (
+          <div className="absolute top-2 right-2">{badge}</div>
+        )}
+      </div>
+
       <div className="p-4 flex flex-col flex-1 gap-2">
-        <div className="flex items-start gap-3">
-          <img
-            src={pictureUrl || PLACEHOLDER_IMG}
-            alt=""
-            loading="lazy"
-            className="flex-shrink-0 w-12 h-12 rounded-lg object-cover bg-surface-2"
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = PLACEHOLDER_IMG;
-            }}
-          />
-          <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold text-text-primary leading-tight line-clamp-2" title={modName}>
-              {modName}
-            </h3>
-            <div className="flex items-center gap-3 text-xs text-text-muted mt-1">
-              {author && (
-                <span className="flex items-center gap-1 truncate" title={author}>
-                  <User size={12} />
-                  {author}
-                </span>
-              )}
-              {version && <span className="truncate" title={`v${version}`}>v{version}</span>}
-              {endorsementCount != null && endorsementCount > 0 && (
-                <span className="flex items-center gap-1" title={`${endorsementCount.toLocaleString()} endorsements`}>
-                  <Heart size={12} />
-                  {endorsementCount.toLocaleString()}
-                </span>
-              )}
-            </div>
-          </div>
-          {badge && <div className="flex-shrink-0">{badge}</div>}
-        </div>
+        <h3 className="text-sm font-semibold text-text-primary leading-tight line-clamp-2" title={modName}>
+          {modName}
+        </h3>
 
         {summary && (
           <p className="text-xs text-text-muted line-clamp-2" title={summary}>{summary}</p>
         )}
+
+        <div className="flex items-center gap-3 text-xs text-text-muted mt-auto pt-1">
+          {author && (
+            <span className="flex items-center gap-1 truncate" title={author}>
+              <User size={12} />
+              {author}
+            </span>
+          )}
+          {version && <span className="truncate" title={`v${version}`}>v{version}</span>}
+          {endorsementCount != null && endorsementCount > 0 && (
+            <span className="flex items-center gap-1" title={`${endorsementCount.toLocaleString()} endorsements on Nexus`}>
+              <Heart size={12} />
+              {endorsementCount.toLocaleString()}
+            </span>
+          )}
+        </div>
 
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-2 border-t border-border/50">
           <div className="min-w-0">{footer ?? <div />}</div>
