@@ -86,7 +86,7 @@ rippermod-manager/
 │   │   ├── stores/          # Zustand stores
 │   │   └── lib/             # API client, SSE parser, utils
 │   └── src-tauri/           # Tauri v2 Rust shell + sidecar lifecycle
-├── docs/                    # Architecture, Nexus API map, Nexus articles
+├── docs/                    # Architecture, Nexus API map, dual release strategy
 ├── scripts/                 # Build + release helpers
 └── .github/workflows/       # CI, release, PR review, CLA
 ```
@@ -190,7 +190,23 @@ npx tauri build
 # Output: frontend/src-tauri/target/release/bundle/nsis/*.exe
 ```
 
-Releases are handled automatically by `semantic-release` — merging a conventional commit to `main` triggers versioning, changelog generation, and a GitHub release with the installer attached.
+### Releases
+
+RipperMod ships two editions from a single repository. Releases are fully automated by `semantic-release`:
+
+| Edition | Branch | Tags | Updater Channel | Distribution |
+|---------|--------|------|-----------------|-------------|
+| **Full** | `main` | `vX.Y.Z` | `stable.json` | GitHub Releases |
+| **Nexus** | `nexus-compliant` | `vX.Y.Z-nexus.N` | `nexus.json` | Nexus Mods page |
+
+- **Full** — All features enabled (mod detail modal, trending, search, card images/stats)
+- **Nexus** — Nexus-policy-compliant (redirects all discovery to nexusmods.com, no content display)
+
+Each edition has its own auto-updater channel via a [shared Gist endpoint](https://gist.github.com/Y4rd13/94a555b2a282fca409c1eb0e0b828eb6), so users only receive updates from their installed edition.
+
+Merging a conventional commit to `main` triggers versioning, changelog generation, and a GitHub release with the installer attached. Syncing `main` into `nexus-compliant` and pushing triggers the same for the Nexus edition.
+
+> Full details: [docs/dual-release-strategy.md](docs/dual-release-strategy.md)
 
 ### API Endpoints
 
@@ -350,7 +366,7 @@ All endpoints are prefixed with `/api/v1/`.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/games/{name}/trending/` | Get trending and recently updated mods |
+| `GET` | `/games/{name}/trending/` | Get trending and recently updated mods (full edition only) |
 
 </details>
 
