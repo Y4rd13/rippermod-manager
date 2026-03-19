@@ -145,3 +145,19 @@ jobs:
             frontend/src-tauri/target/release/bundle/nsis/*-setup.exe \
             frontend/src-tauri/target/release/bundle/nsis/*-setup.exe.sig \
             frontend/src-tauri/target/release/bundle/nsis/latest.json
+
+      - name: Update updater Gist endpoint
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NSIS_DIR="frontend/src-tauri/target/release/bundle/nsis"
+          # Determine which Gist file to update based on the branch
+          if [[ "${{ github.ref_name }}" == "nexus-compliant" ]]; then
+            GIST_FILE="nexus.json"
+          else
+            GIST_FILE="stable.json"
+          fi
+          gh gist edit 94a555b2a282fca409c1eb0e0b828eb6 \
+            -f "${GIST_FILE}" "${NSIS_DIR}/latest.json"
+          echo "Updated Gist file: ${GIST_FILE}"
