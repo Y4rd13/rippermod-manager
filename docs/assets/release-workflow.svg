@@ -78,7 +78,7 @@
   <!-- Step 3: Semantic Release -->
   <rect x="550" y="251" width="250" height="44" rx="8" fill="#1e1e32" stroke="#f59e0b" stroke-width="1.5"/>
   <text x="585" y="269" fill="#94a3b8" font-size="10">STEP 3</text>
-  <text x="585" y="284" fill="#e2e8f0" font-size="12" font-weight="600">semantic-release creates v.x-nexus.N</text>
+  <text x="585" y="284" fill="#e2e8f0" font-size="12" font-weight="600">semantic-release creates vX.x.x-nexus.N</text>
 
   <line x1="675" y1="295" x2="675" y2="315" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
 
@@ -91,7 +91,7 @@
 
   <!-- Result -->
   <rect x="550" y="387" width="250" height="50" rx="10" fill="#f59e0b" opacity="0.12" stroke="#f59e0b" stroke-width="1.5"/>
-  <text x="675" y="410" text-anchor="middle" fill="#fcd34d" font-size="13" font-weight="700">GitHub Release v.x-nexus.N</text>
+  <text x="675" y="410" text-anchor="middle" fill="#fcd34d" font-size="13" font-weight="700">GitHub Release vX.x.x-nexus.N</text>
   <text x="675" y="428" text-anchor="middle" fill="#94a3b8" font-size="11">Nexus-compliant installer</text>
 
   <!-- Cross arrow: main triggers sync -->

@@ -8,8 +8,8 @@ RipperMod Manager ships two editions from a single repository to comply with Nex
 
 | Edition | Branch | Tags | Distribution |
 |---------|--------|------|-------------|
-| **Full** | `main` | `v1.x.x` | GitHub Releases, community |
-| **Nexus** | `nexus-compliant` | `vX.x.x-nexus.N` | Nexus Mods page |
+| **Full** | `main` | `vX.Y.Z` | GitHub Releases, community |
+| **Nexus** | `nexus-compliant` | `vX.Y.Z-nexus.N` | Nexus Mods page |
 
 ### Full Edition (`main`)
 
@@ -56,7 +56,7 @@ Releases trigger automatically when `nexus-compliant` receives new commits:
    git fetch origin
    git merge origin/main
    ```
-2. Resolve any conflicts (typically only in the ~16 divergent files)
+2. Resolve any conflicts (typically only in the ~10 divergent files)
 3. Push to `nexus-compliant`
 4. semantic-release creates a `vX.Y.Z-nexus.N` tag + GitHub Release
 5. The build job compiles the Nexus-compliant installer
