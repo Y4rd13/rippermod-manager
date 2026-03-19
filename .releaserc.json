@@ -1,7 +1,10 @@
 {
   "repositoryUrl": "https://github.com/Y4rd13/rippermod-manager",
   "tagFormat": "v${version}",
-  "branches": ["main"],
+  "branches": [
+    "main",
+    { "name": "nexus-compliant", "channel": "nexus", "prerelease": "nexus" }
+  ],
   "plugins": [
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
