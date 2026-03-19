@@ -449,8 +449,11 @@ function ManagedModsGrid({
               </div>
               <NexusModCard
                 modName={mod.nexus_name || mod.name}
+                summary={mod.summary ?? undefined}
                 author={mod.author ?? undefined}
                 version={mod.installed_version || undefined}
+                endorsementCount={mod.endorsement_count ?? undefined}
+                pictureUrl={mod.picture_url ?? undefined}
                 badge={
                   <>
                     {isMulti && (
@@ -667,8 +670,11 @@ function RecognizedModsGrid({
               </div>
               <NexusModCard
                 modName={match.mod_name}
+                summary={match.summary}
                 author={match.author}
                 version={match.version}
+                endorsementCount={match.endorsement_count}
+                pictureUrl={match.picture_url}
                 badge={update ? <Badge variant="warning" prominent><ArrowUp size={10} className="mr-0.5" />v{update.nexus_version} available</Badge> : undefined}
                 onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
                 action={
