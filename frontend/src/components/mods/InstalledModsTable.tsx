@@ -108,7 +108,7 @@ interface Props {
 
 type SortKey = "name" | "version" | "files" | "disabled" | "updated";
 
-type RecognizedSortKey = "name" | "updated" | "confidence";
+type RecognizedSortKey = "name" | "endorsements" | "updated" | "confidence";
 
 type ScopeKey = "all" | "installed" | "detected";
 
@@ -130,6 +130,7 @@ const CHIP_OPTIONS: { key: ChipKey; label: string }[] = [
 const RECOGNIZED_SORT_OPTIONS: { value: RecognizedSortKey; label: string }[] = [
   { value: "confidence", label: "Match Confidence" },
   { value: "name", label: "Mod Name" },
+  { value: "endorsements", label: "Endorsements" },
   { value: "updated", label: "Recently Updated" },
 ];
 
@@ -849,6 +850,8 @@ export function InstalledModsTable({
       switch (recognizedSort) {
         case "name":
           return ma.mod_name.localeCompare(mb.mod_name);
+        case "endorsements":
+          return mb.endorsement_count - ma.endorsement_count;
         case "updated":
           return isoToEpoch(mb.updated_at) - isoToEpoch(ma.updated_at);
         case "confidence":
