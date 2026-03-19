@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" font-family="Inter, -apple-system, system-ui, sans-serif">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f0f1a;stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:#1a1a2e;stop-opacity:1"/>
+    </linearGradient>
+    <linearGradient id="mainGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#818cf8"/>
+    </linearGradient>
+    <linearGradient id="compGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#f59e0b"/>
+      <stop offset="100%" style="stop-color:#fbbf24"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="520" fill="url(#bgGrad)" rx="12"/>
+
+  <!-- Title -->
+  <text x="450" y="40" text-anchor="middle" fill="#e2e8f0" font-size="20" font-weight="700">Dual Release Strategy</text>
+  <text x="450" y="60" text-anchor="middle" fill="#94a3b8" font-size="12">RipperMod Manager — Branch &amp; Release Model</text>
+
+  <!-- Main branch line -->
+  <line x1="80" y1="140" x2="820" y2="140" stroke="#6366f1" stroke-width="3" stroke-linecap="round" filter="url(#glow)"/>
+  <rect x="20" y="122" width="50" height="36" rx="8" fill="#6366f1" opacity="0.15"/>
+  <text x="45" y="145" text-anchor="middle" fill="#818cf8" font-size="13" font-weight="700">main</text>
+
+  <!-- Main branch commits -->
+  <circle cx="180" cy="140" r="8" fill="#6366f1" stroke="#1a1a2e" stroke-width="2"/>
+  <circle cx="320" cy="140" r="8" fill="#6366f1" stroke="#1a1a2e" stroke-width="2"/>
+  <circle cx="460" cy="140" r="8" fill="#6366f1" stroke="#1a1a2e" stroke-width="2"/>
+  <circle cx="600" cy="140" r="8" fill="#6366f1" stroke="#1a1a2e" stroke-width="2"/>
+  <circle cx="740" cy="140" r="8" fill="#6366f1" stroke="#1a1a2e" stroke-width="2"/>
+
+  <!-- Main release tags -->
+  <rect x="140" y="90" width="80" height="26" rx="6" fill="#6366f1" opacity="0.2" stroke="#6366f1" stroke-width="1"/>
+  <text x="180" y="108" text-anchor="middle" fill="#a5b4fc" font-size="11" font-weight="600">v1.21.0</text>
+
+  <rect x="280" y="90" width="80" height="26" rx="6" fill="#6366f1" opacity="0.2" stroke="#6366f1" stroke-width="1"/>
+  <text x="320" y="108" text-anchor="middle" fill="#a5b4fc" font-size="11" font-weight="600">v1.22.0</text>
+
+  <rect x="420" y="90" width="80" height="26" rx="6" fill="#6366f1" opacity="0.2" stroke="#6366f1" stroke-width="1"/>
+  <text x="460" y="108" text-anchor="middle" fill="#a5b4fc" font-size="11" font-weight="600">v1.23.0</text>
+
+  <!-- Nexus-compliant branch line -->
+  <line x1="280" y1="300" x2="820" y2="300" stroke="#f59e0b" stroke-width="3" stroke-linecap="round" stroke-dasharray="8,4" filter="url(#glow)"/>
+  <rect x="100" y="282" width="170" height="36" rx="8" fill="#f59e0b" opacity="0.1"/>
+  <text x="185" y="305" text-anchor="middle" fill="#fbbf24" font-size="13" font-weight="700">nexus-compliant</text>
+
+  <!-- Nexus-compliant commits -->
+  <circle cx="320" cy="300" r="8" fill="#f59e0b" stroke="#1a1a2e" stroke-width="2"/>
+  <circle cx="500" cy="300" r="8" fill="#f59e0b" stroke="#1a1a2e" stroke-width="2"/>
+  <circle cx="680" cy="300" r="8" fill="#f59e0b" stroke="#1a1a2e" stroke-width="2"/>
+
+  <!-- Nexus release tags -->
+  <rect x="250" y="330" width="140" height="26" rx="6" fill="#f59e0b" opacity="0.15" stroke="#f59e0b" stroke-width="1"/>
+  <text x="320" y="348" text-anchor="middle" fill="#fcd34d" font-size="11" font-weight="600">v2.0.0-nexus.1</text>
+
+  <rect x="430" y="330" width="140" height="26" rx="6" fill="#f59e0b" opacity="0.15" stroke="#f59e0b" stroke-width="1"/>
+  <text x="500" y="348" text-anchor="middle" fill="#fcd34d" font-size="11" font-weight="600">v2.0.0-nexus.2</text>
+
+  <!-- Fork arrow from main to nexus-compliant -->
+  <path d="M320,148 C320,180 320,260 320,292" stroke="#94a3b8" stroke-width="1.5" fill="none" stroke-dasharray="4,3"/>
+  <text x="335" y="220" fill="#94a3b8" font-size="10" font-style="italic">fork</text>
+
+  <!-- Merge arrows from main to nexus-compliant -->
+  <path d="M460,148 C460,190 500,260 500,292" stroke="#22c55e" stroke-width="1.5" fill="none" marker-end="url(#arrowGreen)"/>
+  <text x="490" y="230" fill="#22c55e" font-size="10" font-weight="600">merge</text>
+
+  <path d="M740,148 C740,190 680,260 680,292" stroke="#22c55e" stroke-width="1.5" fill="none" marker-end="url(#arrowGreen)"/>
+  <text x="720" y="230" fill="#22c55e" font-size="10" font-weight="600">merge</text>
+
+  <defs>
+    <marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#22c55e"/>
+    </marker>
+  </defs>
+
+  <!-- Legend -->
+  <rect x="40" y="400" width="820" height="100" rx="10" fill="#1e1e32" stroke="#2d2d44" stroke-width="1"/>
+  <text x="60" y="425" fill="#e2e8f0" font-size="13" font-weight="700">Legend</text>
+
+  <!-- Main legend -->
+  <line x1="60" y1="450" x2="100" y2="450" stroke="#6366f1" stroke-width="3"/>
+  <text x="110" y="454" fill="#94a3b8" font-size="11">main — Full-featured release (all Nexus content display)</text>
+
+  <!-- Compliant legend -->
+  <line x1="60" y1="475" x2="100" y2="475" stroke="#f59e0b" stroke-width="3" stroke-dasharray="8,4"/>
+  <text x="110" y="479" fill="#94a3b8" font-size="11">nexus-compliant — Nexus-policy-compliant (no content replication)</text>
+
+  <!-- Merge legend -->
+  <line x1="530" y1="450" x2="570" y2="450" stroke="#22c55e" stroke-width="1.5"/>
+  <polygon points="570,447 577,450 570,453" fill="#22c55e"/>
+  <text x="585" y="454" fill="#94a3b8" font-size="11">Periodic sync (git merge main)</text>
+
+  <!-- Tag legend -->
+  <rect x="530" y="466" width="50" height="18" rx="4" fill="#6366f1" opacity="0.2" stroke="#6366f1" stroke-width="1"/>
+  <text x="555" y="479" text-anchor="middle" fill="#a5b4fc" font-size="9">v1.x.x</text>
+  <text x="585" y="479" fill="#94a3b8" font-size="11">Semantic release tags</text>
+</svg>
