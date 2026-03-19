@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620" font-family="Inter, -apple-system, system-ui, sans-serif">
+  <defs>
+    <linearGradient id="bg2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f0f1a"/>
+      <stop offset="100%" style="stop-color:#1a1a2e"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#94a3b8"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#6366f1"/>
+    </marker>
+    <marker id="arrowAmber" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#f59e0b"/>
+    </marker>
+  </defs>
+
+  <rect width="900" height="620" fill="url(#bg2)" rx="12"/>
+
+  <!-- Title -->
+  <text x="450" y="38" text-anchor="middle" fill="#e2e8f0" font-size="20" font-weight="700">Release Workflow</text>
+  <text x="450" y="58" text-anchor="middle" fill="#94a3b8" font-size="12">CI/CD Pipeline for Both Editions</text>
+
+  <!-- ===== MAIN FLOW (left) ===== -->
+  <text x="225" y="95" text-anchor="middle" fill="#818cf8" font-size="15" font-weight="700">Full Edition (main)</text>
+
+  <!-- Step 1: PR -->
+  <rect x="100" y="115" width="250" height="44" rx="8" fill="#1e1e32" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="135" y="133" fill="#94a3b8" font-size="10">STEP 1</text>
+  <text x="135" y="148" fill="#e2e8f0" font-size="12" font-weight="600">PR to main (feat/fix/...)</text>
+
+  <!-- Arrow -->
+  <line x1="225" y1="159" x2="225" y2="179" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 2: Review -->
+  <rect x="100" y="183" width="250" height="44" rx="8" fill="#1e1e32" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="135" y="201" fill="#94a3b8" font-size="10">STEP 2</text>
+  <text x="135" y="216" fill="#e2e8f0" font-size="12" font-weight="600">CI + claude[bot] review + merge</text>
+
+  <line x1="225" y1="227" x2="225" y2="247" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 3: Semantic Release -->
+  <rect x="100" y="251" width="250" height="44" rx="8" fill="#1e1e32" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="135" y="269" fill="#94a3b8" font-size="10">STEP 3</text>
+  <text x="135" y="284" fill="#e2e8f0" font-size="12" font-weight="600">semantic-release creates v1.x.x</text>
+
+  <line x1="225" y1="295" x2="225" y2="315" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 4: Build -->
+  <rect x="100" y="319" width="250" height="44" rx="8" fill="#1e1e32" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="135" y="337" fill="#94a3b8" font-size="10">STEP 4</text>
+  <text x="135" y="352" fill="#e2e8f0" font-size="12" font-weight="600">Tauri build + upload installer</text>
+
+  <line x1="225" y1="363" x2="225" y2="383" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Result -->
+  <rect x="100" y="387" width="250" height="50" rx="10" fill="#6366f1" opacity="0.15" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="225" y="410" text-anchor="middle" fill="#a5b4fc" font-size="13" font-weight="700">GitHub Release v1.x.x</text>
+  <text x="225" y="428" text-anchor="middle" fill="#94a3b8" font-size="11">Full-featured installer</text>
+
+  <!-- ===== NEXUS FLOW (right) ===== -->
+  <text x="675" y="95" text-anchor="middle" fill="#fbbf24" font-size="15" font-weight="700">Nexus Edition (nexus-compliant)</text>
+
+  <!-- Step 1: Sync -->
+  <rect x="550" y="115" width="250" height="44" rx="8" fill="#1e1e32" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="585" y="133" fill="#94a3b8" font-size="10">STEP 1</text>
+  <text x="585" y="148" fill="#e2e8f0" font-size="12" font-weight="600">git merge main (sync new features)</text>
+
+  <line x1="675" y1="159" x2="675" y2="179" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 2: Resolve -->
+  <rect x="550" y="183" width="250" height="44" rx="8" fill="#1e1e32" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="585" y="201" fill="#94a3b8" font-size="10">STEP 2</text>
+  <text x="585" y="216" fill="#e2e8f0" font-size="12" font-weight="600">Resolve conflicts (if any) + push</text>
+
+  <line x1="675" y1="227" x2="675" y2="247" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 3: Semantic Release -->
+  <rect x="550" y="251" width="250" height="44" rx="8" fill="#1e1e32" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="585" y="269" fill="#94a3b8" font-size="10">STEP 3</text>
+  <text x="585" y="284" fill="#e2e8f0" font-size="12" font-weight="600">semantic-release creates v.x-nexus.N</text>
+
+  <line x1="675" y1="295" x2="675" y2="315" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 4: Build -->
+  <rect x="550" y="319" width="250" height="44" rx="8" fill="#1e1e32" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="585" y="337" fill="#94a3b8" font-size="10">STEP 4</text>
+  <text x="585" y="352" fill="#e2e8f0" font-size="12" font-weight="600">Tauri build + upload installer</text>
+
+  <line x1="675" y1="363" x2="675" y2="383" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Result -->
+  <rect x="550" y="387" width="250" height="50" rx="10" fill="#f59e0b" opacity="0.12" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="675" y="410" text-anchor="middle" fill="#fcd34d" font-size="13" font-weight="700">GitHub Release v.x-nexus.N</text>
+  <text x="675" y="428" text-anchor="middle" fill="#94a3b8" font-size="11">Nexus-compliant installer</text>
+
+  <!-- Cross arrow: main triggers sync -->
+  <path d="M350,341 C420,341 480,148 550,148" stroke="#22c55e" stroke-width="1.5" fill="none" stroke-dasharray="6,3" marker-end="url(#arrowGreen2)"/>
+  <text x="440" y="240" fill="#22c55e" font-size="10" font-weight="600" transform="rotate(-30,440,240)">triggers sync</text>
+
+  <defs>
+    <marker id="arrowGreen2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#22c55e"/>
+    </marker>
+  </defs>
+
+  <!-- Divider -->
+  <line x1="450" y1="85" x2="450" y2="450" stroke="#2d2d44" stroke-width="1" stroke-dasharray="4,4"/>
+
+  <!-- Bottom info boxes -->
+  <rect x="40" y="470" width="390" height="130" rx="10" fill="#1e1e32" stroke="#6366f1" stroke-width="1" opacity="0.8"/>
+  <text x="60" y="495" fill="#818cf8" font-size="12" font-weight="700">Full Edition Features</text>
+  <text x="60" y="515" fill="#94a3b8" font-size="11">Mod detail modal (description, changelogs, files)</text>
+  <text x="60" y="533" fill="#94a3b8" font-size="11">Trending mods grid + dashboard activity</text>
+  <text x="60" y="551" fill="#94a3b8" font-size="11">Nexus search, images, summaries, stats on cards</text>
+  <text x="60" y="569" fill="#94a3b8" font-size="11">BBCode renderer, file contents preview</text>
+  <text x="60" y="587" fill="#94a3b8" font-size="11">In-app file selection for multi-file mods</text>
+
+  <rect x="470" y="470" width="390" height="130" rx="10" fill="#1e1e32" stroke="#f59e0b" stroke-width="1" opacity="0.8"/>
+  <text x="490" y="495" fill="#fbbf24" font-size="12" font-weight="700">Nexus Edition Differences</text>
+  <text x="490" y="515" fill="#94a3b8" font-size="11">Slim modal (name, requirements, "View on Nexus" CTA)</text>
+  <text x="490" y="533" fill="#94a3b8" font-size="11">No trending, no community activity section</text>
+  <text x="490" y="551" fill="#94a3b8" font-size="11">Cards without images/summaries/stats</text>
+  <text x="490" y="569" fill="#94a3b8" font-size="11">All clicks redirect to nexusmods.com</text>
+  <text x="490" y="587" fill="#94a3b8" font-size="11">File selection redirects to Nexus files tab</text>
+</svg>
