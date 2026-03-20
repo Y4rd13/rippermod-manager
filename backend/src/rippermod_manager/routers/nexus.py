@@ -83,9 +83,6 @@ def list_downloads(
             is_tracked=dl.is_tracked,
             is_endorsed=dl.is_endorsed,
             author=meta.author if meta else "",
-            summary=meta.summary if meta else "",
-            endorsement_count=meta.endorsement_count if meta else 0,
-            picture_url=meta.picture_url if meta else "",
             updated_at=meta.updated_at if meta else None,
         )
         for dl, meta in rows
@@ -258,7 +255,6 @@ async def mod_summary(mod_id: int, session: Session = Depends(get_session)) -> M
         author=meta.author,
         version=meta.version,
         category=category_name,
-        picture_url=meta.picture_url,
         nexus_url=nexus_url,
         is_tracked=dl.is_tracked if dl else False,
         is_endorsed=dl.is_endorsed if dl else False,

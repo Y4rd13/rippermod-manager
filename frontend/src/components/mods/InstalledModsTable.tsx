@@ -108,7 +108,7 @@ interface Props {
 
 type SortKey = "name" | "version" | "files" | "disabled" | "updated";
 
-type RecognizedSortKey = "name" | "endorsements" | "updated" | "confidence";
+type RecognizedSortKey = "name" | "updated" | "confidence";
 
 type ScopeKey = "all" | "installed" | "detected";
 
@@ -130,7 +130,6 @@ const CHIP_OPTIONS: { key: ChipKey; label: string }[] = [
 const RECOGNIZED_SORT_OPTIONS: { value: RecognizedSortKey; label: string }[] = [
   { value: "confidence", label: "Match Confidence" },
   { value: "name", label: "Mod Name" },
-  { value: "endorsements", label: "Endorsements" },
   { value: "updated", label: "Recently Updated" },
 ];
 
@@ -450,11 +449,8 @@ function ManagedModsGrid({
               </div>
               <NexusModCard
                 modName={mod.nexus_name || mod.name}
-                summary={mod.summary ?? undefined}
                 author={mod.author ?? undefined}
                 version={mod.installed_version || undefined}
-                endorsementCount={mod.endorsement_count ?? undefined}
-                pictureUrl={mod.picture_url ?? undefined}
                 badge={
                   <>
                     {isMulti && (
@@ -671,11 +667,8 @@ function RecognizedModsGrid({
               </div>
               <NexusModCard
                 modName={match.mod_name}
-                summary={match.summary}
                 author={match.author}
                 version={match.version}
-                endorsementCount={match.endorsement_count}
-                pictureUrl={match.picture_url}
                 badge={update ? <Badge variant="warning" prominent><ArrowUp size={10} className="mr-0.5" />v{update.nexus_version} available</Badge> : undefined}
                 onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
                 action={
@@ -850,8 +843,6 @@ export function InstalledModsTable({
       switch (recognizedSort) {
         case "name":
           return ma.mod_name.localeCompare(mb.mod_name);
-        case "endorsements":
-          return mb.endorsement_count - ma.endorsement_count;
         case "updated":
           return isoToEpoch(mb.updated_at) - isoToEpoch(ma.updated_at);
         case "confidence":

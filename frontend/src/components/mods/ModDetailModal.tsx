@@ -78,14 +78,6 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, on
             {/* Header */}
             <div className="flex-shrink-0 px-5 pt-5 pb-3">
               <div className="flex items-start justify-between gap-3">
-                {detail.picture_url && (
-                  <img
-                    src={detail.picture_url}
-                    alt=""
-                    className="flex-shrink-0 w-14 h-14 rounded-lg object-cover bg-surface-2"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                  />
-                )}
                 <div className="min-w-0 flex-1">
                   <h2 className="text-lg font-bold text-text-primary leading-tight truncate" title={detail.name}>
                     {detail.name}

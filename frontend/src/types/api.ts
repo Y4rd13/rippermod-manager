@@ -40,11 +40,8 @@ export interface CorrelationBrief {
   method: string;
   confirmed: boolean;
   author: string;
-  summary: string;
   version: string;
-  endorsement_count: number;
   category: string;
-  picture_url: string;
   nexus_url: string;
   updated_at: string | null;
 }
@@ -109,9 +106,6 @@ export interface NexusDownload {
   is_tracked: boolean;
   is_endorsed: boolean;
   author: string;
-  summary: string;
-  endorsement_count: number;
-  picture_url: string;
   updated_at: string | null;
 }
 
@@ -561,7 +555,6 @@ export interface ModSummary {
   author: string | null;
   version: string | null;
   category: string | null;
-  picture_url: string;
   nexus_url: string;
   is_tracked: boolean;
   is_endorsed: boolean;

@@ -57,9 +57,6 @@ class NexusModEnrichedOut(BaseModel):
     is_tracked: bool
     is_endorsed: bool
     author: str = ""
-    summary: str = ""
-    endorsement_count: int = 0
-    picture_url: str = ""
     updated_at: datetime | None = None
 
 
@@ -90,7 +87,6 @@ class ModSummaryOut(BaseModel):
     author: str | None = None
     version: str | None = None
     category: str | None = None
-    picture_url: str = ""
     nexus_url: str
     is_tracked: bool = False
     is_endorsed: bool = False
