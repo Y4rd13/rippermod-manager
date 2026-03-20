@@ -76,12 +76,13 @@ function FilesModal({ group, onClose }: { group: ModGroup; onClose: () => void }
   );
 }
 
-type SortKey = "score" | "name" | "author" | "updated";
+type SortKey = "score" | "name" | "endorsements" | "author" | "updated";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "score", label: "Match Score" },
   { value: "updated", label: "Recently Updated" },
   { value: "name", label: "Mod Name" },
+  { value: "endorsements", label: "Endorsements" },
   { value: "author", label: "Author" },
 ];
 
@@ -216,6 +217,8 @@ export function NexusMatchedGrid({
           return isoToEpoch(mb.updated_at) - isoToEpoch(ma.updated_at);
         case "name":
           return ma.mod_name.localeCompare(mb.mod_name);
+        case "endorsements":
+          return mb.endorsement_count - ma.endorsement_count;
         case "author":
           return ma.author.localeCompare(mb.author);
       }
@@ -312,8 +315,11 @@ export function NexusMatchedGrid({
               <div className="flex-1 grid">
                 <NexusModCard
                   modName={match.mod_name}
+                  summary={match.summary}
                   author={match.author}
                   version={match.version}
+                  endorsementCount={match.endorsement_count}
+                  pictureUrl={match.picture_url}
                   onClick={match.nexus_url ? () => openUrl(match.nexus_url).catch(() => {}) : undefined}
                   onContextMenu={(e) => openMenu(e, mod)}
                   action={
