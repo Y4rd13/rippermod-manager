@@ -206,7 +206,7 @@ Each edition has its own auto-updater channel via a [shared Gist endpoint](https
 
 Merging a conventional commit to `main` triggers versioning, changelog generation, and a GitHub release with the installer attached. Syncing `main` into `nexus-compliant` and pushing triggers the same for the Nexus edition.
 
-> Full details: [docs/dual-release-strategy.md](docs/dual-release-strategy.md)
+> Full details: [docs/dual-release-strategy.md](docs/dual-release-strategy.md) | [Nexus API Compliance](docs/nexus-compliance.md)
 
 ### API Endpoints
 
