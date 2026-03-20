@@ -32,11 +32,12 @@ import type {
 } from "@/types/api";
 
 
-type SortKey = "name" | "author" | "updated";
+type SortKey = "name" | "endorsements" | "author" | "updated";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "updated", label: "Recently Updated" },
   { value: "name", label: "Mod Name" },
+  { value: "endorsements", label: "Endorsements" },
   { value: "author", label: "Author" },
 ];
 
@@ -129,6 +130,8 @@ export function NexusAccountGrid({
           return isoToEpoch(b.updated_at) - isoToEpoch(a.updated_at);
         case "name":
           return a.mod_name.localeCompare(b.mod_name);
+        case "endorsements":
+          return b.endorsement_count - a.endorsement_count;
         case "author":
           return a.author.localeCompare(b.author);
       }
@@ -230,8 +233,11 @@ export function NexusAccountGrid({
           return (
             <NexusModCard
               modName={mod.mod_name}
+              summary={mod.summary}
               author={mod.author}
               version={mod.version}
+              endorsementCount={mod.endorsement_count}
+              pictureUrl={mod.picture_url}
               onClick={() => openUrl(mod.nexus_url).catch(() => {})}
               onContextMenu={(e) => openMenu(e, mod)}
               badge={

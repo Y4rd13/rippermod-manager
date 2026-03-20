@@ -25,9 +25,9 @@ The complete application with all features enabled:
 
 A Nexus-policy-compliant build that redirects all discovery to nexusmods.com:
 
-- Slim modal with name, version, requirements, and "View on Nexus Mods" CTA
-- No trending, no community activity section
-- Compact cards without images, summaries, or stats
+- Slim modal with thumbnail, name, requirements, and "View on Nexus Mods" CTA (no description, changelogs, or file list)
+- No trending page, no community activity section, no in-app Nexus search
+- Cards retain thumbnails, summaries, and endorsement counts (standard mod manager metadata)
 - All card clicks and file selection redirect to nexusmods.com
 - Core management features unchanged (install, conflicts, profiles, updates)
 
@@ -182,15 +182,68 @@ GitHub's `/releases/latest/download/latest.json` always points to the **most rec
 
 The Gist update step uses a classic PAT (`GIST_TOKEN` repository secret) with `gist` scope. Fine-grained tokens have a [known bug](https://github.com/cli/cli/issues/7803) with Gist operations and should not be used.
 
+## Nexus API Policy Compliance
+
+The Nexus edition is designed to comply with the [Nexus Mods API Acceptable Use Policy](https://help.nexusmods.com/article/114-api-acceptable-use-policy) and the [Terms of Service](https://help.nexusmods.com/article/18-terms-of-service).
+
+### Policy requirement
+
+The API Acceptable Use Policy prohibits:
+
+> "Fetching data en-masse with the intent to **rehost** this information on your own service (i.e. scraping)"
+
+Additionally, any usage that is "detrimental to the modding community or Nexus Mods" is prohibited at their sole discretion.
+
+### What the Nexus edition removes
+
+These features replicate Nexus mod pages and reduce the need for users to visit nexusmods.com:
+
+| Removed Feature | Reason |
+|----------------|--------|
+| Full mod description (BBCode rendered) | Replicates the mod page "Description" tab |
+| Changelogs (full version history) | Replicates the mod page "Changelogs" tab |
+| File list with descriptions and preview | Replicates the mod page "Files" tab |
+| Trending mods page | Replicates nexusmods.com trending/latest pages |
+| In-app Nexus search (frontend) | Replicates nexusmods.com search functionality |
+| File contents preview proxy | Proxies Nexus file metadata service |
+| Community activity dashboard section | Aggregates trending data as a browsing feature |
+
+### What the Nexus edition keeps
+
+These features are standard mod manager metadata that [Vortex](https://www.nexusmods.com/about/vortex/) (the official Nexus mod manager) also displays, and do not constitute content rehosting:
+
+| Kept Feature | Justification |
+|-------------|---------------|
+| Mod thumbnail images on cards | Metadata preview — Vortex shows the same |
+| Summary text (1-2 lines, truncated) | Search snippet — equivalent to what Google shows |
+| Endorsement and download counts | Basic statistics — Vortex shows these |
+| Author name, version, category | Standard mod management metadata |
+| Mod requirements (dependencies) | Functional for dependency management |
+| Endorse/track actions | **Generates engagement for Nexus** |
+| NXM download handler | **Drives download traffic through Nexus** |
+| Slim modal with "View on Nexus Mods" CTA | **Redirects users to nexusmods.com** |
+
+### How browsing is redirected to Nexus
+
+Every user interaction that would previously show Nexus content in-app now redirects to nexusmods.com:
+
+- **Clicking a mod card** → opens the mod page on nexusmods.com
+- **File selection** (mods with multiple files) → opens the Nexus files tab
+- **"View on Nexus Mods" button** → prominent CTA in the mod actions modal
+- **Context menu "View on Nexus"** → opens the mod page in the system browser
+
+### Policy sources
+
+- [API Acceptable Use Policy](https://help.nexusmods.com/article/114-api-acceptable-use-policy)
+- [Terms of Service](https://help.nexusmods.com/article/18-terms-of-service)
+- [File Submission Guidelines](https://help.nexusmods.com/article/28-file-submission-guidelines)
+
 ## Publishing to Nexus Mods
 
 When submitting or updating the Nexus Mods page:
 
 1. Build from the `nexus-compliant` branch (or use the `-nexus.N` GitHub Release)
-2. The Nexus edition does **not** display:
-   - Full mod descriptions, changelogs, or file lists
-   - Trending mods or search results
-   - Mod images, summaries, or statistics on cards
+2. The Nexus edition does **not** replicate mod page content (descriptions, changelogs, file lists, trending, search)
 3. All discovery actions redirect users to nexusmods.com
 4. Endorse/track mutations generate engagement for Nexus
 5. Downloads for free users go through the NXM protocol (user visits Nexus to download)

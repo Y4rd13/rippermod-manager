@@ -171,7 +171,7 @@ class TestModSummary:
         assert data["is_tracked"] is True
         assert data["is_endorsed"] is True
 
-    def test_no_description_or_files_in_response(self, client, session):
+    def test_no_content_fields_in_response(self, client, session):
         """Verify the summary endpoint does NOT return mod page content."""
         _seed_game(client)
         _seed_mod_meta(session, mod_id=42, description="Full BBCode description here")
@@ -179,10 +179,11 @@ class TestModSummary:
         r = client.get("/api/v1/nexus/mods/42/summary")
         assert r.status_code == 200
         data = r.json()
+        # Content replication fields must NOT be present
         assert "description" not in data
         assert "changelogs" not in data
         assert "files" not in data
-        assert "picture_url" not in data
-        assert "summary" not in data
         assert "mod_downloads" not in data
-        assert "endorsement_count" not in data
+        # Metadata fields ARE present (policy-compliant)
+        assert "picture_url" in data
+        assert "name" in data
