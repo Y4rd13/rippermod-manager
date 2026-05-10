@@ -18,7 +18,12 @@ logger = logging.getLogger(__name__)
 SSO_WS_URL = "wss://sso.nexusmods.com"
 SSO_AUTHORIZE_URL = "https://www.nexusmods.com/sso"
 SSO_TIMEOUT = 300  # 5 minutes
-APPLICATION_SLUG = os.environ.get("NEXUS_SSO_SLUG", "vortex")
+def _get_application_slug() -> str:
+    """Return the registered Nexus application slug, with env-var override for dev/testing."""
+    return os.environ.get("NEXUS_SSO_SLUG", "y4rd13-rippermodmanager")
+
+
+APPLICATION_SLUG = _get_application_slug()
 MAX_CONCURRENT_SESSIONS = 3
 
 
@@ -134,7 +139,7 @@ async def start_sso() -> tuple[str, str]:
         _sessions.pop(session_uuid, None)
         raise RuntimeError(error)
 
-    authorize_url = f"{SSO_AUTHORIZE_URL}?id={session_uuid}&application={APPLICATION_SLUG}"
+    authorize_url = f"{SSO_AUTHORIZE_URL}?id={session_uuid}&application={_get_application_slug()}"
     return session_uuid, authorize_url
 
 
