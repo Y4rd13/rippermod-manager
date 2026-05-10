@@ -151,3 +151,50 @@ class TestListenerSuccess:
         assert session.result is not None
         assert session.result.username == "testuser"
         assert session.error == ""
+
+
+class TestListenerErrors:
+    async def test_listener_handshake_rejection_sets_error(self, monkeypatch):
+        handshake = json.dumps({"success": False, "data": {}, "error": "invalid id"})
+        ws = _make_mock_ws([handshake])
+        _patch_websockets(monkeypatch, ws)
+        sso_service._sessions.clear()
+
+        with pytest.raises(RuntimeError, match="invalid id"):
+            await sso_service.start_sso()
+
+    async def test_listener_validation_failure_propagates(self, monkeypatch):
+        handshake = json.dumps(
+            {"success": True, "data": {"connection_token": "ct-2"}, "error": None}
+        )
+        api_key_msg = json.dumps(
+            {"success": True, "data": {"api_key": "bad-key"}, "error": None}
+        )
+        ws = _make_mock_ws([handshake, api_key_msg])
+        _patch_websockets(monkeypatch, ws)
+        _patch_validate_key(
+            monkeypatch,
+            NexusKeyResult(valid=False, username="", is_premium=False, error="unauthorized"),
+        )
+        sso_service._sessions.clear()
+
+        with pytest.raises(RuntimeError, match="unauthorized"):
+            await sso_service.start_sso()
+
+    async def test_listener_connection_closed_sets_error(self, monkeypatch):
+        ws = AsyncMock()
+        ws.send = AsyncMock(
+            side_effect=websockets.exceptions.ConnectionClosed(rcvd=None, sent=None)
+        )
+        ws.recv = AsyncMock()
+        connect_ctx = AsyncMock()
+        connect_ctx.__aenter__ = AsyncMock(return_value=ws)
+        connect_ctx.__aexit__ = AsyncMock(return_value=False)
+        monkeypatch.setattr(
+            "rippermod_manager.services.sso_service.websockets.connect",
+            lambda url, **_kw: connect_ctx,
+        )
+        sso_service._sessions.clear()
+
+        with pytest.raises(RuntimeError, match="WebSocket connection closed"):
+            await sso_service.start_sso()
