@@ -117,3 +117,37 @@ class TestHandshakePayload:
         assert sent_payload["protocol"] == 2
 
         sso_service.cancel_sso(session_uuid)
+
+
+class TestListenerSuccess:
+    async def test_listener_completes_and_validates_api_key(self, monkeypatch):
+        handshake = json.dumps(
+            {"success": True, "data": {"connection_token": "ct-1"}, "error": None}
+        )
+        api_key_msg = json.dumps(
+            {"success": True, "data": {"api_key": "valid-key"}, "error": None}
+        )
+        ws = _make_mock_ws([handshake, api_key_msg])
+        _patch_websockets(monkeypatch, ws)
+        _patch_validate_key(
+            monkeypatch,
+            NexusKeyResult(
+                valid=True,
+                username="testuser",
+                is_premium=False,
+                error="",
+            ),
+        )
+        sso_service._sessions.clear()
+
+        session_uuid, _ = await sso_service.start_sso()
+        session = sso_service._sessions[session_uuid]
+
+        await asyncio.wait_for(session.task, timeout=2.0)
+
+        assert session.status == sso_service.SSOStatus.SUCCESS
+        assert session.api_key == "valid-key"
+        assert session.connection_token == "ct-1"
+        assert session.result is not None
+        assert session.result.username == "testuser"
+        assert session.error == ""
