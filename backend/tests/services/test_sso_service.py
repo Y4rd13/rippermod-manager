@@ -198,3 +198,52 @@ class TestListenerErrors:
 
         with pytest.raises(RuntimeError, match="WebSocket connection closed"):
             await sso_service.start_sso()
+
+
+class TestSessionLifecycle:
+    def test_poll_returns_none_for_unknown_uuid(self):
+        sso_service._sessions.clear()
+        assert sso_service.poll_sso("nonexistent") is None
+
+    async def test_poll_returns_active_session(self, monkeypatch):
+        handshake = json.dumps(
+            {"success": True, "data": {"connection_token": "ct-3"}, "error": None}
+        )
+        ws = _make_mock_ws([handshake])
+        _patch_websockets(monkeypatch, ws)
+        sso_service._sessions.clear()
+
+        session_uuid, _ = await sso_service.start_sso()
+        polled = sso_service.poll_sso(session_uuid)
+
+        assert polled is not None
+        assert polled.uuid == session_uuid
+        sso_service.cancel_sso(session_uuid)
+
+    async def test_cancel_removes_session_and_cancels_task(self, monkeypatch):
+        handshake = json.dumps(
+            {"success": True, "data": {"connection_token": "ct-4"}, "error": None}
+        )
+        ws = _make_mock_ws([handshake])
+        _patch_websockets(monkeypatch, ws)
+        sso_service._sessions.clear()
+
+        session_uuid, _ = await sso_service.start_sso()
+        assert sso_service.cancel_sso(session_uuid) is True
+        assert session_uuid not in sso_service._sessions
+
+    def test_cancel_returns_false_for_unknown_uuid(self):
+        sso_service._sessions.clear()
+        assert sso_service.cancel_sso("missing") is False
+
+    async def test_max_concurrent_sessions_raises(self):
+        sso_service._sessions.clear()
+        for i in range(sso_service.MAX_CONCURRENT_SESSIONS):
+            session = sso_service.SSOSession(uuid=f"injected-{i}")
+            session.status = sso_service.SSOStatus.PENDING
+            sso_service._sessions[session.uuid] = session
+
+        with pytest.raises(RuntimeError, match="Too many active SSO sessions"):
+            await sso_service.start_sso()
+
+        sso_service._sessions.clear()
