@@ -62,3 +62,37 @@ class TestApplicationSlug:
     def test_slug_respects_env_override(self, monkeypatch):
         monkeypatch.setenv("NEXUS_SSO_SLUG", "custom-test-slug")
         assert sso_service._get_application_slug() == "custom-test-slug"
+
+
+class TestStartSSO:
+    async def test_authorize_url_contains_registered_slug(self, monkeypatch):
+        monkeypatch.delenv("NEXUS_SSO_SLUG", raising=False)
+        handshake = json.dumps(
+            {"success": True, "data": {"connection_token": "ct-123"}, "error": None}
+        )
+        ws = _make_mock_ws([handshake])
+        _patch_websockets(monkeypatch, ws)
+        sso_service._sessions.clear()
+
+        session_uuid, authorize_url = await sso_service.start_sso()
+
+        assert session_uuid in sso_service._sessions
+        assert authorize_url == (
+            f"https://www.nexusmods.com/sso?id={session_uuid}"
+            "&application=y4rd13-rippermodmanager"
+        )
+        sso_service.cancel_sso(session_uuid)
+
+    async def test_authorize_url_honours_env_override(self, monkeypatch):
+        monkeypatch.setenv("NEXUS_SSO_SLUG", "dev-slug")
+        handshake = json.dumps(
+            {"success": True, "data": {"connection_token": "ct-456"}, "error": None}
+        )
+        ws = _make_mock_ws([handshake])
+        _patch_websockets(monkeypatch, ws)
+        sso_service._sessions.clear()
+
+        session_uuid, authorize_url = await sso_service.start_sso()
+
+        assert "&application=dev-slug" in authorize_url
+        sso_service.cancel_sso(session_uuid)
