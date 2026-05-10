@@ -149,6 +149,8 @@ class TestListenerSuccess:
         assert session.result.username == "testuser"
         assert session.error == ""
 
+        sso_service._sessions.clear()
+
 
 class TestListenerErrors:
     async def test_listener_handshake_rejection_sets_error(self, monkeypatch):
