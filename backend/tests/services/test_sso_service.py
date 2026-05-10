@@ -96,3 +96,24 @@ class TestStartSSO:
 
         assert "&application=dev-slug" in authorize_url
         sso_service.cancel_sso(session_uuid)
+
+
+class TestHandshakePayload:
+    async def test_handshake_uses_protocol_2_with_no_extra_fields(self, monkeypatch):
+        handshake = json.dumps(
+            {"success": True, "data": {"connection_token": "ct-xyz"}, "error": None}
+        )
+        ws = _make_mock_ws([handshake])
+        _patch_websockets(monkeypatch, ws)
+        sso_service._sessions.clear()
+
+        session_uuid, _ = await sso_service.start_sso()
+
+        ws.send.assert_called_once()
+        sent_payload = json.loads(ws.send.call_args.args[0])
+        assert set(sent_payload.keys()) == {"id", "token", "protocol"}
+        assert sent_payload["id"] == session_uuid
+        assert sent_payload["token"] is None
+        assert sent_payload["protocol"] == 2
+
+        sso_service.cancel_sso(session_uuid)
