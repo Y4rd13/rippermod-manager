@@ -25,7 +25,6 @@ def _get_application_slug() -> str:
     return os.environ.get("NEXUS_SSO_SLUG", "y4rd13-rippermodmanager")
 
 
-APPLICATION_SLUG = _get_application_slug()
 MAX_CONCURRENT_SESSIONS = 3
 
 
