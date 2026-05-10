@@ -1,6 +1,5 @@
 """Router tests for /api/v1/nexus/sso endpoints."""
 
-import asyncio
 import json
 from unittest.mock import AsyncMock
 
@@ -16,12 +15,10 @@ def patched_ws(monkeypatch):
     handshake = json.dumps(
         {"success": True, "data": {"connection_token": "router-ct"}, "error": None}
     )
-    api_key_msg = json.dumps(
-        {"success": True, "data": {"api_key": "router-key"}, "error": None}
-    )
+    api_key_msg = json.dumps({"success": True, "data": {"api_key": "router-key"}, "error": None})
     ws = AsyncMock()
     ws.send = AsyncMock()
-    ws.recv = AsyncMock(side_effect=[handshake, api_key_msg, asyncio.TimeoutError()])
+    ws.recv = AsyncMock(side_effect=[handshake, api_key_msg, TimeoutError()])
     connect_ctx = AsyncMock()
     connect_ctx.__aenter__ = AsyncMock(return_value=ws)
     connect_ctx.__aexit__ = AsyncMock(return_value=False)

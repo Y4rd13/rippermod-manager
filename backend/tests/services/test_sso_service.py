@@ -20,7 +20,7 @@ def _make_mock_ws(recv_payloads: list[str]) -> AsyncMock:
     """
     ws = AsyncMock()
     ws.send = AsyncMock()
-    ws.recv = AsyncMock(side_effect=[*recv_payloads, asyncio.TimeoutError()])
+    ws.recv = AsyncMock(side_effect=[*recv_payloads, TimeoutError()])
     return ws
 
 
@@ -78,8 +78,7 @@ class TestStartSSO:
 
         assert session_uuid in sso_service._sessions
         assert authorize_url == (
-            f"https://www.nexusmods.com/sso?id={session_uuid}"
-            "&application=y4rd13-rippermodmanager"
+            f"https://www.nexusmods.com/sso?id={session_uuid}&application=y4rd13-rippermodmanager"
         )
         sso_service.cancel_sso(session_uuid)
 
@@ -124,9 +123,7 @@ class TestListenerSuccess:
         handshake = json.dumps(
             {"success": True, "data": {"connection_token": "ct-1"}, "error": None}
         )
-        api_key_msg = json.dumps(
-            {"success": True, "data": {"api_key": "valid-key"}, "error": None}
-        )
+        api_key_msg = json.dumps({"success": True, "data": {"api_key": "valid-key"}, "error": None})
         ws = _make_mock_ws([handshake, api_key_msg])
         _patch_websockets(monkeypatch, ws)
         _patch_validate_key(
@@ -167,9 +164,7 @@ class TestListenerErrors:
         handshake = json.dumps(
             {"success": True, "data": {"connection_token": "ct-2"}, "error": None}
         )
-        api_key_msg = json.dumps(
-            {"success": True, "data": {"api_key": "bad-key"}, "error": None}
-        )
+        api_key_msg = json.dumps({"success": True, "data": {"api_key": "bad-key"}, "error": None})
         ws = _make_mock_ws([handshake, api_key_msg])
         _patch_websockets(monkeypatch, ws)
         _patch_validate_key(

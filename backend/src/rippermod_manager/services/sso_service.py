@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 SSO_WS_URL = "wss://sso.nexusmods.com"
 SSO_AUTHORIZE_URL = "https://www.nexusmods.com/sso"
 SSO_TIMEOUT = 300  # 5 minutes
+
+
 def _get_application_slug() -> str:
     """Return the registered Nexus application slug, with env-var override for dev/testing."""
     return os.environ.get("NEXUS_SSO_SLUG", "y4rd13-rippermodmanager")
