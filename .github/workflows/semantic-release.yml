@@ -162,3 +162,48 @@ jobs:
           gh gist edit "${GIST_ID}" -f "${GIST_FILE}" "${NSIS_DIR}/latest.json" \
             || echo "::warning::Failed to update Gist — updater endpoint not refreshed"
           echo "Updated Gist file: ${GIST_FILE}"
+
+  upload-nexus:
+    name: Upload to Nexus Mods
+    needs: [release, build]
+    if: needs.release.outputs.new_release_version != '' && contains(needs.release.outputs.new_release_version, '-nexus.')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download installer from GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: v${{ needs.release.outputs.new_release_version }}
+          REPO: ${{ github.repository }}
+        run: |
+          mkdir -p dist
+          gh release download "$TAG_NAME" \
+            --repo "$REPO" \
+            --pattern "*setup.exe" \
+            --dir ./dist
+
+      - name: Resolve installer path
+        id: resolve
+        run: |
+          shopt -s nullglob
+          exe_files=( ./dist/*setup.exe )
+          if [[ ${#exe_files[@]} -ne 1 ]]; then
+            echo "::error::Expected exactly 1 setup .exe in the release, found ${#exe_files[@]}"
+            exit 1
+          fi
+          echo "file=${exe_files[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to Nexus Mods
+        uses: Nexus-Mods/upload-action@a746f1867153abc77beed950bf7526ece1a9f8c4 # v1.0.0-beta.5
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_group_id: ${{ secrets.NEXUS_GROUP_ID }}
+          filename: ${{ steps.resolve.outputs.file }}
+          version: ${{ needs.release.outputs.new_release_version }}
+          display_name: RipperMod Manager ${{ needs.release.outputs.new_release_version }}
+          description: |
+            Nexus-compliant installer. Full release notes:
+            https://github.com/${{ github.repository }}/releases/tag/v${{ needs.release.outputs.new_release_version }}
+          file_category: main
+          archive_existing_file: 'true'
