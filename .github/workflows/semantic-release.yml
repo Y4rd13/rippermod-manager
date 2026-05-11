@@ -168,6 +168,7 @@ jobs:
     needs: [release, build]
     if: needs.release.outputs.new_release_version != '' && contains(needs.release.outputs.new_release_version, '-nexus.')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -180,14 +181,14 @@ jobs:
           mkdir -p dist
           gh release download "$TAG_NAME" \
             --repo "$REPO" \
-            --pattern "*setup.exe" \
+            --pattern "*-setup.exe" \
             --dir ./dist
 
       - name: Resolve installer path
         id: resolve
         run: |
           shopt -s nullglob
-          exe_files=( ./dist/*setup.exe )
+          exe_files=( ./dist/*-setup.exe )
           if [[ ${#exe_files[@]} -ne 1 ]]; then
             echo "::error::Expected exactly 1 setup .exe in the release, found ${#exe_files[@]}"
             exit 1
