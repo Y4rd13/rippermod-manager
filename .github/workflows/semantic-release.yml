@@ -206,6 +206,8 @@ jobs:
           # would barely shrink it; storing is faster and the inner .exe stays
           # byte-identical regardless. -j strips the dist/ prefix inside the zip.
           zip -0 -j "$zip_path" "$EXE_PATH"
+          # Validate the archive integrity before handing it to the upload step
+          unzip -t "$zip_path"
           echo "file=${zip_path}" >> "$GITHUB_OUTPUT"
 
       - name: Upload to Nexus Mods
