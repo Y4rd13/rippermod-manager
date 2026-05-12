@@ -208,7 +208,7 @@ jobs:
           zip -0 -j "$zip_path" "$EXE_PATH"
           # Validate the archive integrity before handing it to the upload step
           unzip -t "$zip_path"
-          echo "file=${zip_path}" >> "$GITHUB_OUTPUT"
+          echo "file=./${zip_path}" >> "$GITHUB_OUTPUT"
 
       - name: Upload to Nexus Mods
         uses: Nexus-Mods/upload-action@a746f1867153abc77beed950bf7526ece1a9f8c4 # v1.0.0-beta.5
