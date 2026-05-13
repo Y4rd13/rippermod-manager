@@ -4,7 +4,7 @@ from sqlmodel import Session, select
 from rippermod_manager.database import get_session
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.settings import AppSetting
-from rippermod_manager.schemas.onboarding import OnboardingComplete, OnboardingStatus
+from rippermod_manager.schemas.onboarding import OnboardingStatus
 from rippermod_manager.services.keyring_service import SECRET_KEYS, delete_secret, get_secret
 
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
@@ -46,9 +46,7 @@ def get_onboarding_status(
 
 
 @router.post("/complete", response_model=OnboardingStatus)
-def complete_onboarding(
-    _data: OnboardingComplete, session: Session = Depends(get_session)
-) -> OnboardingStatus:
+def complete_onboarding(session: Session = Depends(get_session)) -> OnboardingStatus:
     completed_setting = session.exec(
         select(AppSetting).where(AppSetting.key == "onboarding_completed")
     ).first()

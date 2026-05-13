@@ -6,7 +6,3 @@ class OnboardingStatus(BaseModel):
     current_step: int
     has_nexus_key: bool
     has_game: bool
-
-
-class OnboardingComplete(BaseModel):
-    pass
