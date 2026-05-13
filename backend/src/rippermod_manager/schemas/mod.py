@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Literal
 
 from pydantic import BaseModel
 
@@ -63,12 +62,6 @@ class ArchiveMatchResult(BaseModel):
     unmatched: int
 
 
-class WebSearchResult(BaseModel):
-    searched: int
-    matched: int
-    unmatched: int
-
-
 class RequirementMatchResult(BaseModel):
     requirements_checked: int
     matched: int
@@ -82,12 +75,6 @@ class FileContentMatchResult(BaseModel):
 
 class CorrelationReassign(BaseModel):
     nexus_mod_id: int
-
-
-class ScanStreamRequest(BaseModel):
-    ai_search: bool = False
-    ai_search_model: Literal["gpt-5-mini", "gpt-5.2"] | None = None
-    ai_search_effort: Literal["low", "medium", "high"] | None = None
 
 
 ModGroupOut.model_rebuild()

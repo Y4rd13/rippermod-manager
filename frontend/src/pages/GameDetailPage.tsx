@@ -10,7 +10,6 @@ import {
   Play,
   RefreshCw,
   Scan,
-  Sparkles,
   UserCheck,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
@@ -36,7 +35,6 @@ import { UpdatesTable } from "@/components/mods/UpdatesTable";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ScanProgress, type ScanLog } from "@/components/ui/ScanProgress";
-import { Switch } from "@/components/ui/Switch";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import {
   useAvailableArchives,
@@ -48,7 +46,6 @@ import {
   useInstalledMods,
   useMods,
   useProfiles,
-  useHasOpenaiKey,
   useTrackedMods,
   useUpdates,
 } from "@/hooks/queries";
@@ -157,27 +154,10 @@ export function GameDetailPage() {
   const { data: updates, isLoading: updatesLoading } = useUpdates(name);
   const { data: conflictsOverview, isLoading: conflictsLoading } = useConflictsOverview(name);
   const { data: downloadJobs = [] } = useDownloadJobs(name);
-  const hasOpenaiKey = useHasOpenaiKey();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("installed");
   const [matchedSubTab, setMatchedSubTab] = useState<MatchedSubTab>("nexus-matched");
   const [selectedModId, setSelectedModId] = useState<number | null>(null);
-  const [aiSearch, setAiSearch] = useState(() => {
-    try {
-      const stored = localStorage.getItem("ai-search-enabled");
-      if (stored !== null) return JSON.parse(stored) === true;
-    } catch { /* ignore */ }
-    return false;
-  });
-  useEffect(() => {
-    if (localStorage.getItem("ai-search-enabled") === null) {
-      setAiSearch(!!hasOpenaiKey);
-    }
-  }, [hasOpenaiKey]);
-  const handleAiSearchChange = (v: boolean) => {
-    setAiSearch(v);
-    try { localStorage.setItem("ai-search-enabled", JSON.stringify(v)); } catch { /* ignore */ }
-  };
 
   const modalFlow = useInstallFlow(name, archives, downloadJobs, game?.domain_name);
 
@@ -284,7 +264,7 @@ export function GameDetailPage() {
       abortRef.current = controller;
       const response = await api.stream(
         `/api/v1/games/${name}/mods/scan-stream`,
-        aiSearch ? { ai_search: true } : undefined,
+        undefined,
         controller.signal,
       );
 
@@ -436,22 +416,6 @@ export function GameDetailPage() {
           <Button variant="secondary" onClick={handleLaunch} loading={isLaunching} disabled={!gameVersion?.exe_path} title="Launch the game executable">
             <Play size={16} /> Play
           </Button>
-          <span
-            title={
-              hasOpenaiKey
-                ? "Use AI-powered semantic search to improve mod matching accuracy (uses OpenAI API)"
-                : "Add your OpenAI API key in Settings to enable AI Search"
-            }
-            className="flex items-center gap-1.5"
-          >
-            <Sparkles size={16} className={cn(aiSearch && hasOpenaiKey ? "text-accent" : "text-text-muted")} />
-            <Switch
-              checked={aiSearch}
-              onChange={handleAiSearchChange}
-              label="AI Search"
-              disabled={isScanning || !hasOpenaiKey}
-            />
-          </span>
           <Button onClick={handleFullScan} loading={isScanning} title="Scan game folder for mods, group files, and match them to Nexus Mods">
             <Scan size={16} /> Scan & Correlate
           </Button>

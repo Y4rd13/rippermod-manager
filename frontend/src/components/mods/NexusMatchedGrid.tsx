@@ -102,8 +102,6 @@ const METHOD_LABELS: Record<string, string> = {
   file_list: "File List",
   endorsed_name: "Endorsed",
   fomod: "FOMOD",
-  ai_search: "AI Search",
-  web_search: "Web Search",
   manual: "Manual",
 };
 
