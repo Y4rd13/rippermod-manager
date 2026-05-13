@@ -153,6 +153,7 @@ def scan_mods_stream(game_name: str) -> StreamingResponse:
                 from rippermod_manager.services.fomod_parser import parse_archive_metadata
                 from rippermod_manager.services.nexus_sync import sync_nexus_history
                 from rippermod_manager.services.settings_helpers import get_setting
+
                 # Phase 1: Scan files + group (0-83%)
                 scan_game_mods(game, session, on_progress=on_progress)
 
