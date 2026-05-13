@@ -157,10 +157,6 @@ def delete_game(name: str, session: Session = Depends(get_session)) -> None:
 
     game_id = game.id
 
-    from rippermod_manager.vector.indexer import delete_game_vectors
-
-    delete_game_vectors(game_id)
-
     from rippermod_manager.models.download import DownloadJob
     from rippermod_manager.models.install import InstalledMod, InstalledModFile
     from rippermod_manager.models.mod import ModFile, ModGroup, ModGroupAlias
