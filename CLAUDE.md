@@ -56,7 +56,7 @@ See @docs/architecture.md for a full inventory of routers, services, models.
 - **Scan pipeline:** file discovery → TF-IDF + DBSCAN grouping → multi-tier matching → correlation
 - **Matching tiers:** (1) filename ID extraction, (1.5) file content reverse lookup, (2) MD5 hash batch lookup, (3) endorsed/tracked + collection matching + requirement propagation, (4) Jaccard + Jaro-Winkler fuzzy
 - **Secrets:** keyring service attempts OS keychain, falls back to SQLite. Keys: `nexus_api_key`
-- **Health:** `/health` (shallow), `/health/deep` (DB + ChromaDB + data_dir writability)
+- **Health:** `/health` (shallow), `/health/deep` (DB + data_dir writability)
 - **Logging:** stderr + `RotatingFileHandler` at `data_dir/logs/rippermod.log` (5 MB × 3)
 - Tauri CSP restricts connections to `localhost:8425`
 
@@ -92,5 +92,4 @@ When reviewing PRs, pay extra attention to:
 - **Type safety:** Handle `undefined` from indexed access in TypeScript
 - **Security:** CSP compliance, no arbitrary eval, no path traversal in archive extraction
 - **Nexus API:** Rate limiting, proper error handling, catch specific exceptions before broad ones
-- **Vector store:** ChromaDB collection lifecycle, index consistency after data mutations
-- **Exception handling:** Use specific types (`httpx.HTTPError`, `OSError`) — only use `except Exception` for shutdown/cleanup and ChromaDB operations
+- **Exception handling:** Use specific types (`httpx.HTTPError`, `OSError`) — only use `except Exception` for shutdown/cleanup
