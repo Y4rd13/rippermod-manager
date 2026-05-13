@@ -5,11 +5,9 @@ import { ChatPanel } from "@/components/chat/ChatPanel";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Titlebar } from "@/components/layout/Titlebar";
-import { UpdateBanner } from "@/components/layout/UpdateBanner";
 import { DownloadQueueFooter } from "@/components/ui/DownloadQueueFooter";
 import { KeyboardShortcutsModal } from "@/components/ui/KeyboardShortcutsModal";
 import { ToastContainer } from "@/components/ui/Toast";
-import { useAppUpdater } from "@/hooks/use-app-updater";
 import { useDownloadSync } from "@/hooks/use-download-sync";
 import { useHasOpenaiKey } from "@/hooks/queries";
 import { ScrollContainerContext } from "@/hooks/use-scroll-container";
@@ -17,7 +15,6 @@ import { useDownloadStore } from "@/stores/download-store";
 import { useUIStore } from "@/stores/ui-store";
 
 export function RootLayout() {
-  useAppUpdater(); // Triggers auto-check on startup; UI lives in SettingsPage
   const activeGameName = useUIStore((s) => s.activeGameName);
   useDownloadSync(activeGameName);
   const hasDownloads = useDownloadStore((s) => Object.keys(s.jobs).length > 0);
@@ -63,7 +60,6 @@ export function RootLayout() {
         Skip to content
       </a>
       <Titlebar />
-      <UpdateBanner />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <main ref={mainRef} id="main-content" className={`flex-1 overflow-y-auto bg-surface-0 p-6 ${hasDownloads && activeGameName ? "pb-16" : ""}`}>
