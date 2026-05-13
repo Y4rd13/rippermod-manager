@@ -9,7 +9,7 @@ from rippermod_manager.services.settings_helpers import set_setting
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
-HIDDEN_KEYS = {"nexus_api_key", "openai_api_key"}
+HIDDEN_KEYS = {"nexus_api_key"}
 
 
 def _mask_secret(value: str) -> str:

@@ -140,7 +140,6 @@ export interface PCSpecs {
 export interface OnboardingStatus {
   completed: boolean;
   current_step: number;
-  has_openai_key: boolean;
   has_nexus_key: boolean;
   has_game: boolean;
 }
@@ -186,14 +185,6 @@ export interface UpdateCheckResult {
   total_checked: number;
   updates_available: number;
   updates: ModUpdate[];
-}
-
-export interface ChatMessage {
-  id: number;
-  role: string;
-  content: string;
-  tool_calls_json: string;
-  created_at: string;
 }
 
 // Install feature types

@@ -330,7 +330,6 @@ def upsert_nexus_mod(
             dl.file_id = file_id
         dl.nexus_url = nexus_url
 
-    # Upsert mod metadata for vector search
     existing_meta = session.exec(
         select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)
     ).first()

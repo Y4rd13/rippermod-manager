@@ -20,10 +20,6 @@ a = Analysis(
         "uvicorn.lifespan.on",
         # SQLAlchemy dialect
         "sqlalchemy.dialects.sqlite",
-        # ChromaDB + ONNX
-        "chromadb",
-        "chromadb.config",
-        "onnxruntime",
         # scikit-learn Cython extensions
         "sklearn.utils._cython_blas",
         "sklearn.neighbors._typedefs",
@@ -38,8 +34,6 @@ a = Analysis(
         "starlette.middleware",
         "starlette.middleware.cors",
         "multipart",
-        # SSE
-        "sse_starlette",
         # Pydantic
         "pydantic",
         "pydantic_settings",
