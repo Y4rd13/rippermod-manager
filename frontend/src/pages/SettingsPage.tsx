@@ -6,51 +6,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { Input } from "@/components/ui/Input";
-import { useAbstainMod, useDisconnectNexus, useEndorseMod, useSaveSettings, useTrackMod, useUntrackMod } from "@/hooks/mutations";
+import { useAbstainMod, useDisconnectNexus, useEndorseMod, useTrackMod, useUntrackMod } from "@/hooks/mutations";
 import { useNexusSSO } from "@/hooks/use-nexus-sso";
 import { useGames, useModSummary, useSettings } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
-
-function ApiKeyField({
-  id,
-  label,
-  placeholder,
-  currentValue,
-  value,
-  onChange,
-  hint,
-}: {
-  id: string;
-  label: string;
-  placeholder: string;
-  currentValue?: string;
-  value: string;
-  onChange: (value: string) => void;
-  hint?: string;
-}) {
-  return (
-    <div className="space-y-2">
-      <Input
-        id={id}
-        label={label}
-        type="password"
-        placeholder={currentValue ? "Enter new key to replace" : placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      {hint && <p className="text-xs text-text-muted">{hint}</p>}
-      {currentValue && (
-        <div className="flex items-center gap-2 rounded-md bg-surface-2 px-3 py-2">
-          <CheckCircle size={14} className="shrink-0 text-success" />
-          <span className="min-w-0 flex-1 truncate font-mono text-xs text-text-secondary">
-            {currentValue}
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}
 
 const RIPPERMOD_NEXUS_MOD_ID = 27781;
 const RIPPERMOD_NEXUS_DOMAIN = "cyberpunk2077";
@@ -169,21 +128,11 @@ function AboutCard() {
 
 export function SettingsPage() {
   const { data: settings = [] } = useSettings();
-  const saveSettings = useSaveSettings();
   const disconnect = useDisconnectNexus();
   const sso = useNexusSSO();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const [openaiKey, setOpenaiKey] = useState("");
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
-
-  const savedAiModel = settings.find((s) => s.key === "ai_search_model")?.value ?? "gpt-5-mini";
-  const savedAiEffort = settings.find((s) => s.key === "ai_search_effort")?.value ?? "low";
-  const [aiModel, setAiModel] = useState<string | null>(null);
-  const [aiEffort, setAiEffort] = useState<string | null>(null);
-  const currentAiModel = aiModel ?? savedAiModel;
-  const currentAiEffort = aiEffort ?? savedAiEffort;
-  const aiDirty = currentAiModel !== savedAiModel || currentAiEffort !== savedAiEffort;
 
   useEffect(() => {
     if (sso.state === "success") {
@@ -191,15 +140,6 @@ export function SettingsPage() {
     }
   }, [sso.state, qc]);
 
-  const handleSave = () => {
-    if (!openaiKey) return;
-    saveSettings.mutate(
-      { openai_api_key: openaiKey },
-      { onSuccess: () => setOpenaiKey("") },
-    );
-  };
-
-  const currentOpenai = settings.find((s) => s.key === "openai_api_key")?.value;
   const currentNexus = settings.find((s) => s.key === "nexus_api_key")?.value;
   const nexusUsername = settings.find((s) => s.key === "nexus_username")?.value;
   const nexusIsPremium = settings.find((s) => s.key === "nexus_is_premium")?.value === "true";
@@ -207,99 +147,6 @@ export function SettingsPage() {
   return (
     <div className="space-y-6 max-w-2xl">
       <h1 className="text-2xl font-bold text-text-primary">Settings</h1>
-
-      <Card>
-        <h2 className="text-lg font-semibold text-text-primary mb-4">
-          API Keys
-        </h2>
-        <div className="space-y-4">
-          <ApiKeyField
-            id="openai-key"
-            label="OpenAI API Key"
-            placeholder="sk-..."
-            currentValue={currentOpenai}
-            value={openaiKey}
-            onChange={setOpenaiKey}
-            hint="Required for AI Search and the chat agent. Get one at platform.openai.com."
-          />
-          <Button onClick={handleSave} loading={saveSettings.isPending} disabled={!openaiKey}>
-            Save Changes
-          </Button>
-        </div>
-      </Card>
-
-      <Card>
-        <h2 className="text-lg font-semibold text-text-primary mb-4">
-          AI Search
-        </h2>
-        <p className="text-xs text-text-muted mb-4">
-          Configure the OpenAI model used when AI Search is enabled during scans.
-        </p>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-text-secondary">Model</label>
-            <div className="grid grid-cols-2 gap-3">
-              {([
-                { value: "gpt-5-mini", label: "gpt-5-mini", desc: "Cost-optimized", tip: "Faster and cheaper — good for most mod matching tasks" },
-                { value: "gpt-5.2", label: "gpt-5.2", desc: "Best quality", tip: "More accurate but slower and more expensive" },
-              ] as const).map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  title={opt.tip}
-                  onClick={() => setAiModel(opt.value)}
-                  className={cn(
-                    "rounded-lg border px-4 py-3 text-left transition-colors",
-                    currentAiModel === opt.value
-                      ? "border-accent bg-accent/10 text-accent"
-                      : "border-border bg-surface-2 text-text-muted hover:border-text-muted",
-                  )}
-                >
-                  <p className="text-sm font-medium">{opt.label}</p>
-                  <p className="text-xs opacity-70">{opt.desc}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-text-secondary">Reasoning Effort</label>
-            <div className="flex gap-2">
-              {([
-                { value: "low", tip: "Fastest — uses minimal reasoning tokens" },
-                { value: "medium", tip: "Balanced speed and accuracy" },
-                { value: "high", tip: "Most thorough — uses more tokens and takes longer" },
-              ] as const).map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  title={opt.tip}
-                  onClick={() => setAiEffort(opt.value)}
-                  className={cn(
-                    "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
-                    currentAiEffort === opt.value
-                      ? "bg-accent text-white"
-                      : "bg-surface-2 text-text-muted hover:text-text-secondary",
-                  )}
-                >
-                  {opt.value}
-                </button>
-              ))}
-            </div>
-          </div>
-          <Button
-            onClick={() => {
-              saveSettings.mutate(
-                { ai_search_model: currentAiModel, ai_search_effort: currentAiEffort },
-                { onSuccess: () => { setAiModel(null); setAiEffort(null); } },
-              );
-            }}
-            loading={saveSettings.isPending}
-            disabled={!aiDirty}
-          >
-            Save Changes
-          </Button>
-        </div>
-      </Card>
 
       <Card>
         <h2 className="text-lg font-semibold text-text-primary mb-4">

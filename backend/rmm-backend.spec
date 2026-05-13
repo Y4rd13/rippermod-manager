@@ -34,8 +34,6 @@ a = Analysis(
         "starlette.middleware",
         "starlette.middleware.cors",
         "multipart",
-        # SSE
-        "sse_starlette",
         # Pydantic
         "pydantic",
         "pydantic_settings",
