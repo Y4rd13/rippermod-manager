@@ -1,7 +1,7 @@
 [project]
 name = "rippermod-manager"
 version = "1.0.0"
-description = "AI-powered mod manager for PC games"
+description = "Mod manager for PC games with Nexus Mods integration"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",
@@ -9,26 +9,20 @@ dependencies = [
     "sqlmodel>=0.0.22",
     "pydantic-settings>=2.7.0",
     "httpx>=0.28.0",
-    "langchain>=0.3.0",
-    "langchain-openai>=0.3.0",
-    "chromadb>=0.6.0",
     "scikit-learn>=1.6.0",
     "jellyfish>=1.1.0",
     "xxhash>=3.5.0",
-    "sse-starlette>=2.2.0",
     "py7zr>=0.22.0",
     "defusedxml>=0.7.0",
     "pefile>=2024.8.26",
     "pyyaml>=6.0",
     "websockets>=14.0",
-    "openai>=1.60.0",
     "rarfile>=4.2",
     "tenacity>=9.0",
     "keyring>=25.0",
 ]
 
 [project.optional-dependencies]
-search = ["tavily-python>=0.7.0"]
 dev = ["ruff>=0.8.0"]
 test = ["pytest>=8.0", "pytest-asyncio>=0.24", "respx>=0.22", "pytest-cov>=6.0"]
 build = ["pyinstaller>=6.0"]

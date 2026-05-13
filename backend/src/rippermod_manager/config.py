@@ -26,9 +26,6 @@ class Settings(BaseSettings):
 
     data_dir: Path = Path("")
     db_path: Path = Path("")
-    openai_api_key: str = ""
-    openai_model: str = "gpt-4o"
-    tavily_api_key: str = ""
     host: str = "127.0.0.1"
     port: int = 8425
 

@@ -38,7 +38,6 @@ import type {
   ProfileUpdate,
   ResolveResult,
   ScanResult,
-  Setting,
   ToggleResult,
   TrendingResult,
   UninstallResult,
@@ -108,23 +107,10 @@ export function useCorrelate() {
   });
 }
 
-export function useSaveSettings() {
-  const qc = useQueryClient();
-  return useMutation<Setting[], Error, Record<string, string>>({
-    mutationFn: (settings) =>
-      api.put("/api/v1/settings/", { settings }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["settings"] });
-      toast.success("Settings saved");
-    },
-    onError: () => toast.error("Failed to save settings"),
-  });
-}
-
 export function useCompleteOnboarding() {
   const qc = useQueryClient();
-  return useMutation<OnboardingStatus, Error, { openai_api_key?: string }>({
-    mutationFn: (data) => api.post("/api/v1/onboarding/complete", data),
+  return useMutation<OnboardingStatus, Error, void>({
+    mutationFn: () => api.post("/api/v1/onboarding/complete"),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["onboarding"] }),
   });
 }
