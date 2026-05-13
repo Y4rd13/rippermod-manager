@@ -35,7 +35,7 @@ def _configure_logging() -> None:
         handlers=[logging.StreamHandler(sys.stderr), file_handler],
         force=True,
     )
-    for name in ("httpx", "httpcore", "chromadb", "uvicorn.access"):
+    for name in ("httpx", "httpcore", "uvicorn.access"):
         logging.getLogger(name).setLevel(logging.WARNING)
 
 
@@ -64,12 +64,6 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         logger.info("Database engine disposed")
     except Exception:
         logger.exception("Failed to dispose database engine")
-    try:
-        from rippermod_manager.vector.store import release_client
-
-        release_client()
-    except Exception:
-        logger.exception("Failed to release ChromaDB client")
     logger.info("Shutdown complete")
 
 
@@ -119,18 +113,6 @@ async def health_deep() -> dict[str, Any]:
     except Exception:
         logger.exception("Health check: database unavailable")
         checks["database"] = "unavailable"
-        all_ok = False
-
-    # ChromaDB heartbeat
-    try:
-        from rippermod_manager.vector.store import get_chroma_client
-
-        client = get_chroma_client()
-        client.heartbeat()
-        checks["chromadb"] = "ok"
-    except Exception:
-        logger.exception("Health check: chromadb unavailable")
-        checks["chromadb"] = "unavailable"
         all_ok = False
 
     # Data dir writability

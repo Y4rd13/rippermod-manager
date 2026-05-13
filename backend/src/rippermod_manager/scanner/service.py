@@ -146,22 +146,9 @@ def scan_game_mods(
                         session.add(im)
 
     session.commit()
-    on_progress("index", "Indexing into vector store...", 78)
-
-    try:
-        from rippermod_manager.vector.indexer import index_mod_groups
-
-        index_mod_groups(game.id)
-        on_progress("index", "Vector index updated", 83)
-    except ImportError:
-        on_progress("index", "Vector indexing skipped (not configured)", 83)
-        logger.info("ChromaDB not available, skipping vector indexing")
-    except Exception:
-        on_progress("index", "Vector indexing failed", 83)
-        logger.warning("Failed to auto-index after scan", exc_info=True)
 
     msg = f"Scan complete: {len(discovered_files)} files, {groups_created} groups"
-    on_progress("index", msg, 85)
+    on_progress("scan", msg, 85)
 
     return ScanResult(
         files_found=len(discovered_files),

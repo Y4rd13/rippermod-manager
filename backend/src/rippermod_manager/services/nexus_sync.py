@@ -160,14 +160,6 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
 
     total = session.exec(select(NexusDownload).where(NexusDownload.game_id == game.id)).all()
 
-    try:
-        from rippermod_manager.vector.indexer import index_nexus_metadata
-
-        index_nexus_metadata(game.id)
-        logger.info("Auto-indexed Nexus metadata into vector store after sync")
-    except Exception:
-        logger.warning("Failed to auto-index after Nexus sync", exc_info=True)
-
     return NexusSyncResult(
         tracked_mods=len(tracked_ids),
         endorsed_mods=len(endorsed_ids),
