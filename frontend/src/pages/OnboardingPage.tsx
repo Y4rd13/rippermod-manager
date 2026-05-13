@@ -320,7 +320,7 @@ function AddGameStep({ onFinish, onBack }: { onFinish: () => void; onBack: () =>
 
       pushLog({ phase: "complete", message: "Completing setup...", percent: 100 });
       latestPhase.current = "complete";
-      await completeOnboarding.mutateAsync({});
+      await completeOnboarding.mutateAsync();
 
       stopFlushing();
       setScanPhase("done");
@@ -475,13 +475,10 @@ export function OnboardingPage() {
     const nextStep = store.currentStep + 1;
     // After Nexus auth (step 1 → 2): if user already has a game, auto-complete
     if (nextStep === 2 && onboardingStatus?.has_game) {
-      completeOnboarding.mutate(
-        {},
-        {
-          onSuccess: () => navigate("/dashboard", { replace: true }),
-          onError: () => store.setStep(nextStep),
-        },
-      );
+      completeOnboarding.mutate(undefined, {
+        onSuccess: () => navigate("/dashboard", { replace: true }),
+        onError: () => store.setStep(nextStep),
+      });
       return;
     }
     store.setStep(nextStep);

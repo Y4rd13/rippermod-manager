@@ -108,8 +108,8 @@ export function useCorrelate() {
 
 export function useCompleteOnboarding() {
   const qc = useQueryClient();
-  return useMutation<OnboardingStatus, Error, Record<string, never>>({
-    mutationFn: (data) => api.post("/api/v1/onboarding/complete", data),
+  return useMutation<OnboardingStatus, Error, void>({
+    mutationFn: () => api.post("/api/v1/onboarding/complete"),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["onboarding"] }),
   });
 }
