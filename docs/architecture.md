@@ -1,6 +1,6 @@
 # Architecture
 
-Detailed project layout and component inventory.
+Detailed project layout and component inventory for the Full edition.
 For a high-level overview, see the [README](../README.md#architecture).
 
 ## Project Structure
@@ -13,7 +13,7 @@ rippermod-manager/
 │   │   ├── main.py                  # FastAPI app, lifespan, CORS, /health
 │   │   ├── config.py                # Pydantic settings (AppData paths)
 │   │   ├── database.py              # SQLite engine, session factory
-│   │   ├── models/                  # SQLModel tables (12 modules, 18 tables)
+│   │   ├── models/                  # SQLModel tables
 │   │   │   ├── game.py              #   Game, GameModPath
 │   │   │   ├── mod.py               #   ModGroup, ModFile, ModGroupAlias
 │   │   │   ├── nexus.py             #   NexusDownload, NexusModMeta, NexusModRequirement, NexusModFile
@@ -22,12 +22,11 @@ rippermod-manager/
 │   │   │   ├── install.py           #   InstalledMod, InstalledModFile, ArchiveNexusLink
 │   │   │   ├── profile.py           #   Profile, ProfileEntry
 │   │   │   ├── settings.py          #   AppSetting, PCSpecs
-│   │   │   ├── chat.py              #   ChatMessage
 │   │   │   ├── archive_index.py     #   ArchiveEntryIndex (per-archive file listing)
 │   │   │   ├── conflict.py          #   ConflictKind, Severity, ConflictEvidence
 │   │   │   └── load_order.py        #   LoadOrderPreference
 │   │   ├── schemas/                 # Pydantic request/response models
-│   │   ├── routers/                 # FastAPI routers, prefix /api/v1/ (15 routers)
+│   │   ├── routers/                 # FastAPI routers, prefix /api/v1/
 │   │   │   ├── games.py             #   CRUD games + mod paths
 │   │   │   ├── mods.py              #   List, scan, correlate, confirm/reject/reassign
 │   │   │   ├── nexus.py             #   Sync, search, endorse/track, SSO, mod detail
@@ -40,9 +39,7 @@ rippermod-manager/
 │   │   │   ├── trending.py          #   Trending mods from Nexus
 │   │   │   ├── updates.py           #   Version diff + update check
 │   │   │   ├── settings.py          #   App settings + PC specs
-│   │   │   ├── onboarding.py        #   Onboarding status + completion
-│   │   │   ├── chat.py              #   SSE chat endpoint
-│   │   │   └── vector.py            #   Reindex, search, stats
+│   │   │   └── onboarding.py        #   Onboarding status + completion
 │   │   ├── scanner/service.py       # File discovery + grouping
 │   │   ├── matching/                # Mod name matching (5 modules)
 │   │   │   ├── grouper.py           # TF-IDF + DBSCAN file grouping
@@ -53,82 +50,66 @@ rippermod-manager/
 │   │   ├── nexus/                   # Nexus Mods API clients
 │   │   │   ├── client.py            # REST v1 API client (reads + mutations)
 │   │   │   └── graphql_client.py    # GraphQL v2 client (batch + search)
-│   │   ├── services/                # Business logic (38 modules)
-│   │   │   ├── nexus_sync.py        # Sync tracked/endorsed mods
-│   │   │   ├── nexus_helpers.py     # GQL→REST adapters, game categories
-│   │   │   ├── download_service.py  # Download orchestration + shutdown
-│   │   │   ├── download_dates.py    # Download date heuristics
-│   │   │   ├── install_service.py   # Mod install/uninstall/toggle logic
-│   │   │   ├── fomod_config_parser.py # FOMOD XML config parser
-│   │   │   ├── fomod_install_service.py # FOMOD step-based installation
-│   │   │   ├── fomod_parser.py      # FOMOD ModuleConfig XML parser
-│   │   │   ├── profile_service.py   # Profile save/load/export/import
-│   │   │   ├── update_service.py    # Version comparison + update check
-│   │   │   ├── conflict_service.py  # File-level conflict detection
-│   │   │   ├── conflict_graph_service.py # Conflict graph builder
-│   │   │   ├── conflicts_inbox_service.py # Conflict inbox + resolution
-│   │   │   ├── conflicts/           # Multi-layer conflict engine
-│   │   │   │   ├── dependency_graph.py #   Installed mod dependency pair builder
-│   │   │   │   ├── detectors.py     #   REDmod, TweakXL, archive overlap
-│   │   │   │   └── engine.py        #   Orchestrates all detectors
-│   │   │   ├── load_order.py        # Load order + modlist.txt writer
-│   │   │   ├── modlist_service.py   # Ordered mod group view
-│   │   │   ├── archive_index_service.py # Archive file indexing
-│   │   │   ├── archive_conflict_detector.py # Archive-level conflict detection
-│   │   │   ├── archive_layout.py    # Archive structure analysis
-│   │   │   ├── archive_matcher.py   # MD5 hash matching (Tier 2)
-│   │   │   ├── enrichment.py        # Filename ID extraction (Tier 1)
-│   │   │   ├── file_content_matcher.py # File content reverse lookup matching
-│   │   │   ├── file_list_matcher.py # File list similarity matching
-│   │   │   ├── collection_matcher.py # Nexus collection-based matching
-│   │   │   ├── requirement_matcher.py # Mod requirement propagation matching
-│   │   │   ├── trending_service.py  # Trending mods fetching
-│   │   │   ├── ai_search_matcher.py # AI-powered mod matching
-│   │   │   ├── web_search_matcher.py # Web search fallback matching
-│   │   │   ├── redscript_analysis.py # Redscript annotation conflict analysis
-│   │   │   ├── tweakxl_parser.py    # TweakXL YAML parser
-│   │   │   ├── tweakxl_conflict_analyzer.py # TweakXL conflict detection
-│   │   │   ├── sso_service.py       # Nexus SSO WebSocket handler
-│   │   │   ├── settings_helpers.py  # Settings read/write helpers
-│   │   │   ├── keyring_service.py   # OS keychain abstraction
-│   │   │   ├── game_version.py      # Game version detection
-│   │   │   └── progress.py          # SSE progress streaming
-│   │   ├── vector/                  # Semantic search
-│   │   │   ├── store.py             # ChromaDB client + collections
-│   │   │   ├── indexer.py           # Index mods/nexus/correlations
-│   │   │   └── search.py            # Semantic search queries
-│   │   └── agents/orchestrator.py   # LangChain agent + tools
+│   │   └── services/                # Business logic
+│   │       ├── nexus_sync.py        # Sync tracked/endorsed mods
+│   │       ├── nexus_helpers.py     # GQL→REST adapters, game categories
+│   │       ├── download_service.py  # Download orchestration + shutdown
+│   │       ├── download_dates.py    # Download date heuristics
+│   │       ├── install_service.py   # Mod install/uninstall/toggle logic
+│   │       ├── fomod_config_parser.py # FOMOD XML config parser
+│   │       ├── fomod_install_service.py # FOMOD step-based installation
+│   │       ├── fomod_parser.py      # FOMOD ModuleConfig XML parser
+│   │       ├── profile_service.py   # Profile save/load/export/import
+│   │       ├── update_service.py    # Version comparison + update check
+│   │       ├── conflict_service.py  # File-level conflict detection
+│   │       ├── conflict_graph_service.py # Conflict graph builder
+│   │       ├── conflicts_inbox_service.py # Conflict inbox + resolution
+│   │       ├── conflicts/           # Multi-layer conflict engine
+│   │       │   ├── dependency_graph.py #   Installed mod dependency pair builder
+│   │       │   ├── detectors.py     #   REDmod, TweakXL, archive overlap
+│   │       │   └── engine.py        #   Orchestrates all detectors
+│   │       ├── load_order.py        # Load order + modlist.txt writer
+│   │       ├── modlist_service.py   # Ordered mod group view
+│   │       ├── archive_index_service.py # Archive file indexing
+│   │       ├── archive_conflict_detector.py # Archive-level conflict detection
+│   │       ├── archive_layout.py    # Archive structure analysis
+│   │       ├── archive_matcher.py   # MD5 hash matching (Tier 2)
+│   │       ├── enrichment.py        # Filename ID extraction (Tier 1)
+│   │       ├── file_content_matcher.py # File content reverse lookup matching
+│   │       ├── file_list_matcher.py # File list similarity matching
+│   │       ├── collection_matcher.py # Nexus collection-based matching
+│   │       ├── requirement_matcher.py # Mod requirement propagation matching
+│   │       ├── trending_service.py  # Trending mods fetching
+│   │       ├── redscript_analysis.py # Redscript annotation conflict analysis
+│   │       ├── tweakxl_parser.py    # TweakXL YAML parser
+│   │       ├── tweakxl_conflict_analyzer.py # TweakXL conflict detection
+│   │       ├── sso_service.py       # Nexus SSO WebSocket handler
+│   │       ├── settings_helpers.py  # Settings read/write helpers
+│   │       ├── keyring_service.py   # OS keychain abstraction
+│   │       ├── game_version.py      # Game version detection
+│   │       └── progress.py          # SSE progress streaming
 │   ├── rmm-backend.spec            # PyInstaller spec (--onefile)
-│   └── tests/                       # 822+ pytest tests across 51 files
+│   └── tests/                       # 809+ pytest tests
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── BackendGate.tsx       # Waits for backend before rendering
 │   │   │   ├── ErrorBoundary.tsx     # Catches crashes, shows fallback UI
-│   │   │   ├── chat/                 # ChatPanel
-│   │   │   ├── conflicts/           # 5 conflict UI components
-│   │   │   │                        #   ArchiveResourceConflicts, ConflictSummaryWidget,
-│   │   │   │                        #   DisableConfirmDialog, LoadOrderView,
-│   │   │   │                        #   ResourceDetailsPanel
+│   │   │   ├── conflicts/           # ArchiveResourceConflicts, ConflictSummaryWidget,
+│   │   │   │                        # DisableConfirmDialog, LoadOrderView, ResourceDetailsPanel
 │   │   │   ├── layout/              # Sidebar, Titlebar, UpdateBanner
-│   │   │   ├── mods/                # 25 mod-related components
-│   │   │   │                        #   NexusModCard, NexusMatchedGrid,
-│   │   │   │                        #   InstalledModsTable, ModsTable,
-│   │   │   │                        #   ArchivesList, ArchiveTreeModal,
-│   │   │   │                        #   ProfileManager, ProfileCompareDialog,
-│   │   │   │                        #   ProfileDiffDialog, FomodWizard,
-│   │   │   │                        #   TrendingGrid, NexusAccountGrid,
-│   │   │   │                        #   ModDetailModal, ModQuickActions,
-│   │   │   │                        #   ModCardAction, InstalledModCardAction,
-│   │   │   │                        #   UpdatesTable, UpdateDownloadCell,
-│   │   │   │                        #   ConflictDialog, ConflictDetailDrawer,
-│   │   │   │                        #   ConflictsInbox, CorrelationActions,
-│   │   │   │                        #   PreInstallPreview, ReassignDialog,
-│   │   │   │                        #   SourceBadge
-│   │   │   └── ui/                  # 24 shared UI primitives
-│   │   │                            #   Badge, Button, Card, ConfirmDialog,
-│   │   │                            #   ContextMenu, Input, Switch, Toast,
-│   │   │                            #   VirtualTable, VirtualCardGrid, ...
+│   │   │   ├── mods/                # NexusModCard, NexusMatchedGrid, InstalledModsTable,
+│   │   │   │                        # ModsTable, ArchivesList, ArchiveTreeModal,
+│   │   │   │                        # ProfileManager, ProfileCompareDialog,
+│   │   │   │                        # ProfileDiffDialog, FomodWizard, TrendingGrid,
+│   │   │   │                        # NexusAccountGrid, ModDetailModal, ModQuickActions,
+│   │   │   │                        # ModCardAction, InstalledModCardAction,
+│   │   │   │                        # UpdatesTable, UpdateDownloadCell, ConflictDialog,
+│   │   │   │                        # ConflictDetailDrawer, ConflictsInbox,
+│   │   │   │                        # CorrelationActions, PreInstallPreview,
+│   │   │   │                        # ReassignDialog, SourceBadge
+│   │   │   └── ui/                  # Badge, Button, Card, ConfirmDialog, ContextMenu,
+│   │   │                            # Input, Switch, Toast, VirtualTable, VirtualCardGrid, ...
 │   │   ├── pages/
 │   │   │   ├── DashboardPage.tsx
 │   │   │   ├── GamesPage.tsx
@@ -136,19 +117,21 @@ rippermod-manager/
 │   │   │   ├── SettingsPage.tsx
 │   │   │   ├── UpdatesPage.tsx
 │   │   │   └── OnboardingPage.tsx
-│   │   ├── hooks/                   # 12 hooks (React Query, useInstallFlow, useFomodWizard, ...)
-│   │   ├── stores/                  # Zustand stores
+│   │   ├── hooks/                   # React Query, useInstallFlow, useFomodWizard,
+│   │   │                            # useAppUpdater, useNexusSSO, ...
+│   │   ├── stores/                  # Zustand stores (UI, downloads, toasts, updater)
 │   │   ├── lib/                     # API client, SSE parser, utils
 │   │   ├── router/                  # Routes + OnboardingGuard
 │   │   ├── layouts/                 # Root + Onboarding layouts
 │   │   └── types/                   # TypeScript API types
-│   └── src-tauri/                   # Tauri v2 Rust shell + sidecar lifecycle
+│   └── src-tauri/                   # Tauri v2 Rust shell + sidecar lifecycle + updater plugin
 ├── scripts/
 │   ├── build-backend.ps1            # PyInstaller build + sidecar copy
 │   ├── ensure-dev-sidecar.ps1       # Dev placeholder for Tauri compile
 │   └── bump-version.sh             # Patch version bump helper
 ├── docs/
 │   ├── nexus-api-usage.md           # Nexus Mods REST v1 + GraphQL v2 endpoint map
+│   ├── dual-release-strategy.md     # main vs nexus-compliant divergence
 │   ├── nexus-article-getting-started.bbcode  # Nexus Mods Getting Started article
 │   └── nexus-description.bbcode     # Nexus Mods page description
 ├── .github/workflows/
@@ -162,3 +145,16 @@ rippermod-manager/
 ├── CLA.md                           # Contributor License Agreement
 └── LICENSE                          # GPL-3.0
 ```
+
+## Removed from both editions
+
+The following modules existed in earlier releases but have been removed from the current code:
+
+- `agents/` (LangChain chat orchestrator)
+- `vector/` (ChromaDB store, indexer, semantic search)
+- `services/ai_search_matcher.py` and `services/web_search_matcher.py`
+- `routers/chat.py` and `routers/vector.py`
+- `models/chat.py` and `schemas/chat.py` (the `chat_messages` table is left in the SQLite schema for backward compatibility but is no longer read)
+- Frontend `ChatPanel` and `chat-store`
+
+The Nexus edition additionally removes the Tauri auto-updater (`tauri-plugin-updater`, `tauri-plugin-process`, the `UpdateBanner`, the `useAppUpdater` hook, and the related CI/Gist plumbing). See [dual-release-strategy.md](dual-release-strategy.md) for the full divergence list.

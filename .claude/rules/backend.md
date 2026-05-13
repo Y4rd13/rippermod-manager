@@ -26,10 +26,10 @@ paths:
 ## Error handling
 - `except httpx.HTTPError` for API calls
 - `except OSError` for file I/O
-- `except Exception` ONLY for: shutdown/cleanup, ChromaDB ops, keyring ops, top-level scan handler
+- `except Exception` ONLY for: shutdown/cleanup, keyring ops, top-level scan handler
 - NEVER use bare `except:` (no exception type)
 
 ## Adding dependencies
 - Add to `backend/pyproject.toml` under `[project.dependencies]`
-- Optional deps go in `[project.optional-dependencies]` (search, dev, test, build)
+- Optional deps go in `[project.optional-dependencies]` (dev, test, build)
 - Run `uv sync` to update `uv.lock` — always commit the lockfile
