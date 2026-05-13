@@ -187,14 +187,6 @@ export interface UpdateCheckResult {
   updates: ModUpdate[];
 }
 
-export interface ChatMessage {
-  id: number;
-  role: string;
-  content: string;
-  tool_calls_json: string;
-  created_at: string;
-}
-
 // Install feature types
 
 export interface AvailableArchive {
