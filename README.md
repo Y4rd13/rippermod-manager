@@ -5,12 +5,16 @@
 <h1 align="center">RipperMod Manager</h1>
 
 <p align="center">
-  A desktop AI-powered mod manager for PC games.<br>
-  Scan, group, correlate, and manage your mods with an integrated chat assistant and <a href="https://www.nexusmods.com/">Nexus Mods</a> integration.
+  A desktop mod manager for PC games.<br>
+  Scan, group, correlate, and manage your mods with <a href="https://www.nexusmods.com/">Nexus Mods</a> integration.
 </p>
 
 <p align="center">
   Built with Cyberpunk 2077 as the primary target, but designed to support any game on Nexus Mods.
+</p>
+
+<p align="center">
+  <strong>This branch (<code>nexus-compliant</code>) is the Nexus Mods edition</strong> — no in-app LLM features and no app auto-updater, per Nexus file submission guidelines. The full edition lives on <a href="https://github.com/Y4rd13/rippermod-manager/tree/main">main</a>.
 </p>
 
 <p align="center">
@@ -23,23 +27,19 @@
 ## Features
 
 - **Mod Scanner** — Recursively discovers mod files from configured game paths, groups them by name similarity using TF-IDF + DBSCAN clustering, and computes file hashes for integrity tracking.
-- **Nexus Mods Integration** — Connects to your Nexus account via SSO, syncs tracked/endorsed mods, fetches mod metadata, and searches Nexus by name via GraphQL v2.
-- **Endorse & Track** — Toggle endorse/track status on any mod directly from card buttons, context menus, or the mod detail modal — syncs with the Nexus Mods API in real time.
-- **Auto-Correlation** — Multi-tier matching pipeline: filename ID extraction, MD5 hash batch lookup, file content reverse lookup, endorsed/tracked sync, Nexus collection matching, mod requirement propagation, Jaccard + Jaro-Winkler fuzzy matching, and AI/web search. Manual reassign, confirm, and reject actions.
+- **Nexus Mods Integration** — Connects to your Nexus account via SSO, syncs tracked/endorsed mods, and fetches mod metadata via REST v1 and GraphQL v2.
+- **Endorse & Track** — Toggle endorse/track status on any mod directly from card buttons, context menus, or the mod actions panel — syncs with the Nexus Mods API in real time.
+- **Auto-Correlation** — Multi-tier matching pipeline: filename ID extraction, MD5 hash batch lookup, file content reverse lookup, endorsed/tracked sync, Nexus collection matching, mod requirement propagation, and Jaccard + Jaro-Winkler fuzzy matching. Manual reassign, confirm, and reject actions.
 - **Mod Installation** — Install mods from downloaded archives with pre-install preview, conflict detection, skip/overwrite resolution, and enable/disable toggling. Includes FOMOD installer wizard for scripted mod packages.
 - **Conflict Detection** — Multi-layer conflict engine: file-level overlap detection, archive-level resource conflicts with dependency-aware severity classification, redscript annotation analysis, TweakXL conflict scanning, and a conflict inbox for resolution. Disable, uninstall, or set load order preferences directly from the conflict view with Nexus Mods links on every archive.
 - **Load Order** — View and manage archive load order with preference rules, modlist.txt generation, and dry-run previews.
 - **Archive Management** — Browse archive contents, link/unlink archives to Nexus mods, delete, and clean up orphaned mod archives from the downloads staging folder.
 - **Download Manager** — Download mod archives directly from Nexus Mods with progress tracking, NXM deep link handling, and premium account support.
-- **Trending Mods** — Browse trending and recently updated mods from Nexus with one-click install, endorse, or track actions.
 - **Endorsed & Tracked Tabs** — Browse your endorsed and tracked mods from Nexus with install actions or direct Nexus links.
-- **Mod Detail Modal** — View full mod details including description, files, changelogs, requirements, DLC requirements, and action buttons without leaving the app.
+- **Mod Actions Panel** — Lightweight panel with mod name, author, thumbnail, requirements, and a prominent "View on Nexus Mods" button that opens the full mod page on nexusmods.com.
 - **Profile Manager** — Save, load, export, import, duplicate, and compare mod profiles to switch between mod configurations.
-- **Update Checker** — Compares local mod versions against Nexus metadata to surface available updates with one-click download. A persistent update banner notifies you when a new app version is available.
-- **AI Search** — AI-powered mod matching with configurable OpenAI model and reasoning effort for enhanced scan accuracy.
-- **Semantic Search** — ChromaDB vector store indexes mods, Nexus metadata, and correlations for natural-language queries.
-- **Chat Assistant** — LangChain-powered agent with tool access to the local mod database and Nexus data, streamed via SSE.
-- **Guided Onboarding** — Step-by-step setup for Nexus Mods login, game configuration, and initial mod scan.
+- **Update Checker** — Compares local mod versions against Nexus metadata to surface available updates with one-click download.
+- **Guided Onboarding** — Three-step setup: Nexus Mods login, game configuration, and initial mod scan.
 - **Custom Titlebar** — Native-feeling Tauri window with custom drag region and window controls.
 
 ## Tech Stack
@@ -47,8 +47,6 @@
 | Layer | Technology |
 |---|---|
 | Backend | Python 3.12, FastAPI, SQLModel, SQLite |
-| AI Agent | LangChain, OpenAI (configurable model) |
-| Vector Store | ChromaDB (persistent, cosine similarity) |
 | Nexus API | REST v1 + GraphQL v2, async httpx, respx (testing) — [endpoint map](docs/nexus-api-usage.md) |
 | Matching | scikit-learn (TF-IDF, DBSCAN), jellyfish (Jaro-Winkler), tenacity (retry) |
 | Hashing | xxhash (xxh64) |
@@ -68,25 +66,23 @@
 rippermod-manager/
 ├── backend/                 # FastAPI + Python 3.12
 │   ├── src/rippermod_manager/
-│   │   ├── models/          # 12 SQLModel table modules (18 tables)
+│   │   ├── models/          # SQLModel table modules
 │   │   ├── schemas/         # Pydantic request/response models
-│   │   ├── routers/         # 15 API routers (91 endpoints)
-│   │   ├── services/        # 38 business logic modules
+│   │   ├── routers/         # API routers
+│   │   ├── services/        # Business logic modules
 │   │   ├── scanner/         # File discovery + grouping
 │   │   ├── matching/        # TF-IDF, correlation, filename parsing
-│   │   ├── nexus/           # REST v1 + GraphQL v2 API clients
-│   │   ├── vector/          # ChromaDB indexing + search
-│   │   └── agents/          # LangChain chat agent
-│   └── tests/               # 822+ tests across 51 files
+│   │   └── nexus/           # REST v1 + GraphQL v2 API clients
+│   └── tests/               # 816+ tests
 ├── frontend/                # React 19 + TypeScript + Vite
 │   ├── src/
-│   │   ├── components/      # 25 mod components, 5 conflict components, 24 UI primitives
-│   │   ├── pages/           # 6 pages
-│   │   ├── hooks/           # 12 hooks (React Query, install, FOMOD, ...)
+│   │   ├── components/      # Mod, conflict, layout, UI primitives
+│   │   ├── pages/           # Dashboard, Games, Settings, Onboarding, Updates
+│   │   ├── hooks/           # React Query, install flow, FOMOD wizard
 │   │   ├── stores/          # Zustand stores
 │   │   └── lib/             # API client, SSE parser, utils
 │   └── src-tauri/           # Tauri v2 Rust shell + sidecar lifecycle
-├── docs/                    # Architecture, Nexus API map, dual release strategy
+├── docs/                    # Architecture, Nexus API map, dual release strategy, compliance
 ├── scripts/                 # Build + release helpers
 └── .github/workflows/       # CI, release, PR review, CLA
 ```
@@ -121,7 +117,7 @@ uv sync --extra test     # Include test dependencies
 uv run uvicorn rippermod_manager.main:app --reload --port 8425
 ```
 
-The API will be available at `http://localhost:8425`. The SQLite database and ChromaDB are auto-created at `%LOCALAPPDATA%\RipperModManager\` on Windows (or `~/.local/share/RipperModManager/` on Linux) on first startup.
+The API will be available at `http://localhost:8425`. The SQLite database is auto-created at `%LOCALAPPDATA%\RipperModManager\` on Windows (or `~/.local/share/RipperModManager/` on Linux) on first startup.
 
 > **Tip:** Set `RMM_DATA_DIR=./data` in `backend/.env` to use a local data directory instead.
 
@@ -194,17 +190,15 @@ npx tauri build
 
 RipperMod ships two editions from a single repository. Releases are fully automated by `semantic-release`:
 
-| Edition | Branch | Tags | Updater Channel | Distribution |
-|---------|--------|------|-----------------|-------------|
-| **Full** | `main` | `vX.Y.Z` | `stable.json` | GitHub Releases |
-| **Nexus** | `nexus-compliant` | `vX.Y.Z-nexus.N` | `nexus.json` | Nexus Mods page |
+| Edition | Branch | Tags | App Auto-Updater | Distribution |
+|---------|--------|------|------------------|--------------|
+| **Full** | `main` | `vX.Y.Z` | Yes (Tauri updater) | GitHub Releases |
+| **Nexus** | `nexus-compliant` | `vX.Y.Z-nexus.N` | No (manual download only) | Nexus Mods page |
 
-- **Full** — All features enabled (mod detail modal, trending, search, card images/stats)
-- **Nexus** — Nexus-policy-compliant (redirects all discovery to nexusmods.com, no content display)
+- **Full** — All features enabled (mod detail modal, trending, search, card images/stats, chat assistant, AI search, ChromaDB)
+- **Nexus** — Nexus-policy-compliant (no in-app LLM, no auto-updater, no third-party AI network calls; all discovery redirects to nexusmods.com)
 
-Each edition has its own auto-updater channel via a [shared Gist endpoint](https://gist.github.com/Y4rd13/94a555b2a282fca409c1eb0e0b828eb6), so users only receive updates from their installed edition.
-
-Merging a conventional commit to `main` triggers versioning, changelog generation, and a GitHub release with the installer attached. Syncing `main` into `nexus-compliant` and pushing triggers the same for the Nexus edition.
+Cherry-pick individual fixes between branches as needed. Never merge between branches — the editions are kept intentionally divergent.
 
 > Full details: [docs/dual-release-strategy.md](docs/dual-release-strategy.md) | [Nexus API Compliance](docs/nexus-compliance.md)
 
@@ -314,9 +308,7 @@ All endpoints are prefixed with `/api/v1/`.
 | `POST` | `/nexus/sync-history/{name}` | Sync tracked/endorsed mods |
 | `GET` | `/nexus/downloads/{name}` | List synced downloads (filterable by `?source=endorsed\|tracked`) |
 | `GET` | `/nexus/downloads/{name}/search` | Search synced downloads by name |
-| `GET` | `/nexus/search/{name}` | Search Nexus Mods by name (GraphQL v2) |
-| `GET` | `/nexus/mods/{domain}/{mod_id}/detail` | Get full mod detail with files and changelogs |
-| `GET` | `/nexus/file-contents-preview?url=...` | Proxy Nexus file content preview |
+| `GET` | `/nexus/mods/{mod_id}/summary` | Get lightweight mod summary for the actions panel |
 | `POST` | `/nexus/{name}/mods/{mod_id}/endorse` | Endorse a mod |
 | `POST` | `/nexus/{name}/mods/{mod_id}/abstain` | Remove endorsement |
 | `POST` | `/nexus/{name}/mods/{mod_id}/track` | Track a mod |
@@ -362,15 +354,6 @@ All endpoints are prefixed with `/api/v1/`.
 </details>
 
 <details>
-<summary><strong>Trending</strong></summary>
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/games/{name}/trending/` | Get trending and recently updated mods (full edition only) |
-
-</details>
-
-<details>
 <summary><strong>Updates</strong></summary>
 
 | Method | Endpoint | Description |
@@ -381,7 +364,7 @@ All endpoints are prefixed with `/api/v1/`.
 </details>
 
 <details>
-<summary><strong>Settings, Onboarding, Chat, Vector</strong></summary>
+<summary><strong>Settings, Onboarding</strong></summary>
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -391,17 +374,12 @@ All endpoints are prefixed with `/api/v1/`.
 | `GET` | `/onboarding/status` | Get onboarding progress |
 | `POST` | `/onboarding/complete` | Complete onboarding |
 | `POST` | `/onboarding/reset` | Reset onboarding status |
-| `POST` | `/chat/` | Chat with AI assistant (SSE) |
-| `GET` | `/chat/history` | Get chat history |
-| `POST` | `/vector/reindex` | Rebuild vector store index |
-| `GET` | `/vector/search?q=...` | Semantic search |
-| `GET` | `/vector/stats` | Vector collection statistics |
 
 </details>
 
 ### Testing
 
-The backend has a comprehensive test suite with 822+ tests across 51 test files covering all modules:
+The backend has a comprehensive test suite with 816+ tests covering all modules:
 
 ```bash
 cd backend
@@ -409,7 +387,7 @@ uv sync --extra test
 uv run pytest -v
 ```
 
-Tests use an in-memory SQLite database and patched ChromaDB for full isolation. External API calls are mocked with [respx](https://github.com/lundberg/respx).
+Tests use an in-memory SQLite database for full isolation. External API calls are mocked with [respx](https://github.com/lundberg/respx).
 
 ## Architecture
 
@@ -428,21 +406,16 @@ Tests use an in-memory SQLite database and patched ChromaDB for full isolation. 
                       │ HTTP / SSE (localhost:8425)
 ┌─────────────────────┼────────────────────────────┐
 │    FastAPI Backend (PyInstaller sidecar .exe)     │
-│  ┌──────────┐ ┌──────────┐ ┌──────────────────┐  │
-│  │ Routers  │ │ Scanner  │ │   Chat Agent     │  │
-│  │(15 APIs) │ │ Grouper  │ │ (LangChain+OAI)  │  │
-│  │          │ │Correlator│ │   7 tools        │  │
-│  └────┬─────┘ └────┬─────┘ └───────┬──────────┘  │
-│       │             │               │             │
-│  ┌────┴─────────────┴───────────────┴──────────┐  │
-│  │              SQLite (SQLModel)              │  │
-│  │       %LOCALAPPDATA%/RipperModManager    │  │
-│  └──────────────────┬──────────────────────────┘  │
-│                     │                             │
-│  ┌──────────────────┴──────────────────────────┐  │
-│  │           ChromaDB Vector Store             │  │
-│  │  mod_groups │ nexus_mods │ correlations     │  │
-│  └─────────────────────────────────────────────┘  │
+│  ┌──────────┐ ┌──────────┐                       │
+│  │ Routers  │ │ Scanner  │                       │
+│  │          │ │ Grouper  │                       │
+│  │          │ │Correlator│                       │
+│  └────┬─────┘ └────┬─────┘                       │
+│       │             │                             │
+│  ┌────┴─────────────┴────────────────────────┐   │
+│  │              SQLite (SQLModel)            │   │
+│  │       %LOCALAPPDATA%/RipperModManager     │   │
+│  └───────────────────────────────────────────┘   │
 │                                                   │
 │  ┌─────────────────────────────────────────────┐  │
 │  │         Nexus Mods API (httpx)              │  │
@@ -458,8 +431,9 @@ In production, the app ships as a single Windows installer (NSIS):
 - **Frontend** → bundled by Vite into static assets inside the Tauri shell
 - **Backend** → compiled by PyInstaller into `rmm-backend.exe`, embedded as a Tauri sidecar
 - **Startup** → Tauri spawns the sidecar, health-polls `/health`, emits `backend-ready` event
-- **Shutdown** → Cancels active downloads, disposes DB engine, releases ChromaDB, kills sidecar
-- **Data** → Stored in `%LOCALAPPDATA%\RipperModManager\` (DB, ChromaDB, downloads)
+- **Shutdown** → Cancels active downloads, disposes DB engine, kills sidecar
+- **Data** → Stored in `%LOCALAPPDATA%\RipperModManager\` (DB, downloads)
+- **Updates** → No in-app updater on this edition; download new versions manually from the Nexus mod page
 
 ## Contributing
 

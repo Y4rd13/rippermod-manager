@@ -12,6 +12,29 @@ The following features replicate Nexus mod page content and have been removed fr
 - **The file contents preview proxy** has been removed
 - **The community activity dashboard section** has been removed
 
+### Auto-updater (per Nexus Support, post v2.0.0-nexus.7 review)
+
+Nexus Mods Support requires that file submissions not auto-update themselves, since they cannot guarantee the integrity of future updates. The Nexus Edition removes:
+
+- The Tauri `tauri-plugin-updater` and `tauri-plugin-process` integrations
+- The signed `latest.json` updater endpoint hosted on a Gist
+- The `UpdateBanner` and Settings "Check for updates" UI
+- Generation of `.sig` signature files in the release workflow
+
+Users on this edition update by downloading a new installer from the Nexus mod page when a new release is published.
+
+### LLM and third-party AI network activity (per Nexus Support)
+
+Nexus Mods Support deemed LLM integration unnecessary for a mod manager. The Nexus Edition removes:
+
+- The **chat assistant** (LangChain + OpenAI orchestrator with tool access, SSE streaming endpoint, chat history table)
+- **AI Search Matcher** (Tier 3a) that called the OpenAI Responses API with the `web_search` tool to identify mods
+- **Web Search Matcher** (Tier 3b) that called Tavily as a non-Nexus search fallback
+- **Vector store** (ChromaDB) and the semantic search endpoints that backed the chat agent
+- The **AI setup step** in onboarding and the OpenAI/Tavily key fields in Settings
+
+Outbound network activity in the Nexus Edition is limited to: the Nexus Mods REST v1 and GraphQL v2 APIs, the Nexus CDN for downloads triggered by the user, and the system browser handing off NXM links.
+
 ## How browsing now redirects to Nexus
 
 Every discovery interaction sends users directly to nexusmods.com:
