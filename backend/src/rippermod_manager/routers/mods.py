@@ -19,7 +19,6 @@ from rippermod_manager.schemas.mod import (
     CorrelationReassign,
     ModGroupOut,
     ScanResult,
-    ScanStreamRequest,
 )
 from rippermod_manager.services.update_service import batch_group_file_mtimes
 
@@ -126,10 +125,7 @@ def scan_mods(game_name: str, session: Session = Depends(get_session)) -> ScanRe
 
 
 @router.post("/scan-stream")
-def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> StreamingResponse:
-    use_ai_search = body.ai_search if body else False
-    req_ai_model = body.ai_search_model if body else None
-    req_ai_effort = body.ai_search_effort if body else None
+def scan_mods_stream(game_name: str) -> StreamingResponse:
     q: queue.Queue[dict | None] = queue.Queue()
 
     def on_progress(phase: str, message: str, percent: int) -> None:
@@ -157,13 +153,6 @@ def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> S
                 from rippermod_manager.services.fomod_parser import parse_archive_metadata
                 from rippermod_manager.services.nexus_sync import sync_nexus_history
                 from rippermod_manager.services.settings_helpers import get_setting
-                from rippermod_manager.services.web_search_matcher import (
-                    search_unmatched_mods,
-                )
-
-                openai_key = get_setting(session, "openai_api_key") if use_ai_search else None
-                ai_model = req_ai_model or get_setting(session, "ai_search_model") or "gpt-5-mini"
-                ai_effort = req_ai_effort or get_setting(session, "ai_search_effort") or "low"
 
                 # Phase 1: Scan files + group (0-83%)
                 scan_game_mods(game, session, on_progress=on_progress)
@@ -186,7 +175,6 @@ def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> S
                 )
 
                 api_key = get_setting(session, "nexus_api_key")
-                tavily_key = get_setting(session, "tavily_api_key")
 
                 async def _run_async_pipeline() -> None:
                     fc_matched = 0
@@ -286,34 +274,6 @@ def scan_mods_stream(game_name: str, body: ScanStreamRequest | None = None) -> S
                                 "collections",
                                 f"Collections: {coll_matched} matched",
                                 98,
-                            )
-
-                    if use_ai_search and openai_key and api_key:
-                        from rippermod_manager.services.ai_search_matcher import (
-                            ai_search_unmatched_mods,
-                        )
-
-                        on_progress("ai-search", "AI searching unmatched mods...", 99)
-                        await ai_search_unmatched_mods(
-                            game,
-                            openai_key,
-                            api_key,
-                            session,
-                            on_progress,
-                            model=ai_model,
-                            reasoning_effort=ai_effort,
-                        )
-                    elif api_key and tavily_key:
-                        try:
-                            on_progress("web-search", "Searching unmatched mods...", 99)
-                            await search_unmatched_mods(
-                                game, api_key, tavily_key, session, on_progress
-                            )
-                        except ImportError:
-                            on_progress(
-                                "web-search",
-                                "Skipped (install tavily-python for web search)",
-                                99,
                             )
 
                     total_matched = (

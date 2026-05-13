@@ -1,7 +1,6 @@
 import {
   Gamepad2,
   Home,
-  MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
   RefreshCw,
@@ -9,10 +8,8 @@ import {
 } from "lucide-react";
 import { NavLink } from "react-router";
 
-import { useHasOpenaiKey } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui-store";
-import { useUpdaterStore } from "@/stores/updater-store";
 
 const navItems = [
   { to: "/dashboard", icon: Home, label: "Dashboard" },
@@ -22,9 +19,7 @@ const navItems = [
 ];
 
 export function Sidebar() {
-  const { sidebarCollapsed, toggleSidebar, toggleChatPanel } = useUIStore();
-  const hasOpenaiKey = useHasOpenaiKey();
-  const updateAvailable = useUpdaterStore((s) => s.status === "available");
+  const { sidebarCollapsed, toggleSidebar } = useUIStore();
 
   return (
     <aside
@@ -66,34 +61,11 @@ export function Sidebar() {
               )
             }
           >
-            <div className="relative">
-              <Icon size={18} />
-              {to === "/settings" && updateAvailable && (
-                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-accent" />
-              )}
-            </div>
+            <Icon size={18} />
             {!sidebarCollapsed && <span className="truncate">{label}</span>}
           </NavLink>
         ))}
       </nav>
-
-      <div className="border-t border-border p-2">
-        <button
-          onClick={hasOpenaiKey ? toggleChatPanel : undefined}
-          disabled={!hasOpenaiKey}
-          aria-label="Toggle chat panel"
-          title={hasOpenaiKey ? undefined : "Add an OpenAI API key in Settings to enable chat"}
-          className={cn(
-            "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
-            hasOpenaiKey
-              ? "text-text-secondary hover:bg-surface-2 hover:text-text-primary"
-              : "text-text-muted/50 cursor-not-allowed",
-          )}
-        >
-          <MessageSquare size={18} />
-          {!sidebarCollapsed && <span>Chat</span>}
-        </button>
-      </div>
     </aside>
   );
 }

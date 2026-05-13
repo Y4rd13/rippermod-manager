@@ -47,11 +47,11 @@ class TestUpdateSettings:
     def test_masks_in_response(self, client):
         r = client.put(
             "/api/v1/settings/",
-            json={"settings": {"openai_api_key": "sk-test123"}},
+            json={"settings": {"nexus_api_key": "nk-test123"}},
         )
         data = r.json()
-        assert data[0]["value"] == "sk-t**t123"
-        assert "sk-test123" not in data[0]["value"]
+        assert data[0]["value"] == "nk-t**t123"
+        assert "nk-test123" not in data[0]["value"]
 
 
 class TestSpecs:

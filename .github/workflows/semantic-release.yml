@@ -98,43 +98,6 @@ jobs:
       - name: Build Tauri installer
         working-directory: frontend
         run: npx tauri build
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-
-      - name: Generate latest.json for updater
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          NSIS_DIR="frontend/src-tauri/target/release/bundle/nsis"
-
-          shopt -s nullglob
-          sig_files=( ${NSIS_DIR}/*-setup.exe.sig )
-          exe_files=( ${NSIS_DIR}/*-setup.exe )
-          [[ ${#sig_files[@]} -eq 1 ]] || { echo "::error::Expected exactly 1 .exe.sig file, found ${#sig_files[@]}"; exit 1; }
-          [[ ${#exe_files[@]} -eq 1 ]] || { echo "::error::Expected exactly 1 setup .exe file, found ${#exe_files[@]}"; exit 1; }
-
-          SIG_FILE="${sig_files[0]}"
-          EXE_FILE="${exe_files[0]}"
-          EXE_NAME=$(basename "$EXE_FILE" | tr ' ' '.')
-          SIGNATURE=$(cat "$SIG_FILE")
-          DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          NOTES=$(gh release view "v${VERSION}" --json body -q .body 2>/dev/null | head -50 | jq -Rs . || echo '""')
-
-          cat > "${NSIS_DIR}/latest.json" <<ENDJSON
-          {
-            "version": "${VERSION}",
-            "notes": ${NOTES},
-            "pub_date": "${DATE}",
-            "platforms": {
-              "windows-x86_64": {
-                "signature": "${SIGNATURE}",
-                "url": "https://github.com/Y4rd13/rippermod-manager/releases/download/v${VERSION}/${EXE_NAME}"
-              }
-            }
-          }
-          ENDJSON
 
       - name: Upload release assets
         shell: bash
@@ -142,26 +105,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "v${VERSION}" --clobber \
-            frontend/src-tauri/target/release/bundle/nsis/*-setup.exe \
-            frontend/src-tauri/target/release/bundle/nsis/*-setup.exe.sig \
-            frontend/src-tauri/target/release/bundle/nsis/latest.json
-
-      - name: Update updater Gist endpoint
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
-        run: |
-          NSIS_DIR="frontend/src-tauri/target/release/bundle/nsis"
-          GIST_ID="94a555b2a282fca409c1eb0e0b828eb6"
-          # Determine which Gist file to update based on the branch
-          if [[ "${{ github.ref_name }}" == "nexus-compliant" ]]; then
-            GIST_FILE="nexus.json"
-          else
-            GIST_FILE="stable.json"
-          fi
-          gh gist edit "${GIST_ID}" -f "${GIST_FILE}" "${NSIS_DIR}/latest.json" \
-            || echo "::warning::Failed to update Gist — updater endpoint not refreshed"
-          echo "Updated Gist file: ${GIST_FILE}"
+            frontend/src-tauri/target/release/bundle/nsis/*-setup.exe
 
   upload-nexus:
     name: Upload to Nexus Mods

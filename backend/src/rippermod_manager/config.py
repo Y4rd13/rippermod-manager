@@ -26,10 +26,6 @@ class Settings(BaseSettings):
 
     data_dir: Path = Path("")
     db_path: Path = Path("")
-    chroma_path: Path = Path("")
-    openai_api_key: str = ""
-    openai_model: str = "gpt-4o"
-    tavily_api_key: str = ""
     host: str = "127.0.0.1"
     port: int = 8425
 
@@ -39,8 +35,6 @@ class Settings(BaseSettings):
             self.data_dir = _default_data_dir()
         if self.db_path == Path(""):
             self.db_path = self.data_dir / "rmm.db"
-        if self.chroma_path == Path(""):
-            self.chroma_path = self.data_dir / "chroma"
         return self
 
 

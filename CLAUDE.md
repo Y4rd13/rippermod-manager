@@ -1,14 +1,14 @@
 # RipperMod Manager
 
-Desktop AI-powered mod manager for PC games (focused on Cyberpunk 2077). Scans, groups, correlates, and manages mods with Nexus Mods integration and an LLM chat agent.
+Desktop mod manager for PC games (focused on Cyberpunk 2077). Scans, groups, correlates, and manages mods with Nexus Mods integration. This branch is the Nexus edition: no in-app LLM features and no app auto-updater, per Nexus file submission guidelines.
 
 ## Stack
 
 - **Backend:** FastAPI, Python 3.12, uv, src layout — `backend/src/rippermod_manager/`
 - **Frontend:** React 19, TypeScript 5.9 (strict), Vite, Tailwind CSS v4 — `frontend/src/`
 - **Desktop:** Tauri v2, Rust — `frontend/src-tauri/`
-- **State:** Zustand (client), React Query (server), SQLite (persistence), ChromaDB (vectors)
-- **Key deps:** httpx, tenacity (retry), keyring (OS secret store), scikit-learn, jellyfish, langchain
+- **State:** Zustand (client), React Query (server), SQLite (persistence)
+- **Key deps:** httpx, tenacity (retry), keyring (OS secret store), scikit-learn, jellyfish
 
 ## Commands
 
@@ -54,11 +54,10 @@ See @docs/architecture.md for a full inventory of routers, services, models.
 - Backend API: `http://localhost:8425/api/v1/`
 - **Nexus API:** dual-client — REST v1 (`nexus/client.py`) for CRUD, GraphQL v2 (`nexus/graphql_client.py`) for batch queries. Both use tenacity retry (3 attempts, exponential 2–30s) on 429/5xx
 - **Scan pipeline:** file discovery → TF-IDF + DBSCAN grouping → multi-tier matching → correlation
-- **Matching tiers:** (1) filename ID extraction, (1.5) file content reverse lookup, (2) MD5 hash batch lookup, (3) endorsed/tracked + collection matching + requirement propagation, (4) Jaccard + Jaro-Winkler fuzzy, (5) AI/web search
-- **Secrets:** keyring service attempts OS keychain, falls back to SQLite. Keys: `nexus_api_key`, `openai_api_key`, `tavily_api_key`
-- **Health:** `/health` (shallow), `/health/deep` (DB + ChromaDB + data_dir writability)
+- **Matching tiers:** (1) filename ID extraction, (1.5) file content reverse lookup, (2) MD5 hash batch lookup, (3) endorsed/tracked + collection matching + requirement propagation, (4) Jaccard + Jaro-Winkler fuzzy
+- **Secrets:** keyring service attempts OS keychain, falls back to SQLite. Keys: `nexus_api_key`
+- **Health:** `/health` (shallow), `/health/deep` (DB + data_dir writability)
 - **Logging:** stderr + `RotatingFileHandler` at `data_dir/logs/rippermod.log` (5 MB × 3)
-- Chat agent: LangChain + OpenAI with SSE streaming
 - Tauri CSP restricts connections to `localhost:8425`
 
 ## Database
@@ -79,7 +78,7 @@ See @docs/nexus-api-usage.md for endpoint reference.
 
 ## Testing
 
-- 822+ tests across `backend/tests/` (routers, services, matching, scanner, nexus, archive, vector, agents)
+- 816+ tests across `backend/tests/` (routers, services, matching, scanner, nexus, archive)
 - Fixtures in `tests/conftest.py` — in-memory SQLite, test games, mock clients
 - CI runs with `--cov=rippermod_manager --cov-report=term-missing`
 - Use `respx` for HTTP mocking — never make real API calls in tests
@@ -91,7 +90,6 @@ When reviewing PRs, pay extra attention to:
 - **Performance:** Desktop app — avoid unnecessary re-renders, heavy DOM operations, virtualize long lists
 - **SQLite concurrency:** Single-writer — watch for blocking operations in async handlers
 - **Type safety:** Handle `undefined` from indexed access in TypeScript
-- **Security:** CSP compliance, no arbitrary eval, sanitize AI-generated content, no path traversal in archive extraction
+- **Security:** CSP compliance, no arbitrary eval, no path traversal in archive extraction
 - **Nexus API:** Rate limiting, proper error handling, catch specific exceptions before broad ones
-- **Vector store:** ChromaDB collection lifecycle, index consistency after data mutations
-- **Exception handling:** Use specific types (`httpx.HTTPError`, `OSError`) — only use `except Exception` for shutdown/cleanup and ChromaDB operations
+- **Exception handling:** Use specific types (`httpx.HTTPError`, `OSError`) — only use `except Exception` for shutdown/cleanup

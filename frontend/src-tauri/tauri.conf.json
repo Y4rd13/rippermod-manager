@@ -33,17 +33,10 @@
           "nxm"
         ]
       }
-    },
-    "updater": {
-      "endpoints": [
-        "https://gist.githubusercontent.com/Y4rd13/94a555b2a282fca409c1eb0e0b828eb6/raw/nexus.json"
-      ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERGMzQ4M0VCMThEQjgzRjIKUldUeWc5c1k2NE0wM3dvYmowN3BsWVptQjhNc2RaZUVBTUtvTGxwUW8vWVhNTVMwOFIwdTI2YUkK"
     }
   },
   "bundle": {
     "active": true,
-    "createUpdaterArtifacts": true,
     "targets": [
       "nsis"
     ],
@@ -57,8 +50,8 @@
     "externalBin": [
       "binaries/rmm-backend"
     ],
-    "shortDescription": "AI-powered mod manager for PC games",
-    "longDescription": "RipperMod Manager combines a chat agent with Nexus Mods integration to scan, group, correlate, and manage game mods.",
+    "shortDescription": "Mod manager for PC games with Nexus Mods integration",
+    "longDescription": "RipperMod Manager scans your installed mods, links them to their Nexus Mods pages, and lets you install, enable, disable, and manage them locally.",
     "copyright": "Copyright (c) 2025 Y4rd13",
     "category": "Utility",
     "publisher": "Y4rd13",

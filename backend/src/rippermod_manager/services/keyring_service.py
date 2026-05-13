@@ -5,7 +5,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "rippermod-manager"
-SECRET_KEYS = {"nexus_api_key", "openai_api_key", "tavily_api_key"}
+SECRET_KEYS = {"nexus_api_key"}
 
 _available: bool | None = None
 

@@ -10,7 +10,6 @@ import { ScanProgress, type ScanLog } from "@/components/ui/ScanProgress";
 import {
   useCompleteOnboarding,
   useCreateGame,
-  useSaveSettings,
   useSyncNexus,
   useValidatePath,
 } from "@/hooks/mutations";
@@ -22,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { useOnboardingStore } from "@/stores/onboarding-store";
 import type { DetectedGame, PathValidation } from "@/types/api";
 
-const STEPS = ["Welcome", "AI Setup", "Nexus Mods", "Add Game"];
+const STEPS = ["Welcome", "Nexus Mods", "Add Game"];
 
 function StepIndicator({ current }: { current: number }) {
   return (
@@ -70,67 +69,12 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
         RipperMod Manager
       </h2>
       <p className="text-text-secondary max-w-md mx-auto">
-        Manage your mods with AI-powered assistance. Connect your Nexus Mods
-        account, scan your local mods, and let AI help you keep everything
-        organized and up to date.
+        Manage your mods locally. Connect your Nexus Mods account, scan your
+        installed mods, and keep everything organized and up to date.
       </p>
       <Button onClick={onNext} size="lg">
         Get Started
       </Button>
-    </div>
-  );
-}
-
-function AISetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
-  const store = useOnboardingStore();
-  const saveSettings = useSaveSettings();
-  const [error, setError] = useState("");
-
-  const handleSave = () => {
-    saveSettings.mutate(
-      { openai_api_key: store.openaiKey },
-      {
-        onSuccess: () => onNext(),
-        onError: (e) => setError(e.message),
-      },
-    );
-  };
-
-  return (
-    <div className="space-y-6 max-w-md mx-auto">
-      <div>
-        <h2 className="text-2xl font-bold text-text-primary mb-2">
-          AI Configuration
-        </h2>
-        <p className="text-text-secondary text-sm">
-          An OpenAI API key enables the <strong>Chat Assistant</strong> and{" "}
-          <strong>AI-powered Search</strong>. This is optional — you can add it
-          later in Settings.
-        </p>
-      </div>
-      <Input
-        id="openai-key"
-        label="OpenAI API Key"
-        type="password"
-        placeholder="sk-..."
-        value={store.openaiKey}
-        onChange={(e) => {
-          store.setOpenaiKey(e.target.value);
-          setError("");
-        }}
-        error={error}
-      />
-      <div className="flex justify-end gap-3">
-        <Button variant="ghost" onClick={onBack}>Back</Button>
-        <Button variant="ghost" onClick={onNext}>Skip</Button>
-        <Button
-          onClick={handleSave}
-          loading={saveSettings.isPending}
-          disabled={!store.openaiKey.trim()}
-        >
-          Continue
-        </Button>
-      </div>
     </div>
   );
 }
@@ -376,7 +320,7 @@ function AddGameStep({ onFinish, onBack }: { onFinish: () => void; onBack: () =>
 
       pushLog({ phase: "complete", message: "Completing setup...", percent: 100 });
       latestPhase.current = "complete";
-      await completeOnboarding.mutateAsync({});
+      await completeOnboarding.mutateAsync();
 
       stopFlushing();
       setScanPhase("done");
@@ -523,21 +467,18 @@ export function OnboardingPage() {
     if (!onboardingStatus || initializedRef.current) return;
     initializedRef.current = true;
     if (onboardingStatus.current_step > 0) {
-      store.setStep(Math.min(onboardingStatus.current_step + 1, 3));
+      store.setStep(Math.min(onboardingStatus.current_step, 2));
     }
   }, [onboardingStatus, store.setStep]);
 
   const handleNext = () => {
     const nextStep = store.currentStep + 1;
-    // After Nexus auth (step 2 → 3): if user already has a game, auto-complete
-    if (nextStep === 3 && onboardingStatus?.has_game) {
-      completeOnboarding.mutate(
-        {},
-        {
-          onSuccess: () => navigate("/dashboard", { replace: true }),
-          onError: () => store.setStep(nextStep),
-        },
-      );
+    // After Nexus auth (step 1 → 2): if user already has a game, auto-complete
+    if (nextStep === 2 && onboardingStatus?.has_game) {
+      completeOnboarding.mutate(undefined, {
+        onSuccess: () => navigate("/dashboard", { replace: true }),
+        onError: () => store.setStep(nextStep),
+      });
       return;
     }
     store.setStep(nextStep);
@@ -550,9 +491,8 @@ export function OnboardingPage() {
       <div className="w-full max-w-2xl">
         <StepIndicator current={store.currentStep} />
         {store.currentStep === 0 && <WelcomeStep onNext={handleNext} />}
-        {store.currentStep === 1 && <AISetupStep onNext={handleNext} onBack={handleBack} />}
-        {store.currentStep === 2 && <NexusSetupStep onNext={handleNext} onBack={handleBack} />}
-        {store.currentStep === 3 && <AddGameStep onFinish={handleFinish} onBack={handleBack} />}
+        {store.currentStep === 1 && <NexusSetupStep onNext={handleNext} onBack={handleBack} />}
+        {store.currentStep === 2 && <AddGameStep onFinish={handleFinish} onBack={handleBack} />}
       </div>
     </div>
   );

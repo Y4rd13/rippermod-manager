@@ -1,4 +1,3 @@
-import contextlib
 from collections.abc import Generator
 
 import pytest
@@ -23,27 +22,16 @@ def engine():
     return eng
 
 
-def _safe_monkeypatch_engine(monkeypatch, engine):
-    """Monkeypatch engine references, skipping modules with unavailable deps."""
-    monkeypatch.setattr("rippermod_manager.database.engine", engine)
-    for module_path in (
-        "rippermod_manager.vector.indexer.engine",
-        "rippermod_manager.agents.orchestrator.engine",
-    ):
-        with contextlib.suppress(ImportError, AttributeError):
-            monkeypatch.setattr(module_path, engine)
-
-
 @pytest.fixture
 def session(engine, monkeypatch):
+    monkeypatch.setattr("rippermod_manager.database.engine", engine)
     with Session(engine) as sess:
-        _safe_monkeypatch_engine(monkeypatch, engine)
         yield sess
 
 
 @pytest.fixture
 def client(engine, monkeypatch):
-    _safe_monkeypatch_engine(monkeypatch, engine)
+    monkeypatch.setattr("rippermod_manager.database.engine", engine)
 
     def _override_session() -> Generator[Session, None, None]:
         with Session(engine) as sess:
@@ -53,16 +41,6 @@ def client(engine, monkeypatch):
     with TestClient(app, raise_server_exceptions=False) as tc:
         yield tc
     app.dependency_overrides.clear()
-
-
-@pytest.fixture
-def patched_chroma(tmp_path, monkeypatch):
-    monkeypatch.setattr("rippermod_manager.config.settings.chroma_path", tmp_path / "chroma")
-    import rippermod_manager.vector.store as store_mod
-
-    monkeypatch.setattr(store_mod, "_client", None)
-    yield
-    monkeypatch.setattr(store_mod, "_client", None)
 
 
 @pytest.fixture
