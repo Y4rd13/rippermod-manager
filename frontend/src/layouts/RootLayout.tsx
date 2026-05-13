@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Outlet } from "react-router";
 
-import { ChatPanel } from "@/components/chat/ChatPanel";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Titlebar } from "@/components/layout/Titlebar";
@@ -9,7 +8,6 @@ import { DownloadQueueFooter } from "@/components/ui/DownloadQueueFooter";
 import { KeyboardShortcutsModal } from "@/components/ui/KeyboardShortcutsModal";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useDownloadSync } from "@/hooks/use-download-sync";
-import { useHasOpenaiKey } from "@/hooks/queries";
 import { ScrollContainerContext } from "@/hooks/use-scroll-container";
 import { useDownloadStore } from "@/stores/download-store";
 import { useUIStore } from "@/stores/ui-store";
@@ -18,27 +16,11 @@ export function RootLayout() {
   const activeGameName = useUIStore((s) => s.activeGameName);
   useDownloadSync(activeGameName);
   const hasDownloads = useDownloadStore((s) => Object.keys(s.jobs).length > 0);
-  const toggleChatPanel = useUIStore((s) => s.toggleChatPanel);
-  const setChatPanelOpen = useUIStore((s) => s.setChatPanelOpen);
-  const hasOpenaiKey = useHasOpenaiKey();
-  const hasOpenaiKeyRef = useRef(hasOpenaiKey);
-  useEffect(() => { hasOpenaiKeyRef.current = hasOpenaiKey; }, [hasOpenaiKey]);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
-        e.preventDefault();
-        if (!hasOpenaiKeyRef.current) return;
-        toggleChatPanel();
-      }
-      if (e.key === "Escape" && useUIStore.getState().chatPanelOpen) {
-        const activeEl = document.activeElement?.tagName;
-        if (activeEl === "INPUT" || activeEl === "TEXTAREA" || activeEl === "SELECT") return;
-        if (document.querySelector("[role='dialog']") || document.querySelector("[role='menu']")) return;
-        setChatPanelOpen(false);
-      }
       if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const tag = document.activeElement?.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
@@ -49,7 +31,7 @@ export function RootLayout() {
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [toggleChatPanel, setChatPanelOpen]);
+  }, []);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -69,7 +51,6 @@ export function RootLayout() {
             </ErrorBoundary>
           </ScrollContainerContext>
         </main>
-        <ChatPanel />
       </div>
       <DownloadQueueFooter />
       <ToastContainer />

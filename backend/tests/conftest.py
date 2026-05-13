@@ -28,7 +28,6 @@ def _safe_monkeypatch_engine(monkeypatch, engine):
     monkeypatch.setattr("rippermod_manager.database.engine", engine)
     for module_path in (
         "rippermod_manager.vector.indexer.engine",
-        "rippermod_manager.agents.orchestrator.engine",
     ):
         with contextlib.suppress(ImportError, AttributeError):
             monkeypatch.setattr(module_path, engine)
