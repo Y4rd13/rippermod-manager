@@ -130,3 +130,29 @@ class TestVFSColumnMigration:
 
         assert info["deploy_drift"]["type"].upper() == "BOOLEAN"
         assert info["deploy_drift"]["dflt_value"] == "0"
+
+
+def test_migration_adds_installed_mod_files_vfs_columns(tmp_path):
+    db = tmp_path / "test.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE installed_mod_files (id INTEGER PRIMARY KEY, installed_mod_id INTEGER, relative_path TEXT)")
+    conn.commit()
+
+    from unittest.mock import patch
+
+    from sqlalchemy import event
+    from sqlmodel import create_engine
+    from sqlmodel.pool import StaticPool
+
+    from rippermod_manager.database import _migrate_missing_columns
+
+    eng = create_engine(
+        f"sqlite:///{db}",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    with patch("rippermod_manager.database.engine", eng):
+        _migrate_missing_columns()
+
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(installed_mod_files)").fetchall()}
+    assert {"source_path", "link_kind"} <= cols

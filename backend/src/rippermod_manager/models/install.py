@@ -36,6 +36,8 @@ class InstalledModFile(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     installed_mod_id: int = Field(foreign_key="installed_mods.id", index=True)
     relative_path: str = Field(index=True)
+    source_path: str = Field(default="")
+    link_kind: str = Field(default="hardlink")  # hardlink | junction | copy
 
     installed_mod: InstalledMod | None = Relationship(back_populates="files")
 
