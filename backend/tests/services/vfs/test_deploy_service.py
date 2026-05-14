@@ -7,6 +7,7 @@ from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import DeployJournalEntry, InstalledMod, InstalledModFile
 from rippermod_manager.schemas.deploy import DeployOp, DeployPlan
 from rippermod_manager.services.vfs.deploy_service import (
+    deploy,
     execute_plan,
     plan_deploy,
     pre_flight_check,
@@ -161,3 +162,34 @@ def test_execute_plan_failure_marks_journal_failed(in_memory_session, sample_gam
         select(DeployJournalEntry).where(DeployJournalEntry.status == "failed")
     ).all()
     assert len(journal) == 1
+
+
+def test_deploy_full_round_trip(in_memory_session, sample_game):
+    session = in_memory_session
+    game = sample_game
+
+    staging = Path(game.install_path) / "downloaded_mods" / "Demo" / "r6" / "scripts"
+    staging.mkdir(parents=True)
+    (staging / "a.reds").write_text("// a")
+
+    mod = InstalledMod(
+        game_id=game.id, name="Demo", staging_dir="Demo", disabled=False, deployed=False
+    )
+    session.add(mod)
+    session.flush()
+    session.add(
+        InstalledModFile(
+            installed_mod_id=mod.id,
+            relative_path="r6/scripts/a.reds",
+            source_path="r6/scripts/a.reds",
+            link_kind="hardlink",
+        )
+    )
+    session.commit()
+
+    with patch("rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=False):
+        report = deploy(game, session)
+
+    assert report.failed == 0
+    session.refresh(mod)
+    assert mod.deployed is True
