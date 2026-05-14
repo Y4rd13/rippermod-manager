@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
@@ -35,12 +36,35 @@ class GameRunningError(VfsError):
 
 def hardlink(src: Path, dst: Path) -> None:
     """Create a hardlink at dst pointing to src. Raises VfsError on failure."""
-    raise NotImplementedError
+    if not src.exists():
+        raise NotFoundError(f"source missing: {src}")
+    if dst.exists():
+        raise AlreadyExistsError(f"destination exists: {dst}")
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.link(src, dst)
+    except FileExistsError as exc:
+        raise AlreadyExistsError(str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise NotFoundError(str(exc)) from exc
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 17:  # ERROR_NOT_SAME_DEVICE
+            raise CrossVolumeError(f"{src} and {dst} are not on the same volume") from exc
+        if getattr(exc, "winerror", None) == 1 or "not supported" in str(exc).lower():
+            raise FilesystemUnsupportedError(str(exc)) from exc
+        if getattr(exc, "winerror", None) == 5:
+            raise PermissionDeniedError(str(exc)) from exc
+        raise VfsError(str(exc)) from exc
 
 
 def unlink(dst: Path) -> None:
     """Remove a hardlink or regular file at dst. No-op if absent."""
-    raise NotImplementedError
+    try:
+        dst.unlink()
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise VfsError(str(exc)) from exc
 
 
 def junction(target: Path, link: Path) -> None:
