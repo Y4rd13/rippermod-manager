@@ -177,3 +177,28 @@ class TestVFSColumnMigration:
 
         cols = _get_column_names(eng, "installed_mod_files")
         assert {"source_path", "link_kind"}.issubset(cols)
+
+
+class TestDeployJournalTableCreation:
+    """Task 1.4 — deploy_journal table auto-created via SQLModel.metadata.create_all."""
+
+    def test_deploy_journal_table_is_created_on_init(self):
+        from sqlmodel import SQLModel, create_engine
+        from sqlmodel.pool import StaticPool
+
+        # Import the model so SQLModel's metadata registry includes it before create_all.
+        from rippermod_manager.models import install  # noqa: F401
+        from rippermod_manager.models.install import DeployJournalEntry  # noqa: F401
+
+        eng = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        SQLModel.metadata.create_all(eng)
+
+        with eng.connect() as conn:
+            result = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
+            tables = {row[0] for row in result}
+
+        assert "deploy_journal" in tables

@@ -50,3 +50,16 @@ class ArchiveNexusLink(SQLModel, table=True):
     game_id: int = Field(foreign_key="games.id", index=True)
     filename: str = Field(index=True)
     nexus_mod_id: int
+
+
+class DeployJournalEntry(SQLModel, table=True):
+    __tablename__ = "deploy_journal"
+
+    id: int | None = Field(default=None, primary_key=True)
+    game_id: int = Field(foreign_key="games.id", index=True)
+    operation: str  # link | unlink | junction | rm_junction
+    src: str
+    dst: str
+    status: str = Field(default="pending")  # pending | done | failed
+    error: str = Field(default="")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
