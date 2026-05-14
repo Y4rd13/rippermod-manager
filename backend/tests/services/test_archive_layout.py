@@ -26,7 +26,7 @@ class FakeEntry:
 class TestKnownRootsForGame:
     def test_cyberpunk_returns_expected_roots(self) -> None:
         roots = known_roots_for_game("cyberpunk2077")
-        assert roots == {"archive", "bin", "red4ext", "r6", "mods"}
+        assert roots == {"archive", "bin", "red4ext", "r6", "mods", "engine"}
 
     def test_unknown_game_returns_empty(self) -> None:
         assert known_roots_for_game("unknowngame") == set()
@@ -203,3 +203,10 @@ class TestUnknown:
         entries = [FakeEntry("archive\\pc\\mod\\a.archive")]
         result = detect_layout(entries, CP_ROOTS)
         assert result == LayoutResult(layout=ArchiveLayout.STANDARD)
+
+
+def test_engine_is_recognized_root():
+    from rippermod_manager.services.archive_layout import known_roots_for_game
+
+    roots = known_roots_for_game("cyberpunk2077")
+    assert "engine" in roots, f"engine missing from {roots}"
