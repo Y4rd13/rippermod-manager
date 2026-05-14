@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 
 import psutil
@@ -71,12 +72,30 @@ def unlink(dst: Path) -> None:
 
 def junction(target: Path, link: Path) -> None:
     """Create an NTFS directory junction at `link` pointing to `target`."""
-    raise NotImplementedError
+    if not target.is_dir():
+        raise NotFoundError(f"junction target must be an existing directory: {target}")
+    if link.exists():
+        raise AlreadyExistsError(f"junction link path exists: {link}")
+    link.parent.mkdir(parents=True, exist_ok=True)
+    proc = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+        capture_output=True,
+        text=True,
+        shell=False,
+        timeout=10,
+    )
+    if proc.returncode != 0:
+        raise VfsError(f"mklink /J failed: {proc.stderr.strip() or proc.stdout.strip()}")
 
 
 def remove_junction(link: Path) -> None:
     """Remove a junction reparse point. Idempotent."""
-    raise NotImplementedError
+    if not link.exists():
+        return
+    try:
+        os.rmdir(link)
+    except OSError as exc:
+        raise VfsError(f"could not remove junction {link}: {exc}") from exc
 
 
 def verify_link(src: Path, dst: Path) -> bool:

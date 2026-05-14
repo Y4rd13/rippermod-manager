@@ -1,4 +1,5 @@
 import os
+import sys
 from typing import ClassVar
 from unittest.mock import patch
 
@@ -9,10 +10,16 @@ from rippermod_manager.services.vfs.primitives import (
     NotFoundError,
     hardlink,
     is_game_running,
+    junction,
     probe_hardlink_support,
+    remove_junction,
     same_volume,
     unlink,
     verify_link,
+)
+
+skip_if_not_windows = pytest.mark.skipif(
+    sys.platform != "win32", reason="VFS junctions are Windows-only"
 )
 
 
@@ -144,3 +151,38 @@ def test_is_game_running_case_insensitive():
     with patch("rippermod_manager.services.vfs.primitives.psutil") as mock_psutil:
         mock_psutil.process_iter.return_value = [FakeProc()]
         assert is_game_running("Cyberpunk2077.exe") is True
+
+
+@skip_if_not_windows
+def test_junction_creates_traversable_link(tmp_volume):
+    staging, target = tmp_volume
+    inner = staging / "inner"
+    inner.mkdir()
+    (inner / "file.txt").write_text("ok")
+
+    link = target / "link"
+    junction(inner, link)
+
+    assert (link / "file.txt").read_text() == "ok"
+
+
+@skip_if_not_windows
+def test_remove_junction_removes_link_but_keeps_target(tmp_volume):
+    staging, target = tmp_volume
+    inner = staging / "inner"
+    inner.mkdir()
+    (inner / "file.txt").write_text("ok")
+    link = target / "link"
+    junction(inner, link)
+
+    remove_junction(link)
+
+    assert not link.exists()
+    assert (inner / "file.txt").read_text() == "ok"
+
+
+@skip_if_not_windows
+def test_remove_junction_idempotent_when_absent(tmp_volume):
+    _, target = tmp_volume
+    link = target / "ghost"
+    remove_junction(link)  # must not raise
