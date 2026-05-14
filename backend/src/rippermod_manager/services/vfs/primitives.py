@@ -79,7 +79,10 @@ def remove_junction(link: Path) -> None:
 
 def verify_link(src: Path, dst: Path) -> bool:
     """Return True iff dst is a hardlink (same inode) to src."""
-    raise NotImplementedError
+    try:
+        return os.path.samefile(src, dst)
+    except (FileNotFoundError, OSError):
+        return False
 
 
 def same_volume(a: Path, b: Path) -> bool:
