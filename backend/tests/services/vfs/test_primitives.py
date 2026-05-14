@@ -6,6 +6,7 @@ from rippermod_manager.services.vfs.primitives import (
     AlreadyExistsError,
     NotFoundError,
     hardlink,
+    same_volume,
     unlink,
     verify_link,
 )
@@ -91,3 +92,15 @@ def test_verify_link_false_when_dst_missing(tmp_volume):
     dst = target / "missing.txt"
 
     assert verify_link(src, dst) is False
+
+
+def test_same_volume_true_for_siblings(tmp_volume):
+    staging, target = tmp_volume
+    assert same_volume(staging, target) is True
+
+
+def test_same_volume_handles_missing_paths(tmp_path):
+    """If paths don't exist yet, fall back to closest existing ancestor."""
+    a = tmp_path / "nope_a"
+    b = tmp_path / "nope_b"
+    assert same_volume(a, b) is True

@@ -85,9 +85,22 @@ def verify_link(src: Path, dst: Path) -> bool:
         return False
 
 
+def _existing_ancestor(p: Path) -> Path:
+    """Walk up until we find a path that exists. Used by same_volume for non-existent paths."""
+    p = p.resolve(strict=False)
+    while not p.exists() and p != p.parent:
+        p = p.parent
+    return p
+
+
 def same_volume(a: Path, b: Path) -> bool:
     """Return True iff a and b live on the same NTFS volume."""
-    raise NotImplementedError
+    try:
+        sa = os.stat(_existing_ancestor(a))
+        sb = os.stat(_existing_ancestor(b))
+        return sa.st_dev == sb.st_dev
+    except OSError as exc:
+        raise VfsError(str(exc)) from exc
 
 
 def probe_hardlink_support(staging_dir: Path, target_dir: Path) -> bool:
