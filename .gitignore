@@ -35,13 +35,16 @@ backend/build/
 *.env.local
 
 # Docs (local strategy notes, except publishable files)
-docs/
+docs/*
 !docs/nexus-description.bbcode
 !docs/nexus-article-getting-started.bbcode
 !docs/nexus-api-usage.md
 !docs/architecture.md
+!docs/dual-release-strategy.md
 !docs/assets/
-!docs/assets/*
+!docs/assets/**
+!docs/superpowers/
+!docs/superpowers/**
 
 # Temp
 temp/
