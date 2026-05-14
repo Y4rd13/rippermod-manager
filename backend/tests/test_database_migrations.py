@@ -125,8 +125,8 @@ class TestVFSColumnMigration:
         assert info["staging_dir"]["type"].upper().startswith("TEXT")
         assert info["staging_dir"]["dflt_value"] == "''"
 
-        assert info["deployed"]["type"].upper().startswith("INTEGER")
+        assert info["deployed"]["type"].upper() == "BOOLEAN"
         assert info["deployed"]["dflt_value"] == "0"
 
-        assert info["deploy_drift"]["type"].upper().startswith("INTEGER")
+        assert info["deploy_drift"]["type"].upper() == "BOOLEAN"
         assert info["deploy_drift"]["dflt_value"] == "0"
