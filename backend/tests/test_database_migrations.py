@@ -1,4 +1,5 @@
 """Tests for _migrate_missing_columns() idempotency and correctness."""
+
 from unittest.mock import patch
 
 from sqlalchemy import event  # used via @event.listens_for in helpers
