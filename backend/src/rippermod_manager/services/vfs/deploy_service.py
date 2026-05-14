@@ -6,8 +6,14 @@ import logging
 import shutil
 from pathlib import Path
 
+from sqlmodel import Session, select
+
 from rippermod_manager.models.game import Game
-from rippermod_manager.schemas.deploy import PreflightReport
+from rippermod_manager.models.install import (  # noqa: F401 used in plan_deploy
+    InstalledMod,
+    InstalledModFile,
+)
+from rippermod_manager.schemas.deploy import DeployOp, DeployPlan, PreflightReport
 from rippermod_manager.services.vfs.primitives import (
     is_game_running,
     probe_hardlink_support,
@@ -57,3 +63,58 @@ def pre_flight_check(game: Game) -> PreflightReport:
         report.free_disk_bytes = 0
 
     return report
+
+
+def plan_deploy(game: Game, session: Session) -> DeployPlan:
+    """Build a DeployPlan from the installed-mod manifest for a game.
+
+    Enumerates all enabled InstalledMod rows and their InstalledModFile rows,
+    producing one DeployOp per file (link) or per REDmod subtree root (junction).
+    Junction ops are deduplicated: only one junction per mods/<name> directory.
+    """
+    install = Path(game.install_path)
+    staging_root = install / "downloaded_mods"
+
+    mods = session.exec(
+        select(InstalledMod).where(
+            InstalledMod.game_id == game.id,
+            InstalledMod.disabled.is_(False),  # type: ignore[union-attr]
+        )
+    ).all()
+
+    plan = DeployPlan(game_id=game.id)
+    junction_dirs_seen: set[str] = set()
+
+    for mod in mods:
+        _ = mod.files  # touch relationship to load files
+        for f in mod.files:
+            src = staging_root / mod.staging_dir / f.source_path.replace("\\", "/")
+            dst = install / f.relative_path.replace("\\", "/")
+            if f.link_kind == "junction":
+                parts = f.relative_path.replace("\\", "/").split("/")
+                if len(parts) >= 2 and parts[0] == "mods":
+                    redmod_dst = install / "mods" / parts[1]
+                    redmod_src = staging_root / mod.staging_dir / "mods" / parts[1]
+                    key = str(redmod_dst)
+                    if key in junction_dirs_seen:
+                        continue
+                    junction_dirs_seen.add(key)
+                    plan.ops.append(
+                        DeployOp(
+                            operation="junction",
+                            src=str(redmod_src),
+                            dst=str(redmod_dst),
+                            installed_mod_id=mod.id,
+                        )
+                    )
+                    continue
+            plan.ops.append(
+                DeployOp(
+                    operation="link",
+                    src=str(src),
+                    dst=str(dst),
+                    installed_mod_id=mod.id,
+                )
+            )
+
+    return plan
