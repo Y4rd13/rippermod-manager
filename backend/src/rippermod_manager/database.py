@@ -119,6 +119,16 @@ def _migrate_missing_columns() -> None:
             "deploy_drift",
             "ALTER TABLE installed_mods ADD COLUMN deploy_drift BOOLEAN DEFAULT 0",
         ),
+        (
+            "installed_mod_files",
+            "source_path",
+            "ALTER TABLE installed_mod_files ADD COLUMN source_path TEXT DEFAULT ''",
+        ),
+        (
+            "installed_mod_files",
+            "link_kind",
+            "ALTER TABLE installed_mod_files ADD COLUMN link_kind TEXT DEFAULT 'hardlink'",
+        ),
     ]
     with Session(engine) as session:
         for table, column, ddl in migrations:
