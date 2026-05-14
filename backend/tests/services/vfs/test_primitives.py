@@ -6,6 +6,7 @@ from rippermod_manager.services.vfs.primitives import (
     AlreadyExistsError,
     NotFoundError,
     hardlink,
+    probe_hardlink_support,
     same_volume,
     unlink,
     verify_link,
@@ -104,3 +105,15 @@ def test_same_volume_handles_missing_paths(tmp_path):
     a = tmp_path / "nope_a"
     b = tmp_path / "nope_b"
     assert same_volume(a, b) is True
+
+
+def test_probe_returns_true_when_supported(tmp_volume):
+    staging, target = tmp_volume
+    assert probe_hardlink_support(staging, target) is True
+
+
+def test_probe_leaves_no_files(tmp_volume):
+    staging, target = tmp_volume
+    probe_hardlink_support(staging, target)
+    assert list(staging.iterdir()) == []
+    assert list(target.iterdir()) == []

@@ -105,7 +105,20 @@ def same_volume(a: Path, b: Path) -> bool:
 
 def probe_hardlink_support(staging_dir: Path, target_dir: Path) -> bool:
     """Canary: write tmp file in staging_dir, hardlink into target_dir, cleanup."""
-    raise NotImplementedError
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    canary = staging_dir / ".rmm_canary.tmp"
+    link = target_dir / ".rmm_canary.link"
+    try:
+        canary.write_bytes(b"x")
+        try:
+            os.link(canary, link)
+        except OSError:
+            return False
+        return True
+    finally:
+        link.unlink(missing_ok=True)
+        canary.unlink(missing_ok=True)
 
 
 def is_game_running(exe_name: str = "Cyberpunk2077.exe") -> bool:
