@@ -1,12 +1,9 @@
 """Tests for _migrate_missing_columns() idempotency and correctness."""
-import sqlite3
 from unittest.mock import patch
 
-import pytest
-from sqlalchemy import event
-from sqlmodel import Session, create_engine, text
+from sqlalchemy import event  # used via @event.listens_for in helpers
+from sqlmodel import create_engine, text
 from sqlmodel.pool import StaticPool
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -21,6 +18,14 @@ CREATE TABLE installed_mods (
     install_path TEXT NOT NULL DEFAULT '',
     install_order INTEGER NOT NULL DEFAULT 0,
     conflict_dismissed INTEGER NOT NULL DEFAULT 0
+)
+"""
+
+_OLD_INSTALLED_MOD_FILES_DDL = """
+CREATE TABLE installed_mod_files (
+    id INTEGER PRIMARY KEY,
+    installed_mod_id INTEGER,
+    relative_path TEXT
 )
 """
 
@@ -41,6 +46,24 @@ def _make_old_engine():
         # Create only the tables we care about for this test.
         # installed_mods deliberately omits staging_dir, deployed, deploy_drift.
         conn.execute(text(_OLD_INSTALLED_MODS_DDL))
+        conn.commit()
+    return eng
+
+
+def _make_old_engine_with_mod_files():
+    """Return an in-memory SQLite engine with pre-VFS installed_mod_files schema."""
+    eng = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    @event.listens_for(eng, "connect")
+    def _enable_fk(dbapi_conn, _):
+        dbapi_conn.execute("PRAGMA foreign_keys=ON")
+
+    with eng.connect() as conn:
+        conn.execute(text(_OLD_INSTALLED_MOD_FILES_DDL))
         conn.commit()
     return eng
 
@@ -131,28 +154,26 @@ class TestVFSColumnMigration:
         assert info["deploy_drift"]["type"].upper() == "BOOLEAN"
         assert info["deploy_drift"]["dflt_value"] == "0"
 
+    def test_migration_adds_installed_mod_files_vfs_columns(self):
+        """source_path and link_kind must be added to installed_mod_files."""
+        from rippermod_manager.database import _migrate_missing_columns
 
-def test_migration_adds_installed_mod_files_vfs_columns(tmp_path):
-    db = tmp_path / "test.db"
-    conn = sqlite3.connect(db)
-    conn.execute("CREATE TABLE installed_mod_files (id INTEGER PRIMARY KEY, installed_mod_id INTEGER, relative_path TEXT)")
-    conn.commit()
+        eng = _make_old_engine_with_mod_files()
+        with patch("rippermod_manager.database.engine", eng):
+            _migrate_missing_columns()
 
-    from unittest.mock import patch
+        cols = _get_column_names(eng, "installed_mod_files")
+        assert "source_path" in cols, "source_path column not created by migration"
+        assert "link_kind" in cols, "link_kind column not created by migration"
 
-    from sqlalchemy import event
-    from sqlmodel import create_engine
-    from sqlmodel.pool import StaticPool
+    def test_migration_adds_installed_mod_files_vfs_columns_is_idempotent(self):
+        """Running _migrate_missing_columns twice on installed_mod_files must not raise."""
+        from rippermod_manager.database import _migrate_missing_columns
 
-    from rippermod_manager.database import _migrate_missing_columns
+        eng = _make_old_engine_with_mod_files()
+        with patch("rippermod_manager.database.engine", eng):
+            _migrate_missing_columns()
+            _migrate_missing_columns()  # should be a no-op, not an error
 
-    eng = create_engine(
-        f"sqlite:///{db}",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    with patch("rippermod_manager.database.engine", eng):
-        _migrate_missing_columns()
-
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(installed_mod_files)").fetchall()}
-    assert {"source_path", "link_kind"} <= cols
+        cols = _get_column_names(eng, "installed_mod_files")
+        assert {"source_path", "link_kind"}.issubset(cols)
