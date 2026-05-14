@@ -9,6 +9,7 @@ CYBERPUNK_DEFAULT_PATHS = [
     ("r6/tweaks", "TweakXL tweaks", True),
     ("bin/x64/plugins", "ASI/plugin loaders", True),
     ("mods", "REDmod mods", True),
+    ("engine", "Engine config tweaks", True),
 ]
 
 
