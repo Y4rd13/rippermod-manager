@@ -20,6 +20,9 @@ class InstalledMod(SQLModel, table=True):
     conflict_dismissed: bool = False
     installed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     mod_group_id: int | None = Field(default=None, foreign_key="mod_groups.id")
+    staging_dir: str = Field(default="")
+    deployed: bool = Field(default=False)
+    deploy_drift: bool = Field(default=False)
 
     files: list["InstalledModFile"] = Relationship(
         back_populates="installed_mod",
