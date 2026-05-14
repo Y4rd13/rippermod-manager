@@ -170,3 +170,30 @@ def execute_plan(plan: DeployPlan, session: Session) -> DeployReport:
     done = sum(1 for r in results if r.status == "done")
     failed = sum(1 for r in results if r.status == "failed")
     return DeployReport(total=len(results), done=done, failed=failed, results=results)
+
+
+def deploy(game: Game, session: Session) -> DeployReport:
+    """Compose pre_flight_check → plan_deploy → execute_plan.
+
+    If pre-flight fails, returns an empty report without touching the DB.
+    On a clean execute (no failures), marks all enabled mods as deployed and
+    clears any pending drift flag.
+    """
+    pre = pre_flight_check(game)
+    if not pre.ok:
+        return DeployReport(total=0, done=0, failed=0, results=[])
+    plan = plan_deploy(game, session)
+    report = execute_plan(plan, session)
+    if report.is_clean:
+        mods = session.exec(
+            select(InstalledMod).where(
+                InstalledMod.game_id == game.id,
+                InstalledMod.disabled.is_(False),  # type: ignore[union-attr]
+            )
+        ).all()
+        for m in mods:
+            m.deployed = True
+            m.deploy_drift = False
+            session.add(m)
+        session.commit()
+    return report
