@@ -19,6 +19,7 @@ from rippermod_manager.schemas.deploy import (
     DeployOpResult,
     DeployPlan,
     DeployReport,
+    DriftReport,
     PreflightReport,
 )
 from rippermod_manager.services.vfs.primitives import (
@@ -30,6 +31,7 @@ from rippermod_manager.services.vfs.primitives import (
     remove_junction,
     same_volume,
     unlink,
+    verify_link,
 )
 
 logger = logging.getLogger(__name__)
@@ -232,6 +234,51 @@ def undeploy(game: Game, session: Session) -> DeployReport:
             session.add(m)
         session.commit()
     return report
+
+
+def detect_drift(game: Game, session: Session) -> DriftReport:
+    install = Path(game.install_path)
+    staging_root = install / "downloaded_mods"
+
+    mods = session.exec(
+        select(InstalledMod).where(
+            InstalledMod.game_id == game.id,
+            InstalledMod.disabled.is_(False),  # type: ignore[union-attr]
+        )
+    ).all()
+
+    total = linked = missing = foreign = 0
+    by_mod: dict[int, dict[str, int]] = {}
+
+    for mod in mods:
+        _ = mod.files
+        m_linked = m_missing = m_foreign = 0
+        for f in mod.files:
+            total += 1
+            src = staging_root / mod.staging_dir / f.source_path.replace("\\", "/")
+            dst = install / f.relative_path.replace("\\", "/")
+            if not dst.exists():
+                missing += 1
+                m_missing += 1
+                continue
+            if f.link_kind == "hardlink":
+                if verify_link(src, dst):
+                    linked += 1
+                    m_linked += 1
+                else:
+                    foreign += 1
+                    m_foreign += 1
+            elif f.link_kind == "junction":
+                if dst.is_dir():
+                    linked += 1
+                    m_linked += 1
+                else:
+                    missing += 1
+                    m_missing += 1
+        if mod.id is not None:
+            by_mod[mod.id] = {"linked": m_linked, "missing": m_missing, "foreign": m_foreign}
+
+    return DriftReport(total=total, linked=linked, missing=missing, foreign=foreign, by_mod=by_mod)
 
 
 def deploy(game: Game, session: Session) -> DeployReport:
