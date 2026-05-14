@@ -1,4 +1,6 @@
 import os
+from typing import ClassVar
+from unittest.mock import patch
 
 import pytest
 
@@ -6,6 +8,7 @@ from rippermod_manager.services.vfs.primitives import (
     AlreadyExistsError,
     NotFoundError,
     hardlink,
+    is_game_running,
     probe_hardlink_support,
     same_volume,
     unlink,
@@ -117,3 +120,27 @@ def test_probe_leaves_no_files(tmp_volume):
     probe_hardlink_support(staging, target)
     assert list(staging.iterdir()) == []
     assert list(target.iterdir()) == []
+
+
+def test_is_game_running_false_when_no_match():
+    with patch("rippermod_manager.services.vfs.primitives.psutil") as mock_psutil:
+        mock_psutil.process_iter.return_value = []
+        assert is_game_running("Cyberpunk2077.exe") is False
+
+
+def test_is_game_running_true_when_match():
+    class FakeProc:
+        info: ClassVar[dict[str, str]] = {"name": "Cyberpunk2077.exe"}
+
+    with patch("rippermod_manager.services.vfs.primitives.psutil") as mock_psutil:
+        mock_psutil.process_iter.return_value = [FakeProc()]
+        assert is_game_running("Cyberpunk2077.exe") is True
+
+
+def test_is_game_running_case_insensitive():
+    class FakeProc:
+        info: ClassVar[dict[str, str]] = {"name": "CYBERPUNK2077.EXE"}
+
+    with patch("rippermod_manager.services.vfs.primitives.psutil") as mock_psutil:
+        mock_psutil.process_iter.return_value = [FakeProc()]
+        assert is_game_running("Cyberpunk2077.exe") is True
