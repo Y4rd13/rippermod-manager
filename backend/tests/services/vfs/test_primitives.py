@@ -7,6 +7,7 @@ from rippermod_manager.services.vfs.primitives import (
     NotFoundError,
     hardlink,
     unlink,
+    verify_link,
 )
 
 
@@ -61,3 +62,32 @@ def test_unlink_is_idempotent_when_absent(tmp_volume):
     dst = target / "ghost.txt"
 
     unlink(dst)  # should not raise
+
+
+def test_verify_link_true_for_hardlink(tmp_volume):
+    staging, target = tmp_volume
+    src = staging / "a.txt"
+    src.write_text("hi")
+    dst = target / "a.txt"
+    hardlink(src, dst)
+
+    assert verify_link(src, dst) is True
+
+
+def test_verify_link_false_for_separate_files(tmp_volume):
+    staging, target = tmp_volume
+    src = staging / "a.txt"
+    src.write_text("hi")
+    dst = target / "a.txt"
+    dst.write_text("hi")  # same content, different inode
+
+    assert verify_link(src, dst) is False
+
+
+def test_verify_link_false_when_dst_missing(tmp_volume):
+    staging, target = tmp_volume
+    src = staging / "a.txt"
+    src.write_text("hi")
+    dst = target / "missing.txt"
+
+    assert verify_link(src, dst) is False
