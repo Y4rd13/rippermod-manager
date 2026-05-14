@@ -1,11 +1,16 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from rippermod_manager.models.game import Game
-from rippermod_manager.models.install import InstalledMod, InstalledModFile
-from rippermod_manager.services.vfs.deploy_service import plan_deploy, pre_flight_check
+from rippermod_manager.models.install import DeployJournalEntry, InstalledMod, InstalledModFile
+from rippermod_manager.schemas.deploy import DeployOp, DeployPlan
+from rippermod_manager.services.vfs.deploy_service import (
+    execute_plan,
+    plan_deploy,
+    pre_flight_check,
+)
 
 
 def make_game(tmp_path: Path) -> Game:
@@ -100,3 +105,59 @@ def test_plan_uses_junction_for_redmod_subtrees(in_memory_session, sample_game):
     assert junction_ops[0].dst.endswith("mods/MyREDmod") or junction_ops[0].dst.endswith(
         "mods\\MyREDmod"
     )
+
+
+def test_execute_plan_creates_hardlinks_and_journals(in_memory_session, sample_game):
+    session = in_memory_session
+    game = sample_game
+    staging = Path(game.install_path) / "downloaded_mods" / "TestMod" / "r6" / "scripts"
+    staging.mkdir(parents=True)
+    src = staging / "foo.reds"
+    src.write_text("// test")
+
+    plan = DeployPlan(
+        game_id=game.id,
+        ops=[
+            DeployOp(
+                operation="link",
+                src=str(src),
+                dst=str(Path(game.install_path) / "r6" / "scripts" / "foo.reds"),
+                installed_mod_id=1,
+            ),
+        ],
+    )
+
+    report = execute_plan(plan, session)
+
+    assert report.failed == 0
+    assert report.done == 1
+    dst = Path(game.install_path) / "r6" / "scripts" / "foo.reds"
+    assert dst.exists()
+    journal = session.exec(
+        select(DeployJournalEntry).where(DeployJournalEntry.game_id == game.id)
+    ).all()
+    assert all(j.status == "done" for j in journal)
+
+
+def test_execute_plan_failure_marks_journal_failed(in_memory_session, sample_game):
+    session = in_memory_session
+    game = sample_game
+    plan = DeployPlan(
+        game_id=game.id,
+        ops=[
+            DeployOp(
+                operation="link",
+                src="/does/not/exist.txt",
+                dst=str(Path(game.install_path) / "r6" / "scripts" / "ghost.reds"),
+                installed_mod_id=1,
+            ),
+        ],
+    )
+
+    report = execute_plan(plan, session)
+
+    assert report.failed == 1
+    journal = session.exec(
+        select(DeployJournalEntry).where(DeployJournalEntry.status == "failed")
+    ).all()
+    assert len(journal) == 1

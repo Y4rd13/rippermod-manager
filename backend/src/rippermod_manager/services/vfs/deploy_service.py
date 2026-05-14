@@ -10,14 +10,26 @@ from sqlmodel import Session, select
 
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import (  # noqa: F401 used in plan_deploy
+    DeployJournalEntry,
     InstalledMod,
     InstalledModFile,
 )
-from rippermod_manager.schemas.deploy import DeployOp, DeployPlan, PreflightReport
+from rippermod_manager.schemas.deploy import (
+    DeployOp,
+    DeployOpResult,
+    DeployPlan,
+    DeployReport,
+    PreflightReport,
+)
 from rippermod_manager.services.vfs.primitives import (
+    VfsError,
+    hardlink,
     is_game_running,
+    junction,
     probe_hardlink_support,
+    remove_junction,
     same_volume,
+    unlink,
 )
 
 logger = logging.getLogger(__name__)
@@ -118,3 +130,43 @@ def plan_deploy(game: Game, session: Session) -> DeployPlan:
             )
 
     return plan
+
+
+def execute_plan(plan: DeployPlan, session: Session) -> DeployReport:
+    results: list[DeployOpResult] = []
+
+    for op in plan.ops:
+        entry = DeployJournalEntry(
+            game_id=plan.game_id,
+            operation=op.operation,
+            src=op.src,
+            dst=op.dst,
+            status="pending",
+        )
+        session.add(entry)
+        session.flush()
+
+        try:
+            if op.operation == "link":
+                hardlink(Path(op.src), Path(op.dst))
+            elif op.operation == "unlink":
+                unlink(Path(op.dst))
+            elif op.operation == "junction":
+                junction(Path(op.src), Path(op.dst))
+            elif op.operation == "rm_junction":
+                remove_junction(Path(op.dst))
+            else:
+                raise VfsError(f"unknown op: {op.operation}")
+            entry.status = "done"
+            results.append(DeployOpResult(op=op, status="done"))
+        except VfsError as exc:
+            entry.status = "failed"
+            entry.error = str(exc)
+            results.append(DeployOpResult(op=op, status="failed", error=str(exc)))
+
+        session.add(entry)
+
+    session.commit()
+    done = sum(1 for r in results if r.status == "done")
+    failed = sum(1 for r in results if r.status == "failed")
+    return DeployReport(total=len(results), done=done, failed=failed, results=results)
