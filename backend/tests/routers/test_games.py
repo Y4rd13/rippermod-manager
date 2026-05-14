@@ -31,7 +31,7 @@ class TestCreateGame:
         )
         assert r.status_code == 201
         paths = r.json()["mod_paths"]
-        assert len(paths) == 7
+        assert len(paths) == 8
 
     def test_custom_paths(self, client):
         r = client.post(

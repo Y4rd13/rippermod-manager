@@ -107,17 +107,17 @@ def _migrate_missing_columns() -> None:
         (
             "installed_mods",
             "staging_dir",
-            "ALTER TABLE installed_mods ADD COLUMN staging_dir TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE installed_mods ADD COLUMN staging_dir TEXT DEFAULT ''",
         ),
         (
             "installed_mods",
             "deployed",
-            "ALTER TABLE installed_mods ADD COLUMN deployed INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE installed_mods ADD COLUMN deployed BOOLEAN DEFAULT 0",
         ),
         (
             "installed_mods",
             "deploy_drift",
-            "ALTER TABLE installed_mods ADD COLUMN deploy_drift INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE installed_mods ADD COLUMN deploy_drift BOOLEAN DEFAULT 0",
         ),
     ]
     with Session(engine) as session:
