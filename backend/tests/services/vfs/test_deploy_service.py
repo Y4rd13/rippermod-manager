@@ -9,6 +9,7 @@ from rippermod_manager.models.install import DeployJournalEntry, InstalledMod, I
 from rippermod_manager.schemas.deploy import DeployOp, DeployPlan
 from rippermod_manager.services.vfs.deploy_service import (
     deploy,
+    detect_drift,
     execute_plan,
     plan_deploy,
     pre_flight_check,
@@ -226,3 +227,55 @@ def test_undeploy_removes_links_keeps_staging(in_memory_session, sample_game):
     assert (staging_root / "a.reds").exists()
     session.refresh(mod)
     assert mod.deployed is False
+
+
+def test_drift_clean_after_deploy(in_memory_session, sample_game):
+    session = in_memory_session
+    game = sample_game
+    staging = Path(game.install_path) / "downloaded_mods" / "Demo" / "r6" / "scripts"
+    staging.mkdir(parents=True)
+    (staging / "a.reds").write_text("// a")
+
+    mod = InstalledMod(game_id=game.id, name="Demo", staging_dir="Demo")
+    session.add(mod)
+    session.flush()
+    session.add(
+        InstalledModFile(
+            installed_mod_id=mod.id,
+            relative_path="r6/scripts/a.reds",
+            source_path="r6/scripts/a.reds",
+        )
+    )
+    session.commit()
+
+    with patch("rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=False):
+        deploy(game, session)
+
+    drift = detect_drift(game, session)
+    assert drift.is_clean
+    assert drift.linked == 1
+    assert drift.missing == 0
+
+
+def test_drift_detects_missing_link(in_memory_session, sample_game):
+    session = in_memory_session
+    game = sample_game
+    staging = Path(game.install_path) / "downloaded_mods" / "Demo" / "r6" / "scripts"
+    staging.mkdir(parents=True)
+    (staging / "a.reds").write_text("// a")
+
+    mod = InstalledMod(game_id=game.id, name="Demo", staging_dir="Demo", deployed=True)
+    session.add(mod)
+    session.flush()
+    session.add(
+        InstalledModFile(
+            installed_mod_id=mod.id,
+            relative_path="r6/scripts/a.reds",
+            source_path="r6/scripts/a.reds",
+        )
+    )
+    session.commit()
+
+    drift = detect_drift(game, session)
+    assert drift.missing == 1
+    assert drift.linked == 0
