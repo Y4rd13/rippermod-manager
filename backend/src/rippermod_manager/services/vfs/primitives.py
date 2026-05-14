@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import psutil
+
 
 class VfsError(Exception):
     """Base class for VFS-specific failures."""
@@ -123,4 +125,9 @@ def probe_hardlink_support(staging_dir: Path, target_dir: Path) -> bool:
 
 def is_game_running(exe_name: str = "Cyberpunk2077.exe") -> bool:
     """Return True iff a process with the given exe name is running."""
-    raise NotImplementedError
+    needle = exe_name.lower()
+    for proc in psutil.process_iter(attrs=["name"]):
+        name = (proc.info.get("name") or "").lower()
+        if name == needle:
+            return True
+    return False
