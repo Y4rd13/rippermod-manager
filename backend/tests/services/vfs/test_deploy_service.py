@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,6 +12,7 @@ from rippermod_manager.services.vfs.deploy_service import (
     execute_plan,
     plan_deploy,
     pre_flight_check,
+    undeploy,
 )
 
 
@@ -193,3 +195,34 @@ def test_deploy_full_round_trip(in_memory_session, sample_game):
     assert report.failed == 0
     session.refresh(mod)
     assert mod.deployed is True
+
+
+def test_undeploy_removes_links_keeps_staging(in_memory_session, sample_game):
+    session = in_memory_session
+    game = sample_game
+    staging_root = Path(game.install_path) / "downloaded_mods" / "Demo" / "r6" / "scripts"
+    staging_root.mkdir(parents=True)
+    (staging_root / "a.reds").write_text("// a")
+    dst_dir = Path(game.install_path) / "r6" / "scripts"
+    dst_dir.mkdir(parents=True)
+    os.link(staging_root / "a.reds", dst_dir / "a.reds")
+
+    mod = InstalledMod(game_id=game.id, name="Demo", staging_dir="Demo", deployed=True)
+    session.add(mod)
+    session.flush()
+    session.add(
+        InstalledModFile(
+            installed_mod_id=mod.id,
+            relative_path="r6/scripts/a.reds",
+            source_path="r6/scripts/a.reds",
+        )
+    )
+    session.commit()
+
+    with patch("rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=False):
+        undeploy(game, session)
+
+    assert not (dst_dir / "a.reds").exists()
+    assert (staging_root / "a.reds").exists()
+    session.refresh(mod)
+    assert mod.deployed is False

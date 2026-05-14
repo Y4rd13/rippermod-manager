@@ -172,6 +172,68 @@ def execute_plan(plan: DeployPlan, session: Session) -> DeployReport:
     return DeployReport(total=len(results), done=done, failed=failed, results=results)
 
 
+def undeploy(game: Game, session: Session) -> DeployReport:
+    """Remove all deployed hardlinks/junctions for a game and mark mods as undeployed.
+
+    Only checks ``game_running`` from pre-flight — filesystem support gates are
+    irrelevant when removing files rather than creating them.  Marks
+    ``deployed=False`` only when the execute step completes without failures.
+    """
+    pre = pre_flight_check(game)
+    if pre.game_running:
+        return DeployReport(total=0, done=0, failed=0, results=[])
+
+    install = Path(game.install_path)
+    mods = session.exec(
+        select(InstalledMod).where(
+            InstalledMod.game_id == game.id,
+            InstalledMod.deployed.is_(True),  # type: ignore[union-attr]
+        )
+    ).all()
+
+    ops: list[DeployOp] = []
+    junction_dirs_seen: set[str] = set()
+    for mod in mods:
+        _ = mod.files  # touch relationship to load files
+        for f in mod.files:
+            dst = install / f.relative_path.replace("\\", "/")
+            if f.link_kind == "junction":
+                parts = f.relative_path.replace("\\", "/").split("/")
+                if len(parts) >= 2 and parts[0] == "mods":
+                    redmod_dst = install / "mods" / parts[1]
+                    key = str(redmod_dst)
+                    if key in junction_dirs_seen:
+                        continue
+                    junction_dirs_seen.add(key)
+                    ops.append(
+                        DeployOp(
+                            operation="rm_junction",
+                            src="",
+                            dst=str(redmod_dst),
+                            installed_mod_id=mod.id,
+                        )
+                    )
+                    continue
+            ops.append(
+                DeployOp(
+                    operation="unlink",
+                    src="",
+                    dst=str(dst),
+                    installed_mod_id=mod.id,
+                )
+            )
+
+    plan = DeployPlan(game_id=game.id, ops=ops)
+    report = execute_plan(plan, session)
+
+    if report.is_clean:
+        for m in mods:
+            m.deployed = False
+            session.add(m)
+        session.commit()
+    return report
+
+
 def deploy(game: Game, session: Session) -> DeployReport:
     """Compose pre_flight_check → plan_deploy → execute_plan.
 
