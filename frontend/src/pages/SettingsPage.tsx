@@ -8,10 +8,11 @@ import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useAbstainMod, useDisconnectNexus, useEndorseMod, useTrackMod, useUntrackMod } from "@/hooks/mutations";
 import { useAppUpdater } from "@/hooks/use-app-updater";
-import { useDeploy, useDeployStatus, useUndeploy } from "@/hooks/use-deploy";
+import { type DeployReport, useDeploy, useDeployStatus, useUndeploy } from "@/hooks/use-deploy";
 import { useNexusSSO } from "@/hooks/use-nexus-sso";
 import { useGames, useModDetail, useSettings } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
+import { toast } from "@/stores/toast-store";
 import { useUIStore } from "@/stores/ui-store";
 
 function UpdateSection() {
@@ -98,6 +99,27 @@ const RIPPERMOD_NEXUS_MOD_ID = 27781;
 const RIPPERMOD_NEXUS_DOMAIN = "cyberpunk2077";
 const RIPPERMOD_NEXUS_URL = `https://www.nexusmods.com/${RIPPERMOD_NEXUS_DOMAIN}/mods/${RIPPERMOD_NEXUS_MOD_ID}`;
 
+function reportDeployOutcome(report: DeployReport, action: string): void {
+  if (report.preflight && !report.preflight.ok) {
+    toast.error(
+      `${action} refused`,
+      report.preflight.reasons.join(" ") || "Pre-flight check failed",
+    );
+    return;
+  }
+  if (report.failed > 0) {
+    toast.error(
+      `${action} failed`,
+      `${report.failed} of ${report.total} operations failed`,
+    );
+    return;
+  }
+  const skipped = report.skipped_existing
+    ? ` (${report.skipped_existing} already current)`
+    : "";
+  toast.success(`${action} complete`, `${report.done} operation(s) succeeded${skipped}`);
+}
+
 function DeploymentCard() {
   const activeGameName = useUIStore((s) => s.activeGameName);
   const status = useDeployStatus(activeGameName);
@@ -105,6 +127,20 @@ function DeploymentCard() {
   const undeploy = useUndeploy(activeGameName);
 
   if (!activeGameName) return null;
+
+  const handleDeploy = () => {
+    deploy.mutate(undefined, {
+      onSuccess: (report) => reportDeployOutcome(report, "Deploy"),
+      onError: (error) => toast.error("Deploy failed", error.message),
+    });
+  };
+
+  const handleUndeploy = () => {
+    undeploy.mutate(undefined, {
+      onSuccess: (report) => reportDeployOutcome(report, "Undeploy"),
+      onError: (error) => toast.error("Undeploy failed", error.message),
+    });
+  };
 
   return (
     <Card>
@@ -120,14 +156,14 @@ function DeploymentCard() {
           </div>
         )}
         <div className="flex gap-2">
-          <Button size="sm" loading={deploy.isPending} onClick={() => deploy.mutate()}>
+          <Button size="sm" loading={deploy.isPending} onClick={handleDeploy}>
             Deploy
           </Button>
           <Button
             size="sm"
             variant="secondary"
             loading={undeploy.isPending}
-            onClick={() => undeploy.mutate()}
+            onClick={handleUndeploy}
           >
             Undeploy
           </Button>
