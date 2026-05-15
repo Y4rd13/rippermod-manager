@@ -7,13 +7,54 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useAbstainMod, useDisconnectNexus, useEndorseMod, useTrackMod, useUntrackMod } from "@/hooks/mutations";
+import { useDeploy, useDeployStatus, useUndeploy } from "@/hooks/use-deploy";
 import { useNexusSSO } from "@/hooks/use-nexus-sso";
 import { useGames, useModSummary, useSettings } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
+import { useUIStore } from "@/stores/ui-store";
 
 const RIPPERMOD_NEXUS_MOD_ID = 27781;
 const RIPPERMOD_NEXUS_DOMAIN = "cyberpunk2077";
 const RIPPERMOD_NEXUS_URL = `https://www.nexusmods.com/${RIPPERMOD_NEXUS_DOMAIN}/mods/${RIPPERMOD_NEXUS_MOD_ID}`;
+
+function DeploymentCard() {
+  const activeGameName = useUIStore((s) => s.activeGameName);
+  const status = useDeployStatus(activeGameName);
+  const deploy = useDeploy(activeGameName);
+  const undeploy = useUndeploy(activeGameName);
+
+  if (!activeGameName) return null;
+
+  return (
+    <Card>
+      <h2 className="text-lg font-semibold text-text-primary mb-4">Deployment</h2>
+      <div className="space-y-3">
+        <p className="text-sm text-text-secondary">
+          Mods are staged in <code>downloaded_mods/</code> and linked into the game directory at
+          deploy time. Your game folder stays clean.
+        </p>
+        {status.data && (
+          <div className="text-xs text-text-muted font-mono">
+            {status.data.linked} linked · {status.data.missing} missing · {status.data.foreign} foreign
+          </div>
+        )}
+        <div className="flex gap-2">
+          <Button size="sm" loading={deploy.isPending} onClick={() => deploy.mutate()}>
+            Deploy
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={undeploy.isPending}
+            onClick={() => undeploy.mutate()}
+          >
+            Undeploy
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 function AboutCard() {
   const { data: games = [] } = useGames();
@@ -242,6 +283,7 @@ export function SettingsPage() {
         )}
       </Card>
 
+      <DeploymentCard />
       <AboutCard />
     </div>
   );
