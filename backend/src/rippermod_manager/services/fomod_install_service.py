@@ -1,12 +1,14 @@
 """FOMOD file list computation and extraction.
 
 Computes the final list of files to install based on parsed FOMOD config
-and user selections, then extracts them to the game directory.
+and user selections, then extracts them to a staging directory and deploys
+via hardlinks into the game directory (same VFS model as install_service).
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,9 +25,17 @@ from rippermod_manager.services.fomod_config_parser import (
     FileState,
     FomodConfig,
 )
-from rippermod_manager.services.install_service import get_file_ownership_map
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_dir_name(name: str) -> str:
+    """Sanitise a mod name into a filesystem-safe directory name.
+
+    Duplicates the helper in install_service.py — kept here to avoid a circular
+    import (fomod_install_service already imports from install_service).
+    """
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_") or "mod"
 
 
 @dataclass(frozen=True)
@@ -290,7 +300,11 @@ def install_fomod(
     mod_name: str,
     nexus_mod_id: int | None = None,
 ) -> InstallResult:
-    """Extract resolved FOMOD files to the game directory and record ownership.
+    """Extract resolved FOMOD files to staging then deploy via hardlinks.
+
+    Files are written to ``<game>/downloaded_mods/<safe_name>/...`` first,
+    then ``deploy_service.deploy()`` creates hardlinks at the canonical
+    game-dir paths — matching the same VFS model used by ``install_mod``.
 
     Raises:
         FileNotFoundError: If the archive or game directory doesn't exist.
@@ -312,7 +326,9 @@ def install_fomod(
     if existing:
         raise ValueError(f"Mod '{mod_name}' is already installed. Uninstall first to reinstall.")
 
-    ownership = get_file_ownership_map(session, game.id)  # type: ignore[arg-type]
+    safe_name = _safe_dir_name(mod_name)
+    staging_root = game_dir / "downloaded_mods" / safe_name
+    staging_root.mkdir(parents=True, exist_ok=True)
 
     # Build set of archive paths we need to read
     archive_path_set = {rf.archive_path for rf in resolved_files}
@@ -333,8 +349,11 @@ def install_fomod(
                 skipped += 1
                 continue
 
-            target = game_dir / rf.game_relative_path
-            if not target.resolve().is_relative_to(game_dir.resolve()):
+            # Path-traversal guard: target must stay inside staging_root
+            target = staging_root / rf.game_relative_path
+            try:
+                target.resolve().relative_to(staging_root.resolve())
+            except ValueError:
                 logger.warning("FOMOD: skipping path traversal entry: %s", rf.game_relative_path)
                 skipped += 1
                 continue
@@ -346,17 +365,10 @@ def install_fomod(
             target.write_bytes(data)
             extracted_paths.append(rf.game_relative_path)
 
-            normalised_lower = rf.game_relative_path.replace("\\", "/").lower()
-            if normalised_lower in ownership:
-                prev_mod = ownership[normalised_lower]
-                for f in list(prev_mod.files):
-                    if f.relative_path.replace("\\", "/").lower() == normalised_lower:
-                        session.delete(f)
-                        break
-
     installed = InstalledMod(
         game_id=game.id,  # type: ignore[arg-type]
         name=mod_name,
+        staging_dir=safe_name,
         source_archive=archive_path.name,
     )
 
@@ -367,15 +379,27 @@ def install_fomod(
     session.flush()
 
     for rel_path in extracted_paths:
+        rel_norm = rel_path.replace("\\", "/")
+        link_kind = (
+            "junction"
+            if rel_norm.startswith("mods/") and "/" in rel_norm[len("mods/") :]
+            else "hardlink"
+        )
         session.add(
             InstalledModFile(
                 installed_mod_id=installed.id,  # type: ignore[arg-type]
                 relative_path=rel_path,
+                source_path=rel_path,
+                link_kind=link_kind,
             )
         )
 
     session.commit()
     session.refresh(installed)
+
+    from rippermod_manager.services.vfs import deploy_service
+
+    deploy_service.deploy(game, session)
 
     # Regenerate modlist.txt to include new archives in the load order
     from rippermod_manager.services.modlist_service import write_modlist
@@ -383,7 +407,7 @@ def install_fomod(
     write_modlist(game, session)
 
     logger.info(
-        "FOMOD installed '%s' (%d files, %d overwritten)",
+        "FOMOD installed '%s' (%d files staged, %d overwritten in staging)",
         mod_name,
         len(extracted_paths),
         overwritten,
@@ -394,4 +418,5 @@ def install_fomod(
         files_extracted=len(extracted_paths),
         files_skipped=skipped,
         files_overwritten=overwritten,
+        installed_mod_name_safe=safe_name,
     )
