@@ -13,6 +13,7 @@ from rippermod_manager.services.vfs.deploy_service import (
     execute_plan,
     plan_deploy,
     pre_flight_check,
+    replay_pending_journal,
     undeploy,
 )
 
@@ -279,3 +280,25 @@ def test_drift_detects_missing_link(in_memory_session, sample_game):
     drift = detect_drift(game, session)
     assert drift.missing == 1
     assert drift.linked == 0
+
+
+def test_replay_clears_pending_entries(in_memory_session, sample_game):
+    session = in_memory_session
+    game = sample_game
+    session.add(
+        DeployJournalEntry(
+            game_id=game.id,
+            operation="link",
+            src="/nope",
+            dst=str(Path(game.install_path) / "r6" / "scripts" / "ghost.reds"),
+            status="pending",
+        )
+    )
+    session.commit()
+
+    replay_pending_journal(game, session)
+
+    pending = session.exec(
+        select(DeployJournalEntry).where(DeployJournalEntry.status == "pending")
+    ).all()
+    assert len(pending) == 0
