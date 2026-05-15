@@ -52,7 +52,7 @@ def pre_flight_check(game: Game) -> PreflightReport:
 
     try:
         sv = same_volume(staging, install)
-    except Exception as exc:  # file I/O can raise many OSError subclasses
+    except (OSError, VfsError) as exc:
         sv = False
         report.reasons.append(f"could not check volume: {exc}")
     report.same_volume = sv
@@ -64,7 +64,7 @@ def pre_flight_check(game: Game) -> PreflightReport:
 
     try:
         report.hardlink_supported = probe_hardlink_support(staging, install)
-    except Exception as exc:  # probe touches filesystem; wide catch intentional
+    except (OSError, VfsError) as exc:
         report.hardlink_supported = False
         report.reasons.append(f"hardlink probe failed: {exc}")
     if not report.hardlink_supported:
@@ -79,12 +79,16 @@ def pre_flight_check(game: Game) -> PreflightReport:
     return report
 
 
-def plan_deploy(game: Game, session: Session) -> DeployPlan:
+def plan_deploy(game: Game, session: Session) -> tuple[DeployPlan, int]:
     """Build a DeployPlan from the installed-mod manifest for a game.
 
     Enumerates all enabled InstalledMod rows and their InstalledModFile rows,
     producing one DeployOp per file (link) or per REDmod subtree root (junction).
     Junction ops are deduplicated: only one junction per mods/<name> directory.
+
+    Hardlink and junction ops are skipped when the destination already matches
+    the staged source (idempotent re-deploy). Returns the plan plus the count of
+    skipped ops so callers can surface "already up to date" without false drift.
     """
     install = Path(game.install_path)
     staging_root = install / "downloaded_mods"
@@ -98,6 +102,7 @@ def plan_deploy(game: Game, session: Session) -> DeployPlan:
 
     plan = DeployPlan(game_id=game.id)
     junction_dirs_seen: set[str] = set()
+    skipped_existing = 0
 
     for mod in mods:
         _ = mod.files  # touch relationship to load files
@@ -113,6 +118,11 @@ def plan_deploy(game: Game, session: Session) -> DeployPlan:
                     if key in junction_dirs_seen:
                         continue
                     junction_dirs_seen.add(key)
+                    # Idempotency: junction already in place (any reparse-point dir).
+                    # We don't read reparse-point targets; presence is treated as ours.
+                    if redmod_dst.is_dir():
+                        skipped_existing += 1
+                        continue
                     plan.ops.append(
                         DeployOp(
                             operation="junction",
@@ -122,6 +132,10 @@ def plan_deploy(game: Game, session: Session) -> DeployPlan:
                         )
                     )
                     continue
+            # Idempotency: hardlink already points to the staged source.
+            if verify_link(src, dst):
+                skipped_existing += 1
+                continue
             plan.ops.append(
                 DeployOp(
                     operation="link",
@@ -131,13 +145,18 @@ def plan_deploy(game: Game, session: Session) -> DeployPlan:
                 )
             )
 
-    return plan
+    return plan, skipped_existing
 
 
 def execute_plan(plan: DeployPlan, session: Session) -> DeployReport:
+    """Run each op in `plan`, persisting a write-ahead journal entry before each
+    filesystem mutation so crash recovery can roll back partial state on next start.
+    """
     results: list[DeployOpResult] = []
 
     for op in plan.ops:
+        # Write-ahead: persist 'pending' BEFORE the FS op so a crash mid-op leaves
+        # a recoverable journal row. The end-of-loop commit covers status updates.
         entry = DeployJournalEntry(
             game_id=plan.game_id,
             operation=op.operation,
@@ -146,7 +165,7 @@ def execute_plan(plan: DeployPlan, session: Session) -> DeployReport:
             status="pending",
         )
         session.add(entry)
-        session.flush()
+        session.commit()
 
         try:
             if op.operation == "link":
@@ -177,13 +196,18 @@ def execute_plan(plan: DeployPlan, session: Session) -> DeployReport:
 def undeploy(game: Game, session: Session) -> DeployReport:
     """Remove all deployed hardlinks/junctions for a game and mark mods as undeployed.
 
-    Only checks ``game_running`` from pre-flight — filesystem support gates are
-    irrelevant when removing files rather than creating them.  Marks
-    ``deployed=False`` only when the execute step completes without failures.
+    Skips the full pre-flight because filesystem support gates are irrelevant when
+    removing files. Only the cheap ``is_game_running`` check is enforced, and its
+    outcome is surfaced on the returned report so callers can show why the action
+    was refused.
     """
-    pre = pre_flight_check(game)
-    if pre.game_running:
-        return DeployReport(total=0, done=0, failed=0, results=[])
+    if is_game_running(GAME_EXE):
+        refuse_pre = PreflightReport(
+            ok=False,
+            game_running=True,
+            reasons=["Cyberpunk 2077 is running — close it before undeploying."],
+        )
+        return DeployReport(total=0, done=0, failed=0, results=[], preflight=refuse_pre)
 
     install = Path(game.install_path)
     mods = session.exec(
@@ -284,15 +308,17 @@ def detect_drift(game: Game, session: Session) -> DriftReport:
 def deploy(game: Game, session: Session) -> DeployReport:
     """Compose pre_flight_check → plan_deploy → execute_plan.
 
-    If pre-flight fails, returns an empty report without touching the DB.
-    On a clean execute (no failures), marks all enabled mods as deployed and
-    clears any pending drift flag.
+    If pre-flight fails, returns an empty report with the ``preflight`` field
+    populated so callers can surface the reason. On a clean execute (no failures
+    and no preflight refusal), marks all enabled mods as deployed and clears any
+    pending drift flag.
     """
     pre = pre_flight_check(game)
     if not pre.ok:
-        return DeployReport(total=0, done=0, failed=0, results=[])
-    plan = plan_deploy(game, session)
+        return DeployReport(total=0, done=0, failed=0, results=[], preflight=pre)
+    plan, skipped = plan_deploy(game, session)
     report = execute_plan(plan, session)
+    report.skipped_existing = skipped
     if report.is_clean:
         mods = session.exec(
             select(InstalledMod).where(
