@@ -8,7 +8,6 @@ via hardlinks into the game directory (same VFS model as install_service).
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,28 +24,9 @@ from rippermod_manager.services.fomod_config_parser import (
     FileState,
     FomodConfig,
 )
+from rippermod_manager.services.vfs.naming import unique_staging_name
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_dir_name(name: str) -> str:
-    """Sanitise a mod name into a filesystem-safe directory name.
-
-    Duplicates the helper in install_service.py — kept here to avoid a circular
-    import (fomod_install_service already imports from install_service).
-    """
-    return re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_") or "mod"
-
-
-def _unique_staging_name(staging_root: Path, base_name: str) -> str:
-    """Return a unique subdir name under ``staging_root``. See install_service equivalent."""
-    safe = _safe_dir_name(base_name)
-    candidate = safe
-    n = 1
-    while (staging_root / candidate).exists():
-        n += 1
-        candidate = f"{safe}_{n}"
-    return candidate
 
 
 @dataclass(frozen=True)
@@ -339,7 +319,7 @@ def install_fomod(
 
     staging_parent = game_dir / "downloaded_mods"
     staging_parent.mkdir(parents=True, exist_ok=True)
-    safe_name = _unique_staging_name(staging_parent, mod_name)
+    safe_name = unique_staging_name(staging_parent, mod_name)
     staging_root = staging_parent / safe_name
     staging_root.mkdir(parents=True, exist_ok=True)
 
