@@ -1,8 +1,9 @@
 import os
 import zipfile
+from pathlib import Path
 
 import pytest
-from sqlmodel import select
+from sqlmodel import Session, SQLModel, create_engine, select
 
 from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
@@ -224,10 +225,9 @@ class TestUninstallMod:
         assert session.get(InstalledMod, result.installed_mod_id) is None
 
     def test_removes_disabled_files(self, session, game, game_dir, staging_dir):
-        # In the VFS model, toggle_mod currently renames game-dir files to .disabled.
-        # uninstall_mod uses vfs_unlink on the canonical path (not the .disabled variant),
-        # so the .disabled rename is left as a stale artifact in game-dir until Task 4.3
-        # makes toggle DB-only. The important invariant is:
+        # VFS model (Task 4.3): toggle_mod is DB-driven — disabling removes game-dir
+        # hardlinks (no .disabled rename). Uninstall then removes staging + DB record.
+        # Important invariants:
         # - files_deleted reflects the mod's registered file count (not disk success count)
         # - the DB record is gone
         # - the staging subtree is removed
@@ -318,7 +318,8 @@ class TestUninstallMod:
 
 
 class TestToggleMod:
-    def test_disable_renames_files(self, session, game, game_dir, staging_dir):
+    def test_disable_unlinks_game_dir_file(self, session, game, game_dir, staging_dir):
+        # VFS model: disable removes the game-dir hardlink; no .disabled rename.
         archive = staging_dir / "ToggleMe.zip"
         _make_zip(archive, {"mods/mod.txt": b"data"})
         result = install_mod(game, archive, session)
@@ -330,8 +331,14 @@ class TestToggleMod:
 
         assert toggle_result.disabled is True
         assert toggle_result.files_affected == 1
+        # Game-dir hardlink gone; no .disabled rename artifact.
         assert not (game_dir / "mods" / "mod.txt").exists()
-        assert (game_dir / "mods" / "mod.txt.disabled").exists()
+        assert not (game_dir / "mods" / "mod.txt.disabled").exists()
+        # Staging must still be intact.
+        staging_file = (
+            game_dir / "downloaded_mods" / result.installed_mod_name_safe / "mods" / "mod.txt"
+        )
+        assert staging_file.exists(), "staging file must survive disable"
 
     def test_enable_restores_files(self, session, game, game_dir, staging_dir):
         archive = staging_dir / "ToggleBack.zip"
@@ -351,6 +358,7 @@ class TestToggleMod:
         toggle_result = toggle_mod(installed, game, session)
 
         assert toggle_result.disabled is False
+        # Game-dir hardlink re-created; no .disabled artifact.
         assert (game_dir / "mods" / "back.txt").exists()
         assert not (game_dir / "mods" / "back.txt.disabled").exists()
 
@@ -458,6 +466,38 @@ class TestReparseInstalledMods:
         assert mod.upload_timestamp == 1759193708  # unchanged
 
 
+@pytest.fixture
+def tmp_game(tmp_path):
+    """Return (game, session) backed by a fresh in-memory DB and a temp game dir."""
+    import rippermod_manager.models  # noqa: F401 — register all tables
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+    )
+    SQLModel.metadata.create_all(engine)
+    game_dir = tmp_path / "cp2077"
+    game_dir.mkdir()
+    (game_dir / "downloaded_mods").mkdir()
+
+    with Session(engine) as sess:
+        g = Game(name="Cyberpunk 2077", domain_name="cyberpunk2077", install_path=str(game_dir))
+        sess.add(g)
+        sess.flush()
+        sess.add(GameModPath(game_id=g.id, relative_path="mods"))
+        sess.commit()
+        sess.refresh(g)
+        yield g, sess
+
+
+@pytest.fixture
+def sample_archive(tmp_path):
+    """A zip archive with a single r6/scripts/foo.reds file."""
+    archive = tmp_path / "SampleMod-v1.zip"
+    _make_zip(archive, {"r6/scripts/foo.reds": b"// sample"})
+    return archive
+
+
 class TestVfsHardlinks:
     """Verify that install_mod uses staging + hardlinks rather than direct game-dir writes."""
 
@@ -544,3 +584,60 @@ class TestVfsHardlinks:
             ).first()
             is None
         ), "InstalledMod DB record should be deleted"
+
+    def test_toggle_disable_unlinks_keeps_staging(self, tmp_game, sample_archive):
+        """Disabling unlinks game-dir hardlinks but keeps staging intact."""
+        game, session = tmp_game
+        result = install_mod(game, sample_archive, session)
+        installed = session.exec(
+            select(InstalledMod).where(InstalledMod.id == result.installed_mod_id)
+        ).one()
+
+        game_path = Path(game.install_path) / "r6" / "scripts" / "foo.reds"
+        staging_path = (
+            Path(game.install_path)
+            / "downloaded_mods"
+            / result.installed_mod_name_safe
+            / "r6"
+            / "scripts"
+            / "foo.reds"
+        )
+        assert game_path.exists()
+        assert staging_path.exists()
+
+        toggle_mod(installed, game, session)
+
+        session.refresh(installed)
+        assert installed.disabled is True
+        assert not game_path.exists(), "game-dir hardlink should be gone after disable"
+        assert staging_path.exists(), "staging file should survive disable"
+
+    def test_toggle_re_enable_recreates_hardlink(self, tmp_game, sample_archive):
+        """Re-enabling re-creates the game-dir hardlink from staging."""
+        game, session = tmp_game
+        result = install_mod(game, sample_archive, session)
+        installed = session.exec(
+            select(InstalledMod).where(InstalledMod.id == result.installed_mod_id)
+        ).one()
+
+        game_path = Path(game.install_path) / "r6" / "scripts" / "foo.reds"
+        staging_path = (
+            Path(game.install_path)
+            / "downloaded_mods"
+            / result.installed_mod_name_safe
+            / "r6"
+            / "scripts"
+            / "foo.reds"
+        )
+
+        toggle_mod(installed, game, session)  # disable
+        session.refresh(installed)
+        assert installed.disabled is True
+
+        toggle_mod(installed, game, session)  # re-enable
+        session.refresh(installed)
+        assert installed.disabled is False
+        assert game_path.exists()
+        assert os.path.samefile(staging_path, game_path), (
+            "re-enabled file must be a hardlink to staging"
+        )
