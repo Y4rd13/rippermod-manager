@@ -1,3 +1,4 @@
+import os
 import zipfile
 
 import pytest
@@ -188,23 +189,22 @@ class TestInstallMod:
         assert installed.nexus_mod_id == 107
         assert installed.upload_timestamp == 1759193708
 
-    def test_file_ownership_transferred_on_overwrite(self, session, game, game_dir, staging_dir):
-        # Install mod A which owns file.txt
+    def test_file_ownership_each_mod_has_its_own_staging(
+        self, session, game, game_dir, staging_dir
+    ):
+        # Install mod A — each mod gets an isolated staging dir
         archive_a = staging_dir / "ModA.zip"
         _make_zip(archive_a, {"shared.txt": b"from A"})
-        install_mod(game, archive_a, session)
+        result_a = install_mod(game, archive_a, session)
 
-        # Install mod B which also contains shared.txt (no skip)
-        archive_b = staging_dir / "ModB.zip"
-        _make_zip(archive_b, {"shared.txt": b"from B"})
-        install_mod(game, archive_b, session)
+        # Mod A's staging copy must exist with its content
+        staging_a = game_dir / "downloaded_mods" / result_a.installed_mod_name_safe
+        assert (staging_a / "shared.txt").read_bytes() == b"from A"
 
-        # The file on disk now belongs to mod B
-        assert (game_dir / "shared.txt").read_bytes() == b"from B"
-
-        # Mod A should no longer own shared.txt in DB
+        # Mod A is the DB owner of shared.txt
         ownership = get_file_ownership_map(session, game.id)
         assert ownership.get("shared.txt") is not None
+        assert ownership["shared.txt"].name == "ModA"
 
 
 class TestUninstallMod:
@@ -292,7 +292,7 @@ class TestUninstallMod:
         _make_zip(archive, {"mods/gone.txt": b"gone"})
         result = install_mod(game, archive, session)
 
-        # Manually remove the file so uninstall must handle missing gracefully
+        # Manually remove the hardlink at the game-dir path
         (game_dir / "mods" / "gone.txt").unlink()
 
         installed = session.get(InstalledMod, result.installed_mod_id)
@@ -442,3 +442,53 @@ class TestReparseInstalledMods:
         assert mod.nexus_mod_id == 107  # unchanged
         assert mod.installed_version == "1.37.1"  # fixed
         assert mod.upload_timestamp == 1759193708  # unchanged
+
+
+class TestVfsHardlinks:
+    """Verify that install_mod uses staging + hardlinks rather than direct game-dir writes."""
+
+    def test_install_mod_writes_to_staging_with_hardlinks(
+        self, session, game, game_dir, staging_dir
+    ):
+        """Files live in staging and are hardlinked into game-dir paths after install."""
+        from pathlib import Path
+
+        archive = staging_dir / "SampleMod-v1.zip"
+        _make_zip(archive, {"r6/scripts/foo.reds": b"// sample"})
+
+        result = install_mod(game, archive, session)
+
+        assert result.installed_mod_name_safe != "", "installed_mod_name_safe must be populated"
+
+        staging = game_dir / "downloaded_mods" / result.installed_mod_name_safe
+        assert staging.exists(), f"staging dir {staging} missing"
+        assert any(staging.rglob("*")), "no files in staging"
+
+        installed = session.exec(
+            select(InstalledMod).where(InstalledMod.id == result.installed_mod_id)
+        ).one()
+        assert installed.staging_dir == result.installed_mod_name_safe
+        assert installed.deployed is True
+
+        _ = installed.files
+        for f in installed.files:
+            src = staging / f.source_path.replace("\\", "/")
+            dst = Path(game.install_path) / f.relative_path.replace("\\", "/")
+            assert src.exists(), f"staging file {src} missing"
+            assert dst.exists(), f"game-dir hardlink {dst} missing"
+            assert os.path.samefile(src, dst), f"{src} and {dst} are not the same inode"
+            assert f.source_path == f.relative_path, (
+                "source_path should mirror relative_path for VFS installs"
+            )
+            assert f.link_kind == "hardlink", f"expected hardlink, got {f.link_kind!r}"
+
+    def test_install_mod_name_safe_returned_in_result(self, session, game, game_dir, staging_dir):
+        """InstallResult.installed_mod_name_safe is the sanitised staging directory name."""
+        archive = staging_dir / "My_Awesome_Mod.zip"
+        _make_zip(archive, {"r6/scripts/x.reds": b"x"})
+
+        result = install_mod(game, archive, session)
+
+        assert result.installed_mod_name_safe != ""
+        staging = game_dir / "downloaded_mods" / result.installed_mod_name_safe
+        assert staging.is_dir(), "staging dir created with sanitised name"
