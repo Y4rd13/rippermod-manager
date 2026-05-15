@@ -58,6 +58,7 @@ See @docs/architecture.md for a full inventory of routers, services, models.
 - **Secrets:** keyring service attempts OS keychain, falls back to SQLite. Keys: `nexus_api_key`
 - **Health:** `/health` (shallow), `/health/deep` (DB + data_dir writability)
 - **Logging:** stderr + `RotatingFileHandler` at `data_dir/logs/rippermod.log` (5 MB × 3)
+- **VFS deployment:** mods are extracted to `<install>/downloaded_mods/<staging>/` and surfaced in the game dir via NTFS hardlinks (and junctions for REDmod folders). `services/vfs/` orchestrates `plan → journal → execute`. Idempotent; survives crashes via `deploy_journal` replay on app startup.
 - **Auto-updater:** Tauri updater plugin checks the Gist `stable.json` endpoint on startup. Removed in the Nexus edition; kept in the Full edition.
 - Tauri CSP restricts connections to `localhost:8425`
 
@@ -66,6 +67,7 @@ See @docs/architecture.md for a full inventory of routers, services, models.
 - SQLite with WAL mode, `PRAGMA foreign_keys=ON`, `synchronous=NORMAL`
 - Single-writer — avoid long-running transactions and blocking operations
 - Migrations: column additions in `database.py:_migrate_missing_columns()`, unique indexes in `_migrate_unique_indexes()`
+- `deploy_journal` table: write-ahead log of pending VFS ops (replayed on startup to recover from crashes mid-deploy)
 - NEVER use raw SQL for queries accessible from user input — use SQLModel/SQLAlchemy parameterized queries
 
 ## Nexus Mods API
