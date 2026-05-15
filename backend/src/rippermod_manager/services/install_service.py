@@ -362,48 +362,121 @@ def toggle_mod(
     *,
     commit: bool = True,
 ) -> ToggleResult:
-    """Enable or disable a mod by renaming its files with ``.disabled`` suffix.
+    """Flip ``installed_mod.disabled`` and deploy/undeploy that mod's files.
+
+    Disable: removes game-dir hardlinks (staging untouched). The ``disabled``
+    flag is the source of truth — no ``.disabled`` rename happens on disk.
+
+    Enable: flips the flag, commits (so plan_deploy sees the enabled state),
+    then builds a per-mod DeployPlan and executes it to recreate hardlinks.
 
     Pass ``commit=False`` to defer the DB commit (useful for batching in
-    profile loads).
+    profile loads); the caller becomes responsible for commits.
     """
+    from rippermod_manager.services.vfs.primitives import (
+        VfsError,
+        remove_junction,
+    )
+    from rippermod_manager.services.vfs.primitives import unlink as vfs_unlink
+
     game_dir = Path(game.install_path)
     should_disable = not installed_mod.disabled
     affected = 0
 
-    _ = installed_mod.files
-    for f in installed_mod.files:
-        file_path = game_dir / f.relative_path.replace("/", os.sep)
+    _ = installed_mod.files  # touch relationship to load files
 
-        if should_disable:
-            if file_path.exists():
-                disabled_path = file_path.with_suffix(file_path.suffix + ".disabled")
-                try:
-                    file_path.rename(disabled_path)
+    if should_disable:
+        # Disable path: remove game-dir hardlinks, leave staging intact.
+        junction_dirs_seen: set[str] = set()
+        for f in installed_mod.files:
+            dst = game_dir / f.relative_path.replace("/", os.sep)
+            if f.link_kind == "junction":
+                parts = f.relative_path.replace("\\", "/").split("/")
+                if len(parts) >= 2 and parts[0] == "mods":
+                    redmod_dst = game_dir / "mods" / parts[1]
+                    key = str(redmod_dst)
+                    if key in junction_dirs_seen:
+                        continue
+                    junction_dirs_seen.add(key)
+                    try:
+                        remove_junction(redmod_dst)
+                        affected += 1
+                    except VfsError:
+                        logger.warning("Could not remove junction %s", redmod_dst)
+                    continue
+            try:
+                if dst.exists():
+                    vfs_unlink(dst)
                     affected += 1
-                except OSError:
-                    logger.warning("Could not disable %s", file_path)
-        else:
-            disabled_path = file_path.with_suffix(file_path.suffix + ".disabled")
-            if disabled_path.exists():
-                try:
-                    disabled_path.rename(file_path)
-                    affected += 1
-                except OSError:
-                    logger.warning("Could not enable %s", disabled_path)
+            except VfsError:
+                logger.warning("Could not unlink %s", dst)
+        installed_mod.deployed = False
 
     installed_mod.disabled = should_disable
     session.add(installed_mod)
     if commit:
         session.commit()
 
-    # Regenerate modlist.txt to reflect enabled/disabled state
+    if not should_disable:
+        # Re-enable path: build a per-mod plan and execute it.
+        # Using an inline plan (not deploy_service.deploy()) to avoid producing
+        # journal "failed" entries for already-deployed sibling mods.
+        from rippermod_manager.schemas.deploy import DeployOp, DeployPlan
+        from rippermod_manager.services.vfs.deploy_service import execute_plan, pre_flight_check
+
+        pre = pre_flight_check(game)
+        if pre.ok:
+            staging_root = game_dir / "downloaded_mods"
+            ops: list[DeployOp] = []
+            junction_dirs_seen_enable: set[str] = set()
+            for f in installed_mod.files:
+                src = staging_root / installed_mod.staging_dir / f.source_path.replace("\\", "/")
+                dst = game_dir / f.relative_path.replace("\\", "/")
+                if f.link_kind == "junction":
+                    parts = f.relative_path.replace("\\", "/").split("/")
+                    if len(parts) >= 2 and parts[0] == "mods":
+                        redmod_dst = game_dir / "mods" / parts[1]
+                        redmod_src = staging_root / installed_mod.staging_dir / "mods" / parts[1]
+                        key = str(redmod_dst)
+                        if key in junction_dirs_seen_enable:
+                            continue
+                        junction_dirs_seen_enable.add(key)
+                        ops.append(
+                            DeployOp(
+                                operation="junction",
+                                src=str(redmod_src),
+                                dst=str(redmod_dst),
+                                installed_mod_id=installed_mod.id,
+                            )
+                        )
+                        continue
+                ops.append(
+                    DeployOp(
+                        operation="link",
+                        src=str(src),
+                        dst=str(dst),
+                        installed_mod_id=installed_mod.id,
+                    )
+                )
+
+            plan = DeployPlan(game_id=game.id, ops=ops)
+            report = execute_plan(plan, session)
+            if report.is_clean:
+                installed_mod.deployed = True
+                session.add(installed_mod)
+                if commit:
+                    session.commit()
+            affected = report.done
+
+    if commit:
+        session.commit()
+
     from rippermod_manager.services.modlist_service import write_modlist
 
     write_modlist(game, session)
 
     action = "Disabled" if should_disable else "Enabled"
-    logger.info("%s '%s' (%d files)", action, installed_mod.name, affected)
+    logger.info("%s '%s' (%d files affected)", action, installed_mod.name, affected)
     return ToggleResult(disabled=should_disable, files_affected=affected)
 
 
