@@ -306,3 +306,31 @@ def deploy(game: Game, session: Session) -> DeployReport:
             session.add(m)
         session.commit()
     return report
+
+
+def replay_pending_journal(game: Game, session: Session) -> None:
+    """Roll back any journal entries left in 'pending' state from a prior interrupted deploy.
+
+    For each pending entry, attempts to undo the operation (unlink for 'link', remove_junction
+    for 'junction') so the filesystem is left consistent.  The entry is then marked 'failed'
+    regardless of whether the undo succeeded, because the original operation never completed.
+    Errors during rollback are logged as warnings — they do not raise so that startup continues.
+    """
+    pending = session.exec(
+        select(DeployJournalEntry).where(
+            DeployJournalEntry.game_id == game.id,
+            DeployJournalEntry.status == "pending",
+        )
+    ).all()
+    for entry in pending:
+        try:
+            if entry.operation == "link":
+                unlink(Path(entry.dst))
+            elif entry.operation == "junction":
+                remove_junction(Path(entry.dst))
+        except VfsError as exc:
+            logger.warning("journal replay rollback failed for %s: %s", entry.dst, exc)
+        entry.status = "failed"
+        entry.error = entry.error or "rolled back by journal replay"
+        session.add(entry)
+    session.commit()
