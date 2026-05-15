@@ -19,7 +19,7 @@ rippermod-manager/
 │   │   │   ├── nexus.py             #   NexusDownload, NexusModMeta, NexusModRequirement, NexusModFile
 │   │   │   ├── correlation.py       #   ModNexusCorrelation
 │   │   │   ├── download.py          #   DownloadJob
-│   │   │   ├── install.py           #   InstalledMod, InstalledModFile, ArchiveNexusLink
+│   │   │   ├── install.py           #   InstalledMod, InstalledModFile, ArchiveNexusLink, DeployJournal
 │   │   │   ├── profile.py           #   Profile, ProfileEntry
 │   │   │   ├── settings.py          #   AppSetting, PCSpecs
 │   │   │   ├── archive_index.py     #   ArchiveEntryIndex (per-archive file listing)
@@ -30,7 +30,7 @@ rippermod-manager/
 │   │   │   ├── games.py             #   CRUD games + mod paths
 │   │   │   ├── mods.py              #   List, scan, correlate, confirm/reject/reassign
 │   │   │   ├── nexus.py             #   Sync, endorse/track, SSO, mod summary
-│   │   │   ├── install.py           #   Install, uninstall, toggle, preview, archives
+│   │   │   ├── install.py           #   Install, uninstall, toggle, preview, archives; VFS deploy/undeploy/status/migrate/untracked-files
 │   │   │   ├── fomod.py             #   FOMOD installer wizard
 │   │   │   ├── conflicts.py         #   Conflict engine, inbox, graph
 │   │   │   ├── load_order.py        #   Load order + preferences
@@ -67,6 +67,10 @@ rippermod-manager/
 │   │       │   ├── dependency_graph.py #   Installed mod dependency pair builder
 │   │       │   ├── detectors.py     #   REDmod, TweakXL, archive overlap
 │   │       │   └── engine.py        #   Orchestrates all detectors
+│   │       ├── vfs/                 # Virtual file system deployment
+│   │       │   ├── primitives.py    #   hardlink, junction, probe, is_game_running
+│   │       │   ├── deploy_service.py #  plan, execute, drift, journal
+│   │       │   └── migration.py     #   one-time copy→hardlink migration
 │   │       ├── load_order.py        # Load order + modlist.txt writer
 │   │       ├── modlist_service.py   # Ordered mod group view
 │   │       ├── archive_index_service.py # Archive file indexing
@@ -143,6 +147,18 @@ rippermod-manager/
 ├── CLA.md                           # Contributor License Agreement
 └── LICENSE                          # GPL-3.0
 ```
+
+## VFS Deployment Endpoints
+
+Served by `routers/install.py` under `/api/v1/games/{game_name}/install/`:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `.../deploy` | Deploy all enabled mods via NTFS hardlinks/junctions |
+| POST | `.../undeploy` | Remove all VFS links from the game dir |
+| GET | `.../deploy/status` | Drift report — missing/foreign links per mod |
+| POST | `.../migrate-to-vfs` | One-time copy→hardlink migration for existing installs |
+| GET | `.../untracked-files` | Files in game dir not owned by any installed mod |
 
 ## Removed in the Nexus edition
 
