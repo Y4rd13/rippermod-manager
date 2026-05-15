@@ -38,6 +38,17 @@ def _safe_dir_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_") or "mod"
 
 
+def _unique_staging_name(staging_root: Path, base_name: str) -> str:
+    """Return a unique subdir name under ``staging_root``. See install_service equivalent."""
+    safe = _safe_dir_name(base_name)
+    candidate = safe
+    n = 1
+    while (staging_root / candidate).exists():
+        n += 1
+        candidate = f"{safe}_{n}"
+    return candidate
+
+
 @dataclass(frozen=True)
 class ResolvedFile:
     archive_path: str
@@ -326,8 +337,10 @@ def install_fomod(
     if existing:
         raise ValueError(f"Mod '{mod_name}' is already installed. Uninstall first to reinstall.")
 
-    safe_name = _safe_dir_name(mod_name)
-    staging_root = game_dir / "downloaded_mods" / safe_name
+    staging_parent = game_dir / "downloaded_mods"
+    staging_parent.mkdir(parents=True, exist_ok=True)
+    safe_name = _unique_staging_name(staging_parent, mod_name)
+    staging_root = staging_parent / safe_name
     staging_root.mkdir(parents=True, exist_ok=True)
 
     # Build set of archive paths we need to read
