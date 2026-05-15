@@ -37,6 +37,7 @@ import { UpdatesTable } from "@/components/mods/UpdatesTable";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ScanProgress, type ScanLog } from "@/components/ui/ScanProgress";
+import { useDeploy } from "@/hooks/use-deploy";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import {
   useAvailableArchives,
@@ -166,6 +167,7 @@ export function GameDetailPage() {
   const [fileSelectModId, setFileSelectModId] = useState<number | null>(null);
 
   const modalFlow = useInstallFlow(name, archives, downloadJobs);
+  const deploy = useDeploy(name || null);
 
   const handleFileSelect = useCallback((modId: number) => {
     setSelectedModId(modId);
@@ -244,6 +246,7 @@ export function GameDetailPage() {
     if (!game || !gameVersion?.exe_path) return;
     setIsLaunching(true);
     try {
+      await deploy.mutateAsync();
       await invoke<void>("launch_game", {
         installPath: game.install_path,
         exeRelativePath: gameVersion.exe_path,
