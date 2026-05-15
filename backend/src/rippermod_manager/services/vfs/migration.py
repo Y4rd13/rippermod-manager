@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,28 +13,10 @@ from sqlmodel import Session, select
 from rippermod_manager.constants import CYBERPUNK_DEFAULT_PATHS
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
+from rippermod_manager.services.vfs.naming import unique_staging_name
 from rippermod_manager.services.vfs.primitives import hardlink, is_game_running
 
 logger = logging.getLogger(__name__)
-
-
-def _safe(name: str) -> str:
-    return re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_") or "mod"
-
-
-def _unique_staging_name(staging_root: Path, base_name: str) -> str:
-    """Return a subdirectory name under ``staging_root`` that doesn't yet exist.
-
-    Two mods whose names sanitise to the same string would otherwise share a
-    staging directory and corrupt each other. Appends ``_2``, ``_3``, ... as needed.
-    """
-    safe = _safe(base_name)
-    candidate = safe
-    n = 1
-    while (staging_root / candidate).exists():
-        n += 1
-        candidate = f"{safe}_{n}"
-    return candidate
 
 
 @dataclass
@@ -69,7 +50,7 @@ def migrate_to_vfs(game: Game, session: Session) -> MigrationReport:
     ).all()
 
     for mod in mods:
-        safe = _unique_staging_name(staging_root, mod.name)
+        safe = unique_staging_name(staging_root, mod.name)
         staging = staging_root / safe
         _ = mod.files
         ok = True

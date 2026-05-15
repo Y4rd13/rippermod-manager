@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import shutil
 from pathlib import Path
 
@@ -39,29 +38,9 @@ from rippermod_manager.services.archive_layout import (
     known_roots_for_game,
 )
 from rippermod_manager.services.nexus_helpers import match_local_to_nexus_file
+from rippermod_manager.services.vfs.naming import unique_staging_name
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_dir_name(name: str) -> str:
-    """Sanitise a mod name into a filesystem-safe directory name."""
-    return re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_") or "mod"
-
-
-def _unique_staging_name(staging_root: Path, base_name: str) -> str:
-    """Return a subdirectory name under ``staging_root`` that does not yet exist.
-
-    Two mods whose names sanitise to the same string ("My Cool Mod!" and
-    "My Cool Mod?") would otherwise share a staging directory and corrupt each
-    other. Appends ``_2``, ``_3``, ... when a collision is detected.
-    """
-    safe = _safe_dir_name(base_name)
-    candidate = safe
-    n = 1
-    while (staging_root / candidate).exists():
-        n += 1
-        candidate = f"{safe}_{n}"
-    return candidate
 
 
 def list_available_archives(game: Game) -> list[Path]:
@@ -134,7 +113,7 @@ def install_mod(
 
     staging_parent = game_dir / "downloaded_mods"
     staging_parent.mkdir(parents=True, exist_ok=True)
-    safe_name = _unique_staging_name(staging_parent, parsed.name)
+    safe_name = unique_staging_name(staging_parent, parsed.name)
     staging_root = staging_parent / safe_name
     staging_root.mkdir(parents=True, exist_ok=True)
 
@@ -438,9 +417,12 @@ def toggle_mod(
     if not should_disable:
         # Re-enable path: build a per-mod plan and execute it.
         # Using an inline plan (not deploy_service.deploy()) to avoid producing
-        # journal "failed" entries for already-deployed sibling mods.
+        # journal "failed" entries for already-deployed sibling mods. Same
+        # verify_link / is_dir idempotency guard as plan_deploy so a re-enable
+        # on already-linked files is a no-op instead of an AlreadyExistsError.
         from rippermod_manager.schemas.deploy import DeployOp, DeployPlan
         from rippermod_manager.services.vfs.deploy_service import execute_plan, pre_flight_check
+        from rippermod_manager.services.vfs.primitives import verify_link
 
         pre = pre_flight_check(game)
         if pre.ok:
@@ -459,6 +441,9 @@ def toggle_mod(
                         if key in junction_dirs_seen_enable:
                             continue
                         junction_dirs_seen_enable.add(key)
+                        # Idempotency: junction already in place.
+                        if redmod_dst.is_dir():
+                            continue
                         ops.append(
                             DeployOp(
                                 operation="junction",
@@ -468,6 +453,9 @@ def toggle_mod(
                             )
                         )
                         continue
+                # Idempotency: hardlink already points to the staged source.
+                if verify_link(src, dst):
+                    continue
                 ops.append(
                     DeployOp(
                         operation="link",
