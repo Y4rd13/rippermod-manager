@@ -113,3 +113,56 @@ def test_find_untracked_returns_empty_when_dirs_missing(in_memory_session, sampl
     game = sample_game
     result = find_untracked_files(game, session)
     assert result == []
+
+
+def test_migration_handles_staging_name_collision(in_memory_session, sample_game):
+    """Two mods whose names sanitise to the same string must NOT share a staging dir."""
+    session = in_memory_session
+    game = sample_game
+    install = Path(game.install_path)
+    (install / "r6" / "scripts").mkdir(parents=True)
+    (install / "r6" / "scripts" / "a.reds").write_text("// from A")
+    (install / "r6" / "tweaks").mkdir(parents=True)
+    (install / "r6" / "tweaks" / "b.yaml").write_text("# from B")
+
+    # Both names sanitise to "My_Cool_Mod"
+    mod_a = InstalledMod(game_id=game.id, name="My Cool Mod!", staging_dir="", deployed=False)
+    mod_b = InstalledMod(game_id=game.id, name="My Cool Mod?", staging_dir="", deployed=False)
+    session.add(mod_a)
+    session.add(mod_b)
+    session.flush()
+    session.add(
+        InstalledModFile(
+            installed_mod_id=mod_a.id,
+            relative_path="r6/scripts/a.reds",
+            source_path="",
+            link_kind="hardlink",
+        )
+    )
+    session.add(
+        InstalledModFile(
+            installed_mod_id=mod_b.id,
+            relative_path="r6/tweaks/b.yaml",
+            source_path="",
+            link_kind="hardlink",
+        )
+    )
+    session.commit()
+
+    with patch("rippermod_manager.services.vfs.migration.is_game_running", return_value=False):
+        report = migrate_to_vfs(game, session)
+
+    assert report.migrated_mods == 2
+    assert report.errors == []
+
+    session.refresh(mod_a)
+    session.refresh(mod_b)
+    assert mod_a.staging_dir != mod_b.staging_dir, "staging dirs must differ to avoid corruption"
+
+    # Each mod's content lives in its own staging dir
+    stage_a = install / "downloaded_mods" / mod_a.staging_dir / "r6" / "scripts" / "a.reds"
+    stage_b = install / "downloaded_mods" / mod_b.staging_dir / "r6" / "tweaks" / "b.yaml"
+    assert stage_a.read_text() == "// from A"
+    assert stage_b.read_text() == "# from B"
+    assert os.path.samefile(stage_a, install / "r6" / "scripts" / "a.reds")
+    assert os.path.samefile(stage_b, install / "r6" / "tweaks" / "b.yaml")

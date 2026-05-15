@@ -48,6 +48,22 @@ def _safe_dir_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_") or "mod"
 
 
+def _unique_staging_name(staging_root: Path, base_name: str) -> str:
+    """Return a subdirectory name under ``staging_root`` that does not yet exist.
+
+    Two mods whose names sanitise to the same string ("My Cool Mod!" and
+    "My Cool Mod?") would otherwise share a staging directory and corrupt each
+    other. Appends ``_2``, ``_3``, ... when a collision is detected.
+    """
+    safe = _safe_dir_name(base_name)
+    candidate = safe
+    n = 1
+    while (staging_root / candidate).exists():
+        n += 1
+        candidate = f"{safe}_{n}"
+    return candidate
+
+
 def list_available_archives(game: Game) -> list[Path]:
     """Return archive files found in a ``staging`` folder next to the game install."""
     staging = Path(game.install_path) / "downloaded_mods"
@@ -116,8 +132,10 @@ def install_mod(
     if file_renames:
         rename_map = {k.replace("\\", "/"): v.replace("\\", "/") for k, v in file_renames.items()}
 
-    safe_name = _safe_dir_name(parsed.name)
-    staging_root = game_dir / "downloaded_mods" / safe_name
+    staging_parent = game_dir / "downloaded_mods"
+    staging_parent.mkdir(parents=True, exist_ok=True)
+    safe_name = _unique_staging_name(staging_parent, parsed.name)
+    staging_root = staging_parent / safe_name
     staging_root.mkdir(parents=True, exist_ok=True)
 
     extracted_paths: list[str] = []

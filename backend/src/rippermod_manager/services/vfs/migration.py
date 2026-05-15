@@ -23,6 +23,21 @@ def _safe(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_") or "mod"
 
 
+def _unique_staging_name(staging_root: Path, base_name: str) -> str:
+    """Return a subdirectory name under ``staging_root`` that doesn't yet exist.
+
+    Two mods whose names sanitise to the same string would otherwise share a
+    staging directory and corrupt each other. Appends ``_2``, ``_3``, ... as needed.
+    """
+    safe = _safe(base_name)
+    candidate = safe
+    n = 1
+    while (staging_root / candidate).exists():
+        n += 1
+        candidate = f"{safe}_{n}"
+    return candidate
+
+
 @dataclass
 class MigrationReport:
     migrated_mods: int = 0
@@ -32,6 +47,12 @@ class MigrationReport:
 
 
 def migrate_to_vfs(game: Game, session: Session) -> MigrationReport:
+    """Move each unmigrated mod's files from the game dir into staging and hardlink back.
+
+    Commits per-mod so that a crash mid-migration leaves the already-migrated mods
+    in a consistent state (DB row updated, files in staging, hardlinks in game dir).
+    Within a single mod, file moves are reversed on failure.
+    """
     if is_game_running():
         return MigrationReport(errors=["Cyberpunk 2077 is running. Close it and retry."])
 
@@ -48,7 +69,7 @@ def migrate_to_vfs(game: Game, session: Session) -> MigrationReport:
     ).all()
 
     for mod in mods:
-        safe = _safe(mod.name)
+        safe = _unique_staging_name(staging_root, mod.name)
         staging = staging_root / safe
         _ = mod.files
         ok = True
@@ -79,13 +100,15 @@ def migrate_to_vfs(game: Game, session: Session) -> MigrationReport:
                         shutil.move(str(sp), str(gp))
                     except OSError:
                         logger.exception("rollback failed for %s", gp)
+                # Discard any uncommitted source_path changes for this mod
+                session.rollback()
                 break
         if ok:
             mod.staging_dir = safe
             mod.deployed = True
             session.add(mod)
+            session.commit()  # commit per mod for crash safety
             report.migrated_mods += 1
-    session.commit()
     return report
 
 
