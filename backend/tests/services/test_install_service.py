@@ -391,6 +391,47 @@ class TestToggleMod:
         assert installed.disabled is False
         assert (game_dir / "mods" / "double.txt").exists()
 
+    def test_toggle_enable_is_idempotent_on_already_linked_files(
+        self, session, game, game_dir, staging_dir
+    ):
+        """Re-enabling a mod that's already (partially) linked must not raise.
+
+        Mirrors the plan_deploy idempotency guard for the toggle re-enable
+        path: if a file is already correctly hardlinked, the per-mod plan
+        skips it instead of emitting an op that would fail with
+        AlreadyExistsError.
+        """
+        archive = staging_dir / "IdempotentEnable.zip"
+        _make_zip(archive, {"r6/scripts/idem.reds": b"// idem"})
+        result = install_mod(game, archive, session)
+
+        # Disable, then re-enable
+        installed = session.get(InstalledMod, result.installed_mod_id)
+        session.refresh(installed)
+        _ = installed.files
+        toggle_mod(installed, game, session)  # disable
+
+        # Manually re-create the hardlink that the disable removed, simulating
+        # a state where the file is already correctly linked when re-enable runs
+        staging_file = (
+            game_dir / "downloaded_mods" / installed.staging_dir / "r6" / "scripts" / "idem.reds"
+        )
+        game_file = game_dir / "r6" / "scripts" / "idem.reds"
+        game_file.parent.mkdir(parents=True, exist_ok=True)
+        os.link(staging_file, game_file)
+
+        # Re-enable: must succeed without AlreadyExistsError; the plan should
+        # be empty because the hardlink is already in place.
+        installed = session.get(InstalledMod, result.installed_mod_id)
+        session.refresh(installed)
+        _ = installed.files
+        toggle_mod(installed, game, session)
+
+        installed = session.get(InstalledMod, result.installed_mod_id)
+        assert installed.disabled is False
+        assert game_file.exists()
+        assert os.path.samefile(staging_file, game_file)
+
 
 class TestReparseInstalledMods:
     def test_updates_stale_metadata(self, session, game):
