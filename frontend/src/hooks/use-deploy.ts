@@ -16,11 +16,22 @@ export interface DeployOpResult {
   error: string;
 }
 
+export interface PreflightReport {
+  ok: boolean;
+  reasons: string[];
+  game_running: boolean;
+  hardlink_supported: boolean;
+  same_volume: boolean;
+  free_disk_bytes: number;
+}
+
 export interface DeployReport {
   total: number;
   done: number;
   failed: number;
+  skipped_existing: number;
   results: DeployOpResult[];
+  preflight: PreflightReport | null;
 }
 
 export interface MigrationReport {
@@ -47,6 +58,7 @@ export function useDeployStatus(gameName: string | null) {
     queryFn: () => api.get<DriftReport>(statusPath(gameName!)),
     enabled: !!gameName,
     refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
 }
 
