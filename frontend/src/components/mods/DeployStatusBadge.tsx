@@ -25,10 +25,15 @@ export function DeployStatusBadge({ gameName }: DeployStatusBadgeProps) {
     );
   }
 
+  const parts: string[] = [];
+  if (status.missing > 0) parts.push(`${status.missing} missing`);
+  if (status.foreign > 0) parts.push(`${status.foreign} foreign`);
+  const driftLabel = parts.length > 0 ? parts.join(", ") : "drifted";
+
   return (
     <div className="inline-flex items-center gap-2 text-xs">
       <span className="inline-flex items-center gap-1 text-warning">
-        <AlertTriangle size={14} /> Drift: {status.missing} missing
+        <AlertTriangle size={14} /> Drift: {driftLabel}
       </span>
       <Button
         size="sm"
