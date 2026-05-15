@@ -63,8 +63,9 @@ def test_plan_includes_hardlink_for_each_file(in_memory_session, sample_game):
     )
     session.commit()
 
-    plan = plan_deploy(game, session)
+    plan, skipped = plan_deploy(game, session)
 
+    assert skipped == 0
     assert len(plan.ops) == 1
     assert plan.ops[0].operation == "link"
     assert plan.ops[0].src.endswith("downloaded_mods/TestMod/r6/scripts/foo.reds") or plan.ops[
@@ -84,8 +85,9 @@ def test_plan_skips_disabled_mods(in_memory_session, sample_game):
     session.add(InstalledModFile(installed_mod_id=mod.id, relative_path="a", source_path="a"))
     session.commit()
 
-    plan = plan_deploy(game, session)
+    plan, skipped = plan_deploy(game, session)
     assert plan.is_empty
+    assert skipped == 0
 
 
 def test_plan_uses_junction_for_redmod_subtrees(in_memory_session, sample_game):
@@ -104,8 +106,9 @@ def test_plan_uses_junction_for_redmod_subtrees(in_memory_session, sample_game):
     )
     session.commit()
 
-    plan = plan_deploy(game, session)
+    plan, skipped = plan_deploy(game, session)
     junction_ops = [op for op in plan.ops if op.operation == "junction"]
+    assert skipped == 0
     assert len(junction_ops) == 1
     assert junction_ops[0].dst.endswith("mods/MyREDmod") or junction_ops[0].dst.endswith(
         "mods\\MyREDmod"
@@ -302,3 +305,88 @@ def test_replay_clears_pending_entries(in_memory_session, sample_game):
         select(DeployJournalEntry).where(DeployJournalEntry.status == "pending")
     ).all()
     assert len(pending) == 0
+
+
+def test_plan_skips_files_already_correctly_linked(in_memory_session, sample_game):
+    """Re-running plan_deploy after a successful deploy should produce an empty plan."""
+    session = in_memory_session
+    game = sample_game
+    staging = Path(game.install_path) / "downloaded_mods" / "Demo" / "r6" / "scripts"
+    staging.mkdir(parents=True)
+    (staging / "a.reds").write_text("// a")
+
+    mod = InstalledMod(game_id=game.id, name="Demo", staging_dir="Demo", disabled=False)
+    session.add(mod)
+    session.flush()
+    session.add(
+        InstalledModFile(
+            installed_mod_id=mod.id,
+            relative_path="r6/scripts/a.reds",
+            source_path="r6/scripts/a.reds",
+            link_kind="hardlink",
+        )
+    )
+    session.commit()
+
+    with patch("rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=False):
+        first = deploy(game, session)
+        second = deploy(game, session)
+
+    assert first.failed == 0
+    assert first.done == 1
+    assert second.failed == 0
+    assert second.total == 0  # nothing to do — all already linked
+    assert second.skipped_existing == 1
+
+
+def test_deploy_surfaces_preflight_when_game_running(in_memory_session, sample_game):
+    """When the game is running, deploy() should return a report with preflight reasons."""
+    session = in_memory_session
+    game = sample_game
+
+    with patch("rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=True):
+        report = deploy(game, session)
+
+    assert report.total == 0
+    assert report.preflight is not None
+    assert report.preflight.ok is False
+    assert report.preflight.game_running is True
+    assert any("running" in r.lower() for r in report.preflight.reasons)
+    assert report.is_clean is False  # preflight refusal counts as not-clean
+
+
+def test_undeploy_surfaces_preflight_when_game_running(in_memory_session, sample_game):
+    session = in_memory_session
+    game = sample_game
+
+    with patch("rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=True):
+        report = undeploy(game, session)
+
+    assert report.preflight is not None
+    assert report.preflight.game_running is True
+
+
+def test_plan_skips_junction_when_dir_already_exists(in_memory_session, sample_game):
+    """If a junction's destination dir already exists, plan_deploy treats it as up-to-date."""
+    session = in_memory_session
+    game = sample_game
+
+    # Pre-create the destination dir to simulate an existing junction.
+    (Path(game.install_path) / "mods" / "MyREDmod").mkdir(parents=True)
+
+    mod = InstalledMod(game_id=game.id, name="MyREDmod", staging_dir="MyREDmod")
+    session.add(mod)
+    session.flush()
+    session.add(
+        InstalledModFile(
+            installed_mod_id=mod.id,
+            relative_path="mods/MyREDmod/info.json",
+            source_path="mods/MyREDmod/info.json",
+            link_kind="junction",
+        )
+    )
+    session.commit()
+
+    plan, skipped = plan_deploy(game, session)
+    assert plan.is_empty
+    assert skipped == 1

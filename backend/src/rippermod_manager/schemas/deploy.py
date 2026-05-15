@@ -29,15 +29,26 @@ class DeployOpResult(BaseModel):
     error: str = ""
 
 
+class PreflightReport(BaseModel):
+    ok: bool = True
+    reasons: list[str] = Field(default_factory=list)
+    game_running: bool = False
+    hardlink_supported: bool = True
+    same_volume: bool = True
+    free_disk_bytes: int = 0
+
+
 class DeployReport(BaseModel):
     total: int
     done: int
     failed: int
+    skipped_existing: int = 0  # already correctly linked, skipped by plan_deploy
     results: list[DeployOpResult] = Field(default_factory=list)
+    preflight: PreflightReport | None = None  # populated when pre-flight refuses
 
     @property
     def is_clean(self) -> bool:
-        return self.failed == 0
+        return self.failed == 0 and (self.preflight is None or self.preflight.ok)
 
 
 class DriftReport(BaseModel):
@@ -52,10 +63,16 @@ class DriftReport(BaseModel):
         return self.missing == 0 and self.foreign == 0
 
 
-class PreflightReport(BaseModel):
-    ok: bool = True
-    reasons: list[str] = Field(default_factory=list)
-    game_running: bool = False
-    hardlink_supported: bool = True
-    same_volume: bool = True
-    free_disk_bytes: int = 0
+class MigrationReport(BaseModel):
+    """Result of `migrate_to_vfs` — counts of mods/files migrated + any errors."""
+
+    migrated_mods: int = 0
+    migrated_files: int = 0
+    skipped_files: int = 0
+    errors: list[str] = Field(default_factory=list)
+
+
+class UntrackedFilesResponse(BaseModel):
+    """Response model for the untracked-files endpoint."""
+
+    files: list[str] = Field(default_factory=list)
