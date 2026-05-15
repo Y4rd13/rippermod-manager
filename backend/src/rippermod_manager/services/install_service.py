@@ -1,14 +1,17 @@
 """Mod installation, uninstallation, and enable/disable toggle.
 
-Handles archive extraction to the game directory, file ownership tracking
-via the InstalledMod/InstalledModFile tables, and non-destructive
-enable/disable via ``.disabled`` file renaming.
+Handles archive extraction to a per-mod staging directory under
+``<game>/downloaded_mods/<safe_name>/``, then deploys via hardlinks into
+the canonical game-directory paths (VFS model).  Enable/disable and
+uninstall operate on the hardlinks; the staging copy is the authoritative
+source.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 
 import httpx
@@ -39,6 +42,11 @@ from rippermod_manager.services.nexus_helpers import match_local_to_nexus_file
 logger = logging.getLogger(__name__)
 
 
+def _safe_dir_name(name: str) -> str:
+    """Sanitise a mod name into a filesystem-safe directory name."""
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_") or "mod"
+
+
 def list_available_archives(game: Game) -> list[Path]:
     """Return archive files found in a ``staging`` folder next to the game install."""
     staging = Path(game.install_path) / "downloaded_mods"
@@ -66,8 +74,14 @@ def install_mod(
     session: Session,
     skip_conflicts: list[str] | None = None,
     file_renames: dict[str, str] | None = None,
+    auto_deploy: bool = True,
 ) -> InstallResult:
-    """Extract an archive to the game directory and record ownership.
+    """Extract an archive to staging and deploy via hardlinks into the game directory.
+
+    Files are written to ``<game>/downloaded_mods/<safe_name>/...`` first, then
+    ``deploy_service.deploy()`` creates hardlinks at the canonical game-dir paths.
+    After a successful install the game-dir paths exist (as hardlinks) and behave
+    identically to regular files.
 
     Returns an ``InstallResult`` with counts of extracted and skipped files.
 
@@ -101,7 +115,9 @@ def install_mod(
     if file_renames:
         rename_map = {k.replace("\\", "/"): v.replace("\\", "/") for k, v in file_renames.items()}
 
-    ownership = get_file_ownership_map(session, game.id)  # type: ignore[arg-type]
+    safe_name = _safe_dir_name(parsed.name)
+    staging_root = game_dir / "downloaded_mods" / safe_name
+    staging_root.mkdir(parents=True, exist_ok=True)
 
     extracted_paths: list[str] = []
     skipped = 0
@@ -143,8 +159,11 @@ def install_mod(
             if normalised_lower in skip_set:
                 skipped += 1
                 continue
-            target = game_dir / normalised
-            if not target.resolve().is_relative_to(game_dir.resolve()):
+            # Path traversal guard: ensure target stays under staging_root
+            staging_target = staging_root / normalised
+            try:
+                staging_target.resolve().relative_to(staging_root.resolve())
+            except ValueError:
                 logger.warning("Skipping path traversal entry: %s", entry.filename)
                 skipped += 1
                 continue
@@ -154,29 +173,23 @@ def install_mod(
         entries_to_read = [e for e, _, _ in valid_entries]
         file_contents = archive.read_all_files(entries_to_read)
 
-        for entry, normalised, normalised_lower in valid_entries:
+        for entry, normalised, _normalised_lower in valid_entries:
             data = file_contents.get(entry.filename)
             if data is None:
                 logger.warning("Batch read missed entry: %s", entry.filename)
                 skipped += 1
                 continue
-            target = game_dir / normalised
-            if target.exists():
+            staging_target = staging_root / normalised
+            if staging_target.exists():
                 overwritten += 1
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(data)
+            staging_target.parent.mkdir(parents=True, exist_ok=True)
+            staging_target.write_bytes(data)
             extracted_paths.append(normalised)
-
-            if normalised_lower in ownership:
-                prev_mod = ownership[normalised_lower]
-                for f in list(prev_mod.files):
-                    if f.relative_path.replace("\\", "/").lower() == normalised_lower:
-                        session.delete(f)
-                        break
 
     installed = InstalledMod(
         game_id=game.id,  # type: ignore[arg-type]
         name=parsed.name,
+        staging_dir=safe_name,
         source_archive=archive_path.name,
         nexus_mod_id=parsed.nexus_mod_id,
         upload_timestamp=parsed.upload_timestamp,
@@ -219,15 +232,27 @@ def install_mod(
             installed.mod_group_id = corr.mod_group_id
 
     for rel_path in extracted_paths:
+        link_kind = (
+            "junction"
+            if rel_path.startswith("mods/") and "/" in rel_path[len("mods/") :]
+            else "hardlink"
+        )
         session.add(
             InstalledModFile(
                 installed_mod_id=installed.id,  # type: ignore[arg-type]
                 relative_path=rel_path,
+                source_path=rel_path,
+                link_kind=link_kind,
             )
         )
 
     session.commit()
     session.refresh(installed)
+
+    if auto_deploy:
+        from rippermod_manager.services.vfs import deploy_service
+
+        deploy_service.deploy(game, session)
 
     # Index .archive files for resource-level conflict detection
     from rippermod_manager.services.archive_index_service import index_mod_archives
@@ -242,7 +267,10 @@ def install_mod(
     write_modlist(game, session)
 
     logger.info(
-        "Installed '%s' (%d files, %d overwritten)", parsed.name, len(extracted_paths), overwritten
+        "Installed '%s' (%d files staged, %d overwritten in staging)",
+        parsed.name,
+        len(extracted_paths),
+        overwritten,
     )
     return InstallResult(
         installed_mod_id=installed.id,  # type: ignore[arg-type]
@@ -250,6 +278,7 @@ def install_mod(
         files_extracted=len(extracted_paths),
         files_skipped=skipped,
         files_overwritten=overwritten,
+        installed_mod_name_safe=safe_name,
     )
 
 
