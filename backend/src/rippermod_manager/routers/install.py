@@ -12,7 +12,12 @@ from rippermod_manager.models.download import DownloadJob
 from rippermod_manager.models.install import ArchiveNexusLink, InstalledMod
 from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 from rippermod_manager.routers.deps import get_game_or_404
-from rippermod_manager.schemas.deploy import DeployReport, DriftReport
+from rippermod_manager.schemas.deploy import (
+    DeployReport,
+    DriftReport,
+    MigrationReport,
+    UntrackedFilesResponse,
+)
 from rippermod_manager.schemas.install import (
     ArchiveContentsResult,
     ArchiveDeleteResult,
@@ -568,21 +573,23 @@ async def deploy_status(
     return deploy_service.detect_drift(game, session)
 
 
-@router.post("/migrate-to-vfs")
-async def migrate(game_name: str, session: Session = Depends(get_session)):
+@router.post("/migrate-to-vfs", response_model=MigrationReport)
+async def migrate(game_name: str, session: Session = Depends(get_session)) -> MigrationReport:
     """Migrate copy-installed mods to VFS staging with hardlinks."""
     game = get_game_or_404(game_name, session)
     report = vfs_migration.migrate_to_vfs(game, session)
-    return {
-        "migrated_mods": report.migrated_mods,
-        "migrated_files": report.migrated_files,
-        "skipped_files": report.skipped_files,
-        "errors": report.errors,
-    }
+    return MigrationReport(
+        migrated_mods=report.migrated_mods,
+        migrated_files=report.migrated_files,
+        skipped_files=report.skipped_files,
+        errors=report.errors,
+    )
 
 
-@router.get("/untracked-files")
-async def untracked(game_name: str, session: Session = Depends(get_session)):
+@router.get("/untracked-files", response_model=UntrackedFilesResponse)
+async def untracked(
+    game_name: str, session: Session = Depends(get_session)
+) -> UntrackedFilesResponse:
     """List files under known mod roots that are not claimed by any installed mod."""
     game = get_game_or_404(game_name, session)
-    return {"files": vfs_migration.find_untracked_files(game, session)}
+    return UntrackedFilesResponse(files=vfs_migration.find_untracked_files(game, session))
