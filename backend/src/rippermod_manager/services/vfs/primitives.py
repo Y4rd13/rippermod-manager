@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -70,15 +71,34 @@ def unlink(dst: Path) -> None:
         raise VfsError(str(exc)) from exc
 
 
+# cmd.exe metacharacters that can break out of even a quoted argument. We pass
+# the args as a list with shell=False, but cmd.exe still parses these in its own
+# arg-handling layer. Reject paths containing them.
+_CMD_FORBIDDEN = re.compile(r'[&|<>^"%!\r\n]')
+
+
 def junction(target: Path, link: Path) -> None:
-    """Create an NTFS directory junction at `link` pointing to `target`."""
+    """Create an NTFS directory junction at `link` pointing to `target`.
+
+    Rejects paths containing cmd.exe metacharacters (``& | < > ^ " % !`` or newlines)
+    even though we invoke cmd with ``shell=False``: cmd.exe parses its own arg list and
+    these characters can still break out of quoting. Mod paths that originate from
+    untrusted archives must be validated here.
+    """
     if not target.is_dir():
         raise NotFoundError(f"junction target must be an existing directory: {target}")
     if link.exists():
         raise AlreadyExistsError(f"junction link path exists: {link}")
+    target_str = str(target)
+    link_str = str(link)
+    if _CMD_FORBIDDEN.search(target_str) or _CMD_FORBIDDEN.search(link_str):
+        raise VfsError(
+            'junction path contains characters unsafe for cmd.exe (& | < > ^ " % !): '
+            f"target={target_str!r}, link={link_str!r}"
+        )
     link.parent.mkdir(parents=True, exist_ok=True)
     proc = subprocess.run(
-        ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+        ["cmd", "/c", "mklink", "/J", link_str, target_str],
         capture_output=True,
         text=True,
         shell=False,

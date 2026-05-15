@@ -8,6 +8,7 @@ import pytest
 from rippermod_manager.services.vfs.primitives import (
     AlreadyExistsError,
     NotFoundError,
+    VfsError,
     hardlink,
     is_game_running,
     junction,
@@ -186,3 +187,18 @@ def test_remove_junction_idempotent_when_absent(tmp_volume):
     _, target = tmp_volume
     link = target / "ghost"
     remove_junction(link)  # must not raise
+
+
+def test_junction_rejects_cmd_metacharacters(tmp_volume):
+    """junction() must refuse paths containing cmd.exe metacharacters.
+
+    Validation happens before any cmd invocation, so this test is platform-agnostic.
+    A malicious archive cannot escape via & to inject a second command.
+    """
+    staging, target = tmp_volume
+    inner = staging / "inner"
+    inner.mkdir()
+
+    evil_link = target / "evil&deploy"
+    with pytest.raises(VfsError, match=r"cmd\.exe"):
+        junction(inner, evil_link)
