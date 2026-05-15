@@ -48,6 +48,7 @@ from rippermod_manager.services.redscript_analysis import check_redscript_confli
 from rippermod_manager.services.settings_helpers import get_setting
 from rippermod_manager.services.update_service import invalidate_update_cache
 from rippermod_manager.services.vfs import deploy_service
+from rippermod_manager.services.vfs import migration as vfs_migration
 
 logger = logging.getLogger(__name__)
 
@@ -565,3 +566,23 @@ async def deploy_status(
     """Report deployment drift: linked, missing, and foreign files per mod."""
     game = get_game_or_404(game_name, session)
     return deploy_service.detect_drift(game, session)
+
+
+@router.post("/migrate-to-vfs")
+async def migrate(game_name: str, session: Session = Depends(get_session)):
+    """Migrate copy-installed mods to VFS staging with hardlinks."""
+    game = get_game_or_404(game_name, session)
+    report = vfs_migration.migrate_to_vfs(game, session)
+    return {
+        "migrated_mods": report.migrated_mods,
+        "migrated_files": report.migrated_files,
+        "skipped_files": report.skipped_files,
+        "errors": report.errors,
+    }
+
+
+@router.get("/untracked-files")
+async def untracked(game_name: str, session: Session = Depends(get_session)):
+    """List files under known mod roots that are not claimed by any installed mod."""
+    game = get_game_or_404(game_name, session)
+    return {"files": vfs_migration.find_untracked_files(game, session)}

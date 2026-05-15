@@ -343,3 +343,27 @@ class TestDeployEndpoints:
         """POST /undeploy returns 404 when the game does not exist."""
         resp = client.post("/api/v1/games/NoSuchGame/install/undeploy")
         assert resp.status_code == 404
+
+
+class TestMigrationEndpoints:
+    def test_migrate_endpoint_returns_report(self, client, game_setup):
+        game_name = game_setup[0]
+        resp = client.post(f"/api/v1/games/{game_name}/install/migrate-to-vfs")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "migrated_mods" in body
+        assert "migrated_files" in body
+        assert "skipped_files" in body
+        assert "errors" in body
+
+    def test_untracked_files_endpoint(self, client, game_setup):
+        game_name = game_setup[0]
+        resp = client.get(f"/api/v1/games/{game_name}/install/untracked-files")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "files" in body
+        assert isinstance(body["files"], list)
+
+    def test_migrate_endpoint_404_for_missing_game(self, client):
+        resp = client.post("/api/v1/games/NoSuchGame/install/migrate-to-vfs")
+        assert resp.status_code == 404
