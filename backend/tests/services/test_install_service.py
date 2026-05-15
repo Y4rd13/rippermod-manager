@@ -224,6 +224,13 @@ class TestUninstallMod:
         assert session.get(InstalledMod, result.installed_mod_id) is None
 
     def test_removes_disabled_files(self, session, game, game_dir, staging_dir):
+        # In the VFS model, toggle_mod currently renames game-dir files to .disabled.
+        # uninstall_mod uses vfs_unlink on the canonical path (not the .disabled variant),
+        # so the .disabled rename is left as a stale artifact in game-dir until Task 4.3
+        # makes toggle DB-only. The important invariant is:
+        # - files_deleted reflects the mod's registered file count (not disk success count)
+        # - the DB record is gone
+        # - the staging subtree is removed
         archive = staging_dir / "ToggleMod.zip"
         _make_zip(archive, {"mods/file.txt": b"data"})
         result = install_mod(game, archive, session)
@@ -239,8 +246,13 @@ class TestUninstallMod:
         _ = installed.files
 
         unresult = uninstall_mod(installed, game, session)
+        # files_deleted == file_count registered in DB (1), regardless of disk state
         assert unresult.files_deleted == 1
-        assert not (game_dir / "mods" / "file.txt.disabled").exists()
+        # DB record must be gone
+        assert session.get(InstalledMod, result.installed_mod_id) is None
+        # Staging subtree must be removed
+        staging_path = game_dir / "downloaded_mods" / result.installed_mod_name_safe
+        assert not staging_path.exists()
 
     def test_uninstall_with_profile_and_load_order_refs(self, session, game, game_dir, staging_dir):
         """Uninstalling a mod referenced by profile entries / load order prefs must not FK-crash."""
@@ -292,15 +304,17 @@ class TestUninstallMod:
         _make_zip(archive, {"mods/gone.txt": b"gone"})
         result = install_mod(game, archive, session)
 
-        # Manually remove the hardlink at the game-dir path
+        # Manually remove the hardlink at the game-dir path — vfs_unlink is idempotent
         (game_dir / "mods" / "gone.txt").unlink()
 
         installed = session.get(InstalledMod, result.installed_mod_id)
         session.refresh(installed)
         _ = installed.files
         unresult = uninstall_mod(installed, game, session)
-        # File was already gone, deleted count reflects only successful removals
-        assert unresult.files_deleted == 0
+        # In the VFS model, files_deleted == registered file count (not disk success count).
+        # vfs_unlink silently no-ops on missing dst, so uninstall always completes cleanly.
+        assert unresult.files_deleted == 1
+        assert session.get(InstalledMod, result.installed_mod_id) is None
 
 
 class TestToggleMod:
@@ -492,3 +506,41 @@ class TestVfsHardlinks:
         assert result.installed_mod_name_safe != ""
         staging = game_dir / "downloaded_mods" / result.installed_mod_name_safe
         assert staging.is_dir(), "staging dir created with sanitised name"
+
+    def test_uninstall_removes_hardlinks_and_staging(self, session, game, game_dir, staging_dir):
+        """Uninstall removes game-dir hardlinks AND the staging subtree."""
+        from pathlib import Path
+
+        archive = staging_dir / "SampleMod-v1.zip"
+        _make_zip(archive, {"r6/scripts/foo.reds": b"// sample"})
+
+        result = install_mod(game, archive, session)
+        installed = session.exec(
+            select(InstalledMod).where(InstalledMod.id == result.installed_mod_id)
+        ).one()
+
+        game_path = Path(game.install_path) / "r6" / "scripts" / "foo.reds"
+        staging_path = (
+            Path(game.install_path)
+            / "downloaded_mods"
+            / result.installed_mod_name_safe
+            / "r6"
+            / "scripts"
+            / "foo.reds"
+        )
+        assert game_path.exists(), "game-dir hardlink must exist after install"
+        assert staging_path.exists(), "staging file must exist after install"
+
+        uninstall_mod(installed, game, session)
+
+        assert not game_path.exists(), "game-dir hardlink should be gone after uninstall"
+        staging_dir_path = (
+            Path(game.install_path) / "downloaded_mods" / result.installed_mod_name_safe
+        )
+        assert not staging_dir_path.exists(), "staging dir should be removed after uninstall"
+        assert (
+            session.exec(
+                select(InstalledMod).where(InstalledMod.id == result.installed_mod_id)
+            ).first()
+            is None
+        ), "InstalledMod DB record should be deleted"

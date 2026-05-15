@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import shutil
 from pathlib import Path
 
 import httpx
@@ -287,38 +288,45 @@ def uninstall_mod(
     game: Game,
     session: Session,
 ) -> UninstallResult:
-    """Delete all files owned by a mod and remove the DB record."""
+    """Remove a mod's game-dir links and its staging subtree."""
+    from rippermod_manager.services.vfs.primitives import (
+        VfsError,
+        remove_junction,
+    )
+    from rippermod_manager.services.vfs.primitives import unlink as vfs_unlink
+
     game_dir = Path(game.install_path)
-    deleted = 0
-    dirs_removed = 0
-
     _ = installed_mod.files
-    for f in installed_mod.files:
-        file_path = game_dir / f.relative_path.replace("/", os.sep)
-        if file_path.exists():
-            try:
-                file_path.unlink()
-                deleted += 1
-                parent = file_path.parent
-                while parent != game_dir:
-                    if not any(parent.iterdir()):
-                        parent.rmdir()
-                        dirs_removed += 1
-                        parent = parent.parent
-                    else:
-                        break
-            except OSError:
-                logger.warning("Could not delete %s", file_path)
-        else:
-            disabled_path = file_path.with_suffix(file_path.suffix + ".disabled")
-            if disabled_path.exists():
-                try:
-                    disabled_path.unlink()
-                    deleted += 1
-                except OSError:
-                    logger.warning("Could not delete %s", disabled_path)
+    file_count = len(installed_mod.files)
+    junction_dirs_seen: set[str] = set()
 
-    # Clean up dependent rows before deleting the mod record
+    for f in installed_mod.files:
+        dst = game_dir / f.relative_path.replace("/", os.sep)
+        if f.link_kind == "junction":
+            parts = f.relative_path.replace("\\", "/").split("/")
+            if len(parts) >= 2 and parts[0] == "mods":
+                redmod_dst = game_dir / "mods" / parts[1]
+                key = str(redmod_dst)
+                if key in junction_dirs_seen:
+                    continue
+                junction_dirs_seen.add(key)
+                try:
+                    remove_junction(redmod_dst)
+                except VfsError:
+                    logger.warning("Could not remove junction %s", redmod_dst)
+                continue
+        try:
+            vfs_unlink(dst)
+        except VfsError:
+            logger.warning("Could not unlink %s", dst)
+
+    # Remove staging subtree
+    if installed_mod.staging_dir:
+        staging_dir = game_dir / "downloaded_mods" / installed_mod.staging_dir
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir, ignore_errors=True)
+
+    # Existing DB cleanup
     from sqlalchemy import delete as sa_delete
 
     from rippermod_manager.models.load_order import LoadOrderPreference
@@ -341,11 +349,10 @@ def uninstall_mod(
 
     session.delete(installed_mod)
     session.commit()
-
     write_modlist(game, session)
 
-    logger.info("Uninstalled '%s' (%d files deleted)", installed_mod.name, deleted)
-    return UninstallResult(files_deleted=deleted, directories_removed=dirs_removed)
+    logger.info("Uninstalled '%s' (%d files removed)", installed_mod.name, file_count)
+    return UninstallResult(files_deleted=file_count, directories_removed=0)
 
 
 def toggle_mod(
