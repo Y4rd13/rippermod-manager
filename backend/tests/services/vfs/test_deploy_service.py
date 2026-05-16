@@ -280,6 +280,81 @@ def test_drift_clean_after_deploy(in_memory_session, sample_game):
     assert drift.missing == 0
 
 
+def test_drift_counts_redmod_files_under_existing_junction_as_linked(
+    in_memory_session, sample_game
+):
+    """REDmod files share one junction at mods/<name>/.  detect_drift used to call
+    is_dir() on each per-file path (info.json, scripts/x.script), which returns False
+    for actual files inside the reparse point — so a healthy REDmod was reported as
+    fully missing.  Verify all per-file records under an existing junction root count
+    as linked.
+    """
+    session = in_memory_session
+    game = sample_game
+
+    # Simulate the deployed state: the junction root exists as a real dir.
+    (Path(game.install_path) / "mods" / "MyREDmod").mkdir(parents=True)
+
+    mod = InstalledMod(game_id=game.id, name="MyREDmod", staging_dir="MyREDmod", deployed=True)
+    session.add(mod)
+    session.flush()
+    # Three per-file InstalledModFile records that all live under one junction root.
+    for rel in (
+        "mods/MyREDmod/info.json",
+        "mods/MyREDmod/scripts/a.script",
+        "mods/MyREDmod/scripts/sub/b.script",
+    ):
+        session.add(
+            InstalledModFile(
+                installed_mod_id=mod.id,
+                relative_path=rel,
+                source_path=rel,
+                link_kind="junction",
+            )
+        )
+    session.commit()
+
+    drift = detect_drift(game, session)
+
+    assert drift.total == 3
+    assert drift.linked == 3
+    assert drift.missing == 0
+    assert drift.foreign == 0
+
+
+def test_drift_counts_redmod_files_as_missing_when_junction_root_absent(
+    in_memory_session, sample_game
+):
+    """Mirror of the above: when the junction root is gone, every per-file record
+    under it counts as missing (and we only probe the root once, not per file).
+    """
+    session = in_memory_session
+    game = sample_game
+
+    mod = InstalledMod(game_id=game.id, name="MissingMod", staging_dir="MissingMod", deployed=True)
+    session.add(mod)
+    session.flush()
+    for rel in (
+        "mods/MissingMod/info.json",
+        "mods/MissingMod/scripts/a.script",
+    ):
+        session.add(
+            InstalledModFile(
+                installed_mod_id=mod.id,
+                relative_path=rel,
+                source_path=rel,
+                link_kind="junction",
+            )
+        )
+    session.commit()
+
+    drift = detect_drift(game, session)
+
+    assert drift.total == 2
+    assert drift.missing == 2
+    assert drift.linked == 0
+
+
 def test_drift_detects_missing_link(in_memory_session, sample_game):
     session = in_memory_session
     game = sample_game
