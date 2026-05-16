@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import subprocess
 from pathlib import Path
 
 from sqlmodel import Session, select
@@ -21,6 +22,7 @@ from rippermod_manager.schemas.deploy import (
     DeployReport,
     DriftReport,
     PreflightReport,
+    RedmodDeployResult,
 )
 from rippermod_manager.services.vfs.primitives import (
     VfsError,
@@ -37,6 +39,8 @@ from rippermod_manager.services.vfs.primitives import (
 logger = logging.getLogger(__name__)
 
 GAME_EXE = "Cyberpunk2077.exe"
+REDMOD_REL_PATH = Path("tools") / "redmod" / "bin" / "redMod.exe"
+REDMOD_TIMEOUT_S = 600  # generous: heavy REDmod sets can take several minutes to compile
 
 
 def pre_flight_check(game: Game) -> PreflightReport:
@@ -305,13 +309,96 @@ def detect_drift(game: Game, session: Session) -> DriftReport:
     return DriftReport(total=total, linked=linked, missing=missing, foreign=foreign, by_mod=by_mod)
 
 
+def _redmod_exe(game: Game) -> Path | None:
+    """Return the REDmod binary path if available, else None.
+
+    Pre-2.0 Cyberpunk installs and pirated/stripped copies may not ship the REDmod
+    DLC, so we fall back to a no-op instead of erroring out.
+    """
+    p = Path(game.install_path) / REDMOD_REL_PATH
+    return p if p.is_file() else None
+
+
+def _has_enabled_redmods(game: Game, session: Session) -> bool:
+    """Return True iff any enabled InstalledMod owns files under ``mods/``.
+
+    Only mods with REDmod content require a compile pass; legacy archives,
+    redscript, TweakXL and CET load directly from disk without one.
+    """
+    mods = session.exec(
+        select(InstalledMod).where(
+            InstalledMod.game_id == game.id,
+            InstalledMod.disabled.is_(False),  # type: ignore[union-attr]
+        )
+    ).all()
+    for mod in mods:
+        _ = mod.files
+        for f in mod.files:
+            if f.relative_path.replace("\\", "/").startswith("mods/"):
+                return True
+    return False
+
+
+def redmod_deploy(game: Game) -> RedmodDeployResult:
+    """Invoke ``redMod.exe deploy`` to compile the REDmod cache.
+
+    Vortex runs this on its Deploy button; MO2 runs it pre-launch. We run it after
+    every VFS deploy that touches REDmod content, because RipperMod launches the
+    game with ``--launcher-skip`` (bypassing the REDlauncher's own auto-deploy).
+    Without this step the game would load with a stale ``r6/cache/modded/`` and
+    new REDmods would be silently ignored.
+
+    The function is best-effort: an exit-code != 0, a timeout, or a missing binary
+    is surfaced on the returned struct rather than raising, so the deploy report
+    can still report the hardlink/junction state as successful.
+    """
+    exe = _redmod_exe(game)
+    if exe is None:
+        return RedmodDeployResult(ran=False, skipped_reason="REDmod binary not found")
+
+    try:
+        proc = subprocess.run(
+            [str(exe), "deploy", "-reportProgress"],
+            cwd=str(exe.parent),
+            capture_output=True,
+            text=True,
+            timeout=REDMOD_TIMEOUT_S,
+            shell=False,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return RedmodDeployResult(
+            ran=True,
+            success=False,
+            error=f"redmod deploy timed out after {REDMOD_TIMEOUT_S}s",
+        )
+    except OSError as exc:
+        return RedmodDeployResult(ran=True, success=False, error=str(exc))
+
+    success = proc.returncode == 0
+    error = ""
+    if not success:
+        error = (proc.stderr or proc.stdout or "").strip() or "redmod deploy failed"
+    return RedmodDeployResult(
+        ran=True,
+        success=success,
+        returncode=proc.returncode,
+        stdout=(proc.stdout or "")[-4000:],
+        stderr=(proc.stderr or "")[-4000:],
+        error=error,
+    )
+
+
 def deploy(game: Game, session: Session) -> DeployReport:
-    """Compose pre_flight_check → plan_deploy → execute_plan.
+    """Compose pre_flight_check → plan_deploy → execute_plan → redmod_deploy.
 
     If pre-flight fails, returns an empty report with the ``preflight`` field
     populated so callers can surface the reason. On a clean execute (no failures
     and no preflight refusal), marks all enabled mods as deployed and clears any
-    pending drift flag.
+    pending drift flag. If any enabled mod has REDmod content, also invokes
+    ``redMod.exe deploy`` so the compiled cache stays in sync with the deployed
+    junctions; the redmod result is attached to ``report.redmod`` regardless of
+    outcome.
     """
     pre = pre_flight_check(game)
     if not pre.ok:
@@ -331,6 +418,8 @@ def deploy(game: Game, session: Session) -> DeployReport:
             m.deploy_drift = False
             session.add(m)
         session.commit()
+        if _has_enabled_redmods(game, session):
+            report.redmod = redmod_deploy(game)
     return report
 
 

@@ -38,6 +38,25 @@ class PreflightReport(BaseModel):
     free_disk_bytes: int = 0
 
 
+class RedmodDeployResult(BaseModel):
+    """Result of invoking `redMod.exe deploy` after a VFS deploy.
+
+    REDmods under `mods/<name>/` only load if their cache in `r6/cache/modded/`
+    is rebuilt by the REDmod compiler.  This struct surfaces whether the compile
+    ran, succeeded, or was intentionally skipped (no binary present, or no REDmods
+    enabled) so the UI can show "Deploy complete + REDmod compiled" or
+    "Deploy ok but REDmod compile failed: <stderr>".
+    """
+
+    ran: bool = False
+    success: bool = False
+    skipped_reason: str = ""
+    returncode: int | None = None
+    stdout: str = ""
+    stderr: str = ""
+    error: str = ""
+
+
 class DeployReport(BaseModel):
     total: int
     done: int
@@ -45,6 +64,7 @@ class DeployReport(BaseModel):
     skipped_existing: int = 0  # already correctly linked, skipped by plan_deploy
     results: list[DeployOpResult] = Field(default_factory=list)
     preflight: PreflightReport | None = None  # populated when pre-flight refuses
+    redmod: RedmodDeployResult | None = None  # set when redmod.exe was attempted
 
     @property
     def is_clean(self) -> bool:
