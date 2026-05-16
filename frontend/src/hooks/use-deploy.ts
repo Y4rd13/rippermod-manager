@@ -25,6 +25,16 @@ export interface PreflightReport {
   free_disk_bytes: number;
 }
 
+export interface RedmodDeployResult {
+  ran: boolean;
+  success: boolean;
+  skipped_reason: string;
+  returncode: number | null;
+  stdout: string;
+  stderr: string;
+  error: string;
+}
+
 export interface DeployReport {
   total: number;
   done: number;
@@ -32,6 +42,7 @@ export interface DeployReport {
   skipped_existing: number;
   results: DeployOpResult[];
   preflight: PreflightReport | null;
+  redmod: RedmodDeployResult | null;
 }
 
 export interface MigrationReport {

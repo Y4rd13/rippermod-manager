@@ -1,6 +1,7 @@
 import os
+import subprocess
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from sqlmodel import Session, select
 
@@ -8,14 +9,32 @@ from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import DeployJournalEntry, InstalledMod, InstalledModFile
 from rippermod_manager.schemas.deploy import DeployOp, DeployPlan
 from rippermod_manager.services.vfs.deploy_service import (
+    REDMOD_REL_PATH,
     deploy,
     detect_drift,
     execute_plan,
     plan_deploy,
     pre_flight_check,
+    redmod_deploy,
     replay_pending_journal,
     undeploy,
 )
+
+
+def _stage_redmod_binary(game: Game) -> Path:
+    """Create a stub redMod.exe so _redmod_exe() finds it. Caller mocks subprocess."""
+    exe = Path(game.install_path) / REDMOD_REL_PATH
+    exe.parent.mkdir(parents=True, exist_ok=True)
+    exe.write_text("stub")
+    return exe
+
+
+def _make_redmod_proc(returncode: int = 0, stdout: str = "ok", stderr: str = "") -> MagicMock:
+    proc = MagicMock(spec=subprocess.CompletedProcess)
+    proc.returncode = returncode
+    proc.stdout = stdout
+    proc.stderr = stderr
+    return proc
 
 
 def make_game(tmp_path: Path) -> Game:
@@ -390,3 +409,144 @@ def test_plan_skips_junction_when_dir_already_exists(in_memory_session, sample_g
     plan, skipped = plan_deploy(game, session)
     assert plan.is_empty
     assert skipped == 1
+
+
+def test_redmod_deploy_skipped_when_binary_missing(tmp_path):
+    g = make_game(tmp_path)
+    result = redmod_deploy(g)
+    assert result.ran is False
+    assert "not found" in result.skipped_reason.lower()
+
+
+def test_redmod_deploy_invokes_subprocess_with_expected_args(tmp_path):
+    g = make_game(tmp_path)
+    exe = _stage_redmod_binary(g)
+    proc = _make_redmod_proc(returncode=0, stdout="deployed")
+    with patch(
+        "rippermod_manager.services.vfs.deploy_service.subprocess.run", return_value=proc
+    ) as mocked:
+        result = redmod_deploy(g)
+
+    assert result.ran is True
+    assert result.success is True
+    assert result.returncode == 0
+    assert "deployed" in result.stdout
+    mocked.assert_called_once()
+    args, kwargs = mocked.call_args
+    cmd = args[0]
+    assert cmd[0] == str(exe)
+    assert cmd[1:] == ["deploy", "-reportProgress"]
+    assert kwargs["cwd"] == str(exe.parent)
+    assert kwargs["shell"] is False
+    assert kwargs["capture_output"] is True
+
+
+def test_redmod_deploy_captures_nonzero_exit(tmp_path):
+    g = make_game(tmp_path)
+    _stage_redmod_binary(g)
+    proc = _make_redmod_proc(returncode=1, stdout="", stderr="boom")
+    with patch("rippermod_manager.services.vfs.deploy_service.subprocess.run", return_value=proc):
+        result = redmod_deploy(g)
+
+    assert result.ran is True
+    assert result.success is False
+    assert result.returncode == 1
+    assert "boom" in result.error
+
+
+def test_redmod_deploy_handles_timeout(tmp_path):
+    g = make_game(tmp_path)
+    _stage_redmod_binary(g)
+    with patch(
+        "rippermod_manager.services.vfs.deploy_service.subprocess.run",
+        side_effect=subprocess.TimeoutExpired(cmd="redmod", timeout=600),
+    ):
+        result = redmod_deploy(g)
+
+    assert result.ran is True
+    assert result.success is False
+    assert "timed out" in result.error.lower()
+
+
+def test_deploy_runs_redmod_when_redmod_content_present(in_memory_session, sample_game):
+    """deploy() should auto-invoke redMod.exe when any enabled mod has files under mods/."""
+    session = in_memory_session
+    game = sample_game
+    _stage_redmod_binary(game)
+
+    staging = Path(game.install_path) / "downloaded_mods" / "MyREDmod" / "mods" / "MyREDmod"
+    staging.mkdir(parents=True)
+    (staging / "info.json").write_text("{}")
+
+    mod = InstalledMod(game_id=game.id, name="MyREDmod", staging_dir="MyREDmod", disabled=False)
+    session.add(mod)
+    session.flush()
+    session.add(
+        InstalledModFile(
+            installed_mod_id=mod.id,
+            relative_path="mods/MyREDmod/info.json",
+            source_path="mods/MyREDmod/info.json",
+            link_kind="junction",
+        )
+    )
+    session.commit()
+
+    proc = _make_redmod_proc(returncode=0, stdout="compiled 1 mod")
+    with (
+        patch(
+            "rippermod_manager.services.vfs.deploy_service.is_game_running",
+            return_value=False,
+        ),
+        patch(
+            "rippermod_manager.services.vfs.deploy_service.junction",
+            side_effect=lambda src, dst: Path(dst).mkdir(parents=True, exist_ok=True),
+        ),
+        patch(
+            "rippermod_manager.services.vfs.deploy_service.subprocess.run",
+            return_value=proc,
+        ) as redmod_run,
+    ):
+        report = deploy(game, session)
+
+    assert report.failed == 0
+    assert report.redmod is not None
+    assert report.redmod.ran is True
+    assert report.redmod.success is True
+    redmod_run.assert_called_once()
+
+
+def test_deploy_skips_redmod_when_only_legacy_archives(in_memory_session, sample_game):
+    """deploy() must not invoke redMod.exe when no enabled mod has mods/ content."""
+    session = in_memory_session
+    game = sample_game
+    _stage_redmod_binary(game)
+
+    staging = Path(game.install_path) / "downloaded_mods" / "LegacyMod" / "archive" / "pc" / "mod"
+    staging.mkdir(parents=True)
+    (staging / "thing.archive").write_text("x")
+
+    mod = InstalledMod(game_id=game.id, name="LegacyMod", staging_dir="LegacyMod", disabled=False)
+    session.add(mod)
+    session.flush()
+    session.add(
+        InstalledModFile(
+            installed_mod_id=mod.id,
+            relative_path="archive/pc/mod/thing.archive",
+            source_path="archive/pc/mod/thing.archive",
+            link_kind="hardlink",
+        )
+    )
+    session.commit()
+
+    with (
+        patch(
+            "rippermod_manager.services.vfs.deploy_service.is_game_running",
+            return_value=False,
+        ),
+        patch("rippermod_manager.services.vfs.deploy_service.subprocess.run") as redmod_run,
+    ):
+        report = deploy(game, session)
+
+    assert report.failed == 0
+    assert report.redmod is None
+    redmod_run.assert_not_called()

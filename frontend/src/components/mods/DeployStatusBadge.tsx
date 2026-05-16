@@ -1,32 +1,12 @@
 import { AlertTriangle, CheckCircle, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
-import { type DeployReport, useDeploy, useDeployStatus } from "@/hooks/use-deploy";
+import { useDeploy, useDeployStatus } from "@/hooks/use-deploy";
+import { reportDeployOutcome } from "@/lib/deploy-toast";
 import { toast } from "@/stores/toast-store";
 
 interface DeployStatusBadgeProps {
   gameName: string | null;
-}
-
-function reportDeployOutcome(report: DeployReport, action: string): void {
-  if (report.preflight && !report.preflight.ok) {
-    toast.error(
-      `${action} refused`,
-      report.preflight.reasons.join(" ") || "Pre-flight check failed",
-    );
-    return;
-  }
-  if (report.failed > 0) {
-    toast.error(
-      `${action} failed`,
-      `${report.failed} of ${report.total} operations failed`,
-    );
-    return;
-  }
-  const skipped = report.skipped_existing
-    ? ` (${report.skipped_existing} already current)`
-    : "";
-  toast.success(`${action} complete`, `${report.done} operation(s) succeeded${skipped}`);
 }
 
 export function DeployStatusBadge({ gameName }: DeployStatusBadgeProps) {

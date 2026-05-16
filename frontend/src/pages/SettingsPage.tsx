@@ -8,9 +8,10 @@ import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useAbstainMod, useDisconnectNexus, useEndorseMod, useTrackMod, useUntrackMod } from "@/hooks/mutations";
 import { useAppUpdater } from "@/hooks/use-app-updater";
-import { type DeployReport, useDeploy, useDeployStatus, useUndeploy } from "@/hooks/use-deploy";
+import { useDeploy, useDeployStatus, useUndeploy } from "@/hooks/use-deploy";
 import { useNexusSSO } from "@/hooks/use-nexus-sso";
 import { useGames, useModDetail, useSettings } from "@/hooks/queries";
+import { reportDeployOutcome } from "@/lib/deploy-toast";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import { useUIStore } from "@/stores/ui-store";
@@ -98,27 +99,6 @@ function UpdateSection() {
 const RIPPERMOD_NEXUS_MOD_ID = 27781;
 const RIPPERMOD_NEXUS_DOMAIN = "cyberpunk2077";
 const RIPPERMOD_NEXUS_URL = `https://www.nexusmods.com/${RIPPERMOD_NEXUS_DOMAIN}/mods/${RIPPERMOD_NEXUS_MOD_ID}`;
-
-function reportDeployOutcome(report: DeployReport, action: string): void {
-  if (report.preflight && !report.preflight.ok) {
-    toast.error(
-      `${action} refused`,
-      report.preflight.reasons.join(" ") || "Pre-flight check failed",
-    );
-    return;
-  }
-  if (report.failed > 0) {
-    toast.error(
-      `${action} failed`,
-      `${report.failed} of ${report.total} operations failed`,
-    );
-    return;
-  }
-  const skipped = report.skipped_existing
-    ? ` (${report.skipped_existing} already current)`
-    : "";
-  toast.success(`${action} complete`, `${report.done} operation(s) succeeded${skipped}`);
-}
 
 function DeploymentCard() {
   const activeGameName = useUIStore((s) => s.activeGameName);

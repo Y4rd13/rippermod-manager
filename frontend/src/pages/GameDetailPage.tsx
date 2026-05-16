@@ -261,6 +261,15 @@ export function GameDetailPage() {
         );
         return;
       }
+      // Block launch when REDmod compile failed — game would otherwise start with
+      // stale scripts and the user wouldn't see their REDmod changes.
+      if (report.redmod && report.redmod.ran && !report.redmod.success) {
+        toast.error(
+          "REDmod compile failed",
+          `${report.redmod.error || "redmod deploy returned an error"}. Game not launched.`,
+        );
+        return;
+      }
       await invoke<void>("launch_game", {
         installPath: game.install_path,
         exeRelativePath: gameVersion.exe_path,
