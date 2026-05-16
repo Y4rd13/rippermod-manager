@@ -281,28 +281,48 @@ def detect_drift(game: Game, session: Session) -> DriftReport:
     for mod in mods:
         _ = mod.files
         m_linked = m_missing = m_foreign = 0
+        # Cache per-junction-root checks so we don't probe the same reparse point N times
+        # for an N-file REDmod and so all files under the same root agree on linked/missing.
+        junction_root_state: dict[Path, bool] = {}
         for f in mod.files:
             total += 1
             src = staging_root / mod.staging_dir / f.source_path.replace("\\", "/")
-            dst = install / f.relative_path.replace("\\", "/")
-            if not dst.exists():
-                missing += 1
-                m_missing += 1
-                continue
+            rel = f.relative_path.replace("\\", "/")
+            dst = install / rel
             if f.link_kind == "hardlink":
-                if verify_link(src, dst):
+                if not dst.exists():
+                    missing += 1
+                    m_missing += 1
+                elif verify_link(src, dst):
                     linked += 1
                     m_linked += 1
                 else:
                     foreign += 1
                     m_foreign += 1
             elif f.link_kind == "junction":
-                if dst.is_dir():
-                    linked += 1
-                    m_linked += 1
+                # The junction is at mods/<name>/; per-file paths resolve through it. Check
+                # the root's reparse point once, then count every file under that root as
+                # linked-or-missing based on that single check.
+                parts = rel.split("/")
+                if len(parts) >= 2 and parts[0] == "mods":
+                    root = install / "mods" / parts[1]
+                    if root not in junction_root_state:
+                        junction_root_state[root] = root.is_dir()
+                    if junction_root_state[root]:
+                        linked += 1
+                        m_linked += 1
+                    else:
+                        missing += 1
+                        m_missing += 1
                 else:
-                    missing += 1
-                    m_missing += 1
+                    # Defensive: junction kind without expected mods/<name>/ layout. Fall
+                    # back to a plain existence check so we still report something sane.
+                    if dst.exists():
+                        linked += 1
+                        m_linked += 1
+                    else:
+                        missing += 1
+                        m_missing += 1
         if mod.id is not None:
             by_mod[mod.id] = {"linked": m_linked, "missing": m_missing, "foreign": m_foreign}
 
