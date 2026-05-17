@@ -71,6 +71,23 @@ jobs:
           version="${TAG_NAME#v}"
           echo "value=${version}" >> "$GITHUB_OUTPUT"
 
+      - name: Fetch GitHub release notes
+        id: notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Random delimiter avoids any collision with the body content.
+          delim="EOF_$(openssl rand -hex 8)"
+          # Cap at 80 lines so we stay well under Nexus's description size limit;
+          # the GitHub release link in the description still has the full notes.
+          body=$(gh release view "$TAG_NAME" --repo "$REPO" --json body --jq '.body // ""' | head -n 80)
+          {
+            echo "body<<${delim}"
+            printf '%s\n' "$body"
+            echo "${delim}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Upload to Nexus Mods
         uses: Nexus-Mods/upload-action@a746f1867153abc77beed950bf7526ece1a9f8c4 # v1.0.0-beta.5
         with:
@@ -81,7 +98,12 @@ jobs:
           display_name: RipperMod Manager ${{ steps.version.outputs.value }}
           description: |
             Nexus-compliant installer (Windows). Extract the .zip and run the
-            included .exe to install. Full release notes:
+            included .exe to install.
+
+            --- Changes in this release ---
+            ${{ steps.notes.outputs.body }}
+
+            Full release notes:
             https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG_NAME }}
           file_category: main
           archive_existing_file: 'true'
