@@ -45,21 +45,12 @@ export interface DeployReport {
   redmod: RedmodDeployResult | null;
 }
 
-export interface MigrationReport {
-  migrated_mods: number;
-  migrated_files: number;
-  skipped_files: number;
-  errors: string[];
-}
-
 const deployPath = (gameName: string) =>
   `/api/v1/games/${encodeURIComponent(gameName)}/install/deploy`;
 const undeployPath = (gameName: string) =>
   `/api/v1/games/${encodeURIComponent(gameName)}/install/undeploy`;
 const statusPath = (gameName: string) =>
   `/api/v1/games/${encodeURIComponent(gameName)}/install/deploy/status`;
-const migratePath = (gameName: string) =>
-  `/api/v1/games/${encodeURIComponent(gameName)}/install/migrate-to-vfs`;
 const untrackedPath = (gameName: string) =>
   `/api/v1/games/${encodeURIComponent(gameName)}/install/untracked-files`;
 
@@ -90,17 +81,6 @@ export function useUndeploy(gameName: string | null) {
     mutationFn: () => api.post<DeployReport>(undeployPath(gameName!)),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["deploy-status", gameName] });
-    },
-  });
-}
-
-export function useMigrateToVfs(gameName: string | null) {
-  const qc = useQueryClient();
-  return useMutation<MigrationReport, Error, void>({
-    mutationFn: () => api.post<MigrationReport>(migratePath(gameName!)),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["deploy-status", gameName] });
-      void qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
     },
   });
 }

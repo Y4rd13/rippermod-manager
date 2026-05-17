@@ -83,15 +83,6 @@ class DriftReport(BaseModel):
         return self.missing == 0 and self.foreign == 0
 
 
-class MigrationReport(BaseModel):
-    """Result of `migrate_to_vfs` — counts of mods/files migrated + any errors."""
-
-    migrated_mods: int = 0
-    migrated_files: int = 0
-    skipped_files: int = 0
-    errors: list[str] = Field(default_factory=list)
-
-
 class UntrackedFilesResponse(BaseModel):
     """Response model for the untracked-files endpoint."""
 

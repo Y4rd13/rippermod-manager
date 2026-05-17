@@ -14,7 +14,6 @@ from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.deploy import (
     DeployReport,
     DriftReport,
-    MigrationReport,
     UntrackedFilesResponse,
 )
 from rippermod_manager.schemas.install import (
@@ -53,7 +52,7 @@ from rippermod_manager.services.redscript_analysis import check_redscript_confli
 from rippermod_manager.services.settings_helpers import get_setting
 from rippermod_manager.services.update_service import invalidate_update_cache
 from rippermod_manager.services.vfs import deploy_service
-from rippermod_manager.services.vfs import migration as vfs_migration
+from rippermod_manager.services.vfs.untracked import find_untracked_files
 
 logger = logging.getLogger(__name__)
 
@@ -572,23 +571,10 @@ async def deploy_status(
     return deploy_service.detect_drift(game, session)
 
 
-@router.post("/migrate-to-vfs", response_model=MigrationReport)
-async def migrate(game_name: str, session: Session = Depends(get_session)) -> MigrationReport:
-    """Migrate copy-installed mods to VFS staging with hardlinks."""
-    game = get_game_or_404(game_name, session)
-    report = vfs_migration.migrate_to_vfs(game, session)
-    return MigrationReport(
-        migrated_mods=report.migrated_mods,
-        migrated_files=report.migrated_files,
-        skipped_files=report.skipped_files,
-        errors=report.errors,
-    )
-
-
 @router.get("/untracked-files", response_model=UntrackedFilesResponse)
 async def untracked(
     game_name: str, session: Session = Depends(get_session)
 ) -> UntrackedFilesResponse:
     """List files under known mod roots that are not claimed by any installed mod."""
     game = get_game_or_404(game_name, session)
-    return UntrackedFilesResponse(files=vfs_migration.find_untracked_files(game, session))
+    return UntrackedFilesResponse(files=find_untracked_files(game, session))
