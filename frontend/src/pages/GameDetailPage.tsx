@@ -127,18 +127,18 @@ function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomai
 
 type Tab = "installed" | "matched" | "archives" | "updates" | "conflicts" | "profiles" | "trending" | "endorsed" | "tracked";
 
-const TABS: { key: Tab; label: string; Icon: typeof Package; tooltip: string }[] = [
+const TABS: { key: Tab; label: string; Icon: typeof Package; description: string }[] = [
   // Management
-  { key: "installed", label: "Installed", Icon: UserCheck, tooltip: "Managed and recognized mods on your system" },
-  { key: "archives", label: "Archives", Icon: Archive, tooltip: "Downloaded mod archives ready to install" },
-  { key: "updates", label: "Updates", Icon: RefreshCw, tooltip: "Mods with newer versions available on Nexus" },
-  { key: "conflicts", label: "Conflicts", Icon: AlertTriangle, tooltip: "File and resource conflicts between installed mods" },
-  { key: "profiles", label: "Profiles", Icon: FolderOpen, tooltip: "Saved snapshots of your mod enabled/disabled states" },
+  { key: "installed", label: "Installed", Icon: UserCheck, description: "Mods currently installed on your game. Toggle on/off, uninstall, or check deploy drift." },
+  { key: "archives", label: "Archives", Icon: Archive, description: "Mod archives in your downloaded_mods folder, ready to install." },
+  { key: "updates", label: "Updates", Icon: RefreshCw, description: "Newer versions of your installed mods available on Nexus." },
+  { key: "conflicts", label: "Conflicts", Icon: AlertTriangle, description: "File and resource conflicts between your installed mods." },
+  { key: "profiles", label: "Profiles", Icon: FolderOpen, description: "Save and switch between enabled/disabled mod snapshots." },
   // Discovery & Nexus account
-  { key: "matched", label: "Matched", Icon: Link2, tooltip: "Nexus-matched mods and scan details" },
-  { key: "trending", label: "Trending", Icon: TrendingUp, tooltip: "Popular and recently updated mods on Nexus" },
-  { key: "endorsed", label: "Endorsed", Icon: Heart, tooltip: "Mods you've endorsed on your Nexus account" },
-  { key: "tracked", label: "Tracked", Icon: Eye, tooltip: "Mods you're tracking on your Nexus account" },
+  { key: "matched", label: "Matched", Icon: Link2, description: "Mods detected on disk and correlated against Nexus." },
+  { key: "trending", label: "Trending", Icon: TrendingUp, description: "Popular and recently updated mods on Nexus." },
+  { key: "endorsed", label: "Endorsed", Icon: Heart, description: "Mods you've endorsed on your Nexus account." },
+  { key: "tracked", label: "Tracked", Icon: Eye, description: "Mods you're tracking on your Nexus account." },
 ];
 
 export function GameDetailPage() {
@@ -556,11 +556,11 @@ export function GameDetailPage() {
           onScroll={handleTabScroll}
           className="flex gap-1 border-b border-border overflow-x-auto scrollbar-none"
         >
-          {TABS.map(({ key, label, tooltip }) => (
+          {TABS.map(({ key, label, description }) => (
             <button
               key={key}
               onClick={() => setTab(key)}
-              title={tooltip}
+              title={description}
               className={cn(
                 "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap flex items-center gap-1",
                 tab === key
@@ -587,6 +587,14 @@ export function GameDetailPage() {
           <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 z-10 bg-gradient-to-l from-surface-0 to-transparent" />
         )}
       </div>
+
+      {(() => {
+        const active = TABS.find((t) => t.key === tab);
+        if (!active) return null;
+        return (
+          <p className="mt-2 mb-3 text-xs text-text-muted">{active.description}</p>
+        );
+      })()}
 
       <div key={tab} className="animate-fade-in">
       {tab === "matched" && (
@@ -617,6 +625,7 @@ export function GameDetailPage() {
               isLoading={modsLoading}
               onModClick={setSelectedModId}
               onFileSelect={handleFileSelect}
+              viewModeKey="matched"
             />
           )}
           {matchedSubTab === "scan-details" && (
@@ -639,6 +648,7 @@ export function GameDetailPage() {
           onModClick={setSelectedModId}
           onFileSelect={handleFileSelect}
           hideBadges={["endorsed", "installed"]}
+          viewModeKey="endorsed"
         />
       )}
       {tab === "tracked" && (
@@ -656,6 +666,7 @@ export function GameDetailPage() {
           onModClick={setSelectedModId}
           onFileSelect={handleFileSelect}
           hideBadges={["tracked", "installed", "endorsed"]}
+          viewModeKey="tracked"
         />
       )}
       {tab === "trending" && (

@@ -9,6 +9,7 @@ import { CorrelationActions } from "@/components/mods/CorrelationActions";
 import { ReassignDialog } from "@/components/mods/ReassignDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
+import { NexusModRow } from "@/components/mods/NexusModRow";
 import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
@@ -19,11 +20,14 @@ import { buildFileTree } from "@/lib/file-tree";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
+import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { VirtualCardGrid } from "@/components/ui/VirtualCardGrid";
+import { VirtualTable } from "@/components/ui/VirtualTable";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useConfirmCorrelation, useRejectCorrelation } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { useSessionState } from "@/hooks/use-session-state";
+import { useUIStore } from "@/stores/ui-store";
 import { isoToEpoch, timeAgo } from "@/lib/format";
 import type {
   AvailableArchive,
@@ -113,6 +117,7 @@ interface Props {
   isLoading?: boolean;
   onModClick?: (nexusModId: number) => void;
   onFileSelect?: (nexusModId: number) => void;
+  viewModeKey?: string;
 }
 
 export function NexusMatchedGrid({
@@ -124,7 +129,10 @@ export function NexusMatchedGrid({
   isLoading,
   onModClick,
   onFileSelect,
+  viewModeKey,
 }: Props) {
+  const viewMode = useUIStore((s) => (viewModeKey ? s.viewModeByTab[viewModeKey] ?? "grid" : "grid"));
+  const setViewMode = useUIStore((s) => s.setViewMode);
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useSessionState<SortKey>(`matched-sort-${gameName}`, "updated");
   const [chip, setChip] = useSessionState(`matched-chip-${gameName}`, "all");
@@ -298,118 +306,160 @@ export function NexusMatchedGrid({
         <span className="text-xs text-text-muted">
           {filtered.length} mod{filtered.length !== 1 ? "s" : ""}
         </span>
+        {viewModeKey && (
+          <ViewModeToggle
+            className="ml-auto"
+            mode={viewMode}
+            onChange={(m) => setViewMode(viewModeKey, m)}
+          />
+        )}
       </div>
 
       <FilterChips chips={CONFIDENCE_CHIPS} active={chip} onChange={setChip} />
       <FilterChips chips={methodChips} active={methodChip} onChange={setMethodChip} />
       <FilterChips chips={installChips} active={installChip} onChange={setInstallChip} />
 
-      <VirtualCardGrid
-        items={filtered}
-        renderItem={(mod) => {
+      {(() => {
+        const renderCommon = (mod: ModGroup) => {
           const match = mod.nexus_match;
           if (!match) return null;
-
           const nexusModId = match.nexus_mod_id;
           const archive = nexusModId != null ? flow.archiveByModId.get(nexusModId) : undefined;
           const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
-
-          return (
-            <div className="flex flex-col">
-              <div className="flex-1 grid">
-                <NexusModCard
-                  modName={match.mod_name}
-                  summary={match.summary}
-                  author={match.author}
-                  version={match.version}
-                  endorsementCount={match.endorsement_count}
-                  pictureUrl={match.picture_url}
-                  onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
-                  onContextMenu={(e) => openMenu(e, mod)}
-                  action={
-                    <ModCardAction
-                      isInstalled={
-                        (nexusModId != null && installedModIds.has(nexusModId)) ||
-                        (archive?.is_installed ?? false)
-                      }
-                      isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
-                      activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
-                      completedDownload={dl}
-                      archive={archive}
-                      nexusUrl={match.nexus_url}
-                      hasConflicts={flow.conflicts != null}
-                      isDownloading={flow.downloadingModId === nexusModId}
-                      onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
-                      onInstallByFilename={() => {
-                        if (nexusModId != null && dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
-                      }}
-                      onDownload={() => nexusModId != null && flow.handleDownload(nexusModId)}
-                      onCancelDownload={() => {
-                        const activeDl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
-                        if (activeDl) flow.handleCancelDownload(activeDl.id);
-                      }}
-                      onInstallWithPreview={
-                        nexusModId != null && dl
-                          ? () => flow.handleInstallWithPreviewByFilename(nexusModId, dl.file_name)
-                          : nexusModId != null && archive
-                            ? () => flow.handleInstallWithPreview(nexusModId, archive)
-                            : undefined
-                      }
-                    />
-                  }
-                  overflowMenu={
-                    <OverflowMenuButton
-                      items={contextMenuItems}
-                      onSelect={(key) => {
-                        if (key === "view" && nexusModId != null) onModClick?.(nexusModId);
-                        else if (key === "open-nexus" && match.nexus_url) window.open(match.nexus_url, "_blank", "noopener,noreferrer");
-                        else if (key === "copy-name") void navigator.clipboard.writeText(match.mod_name).then(
-                          () => toast.success("Copied to clipboard"),
-                          () => toast.error("Failed to copy"),
-                        );
-                        else if (key === "accept-match") confirmCorrelation.mutate({ gameName, modGroupId: mod.id });
-                        else if (key === "reject-match") setRejectModId(mod.id);
-                        else if (key === "correct-match") setReassignGroupId(mod.id);
-                      }}
-                    />
-                  }
-                  footer={
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <ConfidenceBadge score={match.score} />
-                      <Badge variant="neutral">{match.method}</Badge>
-                      <CorrelationActions
-                        gameName={gameName}
-                        modGroupId={mod.id}
-                        confirmed={match.confirmed}
-                      />
-                      {match.updated_at && (
-                        <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
-                      )}
-                      {mod.earliest_file_mtime != null && (
-                        <span className="text-xs text-text-muted" title="File date on disk">
-                          DL: {timeAgo(mod.earliest_file_mtime)}
-                        </span>
-                      )}
-                      {mod.files.length > 0 && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setFilesModalGroupId(mod.id);
-                          }}
-                          className="ml-auto flex items-center gap-1 text-xs text-accent hover:underline"
-                        >
-                          <FileText size={12} />
-                          {mod.files.length} file{mod.files.length !== 1 ? "s" : ""}
-                        </button>
-                      )}
-                    </div>
-                  }
-                />
-              </div>
+          const action = (
+            <ModCardAction
+              isInstalled={
+                (nexusModId != null && installedModIds.has(nexusModId)) ||
+                (archive?.is_installed ?? false)
+              }
+              isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
+              activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
+              completedDownload={dl}
+              archive={archive}
+              nexusUrl={match.nexus_url}
+              hasConflicts={flow.conflicts != null}
+              isDownloading={flow.downloadingModId === nexusModId}
+              onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
+              onInstallByFilename={() => {
+                if (nexusModId != null && dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
+              }}
+              onDownload={() => nexusModId != null && flow.handleDownload(nexusModId)}
+              onCancelDownload={() => {
+                const activeDl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
+                if (activeDl) flow.handleCancelDownload(activeDl.id);
+              }}
+              onInstallWithPreview={
+                nexusModId != null && dl
+                  ? () => flow.handleInstallWithPreviewByFilename(nexusModId, dl.file_name)
+                  : nexusModId != null && archive
+                    ? () => flow.handleInstallWithPreview(nexusModId, archive)
+                    : undefined
+              }
+            />
+          );
+          const overflowMenu = (
+            <OverflowMenuButton
+              items={contextMenuItems}
+              onSelect={(key) => {
+                if (key === "view" && nexusModId != null) onModClick?.(nexusModId);
+                else if (key === "open-nexus" && match.nexus_url) window.open(match.nexus_url, "_blank", "noopener,noreferrer");
+                else if (key === "copy-name") void navigator.clipboard.writeText(match.mod_name).then(
+                  () => toast.success("Copied to clipboard"),
+                  () => toast.error("Failed to copy"),
+                );
+                else if (key === "accept-match") confirmCorrelation.mutate({ gameName, modGroupId: mod.id });
+                else if (key === "reject-match") setRejectModId(mod.id);
+                else if (key === "correct-match") setReassignGroupId(mod.id);
+              }}
+            />
+          );
+          const footer = (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <ConfidenceBadge score={match.score} />
+              <Badge variant="neutral">{match.method}</Badge>
+              <CorrelationActions
+                gameName={gameName}
+                modGroupId={mod.id}
+                confirmed={match.confirmed}
+              />
+              {match.updated_at && (
+                <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
+              )}
+              {mod.earliest_file_mtime != null && (
+                <span className="text-xs text-text-muted" title="File date on disk">
+                  DL: {timeAgo(mod.earliest_file_mtime)}
+                </span>
+              )}
+              {mod.files.length > 0 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFilesModalGroupId(mod.id);
+                  }}
+                  className="ml-auto flex items-center gap-1 text-xs text-accent hover:underline"
+                >
+                  <FileText size={12} />
+                  {mod.files.length} file{mod.files.length !== 1 ? "s" : ""}
+                </button>
+              )}
             </div>
           );
-        }}
-      />
+          return {
+            modName: match.mod_name,
+            summary: match.summary,
+            author: match.author,
+            version: match.version,
+            endorsementCount: match.endorsement_count,
+            pictureUrl: match.picture_url,
+            onClick: nexusModId != null ? () => onModClick?.(nexusModId) : undefined,
+            onContextMenu: (e: React.MouseEvent) => openMenu(e, mod),
+            action,
+            overflowMenu,
+            footer,
+          };
+        };
+
+        if (viewMode === "list") {
+          return (
+            <VirtualTable
+              items={filtered}
+              estimateHeight={72}
+              renderHead={() => (
+                <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted text-xs">
+                  <th className="py-2 pr-3 w-[68px]" />
+                  <th className="py-2 pr-3 font-medium">Mod</th>
+                  <th className="py-2 pr-3 font-medium">Author</th>
+                  <th className="py-2 pr-3 font-medium">Version</th>
+                  <th className="py-2 pr-3 font-medium">Endorsements</th>
+                  <th className="py-2 pr-3 font-medium">Match</th>
+                  <th className="py-2 pl-2 text-right font-medium">Actions</th>
+                </tr>
+              )}
+              renderRow={(mod) => {
+                const props = renderCommon(mod);
+                if (!props) return null;
+                return <NexusModRow {...props} />;
+              }}
+            />
+          );
+        }
+        return (
+          <VirtualCardGrid
+            items={filtered}
+            renderItem={(mod) => {
+              const props = renderCommon(mod);
+              if (!props) return null;
+              return (
+                <div className="flex flex-col">
+                  <div className="flex-1 grid">
+                    <NexusModCard {...props} />
+                  </div>
+                </div>
+              );
+            }}
+          />
+        );
+      })()}
 
       {flow.previewArchive && (
         <PreInstallPreview
