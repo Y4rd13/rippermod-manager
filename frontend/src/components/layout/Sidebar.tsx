@@ -43,7 +43,8 @@ export function Sidebar() {
         <button
           onClick={toggleSidebar}
           aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="rounded-md p-1.5 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="rounded-md p-1.5 text-text-secondary border border-transparent hover:bg-surface-2 hover:text-text-primary hover:border-border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         </button>
