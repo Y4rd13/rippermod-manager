@@ -123,15 +123,17 @@ Releases are fully automated via semantic-release on every push to `main`:
 5. semantic-release analyzes the commit and creates a `vX.Y.Z` tag + GitHub Release
 6. The build job compiles the Tauri installer, signs it for the updater, uploads `.exe`, `.sig`, `latest.json` to the release, and updates `stable.json` in the updater Gist
 
-### Nexus Edition Release (automatic, no updater publish)
+### Nexus Edition Release (build automatic, Nexus upload gated by promotion)
 
-Releases trigger automatically when `nexus-compliant` receives new commits:
+Builds trigger automatically when `nexus-compliant` receives new commits, but the Nexus Mods upload requires the maintainer to manually promote the GitHub Release from draft to published — that publish event fires the upload workflow:
 
 1. Cherry-pick commits onto `nexus-compliant` (or merge a PR opened against `nexus-compliant`)
-2. semantic-release creates a `vX.Y.Z-nexus.N` tag + GitHub Release
-3. The build job compiles the Nexus-compliant installer
-4. The `upload-nexus` job downloads the `.exe`, wraps it in a `.zip` per Nexus help article 117 (bare `.exe` files are auto-quarantined), and uploads it to the Nexus mod page via the `Nexus-Mods/upload-action`
-5. **No `latest.json` is generated, no Gist file is updated, no `.sig` is created.** The Tauri updater plugin is not bundled at all on this edition.
+2. semantic-release creates a `vX.Y.Z-nexus.N` tag + **draft** GitHub Release (`draftRelease: true` is set for the `nexus-compliant` branch in `.releaserc.js`)
+3. The build job compiles the Nexus-compliant installer and uploads the `.exe` to the draft release as an asset
+4. **Maintainer review:** check the draft release on GitHub. When ready, click **Publish release**
+5. Publishing fires `.github/workflows/upload-nexus.yml` (`on: release: { types: [published] }`). It downloads the `.exe`, wraps it in a `.zip` per Nexus help article 117 (bare `.exe` files are auto-quarantined), and uploads it to the Nexus mod page via the `Nexus-Mods/upload-action`
+6. Fallback: the same workflow can be re-run manually via `workflow_dispatch` with a `tag` input (Actions → "Upload to Nexus Mods" → Run workflow)
+7. **No `latest.json` is generated, no Gist file is updated, no `.sig` is created.** The Tauri updater plugin is not bundled at all on this edition.
 
 ## Versioning
 
@@ -213,4 +215,4 @@ When submitting or updating the Nexus Mods page:
 3. All discovery actions redirect users to nexusmods.com
 4. Endorse/track mutations generate engagement for Nexus
 5. Downloads for free users go through the NXM protocol (user visits Nexus to download)
-6. The `upload-nexus` workflow job uploads each new `-nexus.N` installer (zip-wrapped per help article 117) to the Nexus file group automatically
+6. The `upload-nexus` workflow uploads each `-nexus.N` installer (zip-wrapped per help article 117) to the Nexus file group only after the maintainer manually publishes the corresponding draft GitHub Release. Re-runnable via `workflow_dispatch` with a `tag` input.
