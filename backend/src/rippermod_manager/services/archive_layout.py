@@ -18,6 +18,7 @@ from rippermod_manager.constants import GAME_REGISTRY
 class ArchiveLayout(StrEnum):
     STANDARD = "standard"
     WRAPPED = "wrapped"
+    REDMOD = "redmod"
     FOMOD = "fomod"
     UNKNOWN = "unknown"
 
@@ -31,6 +32,11 @@ class ArchiveEntryLike(Protocol):
 class LayoutResult:
     layout: ArchiveLayout
     strip_prefix: str | None = None
+    # Path prefix to PREPEND to every extracted entry (after any strip_prefix is
+    # applied). Set for REDMOD archives that package as ``<modname>/info.json`` at
+    # the zip root — the install service prepends ``mods/`` so files land at
+    # ``mods/<modname>/info.json`` where the engine expects them.
+    add_prefix: str | None = None
 
 
 def known_roots_for_game(domain_name: str) -> set[str]:
@@ -136,5 +142,23 @@ def detect_layout(
                         layout=ArchiveLayout.WRAPPED,
                         strip_prefix=original_first,
                     )
+
+    # 4. REDMOD: single wrapper that IS the REDmod folder (contains info.json at
+    #    depth 2). Standard REDmod packaging is ``<modname>/info.json`` at the zip
+    #    root — the wrapper is the mod name, not a junk dir to strip. Files have to
+    #    land at ``mods/<modname>/...`` for the engine to detect the mod, so we
+    #    keep the wrapper and prepend ``mods``. Falls under WRAPPED's check above
+    #    only if the second-level is a known root (e.g. ``<wrap>/mods/foo``); pure
+    #    REDmod archives have non-root second-level dirs like ``archives``, ``scripts``.
+    if (
+        len(top_level_dirs) == 1
+        and not has_root_file
+        and "info.json" in second_level_dirs
+    ):
+        return LayoutResult(
+            layout=ArchiveLayout.REDMOD,
+            strip_prefix=None,
+            add_prefix="mods",
+        )
 
     return LayoutResult(layout=ArchiveLayout.UNKNOWN)
