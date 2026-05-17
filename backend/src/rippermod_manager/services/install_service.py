@@ -39,6 +39,7 @@ from rippermod_manager.services.archive_layout import (
     known_roots_for_game,
 )
 from rippermod_manager.services.nexus_helpers import match_local_to_nexus_file
+from rippermod_manager.services.paths import get_mods_dir
 from rippermod_manager.services.vfs.naming import unique_staging_name
 
 logger = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 def list_available_archives(game: Game) -> list[Path]:
     """Return archive files found in a ``staging`` folder next to the game install."""
-    staging = Path(game.install_path) / "downloaded_mods"
+    staging = get_mods_dir(game)
     if not staging.is_dir():
         return []
     return sorted(
@@ -112,7 +113,7 @@ def install_mod(
     if file_renames:
         rename_map = {k.replace("\\", "/"): v.replace("\\", "/") for k, v in file_renames.items()}
 
-    staging_parent = game_dir / "downloaded_mods"
+    staging_parent = get_mods_dir(game)
     staging_parent.mkdir(parents=True, exist_ok=True)
     safe_name = unique_staging_name(staging_parent, parsed.name)
     staging_root = staging_parent / safe_name
@@ -316,7 +317,7 @@ def uninstall_mod(
 
     # Remove staging subtree
     if installed_mod.staging_dir:
-        staging_dir = game_dir / "downloaded_mods" / installed_mod.staging_dir
+        staging_dir = get_mods_dir(game) / installed_mod.staging_dir
         if staging_dir.exists():
             shutil.rmtree(staging_dir, ignore_errors=True)
 
@@ -423,7 +424,7 @@ def toggle_mod(
 
         pre = pre_flight_check(game)
         if pre.ok:
-            staging_root = game_dir / "downloaded_mods"
+            staging_root = get_mods_dir(game)
             ops: list[DeployOp] = []
             junction_dirs_seen_enable: set[str] = set()
             for f in installed_mod.files:
@@ -538,12 +539,12 @@ async def resolve_installed_file_id(
     await asyncio.to_thread(_persist)
 
 
-def delete_archive(game_path: str, filename: str) -> ArchiveDeleteResult:
+def delete_archive(game: Game, filename: str) -> ArchiveDeleteResult:
     """Delete a single archive file from the staging folder.
 
     Validates the filename to prevent path traversal attacks.
     """
-    staging = Path(game_path) / "downloaded_mods"
+    staging = get_mods_dir(game)
     archive_path = staging / filename
     if not archive_path.resolve().is_relative_to(staging.resolve()):
         return ArchiveDeleteResult(filename=filename, deleted=False, message="Invalid filename")
@@ -566,7 +567,7 @@ def find_orphaned_archives(
     session: Session,
 ) -> list[str]:
     """Return archive filenames not referenced by any installed mod or active download."""
-    staging = Path(game.install_path) / "downloaded_mods"
+    staging = get_mods_dir(game)
     if not staging.is_dir():
         return []
 
@@ -609,7 +610,7 @@ def delete_orphaned_archives(
 ) -> OrphanCleanupResult:
     """Delete all orphaned archives and return a summary."""
     orphans = find_orphaned_archives(game, session)
-    staging = Path(game.install_path) / "downloaded_mods"
+    staging = get_mods_dir(game)
 
     deleted_files: list[str] = []
     freed_bytes = 0

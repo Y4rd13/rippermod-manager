@@ -1,5 +1,4 @@
 import logging
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
@@ -13,6 +12,7 @@ from rippermod_manager.schemas.download import (
     DownloadStartResult,
 )
 from rippermod_manager.services import download_service
+from rippermod_manager.services.paths import get_mods_dir
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +151,7 @@ def list_downloads(
     jobs = download_service.list_jobs(game.id, session)  # type: ignore[arg-type]
 
     # Exclude completed jobs whose archive no longer exists on disk
-    staging = Path(game.install_path) / "downloaded_mods"
+    staging = get_mods_dir(game)
     result: list[DownloadJobOut] = []
     for j in jobs:
         if j.status == "completed" and not (staging / j.file_name).is_file():

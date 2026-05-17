@@ -10,6 +10,8 @@ export interface Game {
   name: string;
   domain_name: string;
   install_path: string;
+  mods_dir: string | null;
+  resolved_mods_dir: string;
   os: string;
   created_at: string;
   updated_at: string;
@@ -20,8 +22,13 @@ export interface GameCreate {
   name: string;
   domain_name: string;
   install_path: string;
+  mods_dir?: string | null;
   os?: string;
   mod_paths?: { relative_path: string; description: string; is_default: boolean }[];
+}
+
+export interface GameUpdate {
+  mods_dir?: string | null;
 }
 
 export interface ModFileOut {

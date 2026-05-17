@@ -129,6 +129,11 @@ def _migrate_missing_columns() -> None:
             "link_kind",
             "ALTER TABLE installed_mod_files ADD COLUMN link_kind TEXT DEFAULT 'hardlink'",
         ),
+        (
+            "games",
+            "mods_dir",
+            "ALTER TABLE games ADD COLUMN mods_dir TEXT",
+        ),
     ]
     with Session(engine) as session:
         for table, column, ddl in migrations:

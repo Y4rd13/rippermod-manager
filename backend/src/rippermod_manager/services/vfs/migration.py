@@ -13,6 +13,7 @@ from sqlmodel import Session, select
 from rippermod_manager.constants import CYBERPUNK_DEFAULT_PATHS
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
+from rippermod_manager.services.paths import get_mods_dir
 from rippermod_manager.services.vfs.naming import unique_staging_name
 from rippermod_manager.services.vfs.primitives import hardlink, is_game_running
 
@@ -38,7 +39,7 @@ def migrate_to_vfs(game: Game, session: Session) -> MigrationReport:
         return MigrationReport(errors=["Cyberpunk 2077 is running. Close it and retry."])
 
     install = Path(game.install_path)
-    staging_root = install / "downloaded_mods"
+    staging_root = get_mods_dir(game)
     staging_root.mkdir(parents=True, exist_ok=True)
 
     report = MigrationReport()

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
-from pathlib import Path
 
 from sqlmodel import Session, select
 
 from rippermod_manager.models.download import DownloadJob
+from rippermod_manager.services.paths import resolve_mods_dir
 
 
 def archive_download_dates(
@@ -16,6 +16,7 @@ def archive_download_dates(
     game_id: int,
     install_path: str,
     filenames: set[str],
+    mods_dir: str | None = None,
 ) -> dict[str, datetime]:
     """Return filename → download datetime for a set of archive filenames.
 
@@ -42,7 +43,7 @@ def archive_download_dates(
                 result[fn] = completed
 
     # File mtime fallback for archives not in DownloadJob
-    staging = Path(install_path) / "downloaded_mods"
+    staging = resolve_mods_dir(install_path, mods_dir)
     for fn in filenames - result.keys():
         try:
             mtime = os.stat(staging / fn).st_mtime

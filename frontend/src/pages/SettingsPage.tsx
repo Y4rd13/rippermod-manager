@@ -1,13 +1,14 @@
-import { CheckCircle, Crown, ExternalLink, Eye, EyeOff, Heart, LogOut, Sparkles, User } from "lucide-react";
+import { CheckCircle, Crown, ExternalLink, Eye, EyeOff, FolderOpen, Heart, LogOut, RotateCcw, Sparkles, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { useAbstainMod, useDisconnectNexus, useEndorseMod, useTrackMod, useUntrackMod } from "@/hooks/mutations";
+import { useAbstainMod, useDisconnectNexus, useEndorseMod, useTrackMod, useUntrackMod, useUpdateGame } from "@/hooks/mutations";
 import {
   RIPPERMOD_NEXUS_MOD_ID,
   RIPPERMOD_NEXUS_URL,
@@ -15,7 +16,7 @@ import {
 } from "@/hooks/use-app-update-check";
 import { useDeploy, useDeployStatus, useUndeploy } from "@/hooks/use-deploy";
 import { useNexusSSO } from "@/hooks/use-nexus-sso";
-import { useGames, useModSummary, useSettings } from "@/hooks/queries";
+import { useGame, useGames, useModSummary, useSettings } from "@/hooks/queries";
 import { reportDeployOutcome } from "@/lib/deploy-toast";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
@@ -26,6 +27,8 @@ function DeploymentCard() {
   const status = useDeployStatus(activeGameName);
   const deploy = useDeploy(activeGameName);
   const undeploy = useUndeploy(activeGameName);
+  const { data: game } = useGame(activeGameName ?? "");
+  const updateGame = useUpdateGame();
 
   if (!activeGameName) return null;
 
@@ -43,10 +46,25 @@ function DeploymentCard() {
     });
   };
 
+  const handlePickModsDir = async () => {
+    const picked = await openDialog({
+      directory: true,
+      multiple: false,
+      title: "Choose mods staging folder",
+      defaultPath: game?.resolved_mods_dir,
+    });
+    if (typeof picked !== "string" || picked === game?.mods_dir) return;
+    updateGame.mutate({ name: activeGameName, data: { mods_dir: picked } });
+  };
+
+  const handleResetModsDir = () => {
+    updateGame.mutate({ name: activeGameName, data: { mods_dir: null } });
+  };
+
   return (
     <Card>
       <h2 className="text-lg font-semibold text-text-primary mb-4">Deployment</h2>
-      <div className="space-y-3">
+      <div className="space-y-4">
         <p className="text-sm text-text-secondary">
           Mods are staged in <code>downloaded_mods/</code> and linked into the game directory at
           deploy time. Your game folder stays clean.
@@ -68,6 +86,37 @@ function DeploymentCard() {
           >
             Undeploy
           </Button>
+        </div>
+
+        <div className="border-t border-border pt-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-text-primary">Mods staging folder</span>
+            {game?.mods_dir && (
+              <button
+                type="button"
+                onClick={handleResetModsDir}
+                title="Reset to default (<install>/downloaded_mods)"
+                className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-text-secondary"
+              >
+                <RotateCcw size={12} /> Reset
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-text-muted">
+            Where archives are extracted before being linked into the game directory. Must live on
+            the same drive as your game install (NTFS hardlinks can&apos;t cross volumes).
+          </p>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs font-mono text-text-secondary truncate" title={game?.resolved_mods_dir}>
+              {game?.resolved_mods_dir ?? "—"}
+            </div>
+            <Button size="sm" variant="secondary" onClick={handlePickModsDir} loading={updateGame.isPending}>
+              <FolderOpen size={14} /> Change…
+            </Button>
+          </div>
+          {game?.mods_dir == null && (
+            <p className="text-[11px] text-text-muted/80">Using default location.</p>
+          )}
         </div>
       </div>
     </Card>

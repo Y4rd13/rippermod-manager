@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, model_validator
+
+from rippermod_manager.services.paths import resolve_mods_dir
 
 
 class ModPathIn(BaseModel):
@@ -13,8 +15,13 @@ class GameCreate(BaseModel):
     name: str
     domain_name: str
     install_path: str
+    mods_dir: str | None = None
     os: str = "windows"
     mod_paths: list[ModPathIn] = []
+
+
+class GameUpdate(BaseModel):
+    mods_dir: str | None = None
 
 
 class ModPathOut(BaseModel):
@@ -25,14 +32,24 @@ class ModPathOut(BaseModel):
 
 
 class GameOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
     domain_name: str
     install_path: str
+    mods_dir: str | None = None
+    resolved_mods_dir: str = ""
     os: str
     created_at: datetime
     updated_at: datetime
     mod_paths: list[ModPathOut] = []
+
+    @model_validator(mode="after")
+    def _fill_resolved_mods_dir(self) -> "GameOut":
+        if not self.resolved_mods_dir:
+            self.resolved_mods_dir = str(resolve_mods_dir(self.install_path, self.mods_dir))
+        return self
 
 
 class GameVersion(BaseModel):
