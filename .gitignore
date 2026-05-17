@@ -43,8 +43,7 @@ docs/*
 !docs/dual-release-strategy.md
 !docs/assets/
 !docs/assets/**
-!docs/superpowers/
-!docs/superpowers/**
+# docs/superpowers/ is internal planning/spec; not published.
 
 # Temp
 temp/
