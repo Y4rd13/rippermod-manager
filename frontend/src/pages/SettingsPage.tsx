@@ -14,7 +14,7 @@ import {
   RIPPERMOD_NEXUS_URL,
   useAppUpdateCheck,
 } from "@/hooks/use-app-update-check";
-import { useDeploy, useDeployStatus, useUndeploy } from "@/hooks/use-deploy";
+import { useDeployStatus, useUndeploy } from "@/hooks/use-deploy";
 import { useNexusSSO } from "@/hooks/use-nexus-sso";
 import { useGame, useGames, useModSummary, useSettings } from "@/hooks/queries";
 import { reportDeployOutcome } from "@/lib/deploy-toast";
@@ -24,20 +24,17 @@ import { useUIStore } from "@/stores/ui-store";
 
 function DeploymentCard() {
   const activeGameName = useUIStore((s) => s.activeGameName);
-  const status = useDeployStatus(activeGameName);
-  const deploy = useDeploy(activeGameName);
-  const undeploy = useUndeploy(activeGameName);
-  const { data: game } = useGame(activeGameName ?? "");
+  const { data: games = [] } = useGames();
+  // Fall back to the first game so the card is visible from Settings without
+  // having to navigate through Games first. Hidden only when no games exist
+  // (onboarding state).
+  const gameName = activeGameName ?? games[0]?.name ?? null;
+  const status = useDeployStatus(gameName);
+  const undeploy = useUndeploy(gameName);
+  const { data: game } = useGame(gameName ?? "");
   const updateGame = useUpdateGame();
 
-  if (!activeGameName) return null;
-
-  const handleDeploy = () => {
-    deploy.mutate(undefined, {
-      onSuccess: (report) => reportDeployOutcome(report, "Deploy"),
-      onError: (error) => toast.error("Deploy failed", error.message),
-    });
-  };
+  if (!gameName) return null;
 
   const handleUndeploy = () => {
     undeploy.mutate(undefined, {
@@ -54,11 +51,11 @@ function DeploymentCard() {
       defaultPath: game?.resolved_mods_dir,
     });
     if (typeof picked !== "string" || picked === game?.mods_dir) return;
-    updateGame.mutate({ name: activeGameName, data: { mods_dir: picked } });
+    updateGame.mutate({ name: gameName, data: { mods_dir: picked } });
   };
 
   const handleResetModsDir = () => {
-    updateGame.mutate({ name: activeGameName, data: { mods_dir: null } });
+    updateGame.mutate({ name: gameName, data: { mods_dir: null } });
   };
 
   return (
@@ -66,8 +63,10 @@ function DeploymentCard() {
       <h2 className="text-lg font-semibold text-text-primary mb-4">Deployment</h2>
       <div className="space-y-4">
         <p className="text-sm text-text-secondary">
-          Mods are staged in <code>downloaded_mods/</code> and linked into the game directory at
-          deploy time. Your game folder stays clean.
+          Mods are staged in <code>downloaded_mods/</code> and linked into the game directory
+          automatically when you install, toggle, or launch the game. Use{" "}
+          <strong>Undeploy</strong> to remove all links and restore your game folder to vanilla
+          without uninstalling mods.
         </p>
         {status.data && (
           <div className="text-xs text-text-muted font-mono">
@@ -75,9 +74,6 @@ function DeploymentCard() {
           </div>
         )}
         <div className="flex gap-2">
-          <Button size="sm" loading={deploy.isPending} onClick={handleDeploy}>
-            Deploy
-          </Button>
           <Button
             size="sm"
             variant="secondary"
