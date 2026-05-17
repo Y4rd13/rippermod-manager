@@ -58,7 +58,9 @@ See @docs/architecture.md for a full inventory of routers, services, models.
 - **Secrets:** keyring service attempts OS keychain, falls back to SQLite. Keys: `nexus_api_key`
 - **Health:** `/health` (shallow), `/health/deep` (DB + data_dir writability)
 - **Logging:** stderr + `RotatingFileHandler` at `data_dir/logs/rippermod.log` (5 MB × 3)
-- **VFS deployment:** mods are extracted to `<install>/downloaded_mods/<staging>/` and surfaced in the game dir via NTFS hardlinks (and junctions for REDmod folders). `services/vfs/` orchestrates `plan → journal → execute`. Idempotent; survives crashes via `deploy_journal` replay on app startup.
+- **VFS deployment:** mods are extracted to `<install>/downloaded_mods/<staging>/` and surfaced in the game dir via NTFS hardlinks (and junctions for REDmod folders). `services/vfs/` orchestrates `plan → journal → execute`. Idempotent; survives crashes via `deploy_journal` replay on app startup. After a clean execute, `deploy()` also invokes `redmod_deploy(game)` (runs `tools/redmod/bin/redMod.exe deploy -reportProgress`) if any enabled mod owns files under `mods/`, so REDmod scripts/tweaks compile without user intervention. `detect_drift()` reports `linked / missing / foreign` per mod and caches junction-root probes so REDmod files don't get falsely flagged.
+- **Archive layout transform:** every consumer of `services/archive_layout.detect_layout` (install, conflict checking, conflict graph, conflicts inbox, preview endpoint) must funnel paths through `apply_layout_transform(rel_path, layout_result)`. It composes `strip_prefix` + `add_prefix` (the latter is set to `"mods"` for REDmod archives packaged as `<modname>/info.json` at the zip root) and returns `None` for entries outside the wrapper so callers skip them uniformly.
+- **App update notification:** `hooks/use-app-update-check.ts` reads the existing `useModSummary(27781)` (RipperMod's own Nexus listing) and compares against `__APP_VERSION__` via `lib/version.ts` (handles `v` prefix and git-describe suffix). Surfaces a dismissible top banner (`components/AppUpdateBanner.tsx`), a Settings notice, and a once-per-session startup toast. Pure read against the Nexus API — no auto-download or auto-install (Nexus distribution policy).
 - Tauri CSP restricts connections to `localhost:8425`
 
 ## Database
@@ -80,7 +82,7 @@ See @docs/nexus-api-usage.md for endpoint reference.
 
 ## Testing
 
-- 816+ tests across `backend/tests/` (routers, services, matching, scanner, nexus, archive)
+- 900+ tests across `backend/tests/` (routers, services, matching, scanner, nexus, archive, vfs)
 - Fixtures in `tests/conftest.py` — in-memory SQLite, test games, mock clients
 - CI runs with `--cov=rippermod_manager --cov-report=term-missing`
 - Use `respx` for HTTP mocking — never make real API calls in tests
