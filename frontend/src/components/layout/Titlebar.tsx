@@ -1,6 +1,14 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Minus, Square, X } from "lucide-react";
 
+import { DeployStatusBadge } from "@/components/mods/DeployStatusBadge";
+import { useUIStore } from "@/stores/ui-store";
+
+function ActiveGameDeployBadge() {
+  const activeGameName = useUIStore((s) => s.activeGameName);
+  return <DeployStatusBadge gameName={activeGameName} />;
+}
+
 export function Titlebar() {
   const appWindow = getCurrentWindow();
 
@@ -9,12 +17,15 @@ export function Titlebar() {
       data-tauri-drag-region
       className="flex h-9 items-center justify-between border-b border-border bg-surface-0 px-3 select-none shrink-0"
     >
-      <span
-        data-tauri-drag-region
-        className="text-xs font-semibold tracking-wide text-text-secondary"
-      >
-        RMM
-      </span>
+      <div data-tauri-drag-region className="flex items-center gap-3">
+        <span
+          data-tauri-drag-region
+          className="text-xs font-semibold tracking-wide text-text-secondary"
+        >
+          RMM
+        </span>
+        <ActiveGameDeployBadge />
+      </div>
 
       <div className="flex items-center">
         <button

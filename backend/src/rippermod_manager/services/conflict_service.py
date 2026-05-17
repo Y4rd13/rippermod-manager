@@ -26,6 +26,7 @@ from rippermod_manager.schemas.conflicts import (
 from rippermod_manager.schemas.install import ConflictCheckResult, FileConflict
 from rippermod_manager.services.archive_layout import (
     ArchiveLayout,
+    apply_layout_transform,
     detect_layout,
     known_roots_for_game,
 )
@@ -58,7 +59,6 @@ def check_conflicts(
             is_fomod=True,
         )
 
-    strip_prefix = layout_result.strip_prefix
     ownership = get_file_ownership_map(session, game.id)  # type: ignore[arg-type]
     conflicts: list[FileConflict] = []
     total_files = 0
@@ -68,9 +68,9 @@ def check_conflicts(
             continue
         total_files += 1
 
-        normalised = entry.filename.replace("\\", "/")
-        if strip_prefix and normalised.startswith(strip_prefix + "/"):
-            normalised = normalised[len(strip_prefix) + 1 :]
+        normalised = apply_layout_transform(entry.filename, layout_result)
+        if normalised is None:
+            continue
         normalised_lower = normalised.lower()
 
         if normalised_lower in ownership:
@@ -128,14 +128,13 @@ def _get_archive_file_set(game: Game, archive_filename: str) -> set[str] | None:
     if layout_result.layout == ArchiveLayout.FOMOD:
         return None
 
-    strip_prefix = layout_result.strip_prefix
     file_set: set[str] = set()
     for entry in all_entries:
         if entry.is_dir:
             continue
-        normalised = entry.filename.replace("\\", "/")
-        if strip_prefix and normalised.startswith(strip_prefix + "/"):
-            normalised = normalised[len(strip_prefix) + 1 :]
+        normalised = apply_layout_transform(entry.filename, layout_result)
+        if normalised is None:
+            continue
         file_set.add(normalised.lower())
     return file_set
 

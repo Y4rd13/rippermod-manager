@@ -46,6 +46,22 @@ logger = logging.getLogger(__name__)
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     _configure_logging()
     create_db_and_tables()
+    try:
+        from sqlmodel import Session
+        from sqlmodel import select as sql_select
+
+        from rippermod_manager.database import engine
+        from rippermod_manager.models.game import Game
+        from rippermod_manager.services.vfs.deploy_service import replay_pending_journal
+
+        with Session(engine) as _session:
+            for _game in _session.exec(sql_select(Game)).all():
+                try:
+                    replay_pending_journal(_game, _session)
+                except Exception as exc:
+                    logger.warning("Journal replay failed for game %s: %s", _game.id, exc)
+    except Exception:
+        logger.exception("Journal replay startup hook failed — continuing anyway")
     logger.info("Application started")
     yield
     logger.info("Shutting down...")

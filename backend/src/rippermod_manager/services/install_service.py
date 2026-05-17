@@ -1,14 +1,17 @@
 """Mod installation, uninstallation, and enable/disable toggle.
 
-Handles archive extraction to the game directory, file ownership tracking
-via the InstalledMod/InstalledModFile tables, and non-destructive
-enable/disable via ``.disabled`` file renaming.
+Handles archive extraction to a per-mod staging directory under
+``<game>/downloaded_mods/<safe_name>/``, then deploys via hardlinks into
+the canonical game-directory paths (VFS model).  Enable/disable and
+uninstall operate on the hardlinks; the staging copy is the authoritative
+source.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import shutil
 from pathlib import Path
 
 import httpx
@@ -31,10 +34,12 @@ from rippermod_manager.schemas.install import (
 )
 from rippermod_manager.services.archive_layout import (
     ArchiveLayout,
+    apply_layout_transform,
     detect_layout,
     known_roots_for_game,
 )
 from rippermod_manager.services.nexus_helpers import match_local_to_nexus_file
+from rippermod_manager.services.vfs.naming import unique_staging_name
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +71,14 @@ def install_mod(
     session: Session,
     skip_conflicts: list[str] | None = None,
     file_renames: dict[str, str] | None = None,
+    auto_deploy: bool = True,
 ) -> InstallResult:
-    """Extract an archive to the game directory and record ownership.
+    """Extract an archive to staging and deploy via hardlinks into the game directory.
+
+    Files are written to ``<game>/downloaded_mods/<safe_name>/...`` first, then
+    ``deploy_service.deploy()`` creates hardlinks at the canonical game-dir paths.
+    After a successful install the game-dir paths exist (as hardlinks) and behave
+    identically to regular files.
 
     Returns an ``InstallResult`` with counts of extracted and skipped files.
 
@@ -101,7 +112,11 @@ def install_mod(
     if file_renames:
         rename_map = {k.replace("\\", "/"): v.replace("\\", "/") for k, v in file_renames.items()}
 
-    ownership = get_file_ownership_map(session, game.id)  # type: ignore[arg-type]
+    staging_parent = game_dir / "downloaded_mods"
+    staging_parent.mkdir(parents=True, exist_ok=True)
+    safe_name = unique_staging_name(staging_parent, parsed.name)
+    staging_root = staging_parent / safe_name
+    staging_root.mkdir(parents=True, exist_ok=True)
 
     extracted_paths: list[str] = []
     skipped = 0
@@ -119,22 +134,18 @@ def install_mod(
                 "tool (Vortex, MO2) to install."
             )
 
-        strip_prefix = layout_result.strip_prefix
-
         # Pre-filter entries to determine which files to extract
         valid_entries: list[tuple[ArchiveEntry, str, str]] = []
         for entry in all_entries:
             if entry.is_dir:
                 continue
-            normalised = entry.filename.replace("\\", "/")
 
-            if strip_prefix:
-                if normalised.startswith(strip_prefix + "/"):
-                    normalised = normalised[len(strip_prefix) + 1 :]
-                else:
-                    logger.debug("Skipping entry outside wrapper: %s", entry.filename)
-                    skipped += 1
-                    continue
+            transformed = apply_layout_transform(entry.filename, layout_result)
+            if transformed is None:
+                logger.debug("Skipping entry outside wrapper: %s", entry.filename)
+                skipped += 1
+                continue
+            normalised = transformed
 
             if normalised in rename_map:
                 normalised = rename_map[normalised]
@@ -143,8 +154,11 @@ def install_mod(
             if normalised_lower in skip_set:
                 skipped += 1
                 continue
-            target = game_dir / normalised
-            if not target.resolve().is_relative_to(game_dir.resolve()):
+            # Path traversal guard: ensure target stays under staging_root
+            staging_target = staging_root / normalised
+            try:
+                staging_target.resolve().relative_to(staging_root.resolve())
+            except ValueError:
                 logger.warning("Skipping path traversal entry: %s", entry.filename)
                 skipped += 1
                 continue
@@ -154,29 +168,23 @@ def install_mod(
         entries_to_read = [e for e, _, _ in valid_entries]
         file_contents = archive.read_all_files(entries_to_read)
 
-        for entry, normalised, normalised_lower in valid_entries:
+        for entry, normalised, _normalised_lower in valid_entries:
             data = file_contents.get(entry.filename)
             if data is None:
                 logger.warning("Batch read missed entry: %s", entry.filename)
                 skipped += 1
                 continue
-            target = game_dir / normalised
-            if target.exists():
+            staging_target = staging_root / normalised
+            if staging_target.exists():
                 overwritten += 1
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(data)
+            staging_target.parent.mkdir(parents=True, exist_ok=True)
+            staging_target.write_bytes(data)
             extracted_paths.append(normalised)
-
-            if normalised_lower in ownership:
-                prev_mod = ownership[normalised_lower]
-                for f in list(prev_mod.files):
-                    if f.relative_path.replace("\\", "/").lower() == normalised_lower:
-                        session.delete(f)
-                        break
 
     installed = InstalledMod(
         game_id=game.id,  # type: ignore[arg-type]
         name=parsed.name,
+        staging_dir=safe_name,
         source_archive=archive_path.name,
         nexus_mod_id=parsed.nexus_mod_id,
         upload_timestamp=parsed.upload_timestamp,
@@ -219,15 +227,27 @@ def install_mod(
             installed.mod_group_id = corr.mod_group_id
 
     for rel_path in extracted_paths:
+        link_kind = (
+            "junction"
+            if rel_path.startswith("mods/") and "/" in rel_path[len("mods/") :]
+            else "hardlink"
+        )
         session.add(
             InstalledModFile(
                 installed_mod_id=installed.id,  # type: ignore[arg-type]
                 relative_path=rel_path,
+                source_path=rel_path,
+                link_kind=link_kind,
             )
         )
 
     session.commit()
     session.refresh(installed)
+
+    if auto_deploy:
+        from rippermod_manager.services.vfs import deploy_service
+
+        deploy_service.deploy(game, session)
 
     # Index .archive files for resource-level conflict detection
     from rippermod_manager.services.archive_index_service import index_mod_archives
@@ -242,7 +262,10 @@ def install_mod(
     write_modlist(game, session)
 
     logger.info(
-        "Installed '%s' (%d files, %d overwritten)", parsed.name, len(extracted_paths), overwritten
+        "Installed '%s' (%d files staged, %d overwritten in staging)",
+        parsed.name,
+        len(extracted_paths),
+        overwritten,
     )
     return InstallResult(
         installed_mod_id=installed.id,  # type: ignore[arg-type]
@@ -250,6 +273,7 @@ def install_mod(
         files_extracted=len(extracted_paths),
         files_skipped=skipped,
         files_overwritten=overwritten,
+        installed_mod_name_safe=safe_name,
     )
 
 
@@ -258,38 +282,45 @@ def uninstall_mod(
     game: Game,
     session: Session,
 ) -> UninstallResult:
-    """Delete all files owned by a mod and remove the DB record."""
+    """Remove a mod's game-dir links and its staging subtree."""
+    from rippermod_manager.services.vfs.primitives import (
+        VfsError,
+        remove_junction,
+    )
+    from rippermod_manager.services.vfs.primitives import unlink as vfs_unlink
+
     game_dir = Path(game.install_path)
-    deleted = 0
-    dirs_removed = 0
-
     _ = installed_mod.files
-    for f in installed_mod.files:
-        file_path = game_dir / f.relative_path.replace("/", os.sep)
-        if file_path.exists():
-            try:
-                file_path.unlink()
-                deleted += 1
-                parent = file_path.parent
-                while parent != game_dir:
-                    if not any(parent.iterdir()):
-                        parent.rmdir()
-                        dirs_removed += 1
-                        parent = parent.parent
-                    else:
-                        break
-            except OSError:
-                logger.warning("Could not delete %s", file_path)
-        else:
-            disabled_path = file_path.with_suffix(file_path.suffix + ".disabled")
-            if disabled_path.exists():
-                try:
-                    disabled_path.unlink()
-                    deleted += 1
-                except OSError:
-                    logger.warning("Could not delete %s", disabled_path)
+    file_count = len(installed_mod.files)
+    junction_dirs_seen: set[str] = set()
 
-    # Clean up dependent rows before deleting the mod record
+    for f in installed_mod.files:
+        dst = game_dir / f.relative_path.replace("/", os.sep)
+        if f.link_kind == "junction":
+            parts = f.relative_path.replace("\\", "/").split("/")
+            if len(parts) >= 2 and parts[0] == "mods":
+                redmod_dst = game_dir / "mods" / parts[1]
+                key = str(redmod_dst)
+                if key in junction_dirs_seen:
+                    continue
+                junction_dirs_seen.add(key)
+                try:
+                    remove_junction(redmod_dst)
+                except VfsError:
+                    logger.warning("Could not remove junction %s", redmod_dst)
+                continue
+        try:
+            vfs_unlink(dst)
+        except VfsError:
+            logger.warning("Could not unlink %s", dst)
+
+    # Remove staging subtree
+    if installed_mod.staging_dir:
+        staging_dir = game_dir / "downloaded_mods" / installed_mod.staging_dir
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir, ignore_errors=True)
+
+    # Existing DB cleanup
     from sqlalchemy import delete as sa_delete
 
     from rippermod_manager.models.load_order import LoadOrderPreference
@@ -312,11 +343,10 @@ def uninstall_mod(
 
     session.delete(installed_mod)
     session.commit()
-
     write_modlist(game, session)
 
-    logger.info("Uninstalled '%s' (%d files deleted)", installed_mod.name, deleted)
-    return UninstallResult(files_deleted=deleted, directories_removed=dirs_removed)
+    logger.info("Uninstalled '%s' (%d files removed)", installed_mod.name, file_count)
+    return UninstallResult(files_deleted=file_count, directories_removed=0)
 
 
 def toggle_mod(
@@ -326,48 +356,130 @@ def toggle_mod(
     *,
     commit: bool = True,
 ) -> ToggleResult:
-    """Enable or disable a mod by renaming its files with ``.disabled`` suffix.
+    """Flip ``installed_mod.disabled`` and deploy/undeploy that mod's files.
+
+    Disable: removes game-dir hardlinks (staging untouched). The ``disabled``
+    flag is the source of truth — no ``.disabled`` rename happens on disk.
+
+    Enable: flips the flag, commits (so plan_deploy sees the enabled state),
+    then builds a per-mod DeployPlan and executes it to recreate hardlinks.
 
     Pass ``commit=False`` to defer the DB commit (useful for batching in
-    profile loads).
+    profile loads); the caller becomes responsible for commits.
     """
+    from rippermod_manager.services.vfs.primitives import (
+        VfsError,
+        remove_junction,
+    )
+    from rippermod_manager.services.vfs.primitives import unlink as vfs_unlink
+
     game_dir = Path(game.install_path)
     should_disable = not installed_mod.disabled
     affected = 0
 
-    _ = installed_mod.files
-    for f in installed_mod.files:
-        file_path = game_dir / f.relative_path.replace("/", os.sep)
+    _ = installed_mod.files  # touch relationship to load files
 
-        if should_disable:
-            if file_path.exists():
-                disabled_path = file_path.with_suffix(file_path.suffix + ".disabled")
-                try:
-                    file_path.rename(disabled_path)
+    if should_disable:
+        # Disable path: remove game-dir hardlinks, leave staging intact.
+        junction_dirs_seen: set[str] = set()
+        for f in installed_mod.files:
+            dst = game_dir / f.relative_path.replace("/", os.sep)
+            if f.link_kind == "junction":
+                parts = f.relative_path.replace("\\", "/").split("/")
+                if len(parts) >= 2 and parts[0] == "mods":
+                    redmod_dst = game_dir / "mods" / parts[1]
+                    key = str(redmod_dst)
+                    if key in junction_dirs_seen:
+                        continue
+                    junction_dirs_seen.add(key)
+                    try:
+                        remove_junction(redmod_dst)
+                        affected += 1
+                    except VfsError:
+                        logger.warning("Could not remove junction %s", redmod_dst)
+                    continue
+            try:
+                if dst.exists():
+                    vfs_unlink(dst)
                     affected += 1
-                except OSError:
-                    logger.warning("Could not disable %s", file_path)
-        else:
-            disabled_path = file_path.with_suffix(file_path.suffix + ".disabled")
-            if disabled_path.exists():
-                try:
-                    disabled_path.rename(file_path)
-                    affected += 1
-                except OSError:
-                    logger.warning("Could not enable %s", disabled_path)
+            except VfsError:
+                logger.warning("Could not unlink %s", dst)
+        installed_mod.deployed = False
 
     installed_mod.disabled = should_disable
     session.add(installed_mod)
     if commit:
         session.commit()
 
-    # Regenerate modlist.txt to reflect enabled/disabled state
+    if not should_disable:
+        # Re-enable path: build a per-mod plan and execute it.
+        # Using an inline plan (not deploy_service.deploy()) to avoid producing
+        # journal "failed" entries for already-deployed sibling mods. Same
+        # verify_link / is_dir idempotency guard as plan_deploy so a re-enable
+        # on already-linked files is a no-op instead of an AlreadyExistsError.
+        from rippermod_manager.schemas.deploy import DeployOp, DeployPlan
+        from rippermod_manager.services.vfs.deploy_service import execute_plan, pre_flight_check
+        from rippermod_manager.services.vfs.primitives import verify_link
+
+        pre = pre_flight_check(game)
+        if pre.ok:
+            staging_root = game_dir / "downloaded_mods"
+            ops: list[DeployOp] = []
+            junction_dirs_seen_enable: set[str] = set()
+            for f in installed_mod.files:
+                src = staging_root / installed_mod.staging_dir / f.source_path.replace("\\", "/")
+                dst = game_dir / f.relative_path.replace("\\", "/")
+                if f.link_kind == "junction":
+                    parts = f.relative_path.replace("\\", "/").split("/")
+                    if len(parts) >= 2 and parts[0] == "mods":
+                        redmod_dst = game_dir / "mods" / parts[1]
+                        redmod_src = staging_root / installed_mod.staging_dir / "mods" / parts[1]
+                        key = str(redmod_dst)
+                        if key in junction_dirs_seen_enable:
+                            continue
+                        junction_dirs_seen_enable.add(key)
+                        # Idempotency: junction already in place.
+                        if redmod_dst.is_dir():
+                            continue
+                        ops.append(
+                            DeployOp(
+                                operation="junction",
+                                src=str(redmod_src),
+                                dst=str(redmod_dst),
+                                installed_mod_id=installed_mod.id,
+                            )
+                        )
+                        continue
+                # Idempotency: hardlink already points to the staged source.
+                if verify_link(src, dst):
+                    continue
+                ops.append(
+                    DeployOp(
+                        operation="link",
+                        src=str(src),
+                        dst=str(dst),
+                        installed_mod_id=installed_mod.id,
+                    )
+                )
+
+            plan = DeployPlan(game_id=game.id, ops=ops)
+            report = execute_plan(plan, session)
+            if report.is_clean:
+                installed_mod.deployed = True
+                session.add(installed_mod)
+                if commit:
+                    session.commit()
+            affected = report.done
+
+    if commit:
+        session.commit()
+
     from rippermod_manager.services.modlist_service import write_modlist
 
     write_modlist(game, session)
 
     action = "Disabled" if should_disable else "Enabled"
-    logger.info("%s '%s' (%d files)", action, installed_mod.name, affected)
+    logger.info("%s '%s' (%d files affected)", action, installed_mod.name, affected)
     return ToggleResult(disabled=should_disable, files_affected=affected)
 
 

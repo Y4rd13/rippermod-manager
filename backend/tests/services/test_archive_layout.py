@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from rippermod_manager.services.archive_layout import (
     ArchiveLayout,
     LayoutResult,
+    apply_layout_transform,
     detect_layout,
     known_roots_for_game,
 )
@@ -26,7 +27,7 @@ class FakeEntry:
 class TestKnownRootsForGame:
     def test_cyberpunk_returns_expected_roots(self) -> None:
         roots = known_roots_for_game("cyberpunk2077")
-        assert roots == {"archive", "bin", "red4ext", "r6", "mods"}
+        assert roots == {"archive", "bin", "red4ext", "r6", "mods", "engine"}
 
     def test_unknown_game_returns_empty(self) -> None:
         assert known_roots_for_game("unknowngame") == set()
@@ -93,6 +94,84 @@ class TestWrapped:
         result = detect_layout(entries, CP_ROOTS)
         assert result.layout == ArchiveLayout.WRAPPED
         assert result.strip_prefix == "CoolMod"
+
+
+# ---------------------------------------------------------------------------
+# detect_layout — REDMOD
+# ---------------------------------------------------------------------------
+
+
+class TestRedmod:
+    def test_single_wrapper_with_info_json_and_archives(self) -> None:
+        """Standard REDmod packaging: <modname>/info.json at zip root."""
+        entries = [
+            FakeEntry("MyREDmod/info.json"),
+            FakeEntry("MyREDmod/archives/foo.archive"),
+        ]
+        result = detect_layout(entries, CP_ROOTS)
+        assert result.layout == ArchiveLayout.REDMOD
+        assert result.strip_prefix is None
+        assert result.add_prefix == "mods"
+
+    def test_redmod_with_scripts_only(self) -> None:
+        entries = [
+            FakeEntry("CoolScriptMod/info.json"),
+            FakeEntry("CoolScriptMod/scripts/init.script"),
+        ]
+        result = detect_layout(entries, CP_ROOTS)
+        assert result.layout == ArchiveLayout.REDMOD
+        assert result.add_prefix == "mods"
+
+    def test_redmod_with_complex_modname(self) -> None:
+        """Wrapper dir names commonly include brackets, spaces, version suffixes."""
+        entries = [
+            FakeEntry("00NPC_SPO [NPCs GW Strippers and Prostitutes Only]/info.json"),
+            FakeEntry("00NPC_SPO [NPCs GW Strippers and Prostitutes Only]/archives/NPC.archive"),
+        ]
+        result = detect_layout(entries, CP_ROOTS)
+        assert result.layout == ArchiveLayout.REDMOD
+        assert result.add_prefix == "mods"
+
+    def test_redmod_with_customSounds(self) -> None:
+        entries = [
+            FakeEntry("AudioMod/info.json"),
+            FakeEntry("AudioMod/customSounds/clip1.wav"),
+        ]
+        result = detect_layout(entries, CP_ROOTS)
+        assert result.layout == ArchiveLayout.REDMOD
+
+    def test_wrapped_redmod_uses_wrapped_not_redmod(self) -> None:
+        """Archive like ``<wrap>/mods/<modname>/info.json`` should be WRAPPED, not
+        REDMOD: WRAPPED strips ``<wrap>`` and leaves ``mods/<modname>/info.json``,
+        which is already where the engine expects it.
+        """
+        entries = [
+            FakeEntry("CollectionWrap/mods/MyMod/info.json"),
+            FakeEntry("CollectionWrap/mods/MyMod/archives/x.archive"),
+        ]
+        result = detect_layout(entries, CP_ROOTS)
+        assert result.layout == ArchiveLayout.WRAPPED
+        assert result.strip_prefix == "CollectionWrap"
+
+    def test_multiple_redmods_falls_back_to_unknown(self) -> None:
+        """Two top-level wrappers don't match the single-wrapper REDMOD heuristic."""
+        entries = [
+            FakeEntry("ModA/info.json"),
+            FakeEntry("ModB/info.json"),
+        ]
+        result = detect_layout(entries, CP_ROOTS)
+        assert result.layout == ArchiveLayout.UNKNOWN
+
+    def test_loose_info_json_at_root_is_not_redmod(self) -> None:
+        """``info.json`` directly at the archive root (no wrapper) shouldn't be
+        misclassified — that's not a valid REDmod package."""
+        entries = [
+            FakeEntry("info.json"),
+            FakeEntry("archive/pc/mod/a.archive"),
+        ]
+        result = detect_layout(entries, CP_ROOTS)
+        # Has a root-level file → has_root_file → not REDMOD; STANDARD wins due to archive/
+        assert result.layout == ArchiveLayout.STANDARD
 
 
 # ---------------------------------------------------------------------------
@@ -203,3 +282,59 @@ class TestUnknown:
         entries = [FakeEntry("archive\\pc\\mod\\a.archive")]
         result = detect_layout(entries, CP_ROOTS)
         assert result == LayoutResult(layout=ArchiveLayout.STANDARD)
+
+
+# ---------------------------------------------------------------------------
+# apply_layout_transform
+# ---------------------------------------------------------------------------
+
+
+class TestApplyLayoutTransform:
+    """Single source of truth for path transforms — must be used by every
+    consumer of detect_layout so install, conflict, preview, and graph all agree.
+    """
+
+    def test_standard_layout_passes_through(self) -> None:
+        layout = LayoutResult(layout=ArchiveLayout.STANDARD)
+        assert (
+            apply_layout_transform("archive/pc/mod/foo.archive", layout)
+            == "archive/pc/mod/foo.archive"
+        )
+
+    def test_wrapped_strips_prefix(self) -> None:
+        layout = LayoutResult(layout=ArchiveLayout.WRAPPED, strip_prefix="MyMod")
+        assert apply_layout_transform("MyMod/r6/scripts/x.reds", layout) == "r6/scripts/x.reds"
+
+    def test_wrapped_drops_entries_outside_wrapper(self) -> None:
+        layout = LayoutResult(layout=ArchiveLayout.WRAPPED, strip_prefix="MyMod")
+        # ReadMe at root of a WRAPPED archive should be skipped (None)
+        assert apply_layout_transform("README.md", layout) is None
+
+    def test_redmod_prepends_mods(self) -> None:
+        layout = LayoutResult(layout=ArchiveLayout.REDMOD, add_prefix="mods")
+        assert apply_layout_transform("MyREDmod/info.json", layout) == "mods/MyREDmod/info.json"
+        assert apply_layout_transform("MyREDmod/archives/x.archive", layout) == (
+            "mods/MyREDmod/archives/x.archive"
+        )
+
+    def test_redmod_with_complex_modname(self) -> None:
+        layout = LayoutResult(layout=ArchiveLayout.REDMOD, add_prefix="mods")
+        result = apply_layout_transform("00NPC_SPO [Foo Bar]/info.json", layout)
+        assert result == "mods/00NPC_SPO [Foo Bar]/info.json"
+
+    def test_strip_and_add_prefix_compose(self) -> None:
+        """Hypothetical layout that both strips and prepends — verify order."""
+        layout = LayoutResult(layout=ArchiveLayout.REDMOD, strip_prefix="Wrap", add_prefix="mods")
+        # strip "Wrap/" first, then prepend "mods/"
+        assert apply_layout_transform("Wrap/MyMod/info.json", layout) == "mods/MyMod/info.json"
+
+    def test_backslash_paths_normalised(self) -> None:
+        layout = LayoutResult(layout=ArchiveLayout.REDMOD, add_prefix="mods")
+        assert apply_layout_transform("MyMod\\info.json", layout) == "mods/MyMod/info.json"
+
+
+def test_engine_is_recognized_root():
+    from rippermod_manager.services.archive_layout import known_roots_for_game
+
+    roots = known_roots_for_game("cyberpunk2077")
+    assert "engine" in roots, f"engine missing from {roots}"

@@ -1,7 +1,9 @@
+import os
 import zipfile
+from pathlib import Path
 
 import pytest
-from sqlmodel import select
+from sqlmodel import Session, SQLModel, create_engine, select
 
 from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
@@ -153,6 +155,70 @@ class TestInstallMod:
         with pytest.raises(ValueError, match="already installed"):
             install_mod(game, archive, session)
 
+    def test_redmod_archive_extracts_under_mods_prefix(self, session, game_dir, staging_dir):
+        """REDmod archives package as ``<modname>/info.json`` at the zip root.
+        After install, the extracted files must live at
+        ``<staging>/<safe_name>/mods/<modname>/...`` and the InstalledModFile
+        records must use the ``mods/`` prefix so deploy creates junctions at
+        ``<game>/mods/<modname>/`` where the engine looks.
+
+        This is the full integration: detect_layout → apply_layout_transform →
+        extraction → InstalledMod records → link_kind heuristic.  Without the
+        REDMOD layout detection + `add_prefix`, files would land at the root and
+        `link_kind` would default to `hardlink`, breaking REDmod loading.
+        """
+        # Cyberpunk domain so known_roots includes the real REDmod marker set
+        cp_game = Game(
+            name="CP77Test",
+            domain_name="cyberpunk2077",
+            install_path=str(game_dir),
+        )
+        session.add(cp_game)
+        session.flush()
+        session.add(GameModPath(game_id=cp_game.id, relative_path="mods"))
+        session.commit()
+
+        archive = staging_dir / "MyREDmod-12345-1-0.zip"
+        _make_zip(
+            archive,
+            {
+                "MyREDmodPkg/info.json": b'{"name":"MyREDmod","version":"1.0"}',
+                "MyREDmodPkg/archives/test.archive": b"FAKE",
+                "MyREDmodPkg/scripts/init.script": b"// noop\n",
+            },
+        )
+
+        # auto_deploy=False so we don't try to create real junctions on the test FS
+        # (the test machine may be Linux/macOS where mklink doesn't exist). The
+        # important state is the staging layout and the InstalledModFile records.
+        result = install_mod(cp_game, archive, session, auto_deploy=False)
+
+        assert result.files_extracted == 3
+
+        installed = session.exec(
+            select(InstalledMod).where(InstalledMod.id == result.installed_mod_id)
+        ).one()
+        files = sorted(f.relative_path for f in installed.files)
+
+        # All three files MUST be prefixed with mods/<modname>/
+        assert files == [
+            "mods/MyREDmodPkg/archives/test.archive",
+            "mods/MyREDmodPkg/info.json",
+            "mods/MyREDmodPkg/scripts/init.script",
+        ], f"REDmod files extracted without mods/ prefix — engine won't find them. Got: {files}"
+
+        # link_kind must be junction for every record (mods/<x>/<more>/ matches
+        # install_service's heuristic)
+        kinds = {f.link_kind for f in installed.files}
+        assert kinds == {"junction"}, f"Expected all junctions, got: {kinds}"
+
+        # Staging layout: files live under <safe>/mods/<modname>/...
+        safe = installed.staging_dir
+        assert (staging_dir / safe / "mods" / "MyREDmodPkg" / "info.json").exists()
+        assert (staging_dir / safe / "mods" / "MyREDmodPkg" / "archives" / "test.archive").exists()
+        # And NOT at the wrong root path
+        assert not (staging_dir / safe / "MyREDmodPkg" / "info.json").exists()
+
     def test_missing_archive_raises_file_not_found(self, session, game, tmp_path):
         missing = tmp_path / "nonexistent.zip"
         with pytest.raises(FileNotFoundError):
@@ -188,23 +254,22 @@ class TestInstallMod:
         assert installed.nexus_mod_id == 107
         assert installed.upload_timestamp == 1759193708
 
-    def test_file_ownership_transferred_on_overwrite(self, session, game, game_dir, staging_dir):
-        # Install mod A which owns file.txt
+    def test_file_ownership_each_mod_has_its_own_staging(
+        self, session, game, game_dir, staging_dir
+    ):
+        # Install mod A — each mod gets an isolated staging dir
         archive_a = staging_dir / "ModA.zip"
         _make_zip(archive_a, {"shared.txt": b"from A"})
-        install_mod(game, archive_a, session)
+        result_a = install_mod(game, archive_a, session)
 
-        # Install mod B which also contains shared.txt (no skip)
-        archive_b = staging_dir / "ModB.zip"
-        _make_zip(archive_b, {"shared.txt": b"from B"})
-        install_mod(game, archive_b, session)
+        # Mod A's staging copy must exist with its content
+        staging_a = game_dir / "downloaded_mods" / result_a.installed_mod_name_safe
+        assert (staging_a / "shared.txt").read_bytes() == b"from A"
 
-        # The file on disk now belongs to mod B
-        assert (game_dir / "shared.txt").read_bytes() == b"from B"
-
-        # Mod A should no longer own shared.txt in DB
+        # Mod A is the DB owner of shared.txt
         ownership = get_file_ownership_map(session, game.id)
         assert ownership.get("shared.txt") is not None
+        assert ownership["shared.txt"].name == "ModA"
 
 
 class TestUninstallMod:
@@ -224,6 +289,12 @@ class TestUninstallMod:
         assert session.get(InstalledMod, result.installed_mod_id) is None
 
     def test_removes_disabled_files(self, session, game, game_dir, staging_dir):
+        # VFS model (Task 4.3): toggle_mod is DB-driven — disabling removes game-dir
+        # hardlinks (no .disabled rename). Uninstall then removes staging + DB record.
+        # Important invariants:
+        # - files_deleted reflects the mod's registered file count (not disk success count)
+        # - the DB record is gone
+        # - the staging subtree is removed
         archive = staging_dir / "ToggleMod.zip"
         _make_zip(archive, {"mods/file.txt": b"data"})
         result = install_mod(game, archive, session)
@@ -239,8 +310,13 @@ class TestUninstallMod:
         _ = installed.files
 
         unresult = uninstall_mod(installed, game, session)
+        # files_deleted == file_count registered in DB (1), regardless of disk state
         assert unresult.files_deleted == 1
-        assert not (game_dir / "mods" / "file.txt.disabled").exists()
+        # DB record must be gone
+        assert session.get(InstalledMod, result.installed_mod_id) is None
+        # Staging subtree must be removed
+        staging_path = game_dir / "downloaded_mods" / result.installed_mod_name_safe
+        assert not staging_path.exists()
 
     def test_uninstall_with_profile_and_load_order_refs(self, session, game, game_dir, staging_dir):
         """Uninstalling a mod referenced by profile entries / load order prefs must not FK-crash."""
@@ -292,19 +368,22 @@ class TestUninstallMod:
         _make_zip(archive, {"mods/gone.txt": b"gone"})
         result = install_mod(game, archive, session)
 
-        # Manually remove the file so uninstall must handle missing gracefully
+        # Manually remove the hardlink at the game-dir path — vfs_unlink is idempotent
         (game_dir / "mods" / "gone.txt").unlink()
 
         installed = session.get(InstalledMod, result.installed_mod_id)
         session.refresh(installed)
         _ = installed.files
         unresult = uninstall_mod(installed, game, session)
-        # File was already gone, deleted count reflects only successful removals
-        assert unresult.files_deleted == 0
+        # In the VFS model, files_deleted == registered file count (not disk success count).
+        # vfs_unlink silently no-ops on missing dst, so uninstall always completes cleanly.
+        assert unresult.files_deleted == 1
+        assert session.get(InstalledMod, result.installed_mod_id) is None
 
 
 class TestToggleMod:
-    def test_disable_renames_files(self, session, game, game_dir, staging_dir):
+    def test_disable_unlinks_game_dir_file(self, session, game, game_dir, staging_dir):
+        # VFS model: disable removes the game-dir hardlink; no .disabled rename.
         archive = staging_dir / "ToggleMe.zip"
         _make_zip(archive, {"mods/mod.txt": b"data"})
         result = install_mod(game, archive, session)
@@ -316,8 +395,14 @@ class TestToggleMod:
 
         assert toggle_result.disabled is True
         assert toggle_result.files_affected == 1
+        # Game-dir hardlink gone; no .disabled rename artifact.
         assert not (game_dir / "mods" / "mod.txt").exists()
-        assert (game_dir / "mods" / "mod.txt.disabled").exists()
+        assert not (game_dir / "mods" / "mod.txt.disabled").exists()
+        # Staging must still be intact.
+        staging_file = (
+            game_dir / "downloaded_mods" / result.installed_mod_name_safe / "mods" / "mod.txt"
+        )
+        assert staging_file.exists(), "staging file must survive disable"
 
     def test_enable_restores_files(self, session, game, game_dir, staging_dir):
         archive = staging_dir / "ToggleBack.zip"
@@ -337,6 +422,7 @@ class TestToggleMod:
         toggle_result = toggle_mod(installed, game, session)
 
         assert toggle_result.disabled is False
+        # Game-dir hardlink re-created; no .disabled artifact.
         assert (game_dir / "mods" / "back.txt").exists()
         assert not (game_dir / "mods" / "back.txt.disabled").exists()
 
@@ -368,6 +454,47 @@ class TestToggleMod:
         installed = session.get(InstalledMod, result.installed_mod_id)
         assert installed.disabled is False
         assert (game_dir / "mods" / "double.txt").exists()
+
+    def test_toggle_enable_is_idempotent_on_already_linked_files(
+        self, session, game, game_dir, staging_dir
+    ):
+        """Re-enabling a mod that's already (partially) linked must not raise.
+
+        Mirrors the plan_deploy idempotency guard for the toggle re-enable
+        path: if a file is already correctly hardlinked, the per-mod plan
+        skips it instead of emitting an op that would fail with
+        AlreadyExistsError.
+        """
+        archive = staging_dir / "IdempotentEnable.zip"
+        _make_zip(archive, {"r6/scripts/idem.reds": b"// idem"})
+        result = install_mod(game, archive, session)
+
+        # Disable, then re-enable
+        installed = session.get(InstalledMod, result.installed_mod_id)
+        session.refresh(installed)
+        _ = installed.files
+        toggle_mod(installed, game, session)  # disable
+
+        # Manually re-create the hardlink that the disable removed, simulating
+        # a state where the file is already correctly linked when re-enable runs
+        staging_file = (
+            game_dir / "downloaded_mods" / installed.staging_dir / "r6" / "scripts" / "idem.reds"
+        )
+        game_file = game_dir / "r6" / "scripts" / "idem.reds"
+        game_file.parent.mkdir(parents=True, exist_ok=True)
+        os.link(staging_file, game_file)
+
+        # Re-enable: must succeed without AlreadyExistsError; the plan should
+        # be empty because the hardlink is already in place.
+        installed = session.get(InstalledMod, result.installed_mod_id)
+        session.refresh(installed)
+        _ = installed.files
+        toggle_mod(installed, game, session)
+
+        installed = session.get(InstalledMod, result.installed_mod_id)
+        assert installed.disabled is False
+        assert game_file.exists()
+        assert os.path.samefile(staging_file, game_file)
 
 
 class TestReparseInstalledMods:
@@ -442,3 +569,180 @@ class TestReparseInstalledMods:
         assert mod.nexus_mod_id == 107  # unchanged
         assert mod.installed_version == "1.37.1"  # fixed
         assert mod.upload_timestamp == 1759193708  # unchanged
+
+
+@pytest.fixture
+def tmp_game(tmp_path):
+    """Return (game, session) backed by a fresh in-memory DB and a temp game dir."""
+    import rippermod_manager.models  # noqa: F401 — register all tables
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+    )
+    SQLModel.metadata.create_all(engine)
+    game_dir = tmp_path / "cp2077"
+    game_dir.mkdir()
+    (game_dir / "downloaded_mods").mkdir()
+
+    with Session(engine) as sess:
+        g = Game(name="Cyberpunk 2077", domain_name="cyberpunk2077", install_path=str(game_dir))
+        sess.add(g)
+        sess.flush()
+        sess.add(GameModPath(game_id=g.id, relative_path="mods"))
+        sess.commit()
+        sess.refresh(g)
+        yield g, sess
+
+
+@pytest.fixture
+def sample_archive(tmp_path):
+    """A zip archive with a single r6/scripts/foo.reds file."""
+    archive = tmp_path / "SampleMod-v1.zip"
+    _make_zip(archive, {"r6/scripts/foo.reds": b"// sample"})
+    return archive
+
+
+class TestVfsHardlinks:
+    """Verify that install_mod uses staging + hardlinks rather than direct game-dir writes."""
+
+    def test_install_mod_writes_to_staging_with_hardlinks(
+        self, session, game, game_dir, staging_dir
+    ):
+        """Files live in staging and are hardlinked into game-dir paths after install."""
+        from pathlib import Path
+
+        archive = staging_dir / "SampleMod-v1.zip"
+        _make_zip(archive, {"r6/scripts/foo.reds": b"// sample"})
+
+        result = install_mod(game, archive, session)
+
+        assert result.installed_mod_name_safe != "", "installed_mod_name_safe must be populated"
+
+        staging = game_dir / "downloaded_mods" / result.installed_mod_name_safe
+        assert staging.exists(), f"staging dir {staging} missing"
+        assert any(staging.rglob("*")), "no files in staging"
+
+        installed = session.exec(
+            select(InstalledMod).where(InstalledMod.id == result.installed_mod_id)
+        ).one()
+        assert installed.staging_dir == result.installed_mod_name_safe
+        assert installed.deployed is True
+
+        _ = installed.files
+        for f in installed.files:
+            src = staging / f.source_path.replace("\\", "/")
+            dst = Path(game.install_path) / f.relative_path.replace("\\", "/")
+            assert src.exists(), f"staging file {src} missing"
+            assert dst.exists(), f"game-dir hardlink {dst} missing"
+            assert os.path.samefile(src, dst), f"{src} and {dst} are not the same inode"
+            assert f.source_path == f.relative_path, (
+                "source_path should mirror relative_path for VFS installs"
+            )
+            assert f.link_kind == "hardlink", f"expected hardlink, got {f.link_kind!r}"
+
+    def test_install_mod_name_safe_returned_in_result(self, session, game, game_dir, staging_dir):
+        """InstallResult.installed_mod_name_safe is the sanitised staging directory name."""
+        archive = staging_dir / "My_Awesome_Mod.zip"
+        _make_zip(archive, {"r6/scripts/x.reds": b"x"})
+
+        result = install_mod(game, archive, session)
+
+        assert result.installed_mod_name_safe != ""
+        staging = game_dir / "downloaded_mods" / result.installed_mod_name_safe
+        assert staging.is_dir(), "staging dir created with sanitised name"
+
+    def test_uninstall_removes_hardlinks_and_staging(self, session, game, game_dir, staging_dir):
+        """Uninstall removes game-dir hardlinks AND the staging subtree."""
+        from pathlib import Path
+
+        archive = staging_dir / "SampleMod-v1.zip"
+        _make_zip(archive, {"r6/scripts/foo.reds": b"// sample"})
+
+        result = install_mod(game, archive, session)
+        installed = session.exec(
+            select(InstalledMod).where(InstalledMod.id == result.installed_mod_id)
+        ).one()
+
+        game_path = Path(game.install_path) / "r6" / "scripts" / "foo.reds"
+        staging_path = (
+            Path(game.install_path)
+            / "downloaded_mods"
+            / result.installed_mod_name_safe
+            / "r6"
+            / "scripts"
+            / "foo.reds"
+        )
+        assert game_path.exists(), "game-dir hardlink must exist after install"
+        assert staging_path.exists(), "staging file must exist after install"
+
+        uninstall_mod(installed, game, session)
+
+        assert not game_path.exists(), "game-dir hardlink should be gone after uninstall"
+        staging_dir_path = (
+            Path(game.install_path) / "downloaded_mods" / result.installed_mod_name_safe
+        )
+        assert not staging_dir_path.exists(), "staging dir should be removed after uninstall"
+        assert (
+            session.exec(
+                select(InstalledMod).where(InstalledMod.id == result.installed_mod_id)
+            ).first()
+            is None
+        ), "InstalledMod DB record should be deleted"
+
+    def test_toggle_disable_unlinks_keeps_staging(self, tmp_game, sample_archive):
+        """Disabling unlinks game-dir hardlinks but keeps staging intact."""
+        game, session = tmp_game
+        result = install_mod(game, sample_archive, session)
+        installed = session.exec(
+            select(InstalledMod).where(InstalledMod.id == result.installed_mod_id)
+        ).one()
+
+        game_path = Path(game.install_path) / "r6" / "scripts" / "foo.reds"
+        staging_path = (
+            Path(game.install_path)
+            / "downloaded_mods"
+            / result.installed_mod_name_safe
+            / "r6"
+            / "scripts"
+            / "foo.reds"
+        )
+        assert game_path.exists()
+        assert staging_path.exists()
+
+        toggle_mod(installed, game, session)
+
+        session.refresh(installed)
+        assert installed.disabled is True
+        assert not game_path.exists(), "game-dir hardlink should be gone after disable"
+        assert staging_path.exists(), "staging file should survive disable"
+
+    def test_toggle_re_enable_recreates_hardlink(self, tmp_game, sample_archive):
+        """Re-enabling re-creates the game-dir hardlink from staging."""
+        game, session = tmp_game
+        result = install_mod(game, sample_archive, session)
+        installed = session.exec(
+            select(InstalledMod).where(InstalledMod.id == result.installed_mod_id)
+        ).one()
+
+        game_path = Path(game.install_path) / "r6" / "scripts" / "foo.reds"
+        staging_path = (
+            Path(game.install_path)
+            / "downloaded_mods"
+            / result.installed_mod_name_safe
+            / "r6"
+            / "scripts"
+            / "foo.reds"
+        )
+
+        toggle_mod(installed, game, session)  # disable
+        session.refresh(installed)
+        assert installed.disabled is True
+
+        toggle_mod(installed, game, session)  # re-enable
+        session.refresh(installed)
+        assert installed.disabled is False
+        assert game_path.exists()
+        assert os.path.samefile(staging_path, game_path), (
+            "re-enabled file must be a hardlink to staging"
+        )

@@ -1,19 +1,102 @@
-import { CheckCircle, Crown, ExternalLink, Eye, EyeOff, Heart, LogOut, User } from "lucide-react";
+import { CheckCircle, Crown, ExternalLink, Eye, EyeOff, Heart, LogOut, Sparkles, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useAbstainMod, useDisconnectNexus, useEndorseMod, useTrackMod, useUntrackMod } from "@/hooks/mutations";
+import {
+  RIPPERMOD_NEXUS_MOD_ID,
+  RIPPERMOD_NEXUS_URL,
+  useAppUpdateCheck,
+} from "@/hooks/use-app-update-check";
+import { useDeploy, useDeployStatus, useUndeploy } from "@/hooks/use-deploy";
 import { useNexusSSO } from "@/hooks/use-nexus-sso";
 import { useGames, useModSummary, useSettings } from "@/hooks/queries";
+import { reportDeployOutcome } from "@/lib/deploy-toast";
 import { cn } from "@/lib/utils";
+import { toast } from "@/stores/toast-store";
+import { useUIStore } from "@/stores/ui-store";
 
-const RIPPERMOD_NEXUS_MOD_ID = 27781;
-const RIPPERMOD_NEXUS_DOMAIN = "cyberpunk2077";
-const RIPPERMOD_NEXUS_URL = `https://www.nexusmods.com/${RIPPERMOD_NEXUS_DOMAIN}/mods/${RIPPERMOD_NEXUS_MOD_ID}`;
+function DeploymentCard() {
+  const activeGameName = useUIStore((s) => s.activeGameName);
+  const status = useDeployStatus(activeGameName);
+  const deploy = useDeploy(activeGameName);
+  const undeploy = useUndeploy(activeGameName);
+
+  if (!activeGameName) return null;
+
+  const handleDeploy = () => {
+    deploy.mutate(undefined, {
+      onSuccess: (report) => reportDeployOutcome(report, "Deploy"),
+      onError: (error) => toast.error("Deploy failed", error.message),
+    });
+  };
+
+  const handleUndeploy = () => {
+    undeploy.mutate(undefined, {
+      onSuccess: (report) => reportDeployOutcome(report, "Undeploy"),
+      onError: (error) => toast.error("Undeploy failed", error.message),
+    });
+  };
+
+  return (
+    <Card>
+      <h2 className="text-lg font-semibold text-text-primary mb-4">Deployment</h2>
+      <div className="space-y-3">
+        <p className="text-sm text-text-secondary">
+          Mods are staged in <code>downloaded_mods/</code> and linked into the game directory at
+          deploy time. Your game folder stays clean.
+        </p>
+        {status.data && (
+          <div className="text-xs text-text-muted font-mono">
+            {status.data.linked} linked · {status.data.missing} missing · {status.data.foreign} foreign
+          </div>
+        )}
+        <div className="flex gap-2">
+          <Button size="sm" loading={deploy.isPending} onClick={handleDeploy}>
+            Deploy
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={undeploy.isPending}
+            onClick={handleUndeploy}
+          >
+            Undeploy
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function AppUpdateNotice() {
+  const update = useAppUpdateCheck();
+  if (!update.hasUpdate) return null;
+  return (
+    <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2.5 text-sm">
+      <div className="flex items-center gap-2 text-text-primary">
+        <Sparkles size={14} className="shrink-0 text-accent" />
+        <span>
+          Update to <strong>v{update.latestVersion}</strong> on Nexus Mods
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={() => void openUrl(update.nexusUrl)}
+        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-accent/40 bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent transition-colors hover:bg-accent/25"
+      >
+        <ExternalLink size={12} />
+        View on Nexus
+      </button>
+    </div>
+  );
+}
+
 
 function AboutCard() {
   const { data: games = [] } = useGames();
@@ -45,6 +128,8 @@ function AboutCard() {
           <p className="text-text-muted text-xs font-mono">{__APP_VERSION__}</p>
         </div>
       </div>
+
+      <AppUpdateNotice />
 
       {canInteract && (
         <>
@@ -242,6 +327,7 @@ export function SettingsPage() {
         )}
       </Card>
 
+      <DeploymentCard />
       <AboutCard />
     </div>
   );

@@ -1,20 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { Outlet } from "react-router";
 
+import { AppUpdateBanner } from "@/components/AppUpdateBanner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Titlebar } from "@/components/layout/Titlebar";
 import { DownloadQueueFooter } from "@/components/ui/DownloadQueueFooter";
 import { KeyboardShortcutsModal } from "@/components/ui/KeyboardShortcutsModal";
 import { ToastContainer } from "@/components/ui/Toast";
+import { useAppUpdateCheck, useAppUpdateStartupToast } from "@/hooks/use-app-update-check";
 import { useDownloadSync } from "@/hooks/use-download-sync";
 import { ScrollContainerContext } from "@/hooks/use-scroll-container";
 import { useDownloadStore } from "@/stores/download-store";
+import { toast } from "@/stores/toast-store";
 import { useUIStore } from "@/stores/ui-store";
 
 export function RootLayout() {
   const activeGameName = useUIStore((s) => s.activeGameName);
   useDownloadSync(activeGameName);
+  const appUpdate = useAppUpdateCheck();
+  useAppUpdateStartupToast(appUpdate, toast.info);
   const hasDownloads = useDownloadStore((s) => Object.keys(s.jobs).length > 0);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
@@ -42,6 +47,7 @@ export function RootLayout() {
         Skip to content
       </a>
       <Titlebar />
+      <AppUpdateBanner />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <main ref={mainRef} id="main-content" className={`flex-1 overflow-y-auto bg-surface-0 p-6 ${hasDownloads && activeGameName ? "pb-16" : ""}`}>
