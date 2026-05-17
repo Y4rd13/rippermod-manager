@@ -134,6 +134,7 @@ def install_mod(
             )
 
         strip_prefix = layout_result.strip_prefix
+        add_prefix = layout_result.add_prefix
 
         # Pre-filter entries to determine which files to extract
         valid_entries: list[tuple[ArchiveEntry, str, str]] = []
@@ -149,6 +150,12 @@ def install_mod(
                     logger.debug("Skipping entry outside wrapper: %s", entry.filename)
                     skipped += 1
                     continue
+
+            if add_prefix:
+                # REDmod archives package as `<modname>/info.json` at the zip root.
+                # Prepend `mods/` so files land where the engine expects them; the
+                # existing wrapper dir is retained as the REDmod folder name.
+                normalised = f"{add_prefix}/{normalised}"
 
             if normalised in rename_map:
                 normalised = rename_map[normalised]
