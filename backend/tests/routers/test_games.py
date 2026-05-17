@@ -75,6 +75,75 @@ class TestGetGame:
         r = client.get("/api/v1/games/Nonexistent")
         assert r.status_code == 404
 
+    def test_resolved_mods_dir_default(self, client):
+        client.post(
+            "/api/v1/games/",
+            json={"name": "DefDir", "domain_name": "dd", "install_path": "/games/dd"},
+        )
+        r = client.get("/api/v1/games/DefDir")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["mods_dir"] is None
+        assert data["resolved_mods_dir"].replace("\\", "/") == "/games/dd/downloaded_mods"
+
+    def test_resolved_mods_dir_with_override(self, client, tmp_path):
+        custom = tmp_path / "staging"
+        custom.mkdir()
+        client.post(
+            "/api/v1/games/",
+            json={
+                "name": "OvrDir",
+                "domain_name": "od",
+                "install_path": str(tmp_path),
+                "mods_dir": str(custom),
+            },
+        )
+        r = client.get("/api/v1/games/OvrDir")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["mods_dir"] == str(custom)
+        assert data["resolved_mods_dir"] == str(custom)
+
+
+class TestUpdateGame:
+    def test_set_mods_dir_same_volume(self, client, tmp_path):
+        install = tmp_path / "game"
+        install.mkdir()
+        custom = tmp_path / "staging"
+        custom.mkdir()
+        client.post(
+            "/api/v1/games/",
+            json={"name": "U1", "domain_name": "u", "install_path": str(install)},
+        )
+        r = client.patch("/api/v1/games/U1", json={"mods_dir": str(custom)})
+        assert r.status_code == 200, r.text
+        assert r.json()["mods_dir"] == str(custom)
+        assert r.json()["resolved_mods_dir"] == str(custom)
+
+    def test_clear_mods_dir(self, client, tmp_path):
+        install = tmp_path / "game"
+        install.mkdir()
+        custom = tmp_path / "staging"
+        custom.mkdir()
+        client.post(
+            "/api/v1/games/",
+            json={
+                "name": "U2",
+                "domain_name": "u",
+                "install_path": str(install),
+                "mods_dir": str(custom),
+            },
+        )
+        r = client.patch("/api/v1/games/U2", json={"mods_dir": ""})
+        assert r.status_code == 200
+        assert r.json()["mods_dir"] is None
+        # falls back to default
+        assert r.json()["resolved_mods_dir"].endswith("downloaded_mods")
+
+    def test_not_found(self, client):
+        r = client.patch("/api/v1/games/Nonexistent", json={"mods_dir": "/x"})
+        assert r.status_code == 404
+
 
 class TestValidatePath:
     def test_nonexistent_path(self, client):

@@ -14,6 +14,7 @@ from rippermod_manager.database import engine
 from rippermod_manager.models.download import DownloadJob
 from rippermod_manager.models.game import Game
 from rippermod_manager.nexus.client import NexusClient, NexusPremiumRequiredError
+from rippermod_manager.services.paths import resolve_mods_dir
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,7 @@ async def create_and_start_download(
             file_name,
             cancel_event,
             needs_extension=not file_name_from_api,
+            mods_dir=game.mods_dir,
         )
     )
     _background_tasks.add(task)
@@ -178,9 +180,10 @@ async def _run_download(
     cancel_event: asyncio.Event,
     *,
     needs_extension: bool = False,
+    mods_dir: str | None = None,
 ) -> None:
     """Background task that streams the download and updates the DB periodically."""
-    dest_dir = Path(install_path) / "downloaded_mods"
+    dest_dir = resolve_mods_dir(install_path, mods_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_path = dest_dir / file_name
     part_path = dest_path.with_suffix(dest_path.suffix + ".part")

@@ -1,7 +1,6 @@
 """Endpoints for mod installation, uninstallation, enable/disable, and conflict checking."""
 
 import logging
-from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlmodel import Session, select
@@ -49,6 +48,7 @@ from rippermod_manager.services.install_service import (
     toggle_mod,
     uninstall_mod,
 )
+from rippermod_manager.services.paths import get_mods_dir
 from rippermod_manager.services.redscript_analysis import check_redscript_conflicts
 from rippermod_manager.services.settings_helpers import get_setting
 from rippermod_manager.services.update_service import invalidate_update_cache
@@ -86,6 +86,7 @@ async def list_archives(
         game.id,
         game.install_path,
         archive_names,  # type: ignore[arg-type]
+        mods_dir=game.mods_dir,
     )
 
     # Build fallback map: ArchiveNexusLink → DownloadJob for archives without parsed IDs
@@ -157,6 +158,7 @@ async def list_installed(
         game.id,
         game.install_path,
         source_archives,  # type: ignore[arg-type]
+        mods_dir=game.mods_dir,
     )
 
     seen: set[int] = set()
@@ -208,7 +210,7 @@ async def install(
 ) -> InstallResult:
     """Install a mod from an archive in the staging folder."""
     game = get_game_or_404(game_name, session)
-    staging = Path(game.install_path) / "downloaded_mods"
+    staging = get_mods_dir(game)
     archive_path = staging / data.archive_filename
     if not archive_path.resolve().is_relative_to(staging.resolve()):
         raise HTTPException(400, "Invalid archive filename")
@@ -334,7 +336,7 @@ async def preview_archive(
     )
 
     game = get_game_or_404(game_name, session)
-    staging = Path(game.install_path) / "downloaded_mods"
+    staging = get_mods_dir(game)
     archive_path = staging / archive_filename
     if not archive_path.resolve().is_relative_to(staging.resolve()):
         raise HTTPException(400, "Invalid archive filename")
@@ -378,7 +380,7 @@ async def conflicts(
 ) -> ConflictCheckResult:
     """Check for file conflicts before installing an archive."""
     game = get_game_or_404(game_name, session)
-    staging = Path(game.install_path) / "downloaded_mods"
+    staging = get_mods_dir(game)
     archive_path = staging / archive_filename
     if not archive_path.resolve().is_relative_to(staging.resolve()):
         raise HTTPException(400, "Invalid archive filename")
@@ -395,10 +397,10 @@ async def delete_archive_endpoint(
 ) -> ArchiveDeleteResult:
     """Delete a single archive file from the staging folder."""
     game = get_game_or_404(game_name, session)
-    staging = Path(game.install_path) / "downloaded_mods"
+    staging = get_mods_dir(game)
     if not (staging / filename).resolve().is_relative_to(staging.resolve()):
         raise HTTPException(400, "Invalid archive filename")
-    return delete_archive(game.install_path, filename)
+    return delete_archive(game, filename)
 
 
 @router.put("/archives/{filename}/nexus-link", response_model=NexusLinkResult)
@@ -410,7 +412,7 @@ async def link_archive(
 ) -> NexusLinkResult:
     """Manually link an archive to a Nexus mod ID."""
     game = get_game_or_404(game_name, session)
-    staging = Path(game.install_path) / "downloaded_mods"
+    staging = get_mods_dir(game)
     if not (staging / filename).resolve().is_relative_to(staging.resolve()):
         raise HTTPException(400, "Invalid archive filename")
     existing = session.exec(
@@ -441,7 +443,7 @@ async def unlink_archive(
 ) -> None:
     """Remove a manual Nexus link from an archive."""
     game = get_game_or_404(game_name, session)
-    staging = Path(game.install_path) / "downloaded_mods"
+    staging = get_mods_dir(game)
     if not (staging / filename).resolve().is_relative_to(staging.resolve()):
         raise HTTPException(400, "Invalid archive filename")
     existing = session.exec(
@@ -475,7 +477,7 @@ async def archive_contents(
     from rippermod_manager.archive.handler import open_archive
 
     game = get_game_or_404(game_name, session)
-    staging = Path(game.install_path) / "downloaded_mods"
+    staging = get_mods_dir(game)
     archive_path = staging / filename
     if not archive_path.resolve().is_relative_to(staging.resolve()):
         raise HTTPException(400, "Invalid archive filename")

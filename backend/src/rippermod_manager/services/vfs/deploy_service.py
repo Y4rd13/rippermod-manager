@@ -24,6 +24,7 @@ from rippermod_manager.schemas.deploy import (
     PreflightReport,
     RedmodDeployResult,
 )
+from rippermod_manager.services.paths import get_mods_dir
 from rippermod_manager.services.vfs.primitives import (
     VfsError,
     hardlink,
@@ -46,7 +47,7 @@ REDMOD_TIMEOUT_S = 600  # generous: heavy REDmod sets can take several minutes t
 def pre_flight_check(game: Game) -> PreflightReport:
     report = PreflightReport()
     install = Path(game.install_path)
-    staging = install / "downloaded_mods"
+    staging = get_mods_dir(game)
     staging.mkdir(parents=True, exist_ok=True)
 
     if is_game_running(GAME_EXE):
@@ -95,7 +96,7 @@ def plan_deploy(game: Game, session: Session) -> tuple[DeployPlan, int]:
     skipped ops so callers can surface "already up to date" without false drift.
     """
     install = Path(game.install_path)
-    staging_root = install / "downloaded_mods"
+    staging_root = get_mods_dir(game)
 
     mods = session.exec(
         select(InstalledMod).where(
@@ -266,7 +267,7 @@ def undeploy(game: Game, session: Session) -> DeployReport:
 
 def detect_drift(game: Game, session: Session) -> DriftReport:
     install = Path(game.install_path)
-    staging_root = install / "downloaded_mods"
+    staging_root = get_mods_dir(game)
 
     mods = session.exec(
         select(InstalledMod).where(

@@ -1,5 +1,6 @@
 import os
 from datetime import UTC, datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import delete
@@ -11,10 +12,12 @@ from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.schemas.game import (
     GameCreate,
     GameOut,
+    GameUpdate,
     GameVersion,
     PathValidation,
     PathValidationRequest,
 )
+from rippermod_manager.services.vfs.primitives import VfsError, same_volume
 
 router = APIRouter(prefix="/games", tags=["games"])
 
@@ -36,6 +39,8 @@ def create_game(
         existing.install_path = data.install_path
         existing.domain_name = data.domain_name
         existing.os = data.os
+        if data.mods_dir is not None:
+            existing.mods_dir = data.mods_dir or None
         existing.updated_at = datetime.now(UTC)
         session.commit()
         session.refresh(existing)
@@ -47,6 +52,7 @@ def create_game(
         name=data.name,
         domain_name=data.domain_name,
         install_path=data.install_path,
+        mods_dir=data.mods_dir or None,
         os=data.os,
     )
     session.add(game)
@@ -127,6 +133,37 @@ def get_game(name: str, session: Session = Depends(get_session)) -> Game:
     game = session.exec(select(Game).where(Game.name == name)).first()
     if not game:
         raise HTTPException(404, f"Game '{name}' not found")
+    _ = game.mod_paths
+    return game
+
+
+@router.patch("/{name}", response_model=GameOut)
+def update_game(
+    name: str, data: GameUpdate, session: Session = Depends(get_session)
+) -> Game:
+    game = session.exec(select(Game).where(Game.name == name)).first()
+    if not game:
+        raise HTTPException(404, f"Game '{name}' not found")
+
+    if "mods_dir" in data.model_fields_set:
+        new_mods_dir = (data.mods_dir or "").strip() or None
+        if new_mods_dir:
+            try:
+                if not same_volume(Path(game.install_path), Path(new_mods_dir)):
+                    raise HTTPException(
+                        422,
+                        (
+                            f"mods_dir must live on the same physical volume as the game install "
+                            f"({game.install_path}); NTFS hardlinks cannot cross volumes."
+                        ),
+                    )
+            except VfsError as exc:
+                raise HTTPException(422, f"Cannot resolve mods_dir path: {exc}") from exc
+        game.mods_dir = new_mods_dir
+        game.updated_at = datetime.now(UTC)
+        session.commit()
+        session.refresh(game)
+
     _ = game.mod_paths
     return game
 

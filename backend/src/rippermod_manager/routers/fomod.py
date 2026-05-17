@@ -39,6 +39,7 @@ from rippermod_manager.services.fomod_config_parser import (
 )
 from rippermod_manager.services.fomod_install_service import compute_file_list, install_fomod
 from rippermod_manager.services.fomod_parser import inspect_archive
+from rippermod_manager.services.paths import get_mods_dir
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ def _get_fomod_config(
     Returns (config, archive_entries, fomod_prefix, game, archive_path).
     """
     game = get_game_or_404(game_name, session)
-    staging = Path(game.install_path) / "downloaded_mods"
+    staging = get_mods_dir(game)
     archive_path = staging / archive_filename
     if not archive_path.resolve().is_relative_to(staging.resolve()):
         raise HTTPException(400, "Invalid archive filename")
