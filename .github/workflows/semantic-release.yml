@@ -106,4 +106,3 @@ jobs:
         run: |
           gh release upload "v${VERSION}" --clobber \
             frontend/src-tauri/target/release/bundle/nsis/*-setup.exe
-          archive_existing_file: 'true'

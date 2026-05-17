@@ -84,3 +84,4 @@ jobs:
             included .exe to install. Full release notes:
             https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG_NAME }}
           file_category: main
+          archive_existing_file: 'true'
