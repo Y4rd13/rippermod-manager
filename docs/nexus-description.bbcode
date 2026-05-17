@@ -57,7 +57,17 @@ The algorithm does the heavy lifting, but you're the one calling the shots:
 [*][b]Conflict resolution[/b] dialog showing exactly which files overlap, with Overwrite, Skip, or Cancel options.
 [*][b]Bulk operations[/b] - Select multiple mods and enable, disable, or uninstall them all at once.
 [*][b]Archive cleanup[/b] - Remove orphan archives not linked to any installed mod.
-[*][b]Clean game folder[/b] - Mod content lives in [i]downloaded_mods/[/i] and is linked into the game directory only when deployed. Steam "Verify integrity" only sees vanilla files. Profile switching is instant.
+[/list]
+
+[b]Clean Game Folder & Smart Deployment[/b]
+RipperMod keeps your Cyberpunk install as close to vanilla as possible. Instead of dropping mod files all over the game directory, mods are staged in a [i]downloaded_mods/[/i] folder and linked into the game only when you [b]Deploy[/b] them. Switching mod loadouts or rolling back to vanilla is one click away, and game patches never have to fight with your mods.
+[list]
+[*][b]Deploy / Undeploy[/b] from Settings (or automatically when you hit Play) to link every enabled mod into the game folder, or remove all of them in one click and revert to vanilla.
+[*][b]Steam-Verify friendly[/b] - Steam's "Verify integrity of game files" only sees the vanilla game. No more red-flagged installs after every game update.
+[*][b]Auto-compile REDmods[/b] - When you install or enable a REDmod, RipperMod automatically runs the REDmod compiler for you. Your scripts and tweaks load in-game on the next launch with zero command-line steps.
+[*][b]Drift detection[/b] - If a game patch, another tool, or a manual change touches your game folder outside RipperMod, the app notices and offers a one-click re-deploy to put everything back the way it should be.
+[*][b]Instant profile switching[/b] - Profiles only re-link the mods that need to change. No copying or moving big files, so swapping loadouts takes seconds even with hundreds of mods.
+[*][b]Migrate from old installs[/b] - Already have mods installed the traditional way? The one-time migration tool moves them into the clean-folder layout without losing anything.
 [/list]
 
 [b]Nexus Mods Integration[/b]
@@ -90,12 +100,13 @@ The algorithm does the heavy lifting, but you're the one calling the shots:
 [*][b]Load order management[/b] - View and reorder archive load order with preference rules, dry-run previews, and automatic modlist.txt generation.
 [/list]
 
-[b]Update Checker[/b]
+[b]Stay Up to Date[/b]
 [list]
-[*]Detects which of your installed mods have newer versions available on Nexus.
+[*][b]Mod update checker[/b] - Detects which of your installed mods have newer versions available on Nexus.
 [*]Shows local vs. Nexus version comparison with detection method indicators.
 [*]Aggregated Updates page across all games, plus per-game update tables.
 [*]One-click download of the latest version.
+[*][b]App update notification[/b] - When a new version of RipperMod Manager is published on Nexus, the app shows a banner and Settings notice with a one-click link to the download page. No auto-installs, you stay in control of what you upgrade and when.
 [/list]
 
 [b]Profile Manager[/b]
@@ -185,7 +196,7 @@ Found a glitch in the system? Don't just flatline and delta, report it so I can 
 To help me zero in on the problem fast, include the following:
 
 [list]
-[*][b]App version[/b] - Check Settings > About (e.g. v1.20.0).
+[*][b]App version[/b] - Check Settings > About.
 [*][b]OS[/b] - Windows 10 or 11, and any relevant details (language, antivirus, etc.).
 [*][b]Steps to reproduce[/b] - What exactly did you do? Step by step, from launch to the bug.
 [*][b]Expected behavior[/b] - What should have happened.

@@ -69,6 +69,9 @@ Click any [i]"Download with manager"[/i] button on the Nexus Mods website. Rippe
 [b]Manual Archives[/b]
 Drop your .zip, .7z, or .rar files into the [b]downloaded_mods[/b] folder inside your game directory (e.g. [i]Cyberpunk 2077/downloaded_mods/[/i]). They'll appear in the Archives tab automatically.
 
+[b]What happens after Install[/b]
+RipperMod doesn't dump mod files all over your Cyberpunk install. Mods live in [i]downloaded_mods/[/i] and get [b]Deployed[/b] into the game folder (linked, not copied) when you launch the game or hit Deploy in Settings. If the mod is a REDmod, RipperMod also runs the REDmod compiler automatically, so your scripts and tweaks are ready on the next game launch with zero command-line work. Hit [b]Undeploy[/b] anytime to return your install to vanilla in one click.
+
 [size=3][b]Step 5 - Managing Conflicts[/b][/size]
 
 When two mods touch the same files, RipperMod catches it. The conflict engine detects four types of conflicts:
@@ -99,11 +102,13 @@ Got different mod setups for different playthroughs? Use profiles:
 [*][b]Export/Import[/b] - Share profiles as JSON files with other chooms.
 [/list]
 
-[size=3][b]Step 7 - Keeping Mods Updated[/b][/size]
+[size=3][b]Step 7 - Keeping Mods (and the App) Updated[/b][/size]
 
 Go to the [b]Updates[/b] page (or the Updates tab on your game's page) to see which mods have newer versions available on Nexus. The app compares your installed version against the latest on Nexus using download timestamps for accuracy, no false positives from version string quirks.
 
 Click [b]Download[/b] to grab the latest version, then install it from the Archives tab.
+
+[b]App updates[/b] - When a new version of RipperMod Manager itself is published on Nexus, you'll see a banner at the top of the app and a notice in Settings with a one-click link to the download page. No auto-installs, you're in control of what you upgrade and when.
 
 [size=3][b]Quick Reference[/b][/size]
 
@@ -135,7 +140,7 @@ Found a glitch in the system? Don't just flatline and delta, report it so I can 
 To help me zero in on the problem fast, include the following:
 
 [list]
-[*][b]App version[/b] - Check Settings > About (e.g. v1.16.5).
+[*][b]App version[/b] - Check Settings > About.
 [*][b]OS[/b] - Windows 10 or 11, and any relevant details (language, antivirus, etc.).
 [*][b]Steps to reproduce[/b] - What exactly did you do? Step by step, from launch to the bug.
 [*][b]Expected behavior[/b] - What should have happened.
@@ -162,7 +167,7 @@ Want to contribute? Here's how:
 [list]
 [*][b]Report bugs[/b] - Use the [url=https://www.nexusmods.com/cyberpunk2077/mods/27781?tab=bugs]Bugs[/url] tab here or open a [url=https://github.com/Y4rd13/rippermod-manager/issues]GitHub Issue[/url].
 [*][b]Request features[/b] - Open a GitHub Issue with the [i]feature request[/i] label and describe what you'd like to see.
-[*][b]Submit code[/b] - Fork the repo, create a branch, and open a Pull Request. The project uses conventional commits, Ruff for Python linting, ESLint for TypeScript, and has 836+ automated tests that must pass before merging.
+[*][b]Submit code[/b] - Fork the repo, create a branch, and open a Pull Request. The project uses conventional commits, Ruff for Python linting, ESLint for TypeScript, and has 900+ automated tests that must pass before merging.
 [*][b]Spread the word[/b] - Endorse the mod on Nexus, share it with your chooms, or leave a comment. Visibility helps the project grow.
 [/list]
 
