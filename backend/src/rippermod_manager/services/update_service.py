@@ -621,7 +621,9 @@ async def check_all_updates(
     download_date_map: dict[int, int] = {}
     archive_names = {m.source_archive for m in tracked.values() if m.source_archive}
     if archive_names and install_path:
-        raw_dates = archive_download_dates(session, game_id, install_path, archive_names)
+        raw_dates = archive_download_dates(
+            session, game_id, install_path, archive_names, mods_dir=mods_dir
+        )
         archive_epoch = {fn: int(dt.timestamp()) for fn, dt in raw_dates.items()}
         for mid, mod in tracked.items():
             if mod.source_archive and mod.source_archive in archive_epoch:

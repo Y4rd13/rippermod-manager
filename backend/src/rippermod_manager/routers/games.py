@@ -22,6 +22,26 @@ from rippermod_manager.services.vfs.primitives import VfsError, same_volume
 router = APIRouter(prefix="/games", tags=["games"])
 
 
+def _validate_mods_dir(install_path: str, mods_dir: str) -> None:
+    """Raise 422 if mods_dir doesn't live on the same volume as install_path.
+
+    NTFS hardlinks (used by the VFS deploy) cannot cross volumes, so we reject
+    the staging override up-front rather than failing later at deploy time.
+    """
+    try:
+        on_same_volume = same_volume(Path(install_path), Path(mods_dir))
+    except VfsError as exc:
+        raise HTTPException(422, f"Cannot resolve mods_dir path: {exc}") from exc
+    if not on_same_volume:
+        raise HTTPException(
+            422,
+            (
+                f"mods_dir must live on the same physical volume as the game install "
+                f"({install_path}); NTFS hardlinks cannot cross volumes."
+            ),
+        )
+
+
 @router.get("/", response_model=list[GameOut])
 def list_games(session: Session = Depends(get_session)) -> list[Game]:
     games = session.exec(select(Game)).all()
@@ -34,13 +54,17 @@ def list_games(session: Session = Depends(get_session)) -> list[Game]:
 def create_game(
     data: GameCreate, response: Response, session: Session = Depends(get_session)
 ) -> Game:
+    normalized_mods_dir = (data.mods_dir or "").strip() or None
+    if normalized_mods_dir:
+        _validate_mods_dir(data.install_path, normalized_mods_dir)
+
     existing = session.exec(select(Game).where(Game.name == data.name)).first()
     if existing:
         existing.install_path = data.install_path
         existing.domain_name = data.domain_name
         existing.os = data.os
         if data.mods_dir is not None:
-            existing.mods_dir = data.mods_dir or None
+            existing.mods_dir = normalized_mods_dir
         existing.updated_at = datetime.now(UTC)
         session.commit()
         session.refresh(existing)
@@ -52,7 +76,7 @@ def create_game(
         name=data.name,
         domain_name=data.domain_name,
         install_path=data.install_path,
-        mods_dir=data.mods_dir or None,
+        mods_dir=normalized_mods_dir,
         os=data.os,
     )
     session.add(game)
@@ -146,17 +170,7 @@ def update_game(name: str, data: GameUpdate, session: Session = Depends(get_sess
     if "mods_dir" in data.model_fields_set:
         new_mods_dir = (data.mods_dir or "").strip() or None
         if new_mods_dir:
-            try:
-                if not same_volume(Path(game.install_path), Path(new_mods_dir)):
-                    raise HTTPException(
-                        422,
-                        (
-                            f"mods_dir must live on the same physical volume as the game install "
-                            f"({game.install_path}); NTFS hardlinks cannot cross volumes."
-                        ),
-                    )
-            except VfsError as exc:
-                raise HTTPException(422, f"Cannot resolve mods_dir path: {exc}") from exc
+            _validate_mods_dir(game.install_path, new_mods_dir)
         game.mods_dir = new_mods_dir
         game.updated_at = datetime.now(UTC)
         session.commit()
