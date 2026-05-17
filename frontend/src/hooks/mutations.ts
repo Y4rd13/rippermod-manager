@@ -20,6 +20,7 @@ import type {
   DownloadStartResult,
   Game,
   GameCreate,
+  GameUpdate,
   InstallRequest,
   InstallResult,
   ModActionResult,
@@ -71,6 +72,20 @@ export function useDeleteGame() {
       toast.success("Game deleted", name);
     },
     onError: () => toast.error("Failed to delete game"),
+  });
+}
+
+export function useUpdateGame() {
+  const qc = useQueryClient();
+  return useMutation<Game, Error, { name: string; data: GameUpdate }>({
+    mutationFn: ({ name, data }) => api.patch(`/api/v1/games/${name}`, data),
+    onSuccess: (game) => {
+      // useGame uses queryKey ["games", name] — prefix invalidation covers both
+      // the list query and any single-game query.
+      qc.invalidateQueries({ queryKey: ["games"] });
+      toast.success("Game updated", game.name);
+    },
+    onError: (err) => toast.error("Failed to update game", err.message),
   });
 }
 

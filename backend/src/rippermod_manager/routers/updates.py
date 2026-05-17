@@ -47,14 +47,20 @@ class UpdateCheckResult(BaseModel):
 
 
 def _enrich_download_dates(
-    updates: list[ModUpdate], session: Session, game_id: int, install_path: str
+    updates: list[ModUpdate],
+    session: Session,
+    game_id: int,
+    install_path: str,
+    mods_dir: str | None = None,
 ) -> None:
     """Populate local_download_date from DownloadJob or archive file mtime."""
     archives = {u.source_archive for u in updates if u.source_archive}
     if not archives:
         return
 
-    dl_date_map = archive_download_dates(session, game_id, install_path, archives)
+    dl_date_map = archive_download_dates(
+        session, game_id, install_path, archives, mods_dir=mods_dir
+    )
 
     for u in updates:
         if u.source_archive:
@@ -69,7 +75,7 @@ def list_updates(game_name: str, session: Session = Depends(get_session)) -> Upd
     game = get_game_or_404(game_name, session)
     result = check_cached_updates(game.id, game.domain_name, session)  # type: ignore[arg-type]
     updates = [ModUpdate(**u) for u in result.updates]
-    _enrich_download_dates(updates, session, game.id, game.install_path)  # type: ignore[arg-type]
+    _enrich_download_dates(updates, session, game.id, game.install_path, mods_dir=game.mods_dir)  # type: ignore[arg-type]
     return UpdateCheckResult(
         total_checked=result.total_checked,
         updates_available=len(updates),
@@ -106,12 +112,13 @@ async def check_updates(
                 session,  # type: ignore[arg-type]
                 install_path=game.install_path,
                 gql=gql,
+                mods_dir=game.mods_dir,
             )
     else:
         result = check_cached_updates(game.id, game.domain_name, session)  # type: ignore[arg-type]
 
     updates = [ModUpdate(**u) for u in result.updates]
-    _enrich_download_dates(updates, session, game.id, game.install_path)  # type: ignore[arg-type]
+    _enrich_download_dates(updates, session, game.id, game.install_path, mods_dir=game.mods_dir)  # type: ignore[arg-type]
     return UpdateCheckResult(
         total_checked=result.total_checked,
         updates_available=len(updates),

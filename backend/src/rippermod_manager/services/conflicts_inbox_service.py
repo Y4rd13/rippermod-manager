@@ -8,7 +8,6 @@ conflicts by reinstalling mods.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from sqlmodel import Session, select
 
@@ -34,6 +33,7 @@ from rippermod_manager.services.install_service import (
     install_mod,
     uninstall_mod,
 )
+from rippermod_manager.services.paths import get_mods_dir
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ def _archive_files_for_mod(
     if not mod.source_archive:
         return None
 
-    staging = Path(game.install_path) / "downloaded_mods"
+    staging = get_mods_dir(game)
     archive_path = staging / mod.source_archive
     if not archive_path.is_file():
         return None
@@ -177,7 +177,7 @@ def resolve_conflict(
     if not mod.source_archive:
         raise ValueError("Mod has no source archive — cannot reinstall.")
 
-    staging = Path(game.install_path) / "downloaded_mods"
+    staging = get_mods_dir(game)
     archive_path = staging / mod.source_archive
     if not archive_path.is_file():
         raise FileNotFoundError(f"Source archive not found: {mod.source_archive}")

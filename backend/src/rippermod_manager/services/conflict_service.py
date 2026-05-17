@@ -31,6 +31,7 @@ from rippermod_manager.services.archive_layout import (
     known_roots_for_game,
 )
 from rippermod_manager.services.install_service import get_file_ownership_map
+from rippermod_manager.services.paths import get_mods_dir
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,7 @@ def _get_archive_file_set(game: Game, archive_filename: str) -> set[str] | None:
     Returns ``None`` when the archive is missing, corrupt, or is a FOMOD
     installer (conditional file sets cannot be reliably compared).
     """
-    staging = Path(game.install_path) / "downloaded_mods"
+    staging = get_mods_dir(game)
     archive_path = staging / archive_filename
     if not archive_path.is_file():
         return None
