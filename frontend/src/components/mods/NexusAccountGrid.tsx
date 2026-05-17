@@ -9,6 +9,7 @@ import { ModCardAction } from "@/components/mods/ModCardAction";
 import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { ModQuickActions } from "@/components/mods/ModQuickActions";
 import { NexusModCard } from "@/components/mods/NexusModCard";
+import { NexusModRow } from "@/components/mods/NexusModRow";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
@@ -17,9 +18,12 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
+import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { VirtualCardGrid } from "@/components/ui/VirtualCardGrid";
+import { VirtualTable } from "@/components/ui/VirtualTable";
 import { useAbstainMod, useEndorseMod, useStartModDownload, useTrackMod, useUntrackMod } from "@/hooks/mutations";
 import { toast } from "@/stores/toast-store";
+import { useUIStore } from "@/stores/ui-store";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { useSessionState } from "@/hooks/use-session-state";
@@ -72,6 +76,7 @@ interface Props {
   emptyTitle?: string;
   dataUpdatedAt?: number;
   hideBadges?: Array<"installed" | "tracked" | "endorsed">;
+  viewModeKey?: string;
 }
 
 export function NexusAccountGrid({
@@ -86,7 +91,10 @@ export function NexusAccountGrid({
   emptyTitle = "No mods found",
   dataUpdatedAt,
   hideBadges = [],
+  viewModeKey,
 }: Props) {
+  const viewMode = useUIStore((s) => (viewModeKey ? s.viewModeByTab[viewModeKey] ?? "grid" : "grid"));
+  const setViewMode = useUIStore((s) => s.setViewMode);
   const navigate = useNavigate();
   const [filter, setFilter] = useState("");
   const [isStale, setIsStale] = useState(false);
@@ -211,6 +219,13 @@ export function NexusAccountGrid({
             Updated {timeAgo(Math.floor(dataUpdatedAt / 1000))}
           </span>
         )}
+        {viewModeKey && (
+          <ViewModeToggle
+            className="ml-auto"
+            mode={viewMode}
+            onChange={(m) => setViewMode(viewModeKey, m)}
+          />
+        )}
       </div>
 
       <FilterChips
@@ -223,119 +238,140 @@ export function NexusAccountGrid({
         onChange={setChip}
       />
 
-      <VirtualCardGrid
-        items={filtered}
-        renderItem={(mod) => {
+      {(() => {
+        const renderCommon = (mod: NexusDownload) => {
           const nexusModId = mod.nexus_mod_id;
           const archive = flow.archiveByModId.get(nexusModId);
           const dl = flow.completedDownloadByModId.get(nexusModId);
-
-          return (
-            <NexusModCard
-              modName={mod.mod_name}
-              summary={mod.summary}
-              author={mod.author}
-              version={mod.version}
-              endorsementCount={mod.endorsement_count}
-              pictureUrl={mod.picture_url}
-              onClick={() => openUrl(mod.nexus_url).catch(() => {})}
-              onContextMenu={(e) => openMenu(e, mod)}
-              badge={
-                (() => {
-                  const showInstalled = installedModIds.has(nexusModId) && !hideBadges.includes("installed");
-                  const showTracked = mod.is_tracked && !hideBadges.includes("tracked");
-                  const showEndorsed = mod.is_endorsed && !hideBadges.includes("endorsed");
-                  if (!showInstalled && !showTracked && !showEndorsed) return undefined;
-                  return (
-                    <div className="flex items-center gap-1">
-                      {showInstalled && (
-                        <Badge variant="success">
-                          <Check size={10} className="mr-0.5" />
-                          Installed
-                        </Badge>
-                      )}
-                      {showTracked && (
-                        <Badge variant="neutral">
-                          <Eye size={10} className="mr-0.5" /> Tracked
-                        </Badge>
-                      )}
-                      {showEndorsed && (
-                        <Badge variant="success">
-                          <Heart size={10} className="mr-0.5" /> Endorsed
-                        </Badge>
-                      )}
-                    </div>
-                  );
-                })()
-              }
-              footer={
-                <div className="flex items-center gap-2">
-                  {mod.updated_at && (
-                    <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(mod.updated_at))}</span>
-                  )}
-                  <ModQuickActions
-                    isEndorsed={mod.is_endorsed}
-                    isTracked={mod.is_tracked}
-                    modId={nexusModId}
-                    gameName={gameName}
-                  />
-                </div>
-              }
-              action={
-                <ModCardAction
-                  isInstalled={installedModIds.has(nexusModId)}
-                  isInstalling={flow.installingModIds.has(nexusModId)}
-                  activeDownload={flow.activeDownloadByModId.get(nexusModId)}
-                  completedDownload={flow.completedDownloadByModId.get(nexusModId)}
-                  archive={archive}
-                  nexusUrl={mod.nexus_url}
-                  hasConflicts={flow.conflicts != null}
-                  isDownloading={flow.downloadingModId === nexusModId}
-                  onInstall={() => archive && flow.handleInstall(nexusModId, archive)}
-                  onInstallByFilename={() => {
-                    if (dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
-                  }}
-                  onDownload={() => flow.handleDownload(nexusModId)}
-                  onCancelDownload={() => {
-                    const dl = flow.activeDownloadByModId.get(nexusModId);
-                    if (dl) flow.handleCancelDownload(dl.id);
-                  }}
-                  onInstallWithPreview={
-                    dl
-                      ? () => flow.handleInstallWithPreviewByFilename(nexusModId, dl.file_name)
-                      : archive
-                        ? () => flow.handleInstallWithPreview(nexusModId, archive)
-                        : undefined
-                  }
-                />
-              }
-              overflowMenu={
-                <OverflowMenuButton
-                  items={getContextMenuItems(mod)}
-                  onSelect={(key) => {
-                    if (key === "nexus") openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
-                    else if (key === "download") startModDownload.mutate(
-                      { gameName, nexusModId },
-                      { onSuccess: (r) => { if (r.requires_file_selection) openUrl(mod.nexus_url).catch(() => {}); } },
-                    );
-                    else if (key === "copy-name") void navigator.clipboard.writeText(mod.mod_name).then(
-                      () => toast.success("Copied to clipboard"),
-                      () => toast.error("Failed to copy"),
-                    );
-                    else if (key === "endorse") {
-                      if (mod.is_endorsed) abstainMod.mutate({ gameName, modId: nexusModId });
-                      else endorseMod.mutate({ gameName, modId: nexusModId });
-                    } else if (key === "track") {
-                      if (mod.is_tracked) untrackMod.mutate({ gameName, modId: nexusModId });
-                      else trackMod.mutate({ gameName, modId: nexusModId });
-                    }
-                  }}
-                />
+          const showInstalled = installedModIds.has(nexusModId) && !hideBadges.includes("installed");
+          const showTracked = mod.is_tracked && !hideBadges.includes("tracked");
+          const showEndorsed = mod.is_endorsed && !hideBadges.includes("endorsed");
+          const badge = !showInstalled && !showTracked && !showEndorsed ? undefined : (
+            <div className="flex items-center gap-1">
+              {showInstalled && (
+                <Badge variant="success">
+                  <Check size={10} className="mr-0.5" /> Installed
+                </Badge>
+              )}
+              {showTracked && (
+                <Badge variant="neutral">
+                  <Eye size={10} className="mr-0.5" /> Tracked
+                </Badge>
+              )}
+              {showEndorsed && (
+                <Badge variant="success">
+                  <Heart size={10} className="mr-0.5" /> Endorsed
+                </Badge>
+              )}
+            </div>
+          );
+          const footer = (
+            <div className="flex items-center gap-2">
+              {mod.updated_at && (
+                <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(mod.updated_at))}</span>
+              )}
+              <ModQuickActions
+                isEndorsed={mod.is_endorsed}
+                isTracked={mod.is_tracked}
+                modId={nexusModId}
+                gameName={gameName}
+              />
+            </div>
+          );
+          const action = (
+            <ModCardAction
+              isInstalled={installedModIds.has(nexusModId)}
+              isInstalling={flow.installingModIds.has(nexusModId)}
+              activeDownload={flow.activeDownloadByModId.get(nexusModId)}
+              completedDownload={flow.completedDownloadByModId.get(nexusModId)}
+              archive={archive}
+              nexusUrl={mod.nexus_url}
+              hasConflicts={flow.conflicts != null}
+              isDownloading={flow.downloadingModId === nexusModId}
+              onInstall={() => archive && flow.handleInstall(nexusModId, archive)}
+              onInstallByFilename={() => {
+                if (dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
+              }}
+              onDownload={() => flow.handleDownload(nexusModId)}
+              onCancelDownload={() => {
+                const active = flow.activeDownloadByModId.get(nexusModId);
+                if (active) flow.handleCancelDownload(active.id);
+              }}
+              onInstallWithPreview={
+                dl
+                  ? () => flow.handleInstallWithPreviewByFilename(nexusModId, dl.file_name)
+                  : archive
+                    ? () => flow.handleInstallWithPreview(nexusModId, archive)
+                    : undefined
               }
             />
           );
-        }}
-      />
+          const overflowMenu = (
+            <OverflowMenuButton
+              items={getContextMenuItems(mod)}
+              onSelect={(key) => {
+                if (key === "nexus") openUrl(mod.nexus_url).catch(() => toast.error("Failed to open URL"));
+                else if (key === "download") startModDownload.mutate(
+                  { gameName, nexusModId },
+                  { onSuccess: (r) => { if (r.requires_file_selection) openUrl(mod.nexus_url).catch(() => {}); } },
+                );
+                else if (key === "copy-name") void navigator.clipboard.writeText(mod.mod_name).then(
+                  () => toast.success("Copied to clipboard"),
+                  () => toast.error("Failed to copy"),
+                );
+                else if (key === "endorse") {
+                  if (mod.is_endorsed) abstainMod.mutate({ gameName, modId: nexusModId });
+                  else endorseMod.mutate({ gameName, modId: nexusModId });
+                } else if (key === "track") {
+                  if (mod.is_tracked) untrackMod.mutate({ gameName, modId: nexusModId });
+                  else trackMod.mutate({ gameName, modId: nexusModId });
+                }
+              }}
+            />
+          );
+          return {
+            modName: mod.mod_name,
+            summary: mod.summary,
+            author: mod.author,
+            version: mod.version,
+            endorsementCount: mod.endorsement_count,
+            pictureUrl: mod.picture_url,
+            onClick: () => openUrl(mod.nexus_url).catch(() => {}),
+            onContextMenu: (e: React.MouseEvent) => openMenu(e, mod),
+            badge,
+            footer,
+            action,
+            overflowMenu,
+          };
+        };
+
+        if (viewMode === "list") {
+          return (
+            <VirtualTable
+              items={filtered}
+              estimateHeight={72}
+              renderHead={() => (
+                <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted text-xs">
+                  <th className="py-2 pr-3 w-[68px]" />
+                  <th className="py-2 pr-3 font-medium">Mod</th>
+                  <th className="py-2 pr-3 font-medium">Author</th>
+                  <th className="py-2 pr-3 font-medium">Version</th>
+                  <th className="py-2 pr-3 font-medium">Endorsements</th>
+                  <th className="py-2 pr-3 font-medium">Updated</th>
+                  <th className="py-2 pl-2 text-right font-medium">Actions</th>
+                </tr>
+              )}
+              renderRow={(mod) => <NexusModRow {...renderCommon(mod)} />}
+            />
+          );
+        }
+        return (
+          <VirtualCardGrid
+            items={filtered}
+            renderItem={(mod) => <NexusModCard {...renderCommon(mod)} />}
+          />
+        );
+      })()}
 
       {flow.previewArchive && (
         <PreInstallPreview
