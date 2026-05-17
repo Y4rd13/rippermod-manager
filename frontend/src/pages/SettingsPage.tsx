@@ -64,8 +64,9 @@ function DeploymentCard() {
       <div className="space-y-4">
         <p className="text-sm text-text-secondary">
           Mods are staged in <code>downloaded_mods/</code> and linked into the game directory
-          automatically when you install, toggle, or launch the game. Use <strong>Undeploy</strong>
-          to remove all links and restore your game folder to vanilla without uninstalling mods.
+          automatically when you install, toggle, or launch the game. Use{" "}
+          <strong>Undeploy</strong> to remove all links and restore your game folder to vanilla
+          without uninstalling mods.
         </p>
         {status.data && (
           <div className="text-xs text-text-muted font-mono">
