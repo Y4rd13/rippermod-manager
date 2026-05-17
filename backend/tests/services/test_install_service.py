@@ -155,6 +155,70 @@ class TestInstallMod:
         with pytest.raises(ValueError, match="already installed"):
             install_mod(game, archive, session)
 
+    def test_redmod_archive_extracts_under_mods_prefix(self, session, game_dir, staging_dir):
+        """REDmod archives package as ``<modname>/info.json`` at the zip root.
+        After install, the extracted files must live at
+        ``<staging>/<safe_name>/mods/<modname>/...`` and the InstalledModFile
+        records must use the ``mods/`` prefix so deploy creates junctions at
+        ``<game>/mods/<modname>/`` where the engine looks.
+
+        This is the full integration: detect_layout → apply_layout_transform →
+        extraction → InstalledMod records → link_kind heuristic.  Without the
+        REDMOD layout detection + `add_prefix`, files would land at the root and
+        `link_kind` would default to `hardlink`, breaking REDmod loading.
+        """
+        # Cyberpunk domain so known_roots includes the real REDmod marker set
+        cp_game = Game(
+            name="CP77Test",
+            domain_name="cyberpunk2077",
+            install_path=str(game_dir),
+        )
+        session.add(cp_game)
+        session.flush()
+        session.add(GameModPath(game_id=cp_game.id, relative_path="mods"))
+        session.commit()
+
+        archive = staging_dir / "MyREDmod-12345-1-0.zip"
+        _make_zip(
+            archive,
+            {
+                "MyREDmodPkg/info.json": b'{"name":"MyREDmod","version":"1.0"}',
+                "MyREDmodPkg/archives/test.archive": b"FAKE",
+                "MyREDmodPkg/scripts/init.script": b"// noop\n",
+            },
+        )
+
+        # auto_deploy=False so we don't try to create real junctions on the test FS
+        # (the test machine may be Linux/macOS where mklink doesn't exist). The
+        # important state is the staging layout and the InstalledModFile records.
+        result = install_mod(cp_game, archive, session, auto_deploy=False)
+
+        assert result.files_extracted == 3
+
+        installed = session.exec(
+            select(InstalledMod).where(InstalledMod.id == result.installed_mod_id)
+        ).one()
+        files = sorted(f.relative_path for f in installed.files)
+
+        # All three files MUST be prefixed with mods/<modname>/
+        assert files == [
+            "mods/MyREDmodPkg/archives/test.archive",
+            "mods/MyREDmodPkg/info.json",
+            "mods/MyREDmodPkg/scripts/init.script",
+        ], f"REDmod files extracted without mods/ prefix — engine won't find them. Got: {files}"
+
+        # link_kind must be junction for every record (mods/<x>/<more>/ matches
+        # install_service's heuristic)
+        kinds = {f.link_kind for f in installed.files}
+        assert kinds == {"junction"}, f"Expected all junctions, got: {kinds}"
+
+        # Staging layout: files live under <safe>/mods/<modname>/...
+        safe = installed.staging_dir
+        assert (staging_dir / safe / "mods" / "MyREDmodPkg" / "info.json").exists()
+        assert (staging_dir / safe / "mods" / "MyREDmodPkg" / "archives" / "test.archive").exists()
+        # And NOT at the wrong root path
+        assert not (staging_dir / safe / "MyREDmodPkg" / "info.json").exists()
+
     def test_missing_archive_raises_file_not_found(self, session, game, tmp_path):
         missing = tmp_path / "nonexistent.zip"
         with pytest.raises(FileNotFoundError):

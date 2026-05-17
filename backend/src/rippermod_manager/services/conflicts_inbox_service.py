@@ -24,7 +24,11 @@ from rippermod_manager.schemas.conflicts import (
     ModConflictSummary,
     ResolveResult,
 )
-from rippermod_manager.services.archive_layout import detect_layout, known_roots_for_game
+from rippermod_manager.services.archive_layout import (
+    apply_layout_transform,
+    detect_layout,
+    known_roots_for_game,
+)
 from rippermod_manager.services.install_service import (
     get_file_ownership_map,
     install_mod,
@@ -68,15 +72,14 @@ def _archive_files_for_mod(
 
     known_roots = known_roots_for_game(game.domain_name)
     layout_result = detect_layout(all_entries, known_roots)
-    strip_prefix = layout_result.strip_prefix
 
     files: list[str] = []
     for entry in all_entries:
         if entry.is_dir:
             continue
-        normalised = entry.filename.replace("\\", "/")
-        if strip_prefix and normalised.startswith(strip_prefix + "/"):
-            normalised = normalised[len(strip_prefix) + 1 :]
+        normalised = apply_layout_transform(entry.filename, layout_result)
+        if normalised is None:
+            continue
         files.append(normalised)
     return files
 

@@ -34,6 +34,7 @@ from rippermod_manager.schemas.install import (
 )
 from rippermod_manager.services.archive_layout import (
     ArchiveLayout,
+    apply_layout_transform,
     detect_layout,
     known_roots_for_game,
 )
@@ -133,29 +134,18 @@ def install_mod(
                 "tool (Vortex, MO2) to install."
             )
 
-        strip_prefix = layout_result.strip_prefix
-        add_prefix = layout_result.add_prefix
-
         # Pre-filter entries to determine which files to extract
         valid_entries: list[tuple[ArchiveEntry, str, str]] = []
         for entry in all_entries:
             if entry.is_dir:
                 continue
-            normalised = entry.filename.replace("\\", "/")
 
-            if strip_prefix:
-                if normalised.startswith(strip_prefix + "/"):
-                    normalised = normalised[len(strip_prefix) + 1 :]
-                else:
-                    logger.debug("Skipping entry outside wrapper: %s", entry.filename)
-                    skipped += 1
-                    continue
-
-            if add_prefix:
-                # REDmod archives package as `<modname>/info.json` at the zip root.
-                # Prepend `mods/` so files land where the engine expects them; the
-                # existing wrapper dir is retained as the REDmod folder name.
-                normalised = f"{add_prefix}/{normalised}"
+            transformed = apply_layout_transform(entry.filename, layout_result)
+            if transformed is None:
+                logger.debug("Skipping entry outside wrapper: %s", entry.filename)
+                skipped += 1
+                continue
+            normalised = transformed
 
             if normalised in rename_map:
                 normalised = rename_map[normalised]

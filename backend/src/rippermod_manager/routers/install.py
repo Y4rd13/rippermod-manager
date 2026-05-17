@@ -328,6 +328,7 @@ async def preview_archive(
     from rippermod_manager.archive.handler import open_archive
     from rippermod_manager.services.archive_layout import (
         ArchiveLayout,
+        apply_layout_transform,
         detect_layout,
         known_roots_for_game,
     )
@@ -351,18 +352,14 @@ async def preview_archive(
     known_roots = known_roots_for_game(game.domain_name)
     layout_result = detect_layout(all_entries, known_roots)
     is_fomod = layout_result.layout == ArchiveLayout.FOMOD
-    strip_prefix = layout_result.strip_prefix
 
     files: list[ArchiveFileEntry] = []
     for entry in all_entries:
         if entry.is_dir:
             continue
-        normalised = entry.filename.replace("\\", "/")
-        if strip_prefix:
-            if normalised.startswith(strip_prefix + "/"):
-                normalised = normalised[len(strip_prefix) + 1 :]
-            else:
-                continue
+        normalised = apply_layout_transform(entry.filename, layout_result)
+        if normalised is None:
+            continue
         files.append(ArchiveFileEntry(file_path=normalised, size=entry.size, is_dir=False))
 
     return ArchivePreviewResult(
