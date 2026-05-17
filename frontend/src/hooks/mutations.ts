@@ -80,8 +80,9 @@ export function useUpdateGame() {
   return useMutation<Game, Error, { name: string; data: GameUpdate }>({
     mutationFn: ({ name, data }) => api.patch(`/api/v1/games/${name}`, data),
     onSuccess: (game) => {
+      // useGame uses queryKey ["games", name] — prefix invalidation covers both
+      // the list query and any single-game query.
       qc.invalidateQueries({ queryKey: ["games"] });
-      qc.invalidateQueries({ queryKey: ["game", game.name] });
       toast.success("Game updated", game.name);
     },
     onError: (err) => toast.error("Failed to update game", err.message),

@@ -104,6 +104,45 @@ class TestGetGame:
         assert data["mods_dir"] == str(custom)
         assert data["resolved_mods_dir"] == str(custom)
 
+    def test_post_rejects_cross_volume_mods_dir(self, client, monkeypatch, tmp_path):
+        # Force same_volume to return False so this works regardless of test env layout.
+        from rippermod_manager.routers import games as games_router
+
+        monkeypatch.setattr(games_router, "same_volume", lambda a, b: False)
+        install = tmp_path / "game"
+        install.mkdir()
+        bad_mods_dir = tmp_path / "bad"
+        bad_mods_dir.mkdir()
+        r = client.post(
+            "/api/v1/games/",
+            json={
+                "name": "CrossVol",
+                "domain_name": "cv",
+                "install_path": str(install),
+                "mods_dir": str(bad_mods_dir),
+            },
+        )
+        assert r.status_code == 422, r.text
+        assert "same physical volume" in r.json()["detail"]
+
+    def test_post_accepts_same_volume_mods_dir(self, client, tmp_path):
+        install = tmp_path / "game"
+        install.mkdir()
+        custom = tmp_path / "staging"
+        custom.mkdir()
+        r = client.post(
+            "/api/v1/games/",
+            json={
+                "name": "SameVol",
+                "domain_name": "sv",
+                "install_path": str(install),
+                "mods_dir": str(custom),
+            },
+        )
+        assert r.status_code == 201, r.text
+        assert r.json()["mods_dir"] == str(custom)
+        assert r.json()["resolved_mods_dir"] == str(custom)
+
 
 class TestUpdateGame:
     def test_set_mods_dir_same_volume(self, client, tmp_path):
