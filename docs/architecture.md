@@ -71,7 +71,7 @@ rippermod-manager/
 │   │       ├── vfs/                 # Virtual file system deployment
 │   │       │   ├── primitives.py    #   hardlink, junction, probe, is_game_running
 │   │       │   ├── deploy_service.py #  plan, execute, drift, journal
-│   │       │   └── migration.py     #   one-time copy→hardlink migration
+│   │       │   └── untracked.py     #   find files not owned by any installed mod
 │   │       ├── load_order.py        # Load order + modlist.txt writer
 │   │       ├── modlist_service.py   # Ordered mod group view
 │   │       ├── archive_index_service.py # Archive file indexing
@@ -159,7 +159,6 @@ Served by `routers/install.py` under `/api/v1/games/{game_name}/install/`:
 | POST | `.../deploy` | Deploy all enabled mods via NTFS hardlinks/junctions |
 | POST | `.../undeploy` | Remove all VFS links from the game dir |
 | GET | `.../deploy/status` | Drift report — missing/foreign links per mod |
-| POST | `.../migrate-to-vfs` | One-time copy→hardlink migration for existing installs |
 | GET | `.../untracked-files` | Files in game dir not owned by any installed mod |
 
 ## Removed from both editions
