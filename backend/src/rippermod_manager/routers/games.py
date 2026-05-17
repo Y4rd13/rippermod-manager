@@ -138,9 +138,7 @@ def get_game(name: str, session: Session = Depends(get_session)) -> Game:
 
 
 @router.patch("/{name}", response_model=GameOut)
-def update_game(
-    name: str, data: GameUpdate, session: Session = Depends(get_session)
-) -> Game:
+def update_game(name: str, data: GameUpdate, session: Session = Depends(get_session)) -> Game:
     game = session.exec(select(Game).where(Game.name == name)).first()
     if not game:
         raise HTTPException(404, f"Game '{name}' not found")
