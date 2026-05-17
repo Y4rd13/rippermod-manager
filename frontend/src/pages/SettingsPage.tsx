@@ -1,12 +1,18 @@
-import { CheckCircle, Crown, ExternalLink, Eye, EyeOff, Heart, LogOut, User } from "lucide-react";
+import { CheckCircle, Crown, ExternalLink, Eye, EyeOff, Heart, LogOut, Sparkles, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useAbstainMod, useDisconnectNexus, useEndorseMod, useTrackMod, useUntrackMod } from "@/hooks/mutations";
+import {
+  RIPPERMOD_NEXUS_MOD_ID,
+  RIPPERMOD_NEXUS_URL,
+  useAppUpdateCheck,
+} from "@/hooks/use-app-update-check";
 import { useDeploy, useDeployStatus, useUndeploy } from "@/hooks/use-deploy";
 import { useNexusSSO } from "@/hooks/use-nexus-sso";
 import { useGames, useModSummary, useSettings } from "@/hooks/queries";
@@ -14,10 +20,6 @@ import { reportDeployOutcome } from "@/lib/deploy-toast";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import { useUIStore } from "@/stores/ui-store";
-
-const RIPPERMOD_NEXUS_MOD_ID = 27781;
-const RIPPERMOD_NEXUS_DOMAIN = "cyberpunk2077";
-const RIPPERMOD_NEXUS_URL = `https://www.nexusmods.com/${RIPPERMOD_NEXUS_DOMAIN}/mods/${RIPPERMOD_NEXUS_MOD_ID}`;
 
 function DeploymentCard() {
   const activeGameName = useUIStore((s) => s.activeGameName);
@@ -72,6 +74,30 @@ function DeploymentCard() {
   );
 }
 
+function AppUpdateNotice() {
+  const update = useAppUpdateCheck();
+  if (!update.hasUpdate) return null;
+  return (
+    <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2.5 text-sm">
+      <div className="flex items-center gap-2 text-text-primary">
+        <Sparkles size={14} className="shrink-0 text-accent" />
+        <span>
+          Update to <strong>v{update.latestVersion}</strong> on Nexus Mods
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={() => void openUrl(update.nexusUrl)}
+        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-accent/40 bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent transition-colors hover:bg-accent/25"
+      >
+        <ExternalLink size={12} />
+        View on Nexus
+      </button>
+    </div>
+  );
+}
+
+
 function AboutCard() {
   const { data: games = [] } = useGames();
   const gameName = games[0]?.name;
@@ -102,6 +128,8 @@ function AboutCard() {
           <p className="text-text-muted text-xs font-mono">{__APP_VERSION__}</p>
         </div>
       </div>
+
+      <AppUpdateNotice />
 
       {canInteract && (
         <>
