@@ -128,10 +128,10 @@ def _scan_download_archives(
     When multiple archives exist for the same mod, keeps the one with the
     latest upload_timestamp.
     """
-    if mods_dir:
-        staging = Path(to_native_path(mods_dir))
-    else:
-        staging = resolve_mods_dir(to_native_path(install_path))
+    staging = resolve_mods_dir(
+        to_native_path(install_path),
+        to_native_path(mods_dir) if mods_dir else None,
+    )
     if not staging.is_dir():
         return {}
 
