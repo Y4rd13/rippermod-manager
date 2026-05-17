@@ -24,6 +24,7 @@ from rippermod_manager.services.fomod_config_parser import (
     FileState,
     FomodConfig,
 )
+from rippermod_manager.services.paths import get_mods_dir
 from rippermod_manager.services.vfs.naming import unique_staging_name
 
 logger = logging.getLogger(__name__)
@@ -317,7 +318,7 @@ def install_fomod(
     if existing:
         raise ValueError(f"Mod '{mod_name}' is already installed. Uninstall first to reinstall.")
 
-    staging_parent = game_dir / "downloaded_mods"
+    staging_parent = get_mods_dir(game)
     staging_parent.mkdir(parents=True, exist_ok=True)
     safe_name = unique_staging_name(staging_parent, mod_name)
     staging_root = staging_parent / safe_name

@@ -10,6 +10,7 @@ class Game(SQLModel, table=True):
     name: str = Field(index=True, unique=True)
     domain_name: str = Field(index=True)
     install_path: str
+    mods_dir: str | None = Field(default=None)
     os: str = "windows"
     active_profile_id: int | None = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

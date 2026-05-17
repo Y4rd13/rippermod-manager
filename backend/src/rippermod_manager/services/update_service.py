@@ -18,7 +18,6 @@ import logging
 import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -41,6 +40,7 @@ from rippermod_manager.services.nexus_helpers import (
     match_local_to_nexus_file,
     store_uid_from_gql,
 )
+from rippermod_manager.services.paths import resolve_mods_dir
 from rippermod_manager.services.settings_helpers import get_setting, set_setting
 from rippermod_manager.utils.paths import build_file_path, to_native_path
 
@@ -118,14 +118,19 @@ def batch_group_file_mtimes(
     return result
 
 
-def _scan_download_archives(install_path: str) -> dict[int, ParsedFilename]:
+def _scan_download_archives(
+    install_path: str, mods_dir: str | None = None
+) -> dict[int, ParsedFilename]:
     """Scan the downloaded_mods/ staging folder for Nexus archive filenames.
 
     Returns a dict keyed by nexus_mod_id with the parsed filename info.
     When multiple archives exist for the same mod, keeps the one with the
     latest upload_timestamp.
     """
-    staging = Path(to_native_path(install_path)) / "downloaded_mods"
+    staging = resolve_mods_dir(
+        to_native_path(install_path),
+        to_native_path(mods_dir) if mods_dir else None,
+    )
     if not staging.is_dir():
         return {}
 
@@ -160,6 +165,7 @@ def collect_tracked_mods(
     game_domain: str,
     session: Session,
     install_path: str = "",
+    mods_dir: str | None = None,
 ) -> dict[int, TrackedMod]:
     """Collect all nexus_mod_ids with local versions, deduplicated by priority.
 
@@ -267,7 +273,7 @@ def collect_tracked_mods(
 
     # Enrich with downloaded archives (ground truth versions)
     if install_path:
-        archives = _scan_download_archives(install_path)
+        archives = _scan_download_archives(install_path, mods_dir)
         if archives:
             logger.info(
                 "Archive scan: found %d archives with Nexus filenames in downloaded_mods/",
@@ -524,6 +530,7 @@ async def check_all_updates(
     session: Session,
     install_path: str = "",
     gql: NexusGraphQLClient | None = None,
+    mods_dir: str | None = None,
 ) -> UpdateResult:
     """Unified update check with timestamp-first detection.
 
@@ -535,7 +542,7 @@ async def check_all_updates(
     6. Resolve file IDs, filter false positives
     7. Cache result for the GET endpoint
     """
-    tracked = collect_tracked_mods(game_id, game_domain, session, install_path)
+    tracked = collect_tracked_mods(game_id, game_domain, session, install_path, mods_dir)
     if not tracked:
         return UpdateResult()
 
