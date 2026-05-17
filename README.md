@@ -31,7 +31,7 @@
 - **Endorse & Track** — Toggle endorse/track status on any mod directly from card buttons, context menus, or the mod detail modal — syncs with the Nexus Mods API in real time.
 - **Auto-Correlation** — Multi-tier matching pipeline: filename ID extraction, MD5 hash batch lookup, file content reverse lookup, endorsed/tracked sync, Nexus collection matching, mod requirement propagation, and Jaccard + Jaro-Winkler fuzzy matching. Manual reassign, confirm, and reject actions.
 - **Mod Installation** — Install mods from downloaded archives with pre-install preview, conflict detection, skip/overwrite resolution, and enable/disable toggling. Includes FOMOD installer wizard for scripted mod packages.
-- **Clean Game Folder** — Mod content stays in a managed staging directory (`<install>/downloaded_mods/`). The game directory itself is untouched — only hardlinks are placed there when a mod is deployed. Steam "Verify integrity" sees only vanilla files. Profile switching is instant: just a DB flag flip and a link rebuild.
+- **Clean Game Folder & Smart Deployment** — Mod content stays in a managed staging directory (`<install>/downloaded_mods/`). The game directory itself is untouched — only hardlinks (and REDmod junctions) are placed there when a mod is deployed via the `/deploy` endpoint or auto-deploy on launch. Steam "Verify integrity" sees only vanilla files. Includes: **Deploy / Undeploy** controls, **auto-compile REDmods** (runs `redMod.exe deploy` for you on install/enable), **drift detection** (catches game patches or external tools that modify the game folder), **one-time migration tool** for pre-existing in-place installs, and instant profile switching via DB flag + link rebuild.
 - **Conflict Detection** — Multi-layer conflict engine: file-level overlap detection, archive-level resource conflicts with dependency-aware severity classification, redscript annotation analysis, TweakXL conflict scanning, and a conflict inbox for resolution. Disable, uninstall, or set load order preferences directly from the conflict view with Nexus Mods links on every archive.
 - **Load Order** — View and manage archive load order with preference rules, modlist.txt generation, and dry-run previews.
 - **Archive Management** — Browse archive contents, link/unlink archives to Nexus mods, delete, and clean up orphaned mod archives from the downloads staging folder.
@@ -76,7 +76,7 @@ rippermod-manager/
 │   │   ├── scanner/         # File discovery + grouping
 │   │   ├── matching/        # TF-IDF, correlation, filename parsing
 │   │   └── nexus/           # REST v1 + GraphQL v2 API clients
-│   └── tests/               # 809+ tests
+│   └── tests/               # 900+ tests
 ├── frontend/                # React 19 + TypeScript + Vite
 │   ├── src/
 │   │   ├── components/      # 25 mod components, 5 conflict components, 24 UI primitives
@@ -120,7 +120,7 @@ uv sync --extra test     # Include test dependencies
 uv run uvicorn rippermod_manager.main:app --reload --port 8425
 ```
 
-The API will be available at `http://localhost:8425`. The SQLite database is auto-created at `%LOCALAPPDATA%\RipperModManager\` on Windows (or `~/.local/share/RipperModManager/` on Linux) on first startup.
+The API will be available at `http://localhost:8425`. The SQLite database is auto-created at `%LOCALAPPDATA%\com.rippermod.app\` on Windows (or `~/.local/share/com.rippermod.app/` on Linux) on first startup.
 
 > **Tip:** Set `RMM_DATA_DIR=./data` in `backend/.env` to use a local data directory instead.
 
@@ -156,7 +156,7 @@ cd backend
 uv run uvicorn rippermod_manager.main:app --reload --port 8425   # Dev server
 uv run ruff check src/ tests/                                         # Lint
 uv run ruff format src/ tests/                                        # Format
-uv run pytest tests/ -v                                               # Tests (809+ tests)
+uv run pytest tests/ -v                                               # Tests (900+ tests)
 ```
 
 ### Frontend commands
@@ -257,6 +257,11 @@ All endpoints are prefixed with `/api/v1/`.
 | `DELETE` | `/games/{name}/install/archives/{filename}` | Delete an archive |
 | `POST` | `/games/{name}/install/archives/cleanup-orphans` | Clean up unused archives |
 | `GET` | `/games/{name}/install/redscript-conflicts` | Analyze redscript annotation conflicts |
+| `POST` | `/games/{name}/install/deploy` | Deploy all enabled mods to the game folder (hardlinks + REDmod junctions) |
+| `POST` | `/games/{name}/install/undeploy` | Remove all VFS links from the game folder (revert to vanilla) |
+| `GET` | `/games/{name}/install/deploy/status` | Drift report — counts of linked, missing, and foreign files per mod |
+| `POST` | `/games/{name}/install/migrate-to-vfs` | One-time migration: convert existing in-place installs to staged + linked layout |
+| `GET` | `/games/{name}/install/untracked-files` | List files in the game directory not owned by any installed mod |
 
 </details>
 
@@ -393,7 +398,7 @@ All endpoints are prefixed with `/api/v1/`.
 
 ### Testing
 
-The backend has a comprehensive test suite with 809+ tests covering all modules:
+The backend has a comprehensive test suite with 900+ tests covering all modules:
 
 ```bash
 cd backend
@@ -428,7 +433,7 @@ Tests use an in-memory SQLite database for full isolation. External API calls ar
 │       │             │                             │
 │  ┌────┴─────────────┴────────────────────────┐   │
 │  │              SQLite (SQLModel)            │   │
-│  │       %LOCALAPPDATA%/RipperModManager     │   │
+│  │       %LOCALAPPDATA%/com.rippermod.app     │   │
 │  └───────────────────────────────────────────┘   │
 │                                                   │
 │  ┌─────────────────────────────────────────────┐  │
@@ -446,7 +451,7 @@ In production, the app ships as a single Windows installer (NSIS):
 - **Backend** → compiled by PyInstaller into `rmm-backend.exe`, embedded as a Tauri sidecar
 - **Startup** → Tauri spawns the sidecar, health-polls `/health`, emits `backend-ready` event
 - **Shutdown** → Cancels active downloads, disposes DB engine, kills sidecar
-- **Data** → Stored in `%LOCALAPPDATA%\RipperModManager\` (DB, downloads)
+- **Data** → Stored in `%LOCALAPPDATA%\com.rippermod.app\` (DB, downloads)
 - **Updates** → Tauri updater plugin checks `stable.json` on startup and downloads new signed installers in place
 
 ## Contributing
