@@ -39,6 +39,31 @@ class LayoutResult:
     add_prefix: str | None = None
 
 
+def apply_layout_transform(rel_path: str, layout_result: LayoutResult) -> str | None:
+    """Apply strip_prefix + add_prefix transforms to a raw archive entry path.
+
+    Returns the transformed path, or ``None`` when the entry is outside the
+    strip_prefix wrapper (the caller must skip those entries; the install service
+    counts them as ``skipped`` but consumers like conflict/preview should just
+    drop them).
+
+    All consumers of :func:`detect_layout` must funnel paths through this helper
+    so install, conflict detection, preview, and graph builders agree on the
+    final on-disk path. Without it, a REDmod archive that gets ``add_prefix="mods"``
+    in install would have its conflict-check paths compared at the raw
+    ``<modname>/info.json`` level, missing real REDmod-vs-REDmod conflicts.
+    """
+    normalised = rel_path.replace("\\", "/")
+    if layout_result.strip_prefix:
+        if normalised.startswith(layout_result.strip_prefix + "/"):
+            normalised = normalised[len(layout_result.strip_prefix) + 1 :]
+        else:
+            return None
+    if layout_result.add_prefix:
+        normalised = f"{layout_result.add_prefix}/{normalised}"
+    return normalised
+
+
 def known_roots_for_game(domain_name: str) -> set[str]:
     """Return the set of known top-level mod directories for a game.
 
@@ -150,11 +175,7 @@ def detect_layout(
     #    keep the wrapper and prepend ``mods``. Falls under WRAPPED's check above
     #    only if the second-level is a known root (e.g. ``<wrap>/mods/foo``); pure
     #    REDmod archives have non-root second-level dirs like ``archives``, ``scripts``.
-    if (
-        len(top_level_dirs) == 1
-        and not has_root_file
-        and "info.json" in second_level_dirs
-    ):
+    if len(top_level_dirs) == 1 and not has_root_file and "info.json" in second_level_dirs:
         return LayoutResult(
             layout=ArchiveLayout.REDMOD,
             strip_prefix=None,

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from rippermod_manager.services.archive_layout import (
     ArchiveLayout,
     LayoutResult,
+    apply_layout_transform,
     detect_layout,
     known_roots_for_game,
 )
@@ -125,9 +126,7 @@ class TestRedmod:
         """Wrapper dir names commonly include brackets, spaces, version suffixes."""
         entries = [
             FakeEntry("00NPC_SPO [NPCs GW Strippers and Prostitutes Only]/info.json"),
-            FakeEntry(
-                "00NPC_SPO [NPCs GW Strippers and Prostitutes Only]/archives/NPC.archive"
-            ),
+            FakeEntry("00NPC_SPO [NPCs GW Strippers and Prostitutes Only]/archives/NPC.archive"),
         ]
         result = detect_layout(entries, CP_ROOTS)
         assert result.layout == ArchiveLayout.REDMOD
@@ -283,6 +282,55 @@ class TestUnknown:
         entries = [FakeEntry("archive\\pc\\mod\\a.archive")]
         result = detect_layout(entries, CP_ROOTS)
         assert result == LayoutResult(layout=ArchiveLayout.STANDARD)
+
+
+# ---------------------------------------------------------------------------
+# apply_layout_transform
+# ---------------------------------------------------------------------------
+
+
+class TestApplyLayoutTransform:
+    """Single source of truth for path transforms — must be used by every
+    consumer of detect_layout so install, conflict, preview, and graph all agree.
+    """
+
+    def test_standard_layout_passes_through(self) -> None:
+        layout = LayoutResult(layout=ArchiveLayout.STANDARD)
+        assert (
+            apply_layout_transform("archive/pc/mod/foo.archive", layout)
+            == "archive/pc/mod/foo.archive"
+        )
+
+    def test_wrapped_strips_prefix(self) -> None:
+        layout = LayoutResult(layout=ArchiveLayout.WRAPPED, strip_prefix="MyMod")
+        assert apply_layout_transform("MyMod/r6/scripts/x.reds", layout) == "r6/scripts/x.reds"
+
+    def test_wrapped_drops_entries_outside_wrapper(self) -> None:
+        layout = LayoutResult(layout=ArchiveLayout.WRAPPED, strip_prefix="MyMod")
+        # ReadMe at root of a WRAPPED archive should be skipped (None)
+        assert apply_layout_transform("README.md", layout) is None
+
+    def test_redmod_prepends_mods(self) -> None:
+        layout = LayoutResult(layout=ArchiveLayout.REDMOD, add_prefix="mods")
+        assert apply_layout_transform("MyREDmod/info.json", layout) == "mods/MyREDmod/info.json"
+        assert apply_layout_transform("MyREDmod/archives/x.archive", layout) == (
+            "mods/MyREDmod/archives/x.archive"
+        )
+
+    def test_redmod_with_complex_modname(self) -> None:
+        layout = LayoutResult(layout=ArchiveLayout.REDMOD, add_prefix="mods")
+        result = apply_layout_transform("00NPC_SPO [Foo Bar]/info.json", layout)
+        assert result == "mods/00NPC_SPO [Foo Bar]/info.json"
+
+    def test_strip_and_add_prefix_compose(self) -> None:
+        """Hypothetical layout that both strips and prepends — verify order."""
+        layout = LayoutResult(layout=ArchiveLayout.REDMOD, strip_prefix="Wrap", add_prefix="mods")
+        # strip "Wrap/" first, then prepend "mods/"
+        assert apply_layout_transform("Wrap/MyMod/info.json", layout) == "mods/MyMod/info.json"
+
+    def test_backslash_paths_normalised(self) -> None:
+        layout = LayoutResult(layout=ArchiveLayout.REDMOD, add_prefix="mods")
+        assert apply_layout_transform("MyMod\\info.json", layout) == "mods/MyMod/info.json"
 
 
 def test_engine_is_recognized_root():
