@@ -37,6 +37,7 @@ import { UpdatesTable } from "@/components/mods/UpdatesTable";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ScanProgress, type ScanLog } from "@/components/ui/ScanProgress";
+import { useDeploy } from "@/hooks/use-deploy";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import {
   useAvailableArchives,
@@ -166,6 +167,7 @@ export function GameDetailPage() {
   const [fileSelectModId, setFileSelectModId] = useState<number | null>(null);
 
   const modalFlow = useInstallFlow(name, archives, downloadJobs);
+  const deploy = useDeploy(name || null);
 
   const handleFileSelect = useCallback((modId: number) => {
     setSelectedModId(modId);
@@ -244,6 +246,30 @@ export function GameDetailPage() {
     if (!game || !gameVersion?.exe_path) return;
     setIsLaunching(true);
     try {
+      const report = await deploy.mutateAsync();
+      if (report.preflight && !report.preflight.ok) {
+        toast.error(
+          "Deploy refused",
+          report.preflight.reasons.join(" ") || "Pre-flight check failed",
+        );
+        return;
+      }
+      if (report.failed > 0) {
+        toast.error(
+          "Deploy failed",
+          `${report.failed} of ${report.total} operations failed. Game not launched.`,
+        );
+        return;
+      }
+      // Block launch when REDmod compile failed — game would otherwise start with
+      // stale scripts and the user wouldn't see their REDmod changes.
+      if (report.redmod && report.redmod.ran && !report.redmod.success) {
+        toast.error(
+          "REDmod compile failed",
+          `${report.redmod.error || "redmod deploy returned an error"}. Game not launched.`,
+        );
+        return;
+      }
       await invoke<void>("launch_game", {
         installPath: game.install_path,
         exeRelativePath: gameVersion.exe_path,

@@ -104,12 +104,38 @@ def _migrate_missing_columns() -> None:
             "dlc_requirements",
             "ALTER TABLE nexus_mod_meta ADD COLUMN dlc_requirements TEXT DEFAULT '[]'",
         ),
+        (
+            "installed_mods",
+            "staging_dir",
+            "ALTER TABLE installed_mods ADD COLUMN staging_dir TEXT DEFAULT ''",
+        ),
+        (
+            "installed_mods",
+            "deployed",
+            "ALTER TABLE installed_mods ADD COLUMN deployed BOOLEAN DEFAULT 0",
+        ),
+        (
+            "installed_mods",
+            "deploy_drift",
+            "ALTER TABLE installed_mods ADD COLUMN deploy_drift BOOLEAN DEFAULT 0",
+        ),
+        (
+            "installed_mod_files",
+            "source_path",
+            "ALTER TABLE installed_mod_files ADD COLUMN source_path TEXT DEFAULT ''",
+        ),
+        (
+            "installed_mod_files",
+            "link_kind",
+            "ALTER TABLE installed_mod_files ADD COLUMN link_kind TEXT DEFAULT 'hardlink'",
+        ),
     ]
     with Session(engine) as session:
         for table, column, ddl in migrations:
-            # table name from hardcoded migrations list, not user input
             rows = session.exec(text(f"PRAGMA table_info({table})")).all()  # type: ignore[arg-type]
             col_names = {r[1] for r in rows}
+            if not col_names:
+                continue
             if column not in col_names:
                 logger.info("Migrating: adding %s.%s", table, column)
                 session.exec(text(ddl))  # type: ignore[arg-type]

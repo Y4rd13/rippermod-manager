@@ -17,6 +17,7 @@ from rippermod_manager.schemas.conflicts import (
 )
 from rippermod_manager.services.archive_layout import (
     ArchiveLayout,
+    apply_layout_transform,
     detect_layout,
     known_roots_for_game,
 )
@@ -99,13 +100,9 @@ def build_conflict_graph(
         for entry in entries:
             if entry.is_dir:
                 continue
-            normalised = entry.filename.replace("\\", "/")
-            if layout.strip_prefix:
-                prefix = layout.strip_prefix + "/"
-                if normalised.startswith(prefix):
-                    normalised = normalised[len(prefix) :]
-                else:
-                    continue
+            normalised = apply_layout_transform(entry.filename, layout)
+            if normalised is None:
+                continue
             normalised = normalised.lower()
             file_paths.add(normalised)
             path_to_nodes[normalised].append(node_id)

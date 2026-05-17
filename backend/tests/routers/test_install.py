@@ -304,3 +304,66 @@ class TestConflictsEndpoint:
             params={"archive_filename": "any.zip"},
         )
         assert r.status_code == 404
+
+
+class TestDeployEndpoints:
+    def test_deploy_endpoint_returns_report(self, client, game_setup):
+        """POST /deploy returns a DeployReport (no mods — zero totals)."""
+        game_name, _, _ = game_setup
+
+        resp = client.post(f"/api/v1/games/{game_name}/install/deploy")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "total" in body and "done" in body and "failed" in body
+
+    def test_deploy_status_endpoint(self, client, game_setup):
+        """GET /deploy/status returns a DriftReport with the expected keys."""
+        game_name, _, _ = game_setup
+
+        resp = client.get(f"/api/v1/games/{game_name}/install/deploy/status")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert set(body.keys()) >= {"total", "linked", "missing", "foreign"}
+
+    def test_deploy_endpoint_404_for_missing_game(self, client):
+        """POST /deploy returns 404 when the game does not exist."""
+        resp = client.post("/api/v1/games/NoSuchGame/install/deploy")
+        assert resp.status_code == 404
+
+    def test_undeploy_endpoint_returns_report(self, client, game_setup):
+        """POST /undeploy returns a DeployReport (no deployed mods — zero totals)."""
+        game_name, _, _ = game_setup
+
+        resp = client.post(f"/api/v1/games/{game_name}/install/undeploy")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "total" in body and "done" in body and "failed" in body
+
+    def test_undeploy_endpoint_404_for_missing_game(self, client):
+        """POST /undeploy returns 404 when the game does not exist."""
+        resp = client.post("/api/v1/games/NoSuchGame/install/undeploy")
+        assert resp.status_code == 404
+
+
+class TestMigrationEndpoints:
+    def test_migrate_endpoint_returns_report(self, client, game_setup):
+        game_name = game_setup[0]
+        resp = client.post(f"/api/v1/games/{game_name}/install/migrate-to-vfs")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "migrated_mods" in body
+        assert "migrated_files" in body
+        assert "skipped_files" in body
+        assert "errors" in body
+
+    def test_untracked_files_endpoint(self, client, game_setup):
+        game_name = game_setup[0]
+        resp = client.get(f"/api/v1/games/{game_name}/install/untracked-files")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "files" in body
+        assert isinstance(body["files"], list)
+
+    def test_migrate_endpoint_404_for_missing_game(self, client):
+        resp = client.post("/api/v1/games/NoSuchGame/install/migrate-to-vfs")
+        assert resp.status_code == 404

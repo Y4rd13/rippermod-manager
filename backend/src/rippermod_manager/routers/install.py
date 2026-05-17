@@ -12,6 +12,12 @@ from rippermod_manager.models.download import DownloadJob
 from rippermod_manager.models.install import ArchiveNexusLink, InstalledMod
 from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 from rippermod_manager.routers.deps import get_game_or_404
+from rippermod_manager.schemas.deploy import (
+    DeployReport,
+    DriftReport,
+    MigrationReport,
+    UntrackedFilesResponse,
+)
 from rippermod_manager.schemas.install import (
     ArchiveContentsResult,
     ArchiveDeleteResult,
@@ -46,6 +52,8 @@ from rippermod_manager.services.install_service import (
 from rippermod_manager.services.redscript_analysis import check_redscript_conflicts
 from rippermod_manager.services.settings_helpers import get_setting
 from rippermod_manager.services.update_service import invalidate_update_cache
+from rippermod_manager.services.vfs import deploy_service
+from rippermod_manager.services.vfs import migration as vfs_migration
 
 logger = logging.getLogger(__name__)
 
@@ -320,6 +328,7 @@ async def preview_archive(
     from rippermod_manager.archive.handler import open_archive
     from rippermod_manager.services.archive_layout import (
         ArchiveLayout,
+        apply_layout_transform,
         detect_layout,
         known_roots_for_game,
     )
@@ -343,18 +352,14 @@ async def preview_archive(
     known_roots = known_roots_for_game(game.domain_name)
     layout_result = detect_layout(all_entries, known_roots)
     is_fomod = layout_result.layout == ArchiveLayout.FOMOD
-    strip_prefix = layout_result.strip_prefix
 
     files: list[ArchiveFileEntry] = []
     for entry in all_entries:
         if entry.is_dir:
             continue
-        normalised = entry.filename.replace("\\", "/")
-        if strip_prefix:
-            if normalised.startswith(strip_prefix + "/"):
-                normalised = normalised[len(strip_prefix) + 1 :]
-            else:
-                continue
+        normalised = apply_layout_transform(entry.filename, layout_result)
+        if normalised is None:
+            continue
         files.append(ArchiveFileEntry(file_path=normalised, size=entry.size, is_dir=False))
 
     return ArchivePreviewResult(
@@ -533,3 +538,55 @@ async def redscript_conflicts(
     """Analyze installed redscript mods for annotation-level conflicts."""
     game = get_game_or_404(game_name, session)
     return check_redscript_conflicts(game, session)
+
+
+@router.post("/deploy", response_model=DeployReport)
+async def deploy_game(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> DeployReport:
+    """Deploy all enabled mods for a game via hardlinks/junctions."""
+    game = get_game_or_404(game_name, session)
+    return deploy_service.deploy(game, session)
+
+
+@router.post("/undeploy", response_model=DeployReport)
+async def undeploy_game(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> DeployReport:
+    """Remove all deployed hardlinks/junctions for a game."""
+    game = get_game_or_404(game_name, session)
+    return deploy_service.undeploy(game, session)
+
+
+@router.get("/deploy/status", response_model=DriftReport)
+async def deploy_status(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> DriftReport:
+    """Report deployment drift: linked, missing, and foreign files per mod."""
+    game = get_game_or_404(game_name, session)
+    return deploy_service.detect_drift(game, session)
+
+
+@router.post("/migrate-to-vfs", response_model=MigrationReport)
+async def migrate(game_name: str, session: Session = Depends(get_session)) -> MigrationReport:
+    """Migrate copy-installed mods to VFS staging with hardlinks."""
+    game = get_game_or_404(game_name, session)
+    report = vfs_migration.migrate_to_vfs(game, session)
+    return MigrationReport(
+        migrated_mods=report.migrated_mods,
+        migrated_files=report.migrated_files,
+        skipped_files=report.skipped_files,
+        errors=report.errors,
+    )
+
+
+@router.get("/untracked-files", response_model=UntrackedFilesResponse)
+async def untracked(
+    game_name: str, session: Session = Depends(get_session)
+) -> UntrackedFilesResponse:
+    """List files under known mod roots that are not claimed by any installed mod."""
+    game = get_game_or_404(game_name, session)
+    return UntrackedFilesResponse(files=vfs_migration.find_untracked_files(game, session))

@@ -15,6 +15,7 @@ class InstallResult(BaseModel):
     files_extracted: int
     files_skipped: int
     files_overwritten: int
+    installed_mod_name_safe: str = ""  # staging dir name; empty for legacy compat
 
 
 class InstalledModOut(BaseModel):

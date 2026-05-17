@@ -20,6 +20,9 @@ class InstalledMod(SQLModel, table=True):
     conflict_dismissed: bool = False
     installed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     mod_group_id: int | None = Field(default=None, foreign_key="mod_groups.id")
+    staging_dir: str = Field(default="")
+    deployed: bool = Field(default=False)
+    deploy_drift: bool = Field(default=False)
 
     files: list["InstalledModFile"] = Relationship(
         back_populates="installed_mod",
@@ -33,6 +36,8 @@ class InstalledModFile(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     installed_mod_id: int = Field(foreign_key="installed_mods.id", index=True)
     relative_path: str = Field(index=True)
+    source_path: str = Field(default="")
+    link_kind: str = Field(default="hardlink")  # hardlink | junction | copy
 
     installed_mod: InstalledMod | None = Relationship(back_populates="files")
 
@@ -45,3 +50,16 @@ class ArchiveNexusLink(SQLModel, table=True):
     game_id: int = Field(foreign_key="games.id", index=True)
     filename: str = Field(index=True)
     nexus_mod_id: int
+
+
+class DeployJournalEntry(SQLModel, table=True):
+    __tablename__ = "deploy_journal"
+
+    id: int | None = Field(default=None, primary_key=True)
+    game_id: int = Field(foreign_key="games.id", index=True)
+    operation: str  # link | unlink | junction | rm_junction
+    src: str
+    dst: str
+    status: str = Field(default="pending")  # pending | done | failed
+    error: str = Field(default="")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

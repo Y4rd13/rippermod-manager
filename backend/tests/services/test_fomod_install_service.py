@@ -1,9 +1,10 @@
 """Tests for FOMOD install service (file list computation + extraction)."""
 
+import os
 import zipfile
 
 import pytest
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from rippermod_manager.archive.handler import ArchiveEntry
 from rippermod_manager.models.game import Game, GameModPath
@@ -352,6 +353,7 @@ class TestInstallFomod:
         return game, game_dir, staging
 
     def test_happy_path(self, setup, engine):
+        """FOMOD install writes to staging; game-dir path is accessible via hardlink."""
         game, game_dir, staging = setup
         archive = staging / "TestFomod.zip"
         with zipfile.ZipFile(archive, "w") as zf:
@@ -367,7 +369,47 @@ class TestInstallFomod:
 
         assert result.files_extracted == 1
         assert result.name == "TestFomod"
+        # File is accessible at the canonical game-dir path (via hardlink from deploy)
         assert (game_dir / "mods" / "data.txt").read_text() == "content"
+        # staging_dir is reported in result
+        assert result.installed_mod_name_safe == "TestFomod"
+
+    def test_staging_and_hardlink(self, setup, engine):
+        """FOMOD-installed files live in staging; game-dir file is a hardlink to staging copy."""
+        game, game_dir, staging = setup
+        archive = staging / "VFSFomod.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("plugin.txt", "vfs-content")
+
+        resolved = [
+            ResolvedFile(
+                archive_path="plugin.txt",
+                game_relative_path="archive/pc/mod/plugin.txt",
+                priority=0,
+            ),
+        ]
+
+        with Session(engine) as s:
+            result = install_fomod(game, archive, s, resolved, "VFSFomod")
+
+        assert result.files_extracted == 1
+
+        with Session(engine) as s:
+            installed = s.exec(select(InstalledMod).where(InstalledMod.name == "VFSFomod")).one()
+            assert installed.staging_dir == "VFSFomod"
+            assert installed.deployed is True
+
+            _ = installed.files
+            assert len(installed.files) == 1
+            f = installed.files[0]
+            assert f.source_path == "archive/pc/mod/plugin.txt"
+            assert f.link_kind == "hardlink"
+
+        src = game_dir / "downloaded_mods" / "VFSFomod" / "archive" / "pc" / "mod" / "plugin.txt"
+        dst = game_dir / "archive" / "pc" / "mod" / "plugin.txt"
+        assert src.exists(), "Staging copy must exist"
+        assert dst.exists(), "Game-dir hardlink must exist"
+        assert os.path.samefile(src, dst), "src and dst must be the same inode (hardlink)"
 
     def test_path_traversal_blocked(self, setup, engine):
         game, _game_dir, staging = setup
