@@ -339,7 +339,6 @@ export function SettingsPage() {
               Sign in with your Nexus Mods account to sync mod history.
             </p>
             <Button
-              variant="secondary"
               title="Opens Nexus Mods in your browser for SSO authentication"
               onClick={() => sso.startSSO()}
               loading={sso.state === "connecting" || sso.state === "waiting"}

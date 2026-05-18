@@ -44,7 +44,7 @@ export function DeployStatusBadge({ gameName }: DeployStatusBadgeProps) {
       <span className="inline-flex items-center gap-1 text-warning">
         <AlertTriangle size={14} /> Drift: {driftLabel}
       </span>
-      <Button size="sm" variant="secondary" loading={deploy.isPending} onClick={handleRedeploy}>
+      <Button size="sm" loading={deploy.isPending} onClick={handleRedeploy}>
         <RotateCcw size={12} /> Redeploy
       </Button>
     </div>

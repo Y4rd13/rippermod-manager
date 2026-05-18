@@ -6,8 +6,10 @@ type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 const variantStyles: Record<Variant, string> = {
-  primary: "bg-accent text-white hover:bg-accent-hover",
-  secondary: "bg-surface-3 text-text-primary hover:bg-border",
+  primary:
+    "bg-accent text-white shadow-sm shadow-accent/30 hover:bg-accent-hover hover:shadow-md hover:shadow-accent/40",
+  secondary:
+    "bg-surface-3 text-text-primary border border-transparent hover:bg-surface-2 hover:border-accent/40",
   ghost: "bg-transparent text-text-secondary hover:bg-surface-2 hover:text-text-primary",
   danger: "bg-danger/10 text-danger hover:bg-danger/20",
 };
@@ -29,7 +31,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     <button
       ref={ref}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors",
+        "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         variantStyles[variant],
