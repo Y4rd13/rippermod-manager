@@ -420,6 +420,70 @@ fn kill_sidecar(app: &tauri::AppHandle) {
     }; // Semicolon ensures MutexGuard drops before `state`
 }
 
+/// Detect and kill a leftover backend from a previous session whose Tauri
+/// parent died ungracefully (force-quit, crash). Without this, the orphan
+/// keeps port 8425 bound and every subsequent launch's new backend can't
+/// bind, self-shuts-down, and the user sees an endless "Starting backend"
+/// loop until they reinstall the app.
+fn cleanup_orphan_backend(data_dir: &std::path::Path) {
+    let pid_file = data_dir.join("rmm-backend.pid");
+    let content = match std::fs::read_to_string(&pid_file) {
+        Ok(s) => s,
+        Err(_) => return, // no pid file = no orphan to clean up
+    };
+    let pid: u32 = match content.trim().parse() {
+        Ok(p) => p,
+        Err(_) => {
+            let _ = std::fs::remove_file(&pid_file);
+            return;
+        }
+    };
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        // Verify the PID still belongs to our backend before killing it -
+        // the OS may have reused the PID for an unrelated process.
+        let tasklist = Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+
+        let is_our_backend = match tasklist {
+            Ok(out) => {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                stdout.to_lowercase().contains("rmm-backend.exe")
+            }
+            Err(_) => false,
+        };
+
+        if is_our_backend {
+            log::warn!("Killing orphan backend from previous session (pid={pid})");
+            let _ = Command::new("taskkill")
+                .args(["/F", "/T", "/PID", &pid.to_string()])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output();
+            // Brief wait so the kernel actually releases port 8425
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        // Best-effort: check /proc/<pid>/comm, kill if name matches
+        let comm = std::fs::read_to_string(format!("/proc/{pid}/comm")).unwrap_or_default();
+        if comm.contains("rmm-backend") {
+            log::warn!("Killing orphan backend from previous session (pid={pid})");
+            let _ = Command::new("kill").args(["-9", &pid.to_string()]).output();
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+    }
+
+    let _ = std::fs::remove_file(&pid_file);
+}
+
 fn kill_process_tree(pid: u32) {
     #[cfg(windows)]
     {
@@ -486,6 +550,11 @@ pub fn run() {
 
             // In release builds, spawn the backend sidecar
             if !cfg!(debug_assertions) {
+                // Detect + kill a leftover backend from a previous crashed session,
+                // otherwise the new sidecar can't bind port 8425 and self-shuts-down.
+                if let Ok(data_dir) = app.handle().path().app_local_data_dir() {
+                    cleanup_orphan_backend(&data_dir);
+                }
                 let handle = app.handle().clone();
                 if let Err(e) = spawn_sidecar(app.handle()) {
                     log::error!("Failed to spawn backend sidecar: {}", e);
