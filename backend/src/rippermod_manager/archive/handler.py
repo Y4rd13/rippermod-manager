@@ -134,14 +134,34 @@ class SevenZipHandler(ArchiveHandler):
 
 
 class RarHandler(ArchiveHandler):
-    """Handler for .rar archives using the rarfile library."""
+    """Handler for .rar archives using the rarfile library.
+
+    ``rarfile`` is a Python wrapper around an external extractor — UnRAR,
+    bsdtar, or 7-Zip's CLI.  If none of those are present on the system,
+    every operation raises :class:`rarfile.RarCannotExec`.  We don't ship
+    such an extractor in the bundled installer (UnRAR's license has known
+    GPL-compatibility concerns, and 7-Zip would inflate the installer), so
+    on a default install RAR archives can't be extracted directly.
+
+    We translate the cryptic ``RarCannotExec`` into a clear ``ValueError``
+    so the install endpoint surfaces an actionable message to the user
+    instead of a silent 500.
+    """
 
     def __init__(self, path: str | Path) -> None:
         try:
             import rarfile
         except ImportError as exc:
             raise ImportError("rarfile is required for .rar support: pip install rarfile") from exc
-        self._rf = rarfile.RarFile(str(path), "r")
+        try:
+            self._rf = rarfile.RarFile(str(path), "r")
+        except rarfile.RarCannotExec as exc:
+            raise ValueError(
+                "Could not open .rar archive: RipperMod doesn't bundle a RAR "
+                "extractor on this platform. Please extract the .rar manually "
+                "(7-Zip, WinRAR) and either re-zip the contents or drop the "
+                "extracted files into your game's downloaded_mods/ folder."
+            ) from exc
 
     def list_entries(self) -> list[ArchiveEntry]:
         entries: list[ArchiveEntry] = []
