@@ -183,7 +183,10 @@ def test_execute_plan_force_overwrites_foreign_file(in_memory_session, sample_ga
         game_id=game.id,
         ops=[
             DeployOp(
-                operation="link", src=str(src), dst=str(dst), installed_mod_id=1,
+                operation="link",
+                src=str(src),
+                dst=str(dst),
+                installed_mod_id=1,
             ),
         ],
     )
@@ -199,7 +202,8 @@ def test_execute_plan_force_overwrites_foreign_file(in_memory_session, sample_ga
 
 
 def test_execute_plan_without_force_keeps_foreign_and_fails(
-    in_memory_session, sample_game,
+    in_memory_session,
+    sample_game,
 ):
     """Without force, an op pointing at an occupied dst fails with destination exists."""
     session = in_memory_session
@@ -217,7 +221,10 @@ def test_execute_plan_without_force_keeps_foreign_and_fails(
         game_id=game.id,
         ops=[
             DeployOp(
-                operation="link", src=str(src), dst=str(dst), installed_mod_id=1,
+                operation="link",
+                src=str(src),
+                dst=str(dst),
+                installed_mod_id=1,
             ),
         ],
     )
