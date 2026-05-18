@@ -421,13 +421,13 @@ export function NexusMatchedGrid({
               tableClassName="table-fixed"
               renderHead={() => (
                 <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted text-xs">
-                  <th className="py-2 pr-3 w-[68px]" />
-                  <th className="py-2 pr-3 font-medium">Mod</th>
-                  <th className="py-2 pr-3 font-medium w-[140px]">Author</th>
-                  <th className="py-2 pr-3 font-medium w-[80px]">Version</th>
-                  <th className="py-2 pr-3 font-medium w-[110px]">Endorsements</th>
-                  <th className="py-2 pr-3 font-medium w-[220px]">Match</th>
-                  <th className="py-2 pl-2 text-right font-medium w-[180px]">Actions</th>
+                  <th className="py-2 pr-2 w-[60px]" />
+                  <th className="py-2 pr-2 font-medium">Mod</th>
+                  <th className="py-2 pr-2 font-medium w-[100px]">Author</th>
+                  <th className="py-2 pr-2 font-medium w-[70px]">Version</th>
+                  <th className="py-2 pr-2 font-medium w-[90px]">Endorsements</th>
+                  <th className="py-2 pr-2 font-medium w-[170px]">Match</th>
+                  <th className="py-2 pl-2 text-right font-medium w-[140px]">Actions</th>
                 </tr>
               )}
               renderRow={(mod) => {
