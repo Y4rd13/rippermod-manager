@@ -893,13 +893,6 @@ export function InstalledModsTable({
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <SearchInput value={filter} onChange={setFilter} placeholder="Filter by name..." />
-        {recognized.length > 0 && (
-          <SortSelect
-            value={recognizedSort}
-            onChange={(v) => setRecognizedSort(v as RecognizedSortKey)}
-            options={RECOGNIZED_SORT_OPTIONS}
-          />
-        )}
         {mods.length > 0 && recognized.length > 0 && (
           <FilterChips
             chips={SCOPE_OPTIONS}
@@ -945,9 +938,16 @@ export function InstalledModsTable({
 
       {filteredRecognized.length > 0 && scope !== "installed" && (
         <div>
-          <h3 className="text-sm font-semibold text-text-primary mb-3" title="Mods found on disk and matched to Nexus — click Install to manage them">
-            Detected on Disk ({filteredRecognized.length})
-          </h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-text-primary" title="Mods found on disk and matched to Nexus — click Install to manage them">
+              Detected on Disk ({filteredRecognized.length})
+            </h3>
+            <SortSelect
+              value={recognizedSort}
+              onChange={(v) => setRecognizedSort(v as RecognizedSortKey)}
+              options={RECOGNIZED_SORT_OPTIONS}
+            />
+          </div>
           <p className="text-xs text-text-muted mb-3">
             These mods were detected during scanning and matched to Nexus, but haven&apos;t been
             installed through the manager yet. Install them to enable features like profiles and updates.
