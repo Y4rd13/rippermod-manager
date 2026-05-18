@@ -1,5 +1,6 @@
 import {
   ArrowUp,
+  Check,
   ExternalLink,
   Eye,
   EyeOff,
@@ -160,10 +161,16 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, on
                       return (
                         <button
                           key={`${req.nexus_mod_id}-${req.required_mod_id ?? req.mod_name}`}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/15 hover:border-accent/40 transition-colors disabled:opacity-50 disabled:cursor-default"
+                          className={
+                            req.is_installed
+                              ? "inline-flex items-center gap-1.5 rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success hover:bg-success/20 hover:border-success/50 transition-colors disabled:opacity-50 disabled:cursor-default"
+                              : "inline-flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/15 hover:border-accent/40 transition-colors disabled:opacity-50 disabled:cursor-default"
+                          }
                           onClick={() => { if (href) openUrl(href).catch(() => {}); }}
                           disabled={!href}
+                          title={req.is_installed ? "Installed" : undefined}
                         >
+                          {req.is_installed && <Check size={11} />}
                           {req.mod_name || "Unknown mod"}
                           {req.notes && <span className="text-text-muted font-normal">{req.notes}</span>}
                           {req.is_external && <ExternalLink size={10} />}

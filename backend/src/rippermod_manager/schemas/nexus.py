@@ -76,6 +76,8 @@ class ModRequirementOut(BaseModel):
     url: str = ""
     notes: str = ""
     is_external: bool = False
+    is_installed: bool = False
+    installed_mod_id: int | None = None
 
 
 class DlcRequirementOut(BaseModel):
