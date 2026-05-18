@@ -101,3 +101,43 @@ class ResetPreferencesResult(BaseModel):
     removed_count: int
     modlist_entries: int
     message: str
+
+
+class PreferencePair(BaseModel):
+    winner_mod_id: int
+    loser_mod_id: int
+
+
+class BatchPreferencesRequest(BaseModel):
+    add: list[PreferencePair] = []
+    remove: list[PreferencePair] = []
+
+
+class BatchPreferencesResult(BaseModel):
+    success: bool
+    message: str
+    added: int
+    removed: int
+    modlist_entries: int
+
+
+class AutoSortChange(BaseModel):
+    mod_id: int
+    mod_name: str
+    file_count: int
+
+
+class AutoSortPreview(BaseModel):
+    proposed_add: list[PreferencePair]
+    proposed_remove: list[PreferencePair]
+    affected_mods: list[AutoSortChange]
+    conflict_pairs_evaluated: int
+    rationale: str
+
+
+class AutoSortApplyResult(BaseModel):
+    success: bool
+    message: str
+    added: int
+    removed: int
+    modlist_entries: int
