@@ -78,6 +78,9 @@ Go to [b]Settings → Deployment → Mods staging folder[/b] and pick any folder
 [b]What happens after Install[/b]
 RipperMod doesn't dump mod files all over your Cyberpunk install. Mods live in [i]downloaded_mods/[/i] (or your custom staging folder) and get linked into the game folder automatically every time you install, enable, disable, or hit Play. No manual Deploy step. If the mod is a REDmod, RipperMod also runs the REDmod compiler automatically, so your scripts and tweaks are ready on the next game launch with zero command-line work. Need to roll back? Hit [b]Undeploy[/b] in Settings to return your install to pure vanilla in one click; the next Play re-links everything.
 
+[b]Migrating from another mod manager? Use Force redeploy.[/b]
+If you previously used Vortex or installed mods manually, those files exist as copies in your game folder (not RipperMod hardlinks). When RipperMod tries to deploy the same mod, the hardlink can't be created because something is already at that path. The status badge in the titlebar will show [b]Drift: N foreign[/b]. Click [b]Redeploy[/b] and a confirm dialog appears: [b]Overwrite foreign files?[/b]. Force redeploy deletes each foreign file and replaces it with a RipperMod hardlink. Your staged copies in [i]downloaded_mods/[/i] are never touched, so this is fully reversible by uninstalling. Close the game first.
+
 [size=3][b]Step 5 - Managing Conflicts[/b][/size]
 
 When two mods touch the same files, RipperMod catches it. The conflict engine detects four types of conflicts:
