@@ -4,6 +4,7 @@ import {
   Eye,
   ExternalLink,
   Files,
+  FolderOpen,
   Heart,
   Package,
   Power,
@@ -830,10 +831,45 @@ function RecognizedModsGrid({
         }
       />
     );
+    // Build a "files on disk" badge so users can see which local files
+    // triggered the match. The visible label uses the source folder(s);
+    // hovering reveals the full file paths so it's always verifiable.
+    const sourceFolders = Array.from(
+      new Set(mod.files.map((f) => f.source_folder).filter(Boolean)),
+    );
+    const folderLabel =
+      sourceFolders.length === 0
+        ? "disk"
+        : sourceFolders.length === 1
+          ? sourceFolders[0]
+          : `${sourceFolders.length} folders`;
+    const PATH_PREVIEW_LIMIT = 20;
+    const pathTooltip =
+      mod.files.length > 0
+        ? "Detected at:\n" +
+          mod.files
+            .slice(0, PATH_PREVIEW_LIMIT)
+            .map((f) => f.file_path)
+            .join("\n") +
+          (mod.files.length > PATH_PREVIEW_LIMIT
+            ? `\n…and ${mod.files.length - PATH_PREVIEW_LIMIT} more`
+            : "")
+        : "";
+    const filesBadge =
+      mod.files.length > 0 ? (
+        <span
+          className="inline-flex items-center gap-1 rounded bg-surface-2 px-1.5 py-0.5 text-xs text-text-muted whitespace-nowrap"
+          title={pathTooltip}
+        >
+          <FolderOpen size={11} />
+          {mod.files.length} in {folderLabel}
+        </span>
+      ) : null;
     const footer = (
       <div className="flex flex-wrap items-center gap-1.5">
         <ConfidenceBadge score={match.score} />
         <Badge variant="neutral">{match.method}</Badge>
+        {filesBadge}
         <CorrelationActions gameName={gameName} modGroupId={mod.id} confirmed={match.confirmed} />
         {match.updated_at && (
           <span className="text-xs text-text-muted whitespace-nowrap">{timeAgo(isoToEpoch(match.updated_at))}</span>
@@ -1168,8 +1204,11 @@ export function InstalledModsTable({
             />
           </div>
           <p className="text-xs text-text-muted mb-3">
-            These mods were detected during scanning and matched to Nexus, but haven&apos;t been
-            installed through the manager yet. Install them to enable features like profiles and updates.
+            These mods were detected on disk and matched to Nexus &mdash; sometimes by
+            file content, sometimes by name against your endorsed/tracked list when
+            the local files don&apos;t carry a Nexus ID. Hover the file count on any
+            card to see the exact paths that triggered the match. Install them
+            through the manager to unlock profiles, updates, and clean uninstall.
           </p>
           <RecognizedModsGrid
             mods={filteredRecognized}
