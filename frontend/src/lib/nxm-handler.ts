@@ -65,7 +65,7 @@ function handleNxmLink(
       ctx.retryTimers.add(timer);
       return;
     }
-    toast.error("NXM link failed", "Games not loaded — please try again");
+    toast.error("NXM link failed", "Games not loaded, please try again");
     return;
   }
 

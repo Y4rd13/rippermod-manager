@@ -222,7 +222,7 @@ export function NexusAccountGrid({
           {filtered.length} mod{filtered.length !== 1 ? "s" : ""}
         </span>
         {isStale && dataUpdatedAt != null && (
-          <span className="text-xs text-warning" title="Data may be outdated — sync your Nexus account to update">
+          <span className="text-xs text-warning" title="Data may be outdated; sync your Nexus account to update">
             Updated {timeAgo(Math.floor(dataUpdatedAt / 1000))}
           </span>
         )}

@@ -64,10 +64,21 @@ export function useDeployStatus(gameName: string | null) {
   });
 }
 
+/**
+ * Trigger a deploy. Pass ``{ force: true }`` to overwrite foreign files
+ * (copy-installed leftovers from other mod managers) that would otherwise
+ * make the link op fail with "destination exists". Default: ``{ force: false }``.
+ */
 export function useDeploy(gameName: string | null) {
   const qc = useQueryClient();
-  return useMutation<DeployReport, Error, void>({
-    mutationFn: () => api.post<DeployReport>(deployPath(gameName!)),
+  return useMutation<DeployReport, Error, { force?: boolean } | void>({
+    mutationFn: (vars) => {
+      const force = (vars && "force" in vars && vars.force) ?? false;
+      const url = force
+        ? `${deployPath(gameName!)}?force=true`
+        : deployPath(gameName!);
+      return api.post<DeployReport>(url);
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["deploy-status", gameName] });
       void qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });

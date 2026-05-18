@@ -253,7 +253,7 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, dismi
       {showRemoveConfirm && (
         <ConfirmDialog
           title="Remove old version?"
-          message={`This will remove the "${modName}" entry from your installed mods. Your files are safe — they are now managed by "${winnerName}".`}
+          message={`This will remove the "${modName}" entry from your installed mods. Your files are safe, they are now managed by "${winnerName}".`}
           confirmLabel="Remove"
           variant="danger"
           icon={Trash2}

@@ -166,7 +166,7 @@ class RarHandler(ArchiveHandler):
                 "on your system PATH and none was found. Easiest fix: install "
                 "7-Zip (https://www.7-zip.org/) AND make sure its install "
                 "folder (typically C:\\Program Files\\7-Zip) is on your PATH. "
-                "The 7-Zip installer does NOT add itself to PATH by default — "
+                "The 7-Zip installer does NOT add itself to PATH by default: "
                 "either tick that option during install, or add it manually "
                 "(Windows: Settings → Environment Variables → Path → New). "
                 "Alternatives that work the same way: WinRAR, UnRAR, or "

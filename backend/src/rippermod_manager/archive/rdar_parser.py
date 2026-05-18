@@ -102,7 +102,7 @@ def parse_rdar_toc(file_path: str | Path) -> RdarToc:
         if hash_data_size > MAX_HASH_TABLE_BYTES:
             raise ValueError(
                 f"Unreasonable hash table size: {num_files} entries "
-                f"({hash_data_size} bytes) — file likely corrupt"
+                f"({hash_data_size} bytes), file likely corrupt"
             )
         hash_data = f.read(hash_data_size)
         if len(hash_data) < hash_data_size:

@@ -550,11 +550,17 @@ async def redscript_conflicts(
 @router.post("/deploy", response_model=DeployReport)
 async def deploy_game(
     game_name: str,
+    force: bool = False,
     session: Session = Depends(get_session),
 ) -> DeployReport:
-    """Deploy all enabled mods for a game via hardlinks/junctions."""
+    """Deploy all enabled mods for a game via hardlinks/junctions.
+
+    ``force=true`` opts into overwriting foreign files squatting on a
+    destination (e.g., copy-installed leftovers from another mod manager).
+    Default false: foreign collisions surface as failed ops in the report.
+    """
     game = get_game_or_404(game_name, session)
-    return deploy_service.deploy(game, session)
+    return deploy_service.deploy(game, session, force=force)
 
 
 @router.post("/undeploy", response_model=DeployReport)

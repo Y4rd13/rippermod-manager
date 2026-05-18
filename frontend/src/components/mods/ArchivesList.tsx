@@ -493,7 +493,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
               </td>
               <td className="py-2 pr-2 whitespace-nowrap">
                 {a.is_empty ? (
-                  <span title="Download failed or was interrupted — re-download from Nexus to fix">
+                  <span title="Download failed or was interrupted; re-download from Nexus to fix">
                     <Badge variant="danger"><AlertTriangle size={10} /> Empty</Badge>
                   </span>
                 ) : a.is_installed ? (
@@ -516,7 +516,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
                     <div className="inline-flex items-center">
                       <button
                         disabled={a.is_empty || ((checkConflicts.isPending || installMod.isPending) && selectedArchive === a.filename)}
-                        title={a.is_empty ? "Archive is empty — re-download from Nexus" : undefined}
+                        title={a.is_empty ? "Archive is empty, re-download from Nexus" : undefined}
                         onClick={() => handleCheckConflicts(a.filename)}
                         className="inline-flex items-center gap-1 rounded-l-md bg-accent px-2 py-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50"
                       >
