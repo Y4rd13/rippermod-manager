@@ -69,8 +69,11 @@ Click any [i]"Download with manager"[/i] button on the Nexus Mods website. Rippe
 [b]Manual Archives[/b]
 Drop your .zip, .7z, or .rar files into the [b]downloaded_mods[/b] folder inside your game directory (e.g. [i]Cyberpunk 2077/downloaded_mods/[/i]). They'll appear in the Archives tab automatically.
 
+[b]Want staging outside your game folder?[/b]
+Go to [b]Settings → Deployment → Mods staging folder[/b] and pick any folder on the same drive as your game install. RipperMod uses NTFS hardlinks to deploy, which is why same-drive is required. Reset to default falls back to [i]<game>/downloaded_mods/[/i].
+
 [b]What happens after Install[/b]
-RipperMod doesn't dump mod files all over your Cyberpunk install. Mods live in [i]downloaded_mods/[/i] and get [b]Deployed[/b] into the game folder (linked, not copied) when you launch the game or hit Deploy in Settings. If the mod is a REDmod, RipperMod also runs the REDmod compiler automatically, so your scripts and tweaks are ready on the next game launch with zero command-line work. Hit [b]Undeploy[/b] anytime to return your install to vanilla in one click.
+RipperMod doesn't dump mod files all over your Cyberpunk install. Mods live in [i]downloaded_mods/[/i] (or your custom staging folder) and get linked into the game folder automatically every time you install, enable, disable, or hit Play. No manual Deploy step. If the mod is a REDmod, RipperMod also runs the REDmod compiler automatically, so your scripts and tweaks are ready on the next game launch with zero command-line work. Need to roll back? Hit [b]Undeploy[/b] in Settings to return your install to pure vanilla in one click; the next Play re-links everything.
 
 [size=3][b]Step 5 - Managing Conflicts[/b][/size]
 
@@ -89,7 +92,15 @@ All conflicts show up in the [b]Conflict Inbox[/b] with severity levels. You can
 [*][b]Dismiss[/b] - Acknowledge and ignore the conflict if you know it's harmless.
 [/list]
 
-The [b]Load Order[/b] view lets you reorder archive priorities, set preference rules, and preview changes before applying. The app generates a [b]modlist.txt[/b] for REDmod automatically.
+The [b]Load Order[/b] view (under Conflicts) gives you full control over [b]modlist.txt[/b] without touching a text editor:
+
+[list]
+[*][b]Drag-and-drop reorder[/b] - Grab the handle on any row and drop it where you want. The app computes the minimum set of preference changes and updates [b]modlist.txt[/b] in one atomic call, no matter how far the mod moved.
+[*][b]Auto-sort[/b] - One-click conflict-aware ordering. The app uses your detected conflicts plus a simple heuristic (smaller mods win each conflicting pair, since selective overrides are usually the intentional change) to propose a sensible order. A preview dialog shows exactly which mods would shift before you accept.
+[*][b]Reset to Default Order[/b] - Clears every preference and falls back to the engine's default ASCII order whenever a manual sort or an auto-sort run doesn't pan out.
+[*][b]Up/down arrows[/b] - One-step nudges for fine adjustments stay alongside the drag handle.
+[*][b]Edit modlist.txt directly[/b] - The active modlist is shown at the top of the view with an Edit shortcut that opens it in your default editor for power users.
+[/list]
 
 [size=3][b]Step 6 - Profiles[/b][/size]
 
@@ -128,7 +139,9 @@ Click [b]Download[/b] to grab the latest version, then install it from the Archi
 [list]
 [*][b]Endorse your mods on Nexus[/b] - This dramatically improves scan accuracy. The endorsed list is one of the strongest signals in the matching pipeline.
 [*][b]Keep archives around[/b] - The app uses MD5 hashes from your archives for matching. Deleting them removes a gold-standard matching signal.
-[*][b]View on Nexus[/b] - Click any mod card to open the full mod page on nexusmods.com for descriptions, files, and changelogs. The in-app mod panel shows requirements and quick actions (endorse, track).
+[*][b]Switch view modes[/b] - The grid/compact/list toggle in the header of mod tabs lets you see way more mods per screen (compact) or sort by columns (list). The choice is remembered per tab across launches.
+[*][b]Stack-browse requirements[/b] - In a mod's detail panel, clicking a Nexus requirement opens that requirement's panel in-place with a back arrow. Drill into dependency chains without losing your place. External (non-Nexus) requirements still open in your browser.
+[*][b]View on Nexus[/b] - Click any mod card to open the full mod page on nexusmods.com for descriptions, files, and changelogs. The in-app mod panel shows requirements (with green checkmarks for ones you already have) and quick actions (endorse, track).
 [*][b]Right-click for context menus[/b] - Most lists and cards support right-click actions for quick operations.
 [*][b]Bulk select with checkboxes[/b] - Tables have checkboxes for selecting multiple items at once. A bulk action bar appears at the bottom.
 [/list]

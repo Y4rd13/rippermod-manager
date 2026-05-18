@@ -60,14 +60,15 @@ The algorithm does the heavy lifting, but you're the one calling the shots:
 [/list]
 
 [b]Clean Game Folder & Smart Deployment[/b]
-RipperMod keeps your Cyberpunk install as close to vanilla as possible. Instead of dropping mod files all over the game directory, mods are staged in a [i]downloaded_mods/[/i] folder and linked into the game only when you [b]Deploy[/b] them. Switching mod loadouts or rolling back to vanilla is one click away, and game patches never have to fight with your mods.
+RipperMod keeps your Cyberpunk install as close to vanilla as possible. Instead of dropping mod files all over the game directory, mods are staged in a [i]downloaded_mods/[/i] folder and linked into the game only when needed. Switching mod loadouts or rolling back to vanilla is one click away, and game patches never have to fight with your mods.
 [list]
-[*][b]Deploy / Undeploy[/b] from Settings (or automatically when you hit Play) to link every enabled mod into the game folder, or remove all of them in one click and revert to vanilla.
+[*][b]Automatic deployment[/b] - Mods link into the game folder automatically every time you install, enable, disable, or hit Play. No manual Deploy button to remember.
+[*][b]One-click Undeploy[/b] - Restore your game folder to vanilla from Settings whenever you need to (Steam integrity verification, troubleshooting "is this a mod or a base-game bug?", or testing a fresh patch). Re-deploys on your next Play.
+[*][b]Configurable staging folder[/b] - Don't want [i]downloaded_mods[/i] inside your game install? Point it to any folder on the same drive from Settings. The app validates the location and keeps everything linked correctly.
 [*][b]Steam-Verify friendly[/b] - Steam's "Verify integrity of game files" only sees the vanilla game. No more red-flagged installs after every game update.
 [*][b]Auto-compile REDmods[/b] - When you install or enable a REDmod, RipperMod automatically runs the REDmod compiler for you. Your scripts and tweaks load in-game on the next launch with zero command-line steps.
 [*][b]Drift detection[/b] - If a game patch, another tool, or a manual change touches your game folder outside RipperMod, the app notices and offers a one-click re-deploy to put everything back the way it should be.
 [*][b]Instant profile switching[/b] - Profiles only re-link the mods that need to change. No copying or moving big files, so swapping loadouts takes seconds even with hundreds of mods.
-[*][b]Migrate from old installs[/b] - Already have mods installed the traditional way? The one-time migration tool moves them into the clean-folder layout without losing anything.
 [/list]
 
 [b]Nexus Mods Integration[/b]
@@ -78,6 +79,8 @@ RipperMod keeps your Cyberpunk install as close to vanilla as possible. Instead 
 [*][b]Endorse / Abstain[/b] - Toggle endorsement on any mod directly from the app.
 [*][b]Track / Untrack[/b] - Toggle tracking on any mod directly from the app.
 [*][b]Mod actions panel[/b] - Lightweight panel showing mod name, author, thumbnail, requirements, and a prominent "View on Nexus Mods" button. All detailed content (description, changelogs, files) is available on the Nexus mod page.
+[*][b]Installed requirement markers[/b] - When you open a mod, requirements you already have installed are highlighted with a green check so you see at a glance what's still missing.
+[*][b]Click-through requirements[/b] - Clicking a Nexus requirement opens the requirement's mini panel in-place with a back arrow. Drill into a chain of dependencies without losing your place. External (non-Nexus) requirements still open in your browser.
 [/list]
 
 [b]Download Manager[/b]
@@ -97,7 +100,10 @@ RipperMod keeps your Cyberpunk install as close to vanilla as possible. Instead 
 [*][b]Conflict inbox[/b] - Centralized view of all detected conflicts with resolve (reinstall with new priority) or dismiss actions.
 [*][b]Conflict graph[/b] - Visual graph of which mods conflict with each other.
 [*][b]Archive-level details[/b] - See exactly which resources overlap between archives, with per-resource severity and auto-collapsed hash lists.
-[*][b]Load order management[/b] - View and reorder archive load order with preference rules, dry-run previews, and automatic modlist.txt generation.
+[*][b]Load order: drag-and-drop[/b] - MO2-style. Grab the handle on any row and drop it where you want, the order rewrites and modlist.txt regenerates in one atomic call. Up/down arrows stay as a fine-grained fallback.
+[*][b]Load order: auto-sort[/b] - Conflict-aware heuristic that proposes a sensible order in one click (smaller mods win each conflicting pair, since selective overrides are usually the intentional change). Two-step UX with a preview dialog showing exactly what will change before you accept.
+[*][b]Reset to Default Order[/b] - Clear every preference and fall back to the engine's default ASCII order whenever a manual sort or auto-sort run doesn't work out.
+[*][b]modlist.txt visible and editable[/b] - The generated file is shown in the Load Order view with an Edit shortcut that opens it in your default editor for power users.
 [/list]
 
 [b]Stay Up to Date[/b]
@@ -121,12 +127,21 @@ Got multiple playthroughs? Different mod loadouts for different builds? Profiles
 [*][b]Compare[/b] - Side-by-side comparison of two profiles to see the differences.
 [/list]
 
+[b]Interface & Layout[/b]
+[list]
+[*][b]Three view modes[/b] - Big preview grid, compact tile grid (more mods per screen), or virtualized list with sortable columns. Available on Installed, Detected on Disk, Matched, Endorsed, and Tracked tabs.
+[*][b]Persists across launches[/b] - The sidebar collapse state and per-tab view mode are remembered between sessions, so the app opens the way you left it.
+[*][b]Tab hints[/b] - One-line descriptions under every tab header tell first-time users what the tab is for at a glance.
+[*][b]Right-click context menus[/b] - Common actions one click away on most rows and cards.
+[*][b]Bulk operations[/b] - Multi-select with checkboxes in list/grid views. A bulk action bar appears when you have a selection.
+[/list]
+
 [b]Game Management[/b]
 [list]
 [*][b]Auto-detection[/b] - Automatically finds game installations from Steam, GOG, and Epic registries (including multi-library Steam setups).
 [*][b]Manual setup[/b] - Browse and select your game folder manually with path validation.
-[*][b]Play button[/b] - Launch your game directly from the app.
-[*]Configurable mod directories per game.
+[*][b]Play button[/b] - Launch your game directly from the app (auto-deploys enabled mods first).
+[*]Configurable scanned mod directories per game.
 [*]Dashboard with overview stats: total games, total mods, Nexus matches, available updates.
 [/list]
 
