@@ -1,4 +1,5 @@
 import {
+  ArrowLeft,
   ArrowUp,
   Check,
   ExternalLink,
@@ -9,7 +10,7 @@ import {
   Puzzle,
   X,
 } from "lucide-react";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Badge } from "@/components/ui/Badge";
@@ -29,17 +30,33 @@ interface Props {
 }
 
 export function ModDetailModal({ gameDomain, gameName, modId, update, action, onClose }: Props) {
-  const { data: detail, isLoading } = useModSummary(modId);
+  // In-app navigation stack: clicking a requirement pushes its mod id, allowing
+  // the user to drill into requirements without leaving the modal.
+  const [modIdStack, setModIdStack] = useState<number[]>([modId]);
+  useEffect(() => {
+    setModIdStack([modId]);
+  }, [modId]);
+  const currentModId = modIdStack[modIdStack.length - 1] ?? modId;
+  const isDrilled = modIdStack.length > 1;
+
+  const { data: detail, isLoading } = useModSummary(currentModId);
   const endorseMod = useEndorseMod();
   const abstainMod = useAbstainMod();
   const trackMod = useTrackMod();
   const untrackMod = useUntrackMod();
 
+  const handleBack = useCallback(() => {
+    setModIdStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev));
+  }, []);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        if (isDrilled) handleBack();
+        else onClose();
+      }
     },
-    [onClose],
+    [onClose, isDrilled, handleBack],
   );
 
   useEffect(() => {
@@ -52,7 +69,7 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, on
   }, [handleKeyDown]);
 
   const nexusUrl = detail?.nexus_url
-    ?? `https://www.nexusmods.com/${gameDomain}/mods/${modId}`;
+    ?? `https://www.nexusmods.com/${gameDomain}/mods/${currentModId}`;
 
   return (
     <div
@@ -96,7 +113,7 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, on
                       <span className="text-text-secondary">by {detail.author}</span>
                     )}
                     {detail.version && <span>v{detail.version}</span>}
-                    {update && (
+                    {update && !isDrilled && (
                       <Badge variant="warning"><ArrowUp size={10} className="mr-0.5" />v{update.nexus_version} available</Badge>
                     )}
                     {detail.category && !/^\d+$/.test(detail.category) && (
@@ -104,12 +121,24 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, on
                     )}
                   </div>
                 </div>
-                <button
-                  className="rounded-lg p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors flex-shrink-0"
-                  onClick={onClose}
-                >
-                  <X size={18} />
-                </button>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {isDrilled && (
+                    <button
+                      className="rounded-lg p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
+                      onClick={handleBack}
+                      title="Back to previous mod"
+                    >
+                      <ArrowLeft size={18} />
+                    </button>
+                  )}
+                  <button
+                    className="rounded-lg p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
+                    onClick={onClose}
+                    title="Close"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
               </div>
 
               {/* Prominent CTA */}
@@ -154,10 +183,18 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, on
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {detail.requirements.map((req) => {
+                      const canNavInApp = req.required_mod_id != null && !req.is_external;
                       const href = req.url
                         || (req.required_mod_id
                           ? `https://www.nexusmods.com/${gameDomain}/mods/${req.required_mod_id}`
                           : "");
+                      const titleHint = req.is_installed
+                        ? "Installed"
+                        : canNavInApp
+                          ? "Open in app"
+                          : req.is_external
+                            ? "Open in browser"
+                            : undefined;
                       return (
                         <button
                           key={`${req.nexus_mod_id}-${req.required_mod_id ?? req.mod_name}`}
@@ -166,9 +203,15 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, on
                               ? "inline-flex items-center gap-1.5 rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success hover:bg-success/20 hover:border-success/50 transition-colors disabled:opacity-50 disabled:cursor-default"
                               : "inline-flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/15 hover:border-accent/40 transition-colors disabled:opacity-50 disabled:cursor-default"
                           }
-                          onClick={() => { if (href) openUrl(href).catch(() => {}); }}
-                          disabled={!href}
-                          title={req.is_installed ? "Installed" : undefined}
+                          onClick={() => {
+                            if (canNavInApp && req.required_mod_id != null) {
+                              setModIdStack((prev) => [...prev, req.required_mod_id as number]);
+                            } else if (href) {
+                              openUrl(href).catch(() => {});
+                            }
+                          }}
+                          disabled={!canNavInApp && !href}
+                          title={titleHint}
                         >
                           {req.is_installed && <Check size={11} />}
                           {req.mod_name || "Unknown mod"}
@@ -192,8 +235,8 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, on
                       size="sm"
                       loading={endorseMod.isPending || abstainMod.isPending}
                       onClick={() => {
-                        if (detail.is_endorsed) abstainMod.mutate({ gameName, modId });
-                        else endorseMod.mutate({ gameName, modId });
+                        if (detail.is_endorsed) abstainMod.mutate({ gameName, modId: currentModId });
+                        else endorseMod.mutate({ gameName, modId: currentModId });
                       }}
                       className={detail.is_endorsed ? "text-danger" : ""}
                     >
@@ -205,8 +248,8 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, on
                       size="sm"
                       loading={trackMod.isPending || untrackMod.isPending}
                       onClick={() => {
-                        if (detail.is_tracked) untrackMod.mutate({ gameName, modId });
-                        else trackMod.mutate({ gameName, modId });
+                        if (detail.is_tracked) untrackMod.mutate({ gameName, modId: currentModId });
+                        else trackMod.mutate({ gameName, modId: currentModId });
                       }}
                       className={detail.is_tracked ? "text-accent" : ""}
                     >
@@ -216,7 +259,7 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, on
                   </>
                 )}
               </div>
-              {action && <div className="flex items-center gap-2">{action}</div>}
+              {action && !isDrilled && <div className="flex items-center gap-2">{action}</div>}
             </div>
           </>
         )}
