@@ -33,9 +33,14 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, on
   // In-app navigation stack: clicking a requirement pushes its mod id, allowing
   // the user to drill into requirements without leaving the modal.
   const [modIdStack, setModIdStack] = useState<number[]>([modId]);
-  useEffect(() => {
+  // Reset the stack synchronously when the parent passes a new modId (e.g. user
+  // opened a different mod). Using the "adjusting state during render" pattern
+  // from React docs to avoid cascading-render lint violations.
+  const [lastPropModId, setLastPropModId] = useState(modId);
+  if (modId !== lastPropModId) {
+    setLastPropModId(modId);
     setModIdStack([modId]);
-  }, [modId]);
+  }
   const currentModId = modIdStack[modIdStack.length - 1] ?? modId;
   const isDrilled = modIdStack.length > 1;
 

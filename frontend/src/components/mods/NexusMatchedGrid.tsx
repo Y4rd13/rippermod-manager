@@ -453,7 +453,6 @@ export function NexusMatchedGrid({
                   <NexusModTile
                     modName={props.modName}
                     pictureUrl={props.pictureUrl}
-                    badge={props.badge}
                     footer={props.footer}
                     action={props.action}
                     onClick={props.onClick}
