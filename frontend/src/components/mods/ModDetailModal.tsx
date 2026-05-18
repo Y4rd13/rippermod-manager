@@ -449,7 +449,7 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                                   startDownload.mutate(
                                     {
                                       gameName,
-                                      data: { nexus_mod_id: modId, nexus_file_id: f.file_id },
+                                      data: { nexus_mod_id: currentModId, nexus_file_id: f.file_id },
                                     },
                                     { onSettled: () => setDownloadingFileId(null) },
                                   );

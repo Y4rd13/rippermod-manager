@@ -74,6 +74,7 @@ class TestListDownloads:
         assert r.status_code == 200
         assert r.json() == []
 
+
 class TestModDetailRequirements:
     """Coverage for the is_installed / installed_mod_id fields on requirements.
 
@@ -115,4 +116,3 @@ class TestModDetailRequirements:
         assert len(reqs) == 1
         assert reqs[0]["is_installed"] is True
         assert reqs[0]["installed_mod_id"] == installed.id
-
