@@ -181,7 +181,11 @@ async def mod_summary(
             # fresh=true + no API key: silently fall back to cached metadata
             # rather than failing the update check.
         else:
-            from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
+            from rippermod_manager.nexus.client import NexusRateLimitError
+            from rippermod_manager.nexus.graphql_client import (
+                NexusGraphQLClient,
+                NexusGraphQLError,
+            )
             from rippermod_manager.services.nexus_helpers import (
                 graphql_mod_to_rest_info,
                 store_uid_from_gql,
@@ -207,10 +211,12 @@ async def mod_summary(
                     meta = session.exec(
                         select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)
                     ).first()
-                except httpx.HTTPError:
-                    # Nexus unreachable / rate-limited: cached value is acceptable
-                    # for the update check; bubble the error only if we have no
-                    # cached metadata at all.
+                except (NexusRateLimitError, NexusGraphQLError, httpx.HTTPError):
+                    # Rate-limited (NexusRateLimitError is a bare Exception, NOT
+                    # an httpx.HTTPError — per CLAUDE.md it must be caught
+                    # explicitly), GraphQL-level errors, or transport failures
+                    # all fall back to the cached row so the update check never
+                    # 500s. Bubble only if no cached metadata exists at all.
                     logger.debug("mod_summary refresh failed for %d", mod_id, exc_info=True)
                     if meta is None:
                         raise
@@ -240,12 +246,15 @@ async def mod_summary(
     if not req_rows and not meta.requirements_fetched_at:
         api_key = get_setting(session, "nexus_api_key") or ""
         if api_key:
+            from rippermod_manager.nexus.client import NexusRateLimitError
+            from rippermod_manager.nexus.graphql_client import NexusGraphQLError
+
             try:
                 await _fetch_requirements(api_key, meta.game_domain, mod_id, session)
                 req_rows = session.exec(
                     select(NexusModRequirement).where(NexusModRequirement.nexus_mod_id == mod_id)
                 ).all()
-            except httpx.HTTPError:
+            except (NexusRateLimitError, NexusGraphQLError, httpx.HTTPError):
                 logger.debug("Failed to backfill requirements for mod %d", mod_id, exc_info=True)
 
     # Map {required nexus_mod_id -> installed_mod_id} for the game this mod belongs to,
