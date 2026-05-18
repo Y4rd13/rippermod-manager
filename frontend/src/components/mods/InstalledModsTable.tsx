@@ -1167,7 +1167,7 @@ export function InstalledModsTable({
       {mods.length > 0 && scope !== "detected" && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-text-primary" title="Mods installed and managed through this app — you can enable, disable, or uninstall them">
+            <h3 className="text-sm font-semibold text-text-primary" title="Mods installed and managed through this app. You can enable, disable, or uninstall them">
               Installed Mods ({groupedFilteredMods.length})
             </h3>
             <FilterChips
@@ -1198,7 +1198,7 @@ export function InstalledModsTable({
       {filteredRecognized.length > 0 && scope !== "installed" && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-text-primary" title="Mods found on disk and matched to Nexus — click Install to manage them">
+            <h3 className="text-sm font-semibold text-text-primary" title="Mods found on disk and matched to Nexus. Click Install to manage them">
               Detected on Disk ({filteredRecognized.length})
             </h3>
             <SortSelect

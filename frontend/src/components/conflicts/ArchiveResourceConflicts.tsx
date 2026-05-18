@@ -430,7 +430,7 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
                             {item.identical_count} cosmetic
                           </button>
                         )}
-                        {totalConflicts === 0 && "—"}
+                        {totalConflicts === 0 && "-"}
                       </span>
                       {totalConflicts > 0 && (
                         <div className="flex h-1 w-12 rounded-full overflow-hidden bg-surface-2">
@@ -764,7 +764,7 @@ function ConflictHelpModal({ onClose }: { onClose: () => void }) {
         <div className="space-y-3 text-sm text-text-secondary">
           <p>
             <Badge variant="success">cosmetic</Badge>{" "}
-            Both archives contain identical data for this resource. No gameplay impact — safe to ignore.
+            Both archives contain identical data for this resource. No gameplay impact, safe to ignore.
           </p>
           <p>
             <Badge variant="danger">real</Badge>{" "}
@@ -772,7 +772,7 @@ function ConflictHelpModal({ onClose }: { onClose: () => void }) {
           </p>
           <p>
             <Badge variant="warning">dependency</Badge>{" "}
-            One mod requires the other — the override is intentional. Usually safe to leave as-is.
+            One mod requires the other, so the override is intentional. Usually safe to leave as-is.
           </p>
           <p>
             <Badge variant="success">wins over</Badge>{" "}

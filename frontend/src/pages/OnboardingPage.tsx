@@ -144,7 +144,7 @@ function NexusSetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
           {sso.state === "waiting" && (
             <div className="text-center space-y-1">
               <p className="text-text-muted text-xs">
-                Waiting... ({ssoElapsed}s) — Complete authorization in your browser.
+                Waiting... ({ssoElapsed}s). Complete authorization in your browser.
                 <button
                   type="button"
                   onClick={() => sso.cancel()}
@@ -155,7 +155,7 @@ function NexusSetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
               </p>
               {ssoElapsed > 120 && (
                 <p className="text-warning text-xs">
-                  Taking longer than expected — try cancelling and starting again.
+                  Taking longer than expected. Try cancelling and starting again.
                 </p>
               )}
             </div>

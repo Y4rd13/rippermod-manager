@@ -248,7 +248,7 @@ export function ModsTable({ mods, gameName, isLoading }: { mods: ModGroup[]; gam
                       <div className="mt-2 pt-2 border-t border-border flex items-center gap-2 text-xs">
                         <ExternalLink size={12} className="text-accent" />
                         <span className="text-text-muted">
-                          Matched via {mod.nexus_match.method} — Nexus Mod #
+                          Matched via {mod.nexus_match.method}, Nexus Mod #
                           {mod.nexus_match.nexus_mod_id}
                         </span>
                       </div>

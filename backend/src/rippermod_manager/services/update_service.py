@@ -823,7 +823,7 @@ async def check_all_updates(
             if resolved_nexus_v and local_v and not is_newer_version(resolved_nexus_v, local_v):
                 if not is_file_upd:
                     logger.debug(
-                        "Filtered (resolved version not newer): %s — nexus=%s, local=%s",
+                        "Filtered (resolved version not newer): %s, nexus=%s, local=%s",
                         u["display_name"],
                         resolved_nexus_v,
                         local_v,
@@ -839,7 +839,7 @@ async def check_all_updates(
                     and resolved_file_ts <= local_mtime
                 ):
                     logger.debug(
-                        "Filtered (same-version, file not newer): %s — file_ts=%d <= local_ts=%d",
+                        "Filtered (same-version, file not newer): %s, file_ts=%d <= local_ts=%d",
                         u["display_name"],
                         resolved_file_ts,
                         local_mtime,
