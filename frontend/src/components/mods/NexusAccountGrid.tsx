@@ -371,6 +371,7 @@ export function NexusAccountGrid({
         if (viewMode === "compact") {
           return (
             <VirtualCardGrid
+              key="compact"
               items={filtered}
               variant="compact"
               estimateHeight={210}
@@ -393,6 +394,7 @@ export function NexusAccountGrid({
         }
         return (
           <VirtualCardGrid
+            key="grid"
             items={filtered}
             renderItem={(mod) => <NexusModCard {...renderCommon(mod)} />}
           />

@@ -442,6 +442,7 @@ export function NexusMatchedGrid({
         if (viewMode === "compact") {
           return (
             <VirtualCardGrid
+              key="compact"
               items={filtered}
               variant="compact"
               estimateHeight={210}
@@ -465,6 +466,7 @@ export function NexusMatchedGrid({
         }
         return (
           <VirtualCardGrid
+            key="grid"
             items={filtered}
             renderItem={(mod) => {
               const props = renderCommon(mod);

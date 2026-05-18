@@ -545,6 +545,7 @@ function ManagedModsGrid({
         if (viewMode === "compact") {
           return (
             <VirtualCardGrid
+              key="compact"
               items={sorted}
               variant="compact"
               estimateHeight={210}
@@ -570,6 +571,7 @@ function ManagedModsGrid({
 
         return (
       <VirtualCardGrid
+        key="grid"
         items={sorted}
         renderItem={(group) => {
           const mod = group.primary;
@@ -888,6 +890,7 @@ function RecognizedModsGrid({
         />
       ) : viewMode === "compact" ? (
         <VirtualCardGrid
+          key="compact"
           items={mods}
           variant="compact"
           estimateHeight={210}
@@ -908,6 +911,7 @@ function RecognizedModsGrid({
         />
       ) : (
         <VirtualCardGrid
+          key="grid"
           items={mods}
           renderItem={(mod) => {
             const c = buildRec(mod);
