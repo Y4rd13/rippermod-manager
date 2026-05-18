@@ -67,7 +67,7 @@ def _archive_files_for_mod(
         with open_archive(archive_path) as archive:
             all_entries = archive.list_entries()
     except Exception:
-        logger.warning("Could not open archive %s — skipping conflict check", archive_path)
+        logger.warning("Could not open archive %s, skipping conflict check", archive_path)
         return None
 
     known_roots = known_roots_for_game(game.domain_name)
@@ -175,7 +175,7 @@ def resolve_conflict(
 ) -> ResolveResult:
     """Resolve conflicts by the given action (currently only 'reinstall')."""
     if not mod.source_archive:
-        raise ValueError("Mod has no source archive — cannot reinstall.")
+        raise ValueError("Mod has no source archive, cannot reinstall.")
 
     staging = get_mods_dir(game)
     archive_path = staging / mod.source_archive
@@ -198,7 +198,7 @@ def resolve_conflict(
         result = install_mod(game, archive_path, session)
     except Exception:
         logger.error(
-            "Reinstall failed after uninstall for mod %s — mod is now uninstalled",
+            "Reinstall failed after uninstall for mod %s, mod is now uninstalled",
             mod.name,
         )
         raise

@@ -166,6 +166,71 @@ def test_execute_plan_creates_hardlinks_and_journals(in_memory_session, sample_g
     assert all(j.status == "done" for j in journal)
 
 
+def test_execute_plan_force_overwrites_foreign_file(in_memory_session, sample_game):
+    """A regular file squatting on the destination is overwritten when force=True."""
+    session = in_memory_session
+    game = sample_game
+    staging = Path(game.install_path) / "downloaded_mods" / "TestMod" / "r6" / "scripts"
+    staging.mkdir(parents=True)
+    src = staging / "foo.reds"
+    src.write_text("staged content")
+
+    dst = Path(game.install_path) / "r6" / "scripts" / "foo.reds"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_text("foreign content from another mod manager")
+
+    plan = DeployPlan(
+        game_id=game.id,
+        ops=[
+            DeployOp(
+                operation="link", src=str(src), dst=str(dst), installed_mod_id=1,
+            ),
+        ],
+    )
+
+    report = execute_plan(plan, session, force=True)
+
+    assert report.failed == 0
+    assert report.done == 1
+    # Destination is now a hardlink to the staged source: identical content.
+    assert dst.read_text() == "staged content"
+    # And shares an inode with src.
+    assert dst.stat().st_ino == src.stat().st_ino
+
+
+def test_execute_plan_without_force_keeps_foreign_and_fails(
+    in_memory_session, sample_game,
+):
+    """Without force, an op pointing at an occupied dst fails with destination exists."""
+    session = in_memory_session
+    game = sample_game
+    staging = Path(game.install_path) / "downloaded_mods" / "TestMod" / "r6" / "scripts"
+    staging.mkdir(parents=True)
+    src = staging / "foo.reds"
+    src.write_text("staged content")
+
+    dst = Path(game.install_path) / "r6" / "scripts" / "foo.reds"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_text("foreign content")
+
+    plan = DeployPlan(
+        game_id=game.id,
+        ops=[
+            DeployOp(
+                operation="link", src=str(src), dst=str(dst), installed_mod_id=1,
+            ),
+        ],
+    )
+
+    report = execute_plan(plan, session)
+
+    assert report.failed == 1
+    assert report.done == 0
+    # Foreign file is untouched.
+    assert dst.read_text() == "foreign content"
+    assert "destination exists" in report.results[0].error
+
+
 def test_execute_plan_failure_marks_journal_failed(in_memory_session, sample_game):
     session = in_memory_session
     game = sample_game

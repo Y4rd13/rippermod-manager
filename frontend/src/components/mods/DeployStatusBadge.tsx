@@ -1,6 +1,8 @@
-import { AlertTriangle, CheckCircle, RotateCcw } from "lucide-react";
+import { AlertTriangle, CheckCircle, RotateCcw, Zap } from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useDeploy, useDeployStatus } from "@/hooks/use-deploy";
 import { reportDeployOutcome } from "@/lib/deploy-toast";
 import { toast } from "@/stores/toast-store";
@@ -12,12 +14,30 @@ interface DeployStatusBadgeProps {
 export function DeployStatusBadge({ gameName }: DeployStatusBadgeProps) {
   const { data: status } = useDeployStatus(gameName);
   const deploy = useDeploy(gameName);
+  const [confirmForce, setConfirmForce] = useState(false);
+
+  const runDeploy = (force: boolean) => {
+    deploy.mutate(
+      { force },
+      {
+        onSuccess: (report) =>
+          reportDeployOutcome(report, force ? "Force redeploy" : "Redeploy"),
+        onError: (error) =>
+          toast.error(force ? "Force redeploy failed" : "Redeploy failed", error.message),
+        onSettled: () => setConfirmForce(false),
+      },
+    );
+  };
 
   const handleRedeploy = () => {
-    deploy.mutate(undefined, {
-      onSuccess: (report) => reportDeployOutcome(report, "Redeploy"),
-      onError: (error) => toast.error("Redeploy failed", error.message),
-    });
+    // When the only drift is missing links (no foreign squatters), a normal
+    // redeploy is enough. When foreign files are in the way, prompt for
+    // confirmation since overwriting is destructive.
+    if (status && status.foreign > 0) {
+      setConfirmForce(true);
+      return;
+    }
+    runDeploy(false);
   };
 
   if (!status) return null;
@@ -40,13 +60,35 @@ export function DeployStatusBadge({ gameName }: DeployStatusBadgeProps) {
   const driftLabel = parts.length > 0 ? parts.join(", ") : "drifted";
 
   return (
-    <div className="inline-flex items-center gap-2 text-xs">
-      <span className="inline-flex items-center gap-1 text-warning">
-        <AlertTriangle size={14} /> Drift: {driftLabel}
-      </span>
-      <Button size="sm" loading={deploy.isPending} onClick={handleRedeploy}>
-        <RotateCcw size={12} /> Redeploy
-      </Button>
-    </div>
+    <>
+      <div className="inline-flex items-center gap-2 text-xs">
+        <span className="inline-flex items-center gap-1 text-warning">
+          <AlertTriangle size={14} /> Drift: {driftLabel}
+        </span>
+        <Button size="sm" loading={deploy.isPending} onClick={handleRedeploy}>
+          <RotateCcw size={12} /> Redeploy
+        </Button>
+      </div>
+
+      {confirmForce && status.foreign > 0 && (
+        <ConfirmDialog
+          title="Overwrite foreign files?"
+          message={
+            `${status.foreign} file${status.foreign === 1 ? "" : "s"} in the game folder are currently ` +
+            `copies (not RipperMod hardlinks), most likely left over from another mod manager or a ` +
+            `manual install. A regular redeploy refuses to overwrite them. Force redeploy will delete ` +
+            `each of those files and replace them with RipperMod hardlinks. Your staged copies in ` +
+            `downloaded_mods/ are not touched, so this is safe to undo by uninstalling. ` +
+            `Close Cyberpunk 2077 first.`
+          }
+          confirmLabel="Force redeploy"
+          variant="warning"
+          icon={Zap}
+          loading={deploy.isPending}
+          onConfirm={() => runDeploy(true)}
+          onCancel={() => setConfirmForce(false)}
+        />
+      )}
+    </>
   );
 }

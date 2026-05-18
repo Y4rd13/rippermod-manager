@@ -62,7 +62,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 except Exception as exc:
                     logger.warning("Journal replay failed for game %s: %s", _game.id, exc)
     except Exception:
-        logger.exception("Journal replay startup hook failed — continuing anyway")
+        logger.exception("Journal replay startup hook failed, continuing anyway")
     write_pid_file(settings.data_dir)
     logger.info("Application started")
     yield

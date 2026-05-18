@@ -26,6 +26,7 @@ from rippermod_manager.schemas.deploy import (
 )
 from rippermod_manager.services.paths import get_mods_dir
 from rippermod_manager.services.vfs.primitives import (
+    AlreadyExistsError,
     VfsError,
     hardlink,
     is_game_running,
@@ -53,7 +54,7 @@ def pre_flight_check(game: Game) -> PreflightReport:
     if is_game_running(GAME_EXE):
         report.ok = False
         report.game_running = True
-        report.reasons.append("Cyberpunk 2077 is running — close it before deploying.")
+        report.reasons.append("Cyberpunk 2077 is running, close it before deploying.")
 
     try:
         sv = same_volume(staging, install)
@@ -153,9 +154,14 @@ def plan_deploy(game: Game, session: Session) -> tuple[DeployPlan, int]:
     return plan, skipped_existing
 
 
-def execute_plan(plan: DeployPlan, session: Session) -> DeployReport:
+def execute_plan(plan: DeployPlan, session: Session, *, force: bool = False) -> DeployReport:
     """Run each op in `plan`, persisting a write-ahead journal entry before each
     filesystem mutation so crash recovery can roll back partial state on next start.
+
+    When ``force=True`` and a link/junction op hits ``AlreadyExistsError`` (a foreign
+    file is squatting on the destination), the destination is removed and the op is
+    retried once. Without ``force``, such conflicts surface as failures so the user
+    can decide whether to overwrite.
     """
     results: list[DeployOpResult] = []
 
@@ -185,6 +191,26 @@ def execute_plan(plan: DeployPlan, session: Session) -> DeployReport:
                 raise VfsError(f"unknown op: {op.operation}")
             entry.status = "done"
             results.append(DeployOpResult(op=op, status="done"))
+        except AlreadyExistsError as exc:
+            if force and op.operation in ("link", "junction"):
+                try:
+                    if op.operation == "link":
+                        unlink(Path(op.dst))
+                        hardlink(Path(op.src), Path(op.dst))
+                    else:
+                        remove_junction(Path(op.dst))
+                        junction(Path(op.src), Path(op.dst))
+                    entry.status = "done"
+                    results.append(DeployOpResult(op=op, status="done"))
+                except (VfsError, OSError) as retry_exc:
+                    msg = f"force overwrite failed: {retry_exc}"
+                    entry.status = "failed"
+                    entry.error = msg
+                    results.append(DeployOpResult(op=op, status="failed", error=msg))
+            else:
+                entry.status = "failed"
+                entry.error = str(exc)
+                results.append(DeployOpResult(op=op, status="failed", error=str(exc)))
         except VfsError as exc:
             entry.status = "failed"
             entry.error = str(exc)
@@ -210,7 +236,7 @@ def undeploy(game: Game, session: Session) -> DeployReport:
         refuse_pre = PreflightReport(
             ok=False,
             game_running=True,
-            reasons=["Cyberpunk 2077 is running — close it before undeploying."],
+            reasons=["Cyberpunk 2077 is running, close it before undeploying."],
         )
         return DeployReport(total=0, done=0, failed=0, results=[], preflight=refuse_pre)
 
@@ -410,8 +436,8 @@ def redmod_deploy(game: Game) -> RedmodDeployResult:
     )
 
 
-def deploy(game: Game, session: Session) -> DeployReport:
-    """Compose pre_flight_check → plan_deploy → execute_plan → redmod_deploy.
+def deploy(game: Game, session: Session, *, force: bool = False) -> DeployReport:
+    """Compose pre_flight_check, plan_deploy, execute_plan and redmod_deploy.
 
     If pre-flight fails, returns an empty report with the ``preflight`` field
     populated so callers can surface the reason. On a clean execute (no failures
@@ -420,12 +446,17 @@ def deploy(game: Game, session: Session) -> DeployReport:
     ``redMod.exe deploy`` so the compiled cache stays in sync with the deployed
     junctions; the redmod result is attached to ``report.redmod`` regardless of
     outcome.
+
+    ``force=True`` makes ``execute_plan`` overwrite foreign files squatting on a
+    destination instead of skipping them as conflicts. Use this when the user
+    has explicitly opted into a "force redeploy" (e.g., to migrate from another
+    mod manager that left copy-installed files behind).
     """
     pre = pre_flight_check(game)
     if not pre.ok:
         return DeployReport(total=0, done=0, failed=0, results=[], preflight=pre)
     plan, skipped = plan_deploy(game, session)
-    report = execute_plan(plan, session)
+    report = execute_plan(plan, session, force=force)
     report.skipped_existing = skipped
     if report.is_clean:
         mods = session.exec(
