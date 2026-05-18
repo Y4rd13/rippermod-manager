@@ -10,6 +10,7 @@ import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { ModQuickActions } from "@/components/mods/ModQuickActions";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { NexusModRow } from "@/components/mods/NexusModRow";
+import { NexusModTile } from "@/components/mods/NexusModTile";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
@@ -362,6 +363,29 @@ export function NexusAccountGrid({
                 </tr>
               )}
               renderRow={(mod) => <NexusModRow {...renderCommon(mod)} />}
+            />
+          );
+        }
+        if (viewMode === "compact") {
+          return (
+            <VirtualCardGrid
+              items={filtered}
+              variant="compact"
+              estimateHeight={210}
+              renderItem={(mod) => {
+                const props = renderCommon(mod);
+                return (
+                  <NexusModTile
+                    modName={props.modName}
+                    pictureUrl={props.pictureUrl}
+                    badge={props.badge}
+                    footer={props.footer}
+                    action={props.action}
+                    onClick={props.onClick}
+                    onContextMenu={props.onContextMenu}
+                  />
+                );
+              }}
             />
           );
         }

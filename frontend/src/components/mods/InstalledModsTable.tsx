@@ -33,7 +33,12 @@ import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { VirtualCardGrid } from "@/components/ui/VirtualCardGrid";
+import { VirtualTable } from "@/components/ui/VirtualTable";
+import { NexusModRow } from "@/components/mods/NexusModRow";
+import { NexusModTile } from "@/components/mods/NexusModTile";
+import type { ModViewMode } from "@/stores/ui-store";
 import { DownloadProgress } from "@/components/ui/DownloadProgress";
 import { useBulkSelect } from "@/hooks/use-bulk-select";
 import { useContextMenu } from "@/hooks/use-context-menu";
@@ -43,6 +48,7 @@ import { useInstallFlow } from "@/hooks/use-install-flow";
 import { isoToEpoch, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
+import { useUIStore } from "@/stores/ui-store";
 import type { AvailableArchive, DownloadJobOut, InstalledModOut, ModGroup, ModUpdate } from "@/types/api";
 
 interface GroupedMod {
@@ -150,6 +156,7 @@ function ManagedModsGrid({
   updateByInstalledId,
   updateByNexusId,
   onModClick,
+  viewMode,
 }: {
   groups: GroupedMod[];
   allMods: InstalledModOut[];
@@ -158,6 +165,7 @@ function ManagedModsGrid({
   updateByInstalledId: Map<number, ModUpdate>;
   updateByNexusId: Map<number, ModUpdate>;
   onModClick?: (nexusModId: number) => void;
+  viewMode: ModViewMode;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("updated");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -427,6 +435,138 @@ function ManagedModsGrid({
         </Button>
       </BulkActionBar>
 
+      {(() => {
+        const buildCommon = (group: GroupedMod) => {
+          const mod = group.primary;
+          const isMulti = group.entries.length > 1;
+          const anyDisabled = group.entries.some((e) => e.disabled);
+          const allDisabled = group.entries.every((e) => e.disabled);
+          const update =
+            updateByInstalledId.get(mod.id) ??
+            (mod.nexus_mod_id ? updateByNexusId.get(mod.nexus_mod_id) : undefined);
+          const badge = (
+            <>
+              {isMulti && (
+                <Badge variant="neutral">
+                  <Files size={10} className="mr-0.5" />
+                  {group.entries.length} files
+                </Badge>
+              )}
+              {update && (
+                <span title={update.reason || `Update: v${update.local_version} → v${update.nexus_version}`}>
+                  <Badge variant="warning" prominent>
+                    <ArrowUp size={10} className="mr-0.5" />
+                    v{update.nexus_version}
+                  </Badge>
+                </span>
+              )}
+            </>
+          );
+          const stateBadge = isMulti && anyDisabled && !allDisabled ? (
+            <Badge variant="warning">
+              <Power size={10} className="mr-0.5" /> Mixed
+            </Badge>
+          ) : (
+            <Badge variant={allDisabled ? "danger" : "success"}>
+              {allDisabled ? (
+                <><PowerOff size={10} className="mr-0.5" /> Disabled</>
+              ) : (
+                <><Power size={10} className="mr-0.5" /> Enabled</>
+              )}
+            </Badge>
+          );
+          const activeDl = mod.nexus_mod_id ? activeDownloadByModId.get(mod.nexus_mod_id) : undefined;
+          const action = activeDl ? (
+            <div className="w-36">
+              <DownloadProgress
+                job={activeDl}
+                onCancel={() => cancelDownload.mutate({ gameName, jobId: activeDl.id })}
+              />
+            </div>
+          ) : (
+            <InstalledModCardAction
+              disabled={allDisabled}
+              isToggling={group.entries.some((e) => toggleMod.isPending && toggleMod.variables?.modId === e.id)}
+              isUninstalling={group.entries.some((e) => uninstallMod.isPending && uninstallMod.variables?.modId === e.id)}
+              onToggle={() => runOrSelect("toggle", group)}
+              onUninstall={() => runOrSelect("delete", group)}
+            />
+          );
+          const overflowMenu = (
+            <OverflowMenuButton
+              items={buildContextMenuItems(group)}
+              onSelect={(key) => handleMenuAction(key, group)}
+            />
+          );
+          return { mod, isMulti, anyDisabled, allDisabled, update, badge, stateBadge, action, overflowMenu };
+        };
+
+        if (viewMode === "list") {
+          return (
+            <VirtualTable
+              items={sorted}
+              estimateHeight={72}
+              renderHead={() => (
+                <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted text-xs">
+                  <th className="py-2 pr-3 w-[68px]" />
+                  <th className="py-2 pr-3 font-medium">Mod</th>
+                  <th className="py-2 pr-3 font-medium">Author</th>
+                  <th className="py-2 pr-3 font-medium">Version</th>
+                  <th className="py-2 pr-3 font-medium">Endorsements</th>
+                  <th className="py-2 pr-3 font-medium">State</th>
+                  <th className="py-2 pl-2 text-right font-medium">Actions</th>
+                </tr>
+              )}
+              renderRow={(group) => {
+                const c = buildCommon(group);
+                return (
+                  <NexusModRow
+                    modName={c.mod.nexus_name || c.mod.name}
+                    summary={c.mod.summary ?? undefined}
+                    author={c.mod.author ?? undefined}
+                    version={c.mod.installed_version || undefined}
+                    endorsementCount={c.mod.endorsement_count ?? undefined}
+                    pictureUrl={c.mod.picture_url ?? undefined}
+                    badge={c.badge}
+                    footer={c.stateBadge}
+                    action={c.action}
+                    overflowMenu={c.overflowMenu}
+                    onClick={c.mod.nexus_mod_id ? () => onModClick?.(c.mod.nexus_mod_id!) : undefined}
+                    onContextMenu={(e) => openMenu(e, group)}
+                  />
+                );
+              }}
+            />
+          );
+        }
+
+        if (viewMode === "compact") {
+          return (
+            <VirtualCardGrid
+              items={sorted}
+              variant="compact"
+              estimateHeight={210}
+              renderItem={(group) => {
+                const c = buildCommon(group);
+                return (
+                  <div className={cn(c.allDisabled && "opacity-60")}>
+                    <NexusModTile
+                      modName={c.mod.nexus_name || c.mod.name}
+                      pictureUrl={c.mod.picture_url ?? undefined}
+                      badge={c.badge}
+                      footer={c.stateBadge}
+                      action={c.action}
+                      onClick={c.mod.nexus_mod_id ? () => onModClick?.(c.mod.nexus_mod_id!) : undefined}
+                      onContextMenu={(e) => openMenu(e, group)}
+                    />
+                  </div>
+                );
+              }}
+            />
+          );
+        }
+
+        return (
       <VirtualCardGrid
         items={sorted}
         renderItem={(group) => {
@@ -547,6 +687,8 @@ function ManagedModsGrid({
           );
         }}
       />
+        );
+      })()}
 
       {menuState.visible && menuState.data && (
         <ContextMenu
@@ -615,6 +757,7 @@ function RecognizedModsGrid({
   downloadJobs,
   updateByNexusId,
   onModClick,
+  viewMode,
 }: {
   mods: ModGroup[];
   archives: AvailableArchive[];
@@ -623,6 +766,7 @@ function RecognizedModsGrid({
   downloadJobs: DownloadJobOut[];
   updateByNexusId: Map<number, ModUpdate>;
   onModClick?: (nexusModId: number) => void;
+  viewMode: ModViewMode;
 }) {
   const flow = useInstallFlow(gameName, archives, downloadJobs);
 
@@ -646,87 +790,151 @@ function RecognizedModsGrid({
     bulk.deselectAll();
   };
 
+  const buildRec = (mod: ModGroup) => {
+    const match = mod.nexus_match;
+    if (!match) return null;
+    const nexusModId = match.nexus_mod_id;
+    const archive = nexusModId != null ? flow.archiveByModId.get(nexusModId) : undefined;
+    const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
+    const update = nexusModId != null ? updateByNexusId.get(nexusModId) : undefined;
+    const badge = update ? (
+      <Badge variant="warning" prominent>
+        <ArrowUp size={10} className="mr-0.5" />v{update.nexus_version} available
+      </Badge>
+    ) : undefined;
+    const action = (
+      <ModCardAction
+        isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
+        isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
+        activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
+        completedDownload={nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined}
+        archive={archive}
+        nexusUrl={match.nexus_url}
+        hasConflicts={flow.conflicts != null}
+        isDownloading={flow.downloadingModId === nexusModId}
+        isUpdate={!!update}
+        updateVersion={update?.nexus_version}
+        onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
+        onInstallByFilename={() => {
+          if (nexusModId != null && dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
+        }}
+        onDownload={() => nexusModId != null && flow.handleDownload(nexusModId)}
+        onCancelDownload={() => {
+          const activeDl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
+          if (activeDl) flow.handleCancelDownload(activeDl.id);
+        }}
+        onInstallWithPreview={
+          nexusModId != null && dl
+            ? () => flow.handleInstallWithPreviewByFilename(nexusModId, dl.file_name)
+            : nexusModId != null && archive
+              ? () => flow.handleInstallWithPreview(nexusModId, archive)
+              : undefined
+        }
+      />
+    );
+    const footer = (
+      <div className="flex items-center gap-1.5">
+        <ConfidenceBadge score={match.score} />
+        <Badge variant="neutral">{match.method}</Badge>
+        <CorrelationActions gameName={gameName} modGroupId={mod.id} confirmed={match.confirmed} />
+        {match.updated_at && (
+          <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
+        )}
+      </div>
+    );
+    const onClickHandler = nexusModId != null ? () => onModClick?.(nexusModId) : undefined;
+    return { mod, match, nexusModId, badge, action, footer, onClickHandler };
+  };
+
   return (
     <>
-      <VirtualCardGrid
-        items={mods}
-        renderItem={(mod) => {
-          const match = mod.nexus_match;
-          if (!match) return null;
-
-          const nexusModId = match.nexus_mod_id;
-          const archive = nexusModId != null ? flow.archiveByModId.get(nexusModId) : undefined;
-          const dl = nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined;
-          const update = nexusModId != null ? updateByNexusId.get(nexusModId) : undefined;
-
-          return (
-            <div className="relative grid">
-              <div className="absolute top-2 left-2 z-10">
-                <input
-                  type="checkbox"
-                  checked={bulk.isSelected(String(mod.id))}
-                  onChange={() => bulk.toggle(String(mod.id))}
-                  className="shrink-0"
+      {viewMode === "list" ? (
+        <VirtualTable
+          items={mods}
+          estimateHeight={72}
+          renderHead={() => (
+            <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted text-xs">
+              <th className="py-2 pr-3 w-[68px]" />
+              <th className="py-2 pr-3 font-medium">Mod</th>
+              <th className="py-2 pr-3 font-medium">Author</th>
+              <th className="py-2 pr-3 font-medium">Version</th>
+              <th className="py-2 pr-3 font-medium">Endorsements</th>
+              <th className="py-2 pr-3 font-medium">Match</th>
+              <th className="py-2 pl-2 text-right font-medium">Actions</th>
+            </tr>
+          )}
+          renderRow={(mod) => {
+            const c = buildRec(mod);
+            if (!c) return null;
+            return (
+              <NexusModRow
+                modName={c.match.mod_name}
+                summary={c.match.summary}
+                author={c.match.author}
+                version={c.match.version}
+                endorsementCount={c.match.endorsement_count}
+                pictureUrl={c.match.picture_url}
+                badge={c.badge}
+                footer={c.footer}
+                action={c.action}
+                onClick={c.onClickHandler}
+              />
+            );
+          }}
+        />
+      ) : viewMode === "compact" ? (
+        <VirtualCardGrid
+          items={mods}
+          variant="compact"
+          estimateHeight={210}
+          renderItem={(mod) => {
+            const c = buildRec(mod);
+            if (!c) return null;
+            return (
+              <NexusModTile
+                modName={c.match.mod_name}
+                pictureUrl={c.match.picture_url}
+                badge={c.badge}
+                footer={c.footer}
+                action={c.action}
+                onClick={c.onClickHandler}
+              />
+            );
+          }}
+        />
+      ) : (
+        <VirtualCardGrid
+          items={mods}
+          renderItem={(mod) => {
+            const c = buildRec(mod);
+            if (!c) return null;
+            return (
+              <div className="relative grid">
+                <div className="absolute top-2 left-2 z-10">
+                  <input
+                    type="checkbox"
+                    checked={bulk.isSelected(String(mod.id))}
+                    onChange={() => bulk.toggle(String(mod.id))}
+                    className="shrink-0"
+                  />
+                </div>
+                <NexusModCard
+                  modName={c.match.mod_name}
+                  summary={c.match.summary}
+                  author={c.match.author}
+                  version={c.match.version}
+                  endorsementCount={c.match.endorsement_count}
+                  pictureUrl={c.match.picture_url}
+                  badge={c.badge}
+                  onClick={c.onClickHandler}
+                  action={c.action}
+                  footer={c.footer}
                 />
               </div>
-              <NexusModCard
-                modName={match.mod_name}
-                summary={match.summary}
-                author={match.author}
-                version={match.version}
-                endorsementCount={match.endorsement_count}
-                pictureUrl={match.picture_url}
-                badge={update ? <Badge variant="warning" prominent><ArrowUp size={10} className="mr-0.5" />v{update.nexus_version} available</Badge> : undefined}
-                onClick={nexusModId != null ? () => onModClick?.(nexusModId) : undefined}
-                action={
-                  <ModCardAction
-                    isInstalled={nexusModId != null && installedModIds.has(nexusModId)}
-                    isInstalling={nexusModId != null && flow.installingModIds.has(nexusModId)}
-                    activeDownload={nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined}
-                    completedDownload={nexusModId != null ? flow.completedDownloadByModId.get(nexusModId) : undefined}
-                    archive={archive}
-                    nexusUrl={match.nexus_url}
-                    hasConflicts={flow.conflicts != null}
-                    isDownloading={flow.downloadingModId === nexusModId}
-                    isUpdate={!!update}
-                    updateVersion={update?.nexus_version}
-                    onInstall={() => nexusModId != null && archive && flow.handleInstall(nexusModId, archive)}
-                    onInstallByFilename={() => {
-                      if (nexusModId != null && dl) flow.handleInstallByFilename(nexusModId, dl.file_name);
-                    }}
-                    onDownload={() => nexusModId != null && flow.handleDownload(nexusModId)}
-                    onCancelDownload={() => {
-                      const activeDl = nexusModId != null ? flow.activeDownloadByModId.get(nexusModId) : undefined;
-                      if (activeDl) flow.handleCancelDownload(activeDl.id);
-                    }}
-                    onInstallWithPreview={
-                      nexusModId != null && dl
-                        ? () => flow.handleInstallWithPreviewByFilename(nexusModId, dl.file_name)
-                        : nexusModId != null && archive
-                          ? () => flow.handleInstallWithPreview(nexusModId, archive)
-                          : undefined
-                    }
-                  />
-                }
-                footer={
-                  <div className="flex items-center gap-1.5">
-                    <ConfidenceBadge score={match.score} />
-                    <Badge variant="neutral">{match.method}</Badge>
-                    <CorrelationActions
-                      gameName={gameName}
-                      modGroupId={mod.id}
-                      confirmed={match.confirmed}
-                    />
-                    {match.updated_at && (
-                      <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
-                    )}
-                  </div>
-                }
-              />
-            </div>
-          );
-        }}
-      />
+            );
+          }}
+        />
+      )}
 
       <BulkActionBar
         selectedCount={bulk.selectedCount}
@@ -778,6 +986,8 @@ export function InstalledModsTable({
 }: Props) {
   const [filter, setFilter] = useState("");
   const [chip, setChip] = useSessionState<ChipKey>(`installed-chip-${gameName}`, "all");
+  const viewMode = useUIStore((s) => s.viewModeByTab["installed"] ?? "grid");
+  const setViewMode = useUIStore((s) => s.setViewMode);
   const [scope, setScope] = useSessionState<ScopeKey>(`installed-scope-${gameName}`, "all");
   const [recognizedSort, setRecognizedSort] = useSessionState<RecognizedSortKey>(`installed-recsort-${gameName}`, "updated");
 
@@ -903,6 +1113,11 @@ export function InstalledModsTable({
         <span className="text-xs text-text-muted">
           {totalCount} mod{totalCount !== 1 ? "s" : ""}
         </span>
+        <ViewModeToggle
+          className="ml-auto"
+          mode={viewMode}
+          onChange={(m) => setViewMode("installed", m)}
+        />
       </div>
 
       {mods.length > 0 && scope !== "detected" && (
@@ -926,7 +1141,7 @@ export function InstalledModsTable({
               updateByInstalledId={updateByInstalledId}
               updateByNexusId={updateByNexusId}
               onModClick={onModClick}
-
+              viewMode={viewMode}
             />
           ) : (
             <p className="py-4 text-sm text-text-muted text-center">
@@ -960,6 +1175,7 @@ export function InstalledModsTable({
             downloadJobs={downloadJobs}
             updateByNexusId={updateByNexusId}
             onModClick={onModClick}
+            viewMode={viewMode}
           />
         </div>
       )}

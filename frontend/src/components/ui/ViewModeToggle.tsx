@@ -1,4 +1,4 @@
-import { LayoutGrid, List } from "lucide-react";
+import { Grid3x3, LayoutGrid, List } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { ModViewMode } from "@/stores/ui-store";
@@ -8,6 +8,12 @@ interface Props {
   onChange: (mode: ModViewMode) => void;
   className?: string;
 }
+
+const MODES: { value: ModViewMode; icon: typeof List; title: string }[] = [
+  { value: "grid", icon: LayoutGrid, title: "Grid view (big previews)" },
+  { value: "compact", icon: Grid3x3, title: "Compact tiles (small)" },
+  { value: "list", icon: List, title: "List view (rows)" },
+];
 
 export function ViewModeToggle({ mode, onChange, className }: Props) {
   return (
@@ -19,34 +25,23 @@ export function ViewModeToggle({ mode, onChange, className }: Props) {
         className,
       )}
     >
-      <button
-        type="button"
-        onClick={() => onChange("grid")}
-        aria-pressed={mode === "grid"}
-        title="Grid view (big previews)"
-        className={cn(
-          "rounded-md p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
-          mode === "grid"
-            ? "bg-surface-0 text-text-primary shadow-sm"
-            : "text-text-muted hover:text-text-secondary",
-        )}
-      >
-        <LayoutGrid size={14} />
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange("list")}
-        aria-pressed={mode === "list"}
-        title="List view (compact rows)"
-        className={cn(
-          "rounded-md p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
-          mode === "list"
-            ? "bg-surface-0 text-text-primary shadow-sm"
-            : "text-text-muted hover:text-text-secondary",
-        )}
-      >
-        <List size={14} />
-      </button>
+      {MODES.map(({ value, icon: Icon, title }) => (
+        <button
+          key={value}
+          type="button"
+          onClick={() => onChange(value)}
+          aria-pressed={mode === value}
+          title={title}
+          className={cn(
+            "rounded-md p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+            mode === value
+              ? "bg-surface-0 text-text-primary shadow-sm"
+              : "text-text-muted hover:text-text-secondary",
+          )}
+        >
+          <Icon size={14} />
+        </button>
+      ))}
     </div>
   );
 }

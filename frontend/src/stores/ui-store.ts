@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
-export type ModViewMode = "grid" | "list";
+export type ModViewMode = "grid" | "list" | "compact";
 
 interface UIState {
   sidebarCollapsed: boolean;

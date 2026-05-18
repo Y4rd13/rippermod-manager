@@ -11,6 +11,7 @@ import { ReassignDialog } from "@/components/mods/ReassignDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { NexusModRow } from "@/components/mods/NexusModRow";
+import { NexusModTile } from "@/components/mods/NexusModTile";
 import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
@@ -432,6 +433,30 @@ export function NexusMatchedGrid({
                 const props = renderCommon(mod);
                 if (!props) return null;
                 return <NexusModRow {...props} />;
+              }}
+            />
+          );
+        }
+        if (viewMode === "compact") {
+          return (
+            <VirtualCardGrid
+              items={filtered}
+              variant="compact"
+              estimateHeight={210}
+              renderItem={(mod) => {
+                const props = renderCommon(mod);
+                if (!props) return null;
+                return (
+                  <NexusModTile
+                    modName={props.modName}
+                    pictureUrl={props.pictureUrl}
+                    badge={props.badge}
+                    footer={props.footer}
+                    action={props.action}
+                    onClick={props.onClick}
+                    onContextMenu={props.onContextMenu}
+                  />
+                );
               }}
             />
           );
