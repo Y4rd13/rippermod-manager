@@ -419,6 +419,7 @@ export function NexusMatchedGrid({
               items={filtered}
               estimateHeight={72}
               tableClassName="table-fixed"
+              dynamicHeight
               renderHead={() => (
                 <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted text-xs">
                   <th className="py-2 pr-2 w-[60px]" />

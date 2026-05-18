@@ -101,7 +101,7 @@ export function NexusModRow({
           </span>
         )}
       </td>
-      <td className="py-2 pr-3 text-xs text-text-muted max-w-[200px]">
+      <td className="py-2 pr-3 text-xs text-text-muted overflow-hidden">
         <div className="flex flex-wrap items-center gap-1">{footer}</div>
       </td>
       <td className="py-2 pl-2 whitespace-nowrap text-right">
