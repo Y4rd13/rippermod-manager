@@ -9,7 +9,9 @@ RipperMod Manager ships two editions from a single repository: a Full edition fo
 | Edition | Branch | Tags | App Auto-Updater | Distribution |
 |---------|--------|------|------------------|--------------|
 | **Full** | `main` | `vX.Y.Z` | Yes (Tauri updater + Gist `stable.json`) | GitHub Releases, community |
-| **Nexus** | `nexus-compliant` | `vX.Y.Z-nexus.N` | **No** | Nexus Mods page |
+| **Nexus** | `nexus-compliant` | `nexus-vX.Y.Z` | **No** | Nexus Mods page (manual draft → published promotion) |
+
+Each branch carries its own `.releaserc` and releases on an **independent SemVer track**. `main` bumps follow conventional commits on `main`; `nexus-compliant` bumps follow conventional commits on `nexus-compliant`. They are two distinct products with the same lineage — when one bumps, the other does not automatically follow.
 
 ### Full Edition (`main`)
 
@@ -111,38 +113,31 @@ Releases are fully automated via semantic-release on every push to `main`:
 Releases trigger automatically when `nexus-compliant` receives new commits:
 
 1. Cherry-pick commits onto `nexus-compliant` (or merge a PR opened against `nexus-compliant`)
-2. semantic-release creates a `vX.Y.Z-nexus.N` tag + GitHub Release
-3. The build job compiles the Nexus-compliant installer
-4. The `upload-nexus` job downloads the `.exe`, wraps it in a `.zip` per Nexus help article 117 (bare `.exe` files are auto-quarantined), and uploads it to the Nexus mod page via the `Nexus-Mods/upload-action`
+2. semantic-release creates a `nexus-vX.Y.Z` tag + **draft** GitHub Release (gated for manual review)
+3. The build job compiles the Nexus-compliant installer and uploads the `.exe` to the draft release
+4. The maintainer promotes the draft to **published** on GitHub when ready, which fires `upload-nexus.yml`; that job downloads the `.exe`, wraps it in a `.zip` per Nexus help article 117 (bare `.exe` files are auto-quarantined), and uploads it to the Nexus mod page via the `Nexus-Mods/upload-action`
 5. **No `latest.json` is generated, no Gist file is updated, no `.sig` is created.** The Tauri updater plugin is not bundled at all on this edition.
 
 ## Versioning
 
-Both branches use [semantic-release](https://github.com/semantic-release/semantic-release) with the `conventionalcommits` preset and conventional commits:
+Both branches use [semantic-release](https://github.com/semantic-release/semantic-release) with the `conventionalcommits` preset and conventional commits, on **independent SemVer tracks**:
 
 - `fix:` = PATCH, `feat:` = MINOR, `feat!:` / `fix!:` = MAJOR, `chore:` / `docs:` / `refactor:` = no release
-- `main` produces stable versions: `v1.22.0`, `v1.23.0`, `v2.0.0`
-- `nexus-compliant` produces prerelease versions: `v2.0.0-nexus.1`, `v2.0.0-nexus.2`
+- `main` produces `vX.Y.Z` (e.g. `v3.3.0`, `v3.4.0`)
+- `nexus-compliant` produces `nexus-vX.Y.Z` (e.g. `nexus-v2.0.0`, `nexus-v2.1.0`)
 
-The `nexus` channel ensures versions never collide between branches.
+Distinct tag prefixes prevent collision; each branch's `.releaserc` lists only its own branch under `branches`.
 
-### `.releaserc.json`
+### `.releaserc` per branch
 
-```json
-{
-  "branches": [
-    "main",
-    { "name": "nexus-compliant", "channel": "nexus", "prerelease": "nexus" }
-  ],
-  "plugins": [
-    ["@semantic-release/commit-analyzer", { "preset": "conventionalcommits" }],
-    ["@semantic-release/release-notes-generator", { "preset": "conventionalcommits" }],
-    ...
-  ]
-}
-```
+- `main` → `.releaserc.json` with `tagFormat: "v${version}"`, `branches: ["main"]`
+- `nexus-compliant` → `.releaserc.js` with `tagFormat: "nexus-v${version}"`, `branches: ["nexus-compliant"]`, and `draftRelease: true` on the GitHub plugin so Nexus uploads stay gated behind manual promotion
 
 The `conventionalcommits` preset (not the default `angular` preset) is required for `feat!:` and `fix!:` to be parsed as breaking changes — the angular preset's header regex silently drops the `!` marker and treats the commit as a non-release.
+
+### Historical: prerelease-based versioning on nexus-compliant
+
+Up to `v2.0.0-nexus.14` the Nexus branch was configured as a semantic-release prerelease branch (`{ channel: "nexus", prerelease: "nexus" }` in `main`'s `.releaserc.json`, mirrored on the branch itself). Prerelease branches pin the X.Y.Z base on the first release of the cycle, so the base stayed at `2.0.0` indefinitely while only the `.N` counter bumped — losing the SemVer signal of whether a release was a patch, minor, or major change. The migration to `nexus-vX.Y.Z` restored that signal. Old `v2.0.0-nexus.*` tags remain on the repository for historical traceability.
 
 ### `.github/workflows/semantic-release.yml`
 
