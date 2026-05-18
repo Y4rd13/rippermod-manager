@@ -104,5 +104,5 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "v${VERSION}" --clobber \
+          gh release upload "nexus-v${VERSION}" --clobber \
             frontend/src-tauri/target/release/bundle/nsis/*-setup.exe

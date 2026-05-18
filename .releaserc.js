@@ -14,8 +14,8 @@
 //
 // History note: prior tags used the prerelease format `v2.0.0-nexus.N`. That
 // scheme pinned the base at 2.0.0 because semantic-release prerelease branches
-// freeze the base. Migrated to independent SemVer on <date of migration>.
-// The `nexus-v2.0.0` baseline tag preserves continuity with the last
+// freeze the base. Migrated to independent SemVer in May 2026. The
+// `nexus-v2.0.0` baseline tag preserves continuity with the last
 // `v2.0.0-nexus.14` release.
 
 module.exports = {

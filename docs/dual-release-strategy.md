@@ -214,9 +214,9 @@ See [nexus-compliance.md](nexus-compliance.md) for the full list of compliance r
 
 When submitting or updating the Nexus Mods page:
 
-1. Build from the `nexus-compliant` branch (or use the `-nexus.N` GitHub Release)
+1. Build from the `nexus-compliant` branch (or use the corresponding `nexus-vX.Y.Z` GitHub Release)
 2. The Nexus edition does **not** replicate mod page content (descriptions, changelogs, file lists, trending, search), and does **not** auto-update or contact any LLM
 3. All discovery actions redirect users to nexusmods.com
 4. Endorse/track mutations generate engagement for Nexus
 5. Downloads for free users go through the NXM protocol (user visits Nexus to download)
-6. The `upload-nexus` workflow uploads each `-nexus.N` installer (zip-wrapped per help article 117) to the Nexus file group only after the maintainer manually publishes the corresponding draft GitHub Release. Re-runnable via `workflow_dispatch` with a `tag` input.
+6. The `upload-nexus` workflow uploads each `nexus-vX.Y.Z` installer (zip-wrapped per help article 117) to the Nexus file group only after the maintainer manually publishes the corresponding draft GitHub Release. Re-runnable via `workflow_dispatch` with a `tag` input.
