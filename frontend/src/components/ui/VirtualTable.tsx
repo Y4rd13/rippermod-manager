@@ -12,6 +12,7 @@ interface VirtualTableProps<T> {
   dynamicHeight?: boolean;
   remeasureDep?: unknown;
   className?: string;
+  tableClassName?: string;
 }
 
 export function VirtualTable<T>({
@@ -23,6 +24,7 @@ export function VirtualTable<T>({
   dynamicHeight = false,
   remeasureDep,
   className,
+  tableClassName,
 }: VirtualTableProps<T>) {
   const scrollContainerRef = useScrollContainer();
   const tableRef = useRef<HTMLTableElement>(null);
@@ -65,7 +67,7 @@ export function VirtualTable<T>({
 
   return (
     <div className={className ?? "overflow-x-auto"}>
-      <table ref={tableCallbackRef} className="w-full text-sm">
+      <table ref={tableCallbackRef} className={`w-full text-sm ${tableClassName ?? ""}`}>
         <thead>{renderHead()}</thead>
         {paddingTop > 0 && (
           <tbody>

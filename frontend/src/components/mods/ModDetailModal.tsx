@@ -1,5 +1,7 @@
 import {
+  ArrowLeft,
   ArrowUp,
+  Check,
   ChevronDown,
   ChevronRight,
   Clock,
@@ -53,7 +55,21 @@ interface Props {
 }
 
 export function ModDetailModal({ gameDomain, gameName, modId, update, action, defaultTab, onClose }: Props) {
-  const { data: detail, isLoading } = useModDetail(gameDomain, modId);
+  // In-app navigation stack: clicking a requirement pushes its mod id, allowing
+  // the user to drill into requirements without leaving the modal.
+  const [modIdStack, setModIdStack] = useState<number[]>([modId]);
+  // Reset the stack synchronously when the parent passes a new modId (e.g. user
+  // opened a different mod). Using the "adjusting state during render" pattern
+  // from React docs to avoid cascading-render lint violations.
+  const [lastPropModId, setLastPropModId] = useState(modId);
+  if (modId !== lastPropModId) {
+    setLastPropModId(modId);
+    setModIdStack([modId]);
+  }
+  const currentModId = modIdStack[modIdStack.length - 1] ?? modId;
+  const isDrilled = modIdStack.length > 1;
+
+  const { data: detail, isLoading } = useModDetail(gameDomain, currentModId);
   const endorseMod = useEndorseMod();
   const abstainMod = useAbstainMod();
   const trackMod = useTrackMod();
@@ -65,14 +81,19 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
   const [previewFileId, setPreviewFileId] = useState<number | null>(null);
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<number>>(new Set());
 
+  const handleBack = useCallback(() => {
+    setModIdStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev));
+  }, []);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (previewFileId != null) setPreviewFileId(null);
+        else if (isDrilled) handleBack();
         else onClose();
       }
     },
-    [onClose, previewFileId],
+    [onClose, previewFileId, isDrilled, handleBack],
   );
 
   useEffect(() => {
@@ -177,6 +198,15 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                   }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-surface-0 via-surface-0/40 to-transparent" />
+                {isDrilled && (
+                  <button
+                    className="absolute top-3 right-12 z-10 rounded-lg p-1.5 bg-surface-0/60 text-text-muted hover:text-text-primary hover:bg-surface-0/80 transition-colors backdrop-blur-sm"
+                    onClick={handleBack}
+                    title="Back to previous mod"
+                  >
+                    <ArrowLeft size={18} />
+                  </button>
+                )}
                 <button
                   className="absolute top-3 right-3 z-10 rounded-lg p-1.5 bg-surface-0/60 text-text-muted hover:text-text-primary hover:bg-surface-0/80 transition-colors backdrop-blur-sm"
                   onClick={onClose}
@@ -265,17 +295,37 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                       </div>
                       <div className="flex flex-wrap gap-1.5">
                         {detail.requirements.map((req) => {
+                          const canNavInApp = req.required_mod_id != null && !req.is_external;
                           const href = req.url
                             || (req.required_mod_id
                               ? `https://www.nexusmods.com/${detail.game_domain}/mods/${req.required_mod_id}`
                               : "");
+                          const titleHint = req.is_installed
+                            ? "Installed"
+                            : canNavInApp
+                              ? "Open in app"
+                              : req.is_external
+                                ? "Open in browser"
+                                : undefined;
                           return (
                             <button
                               key={`${req.nexus_mod_id}-${req.required_mod_id ?? req.mod_name}`}
-                              className="inline-flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/15 hover:border-accent/40 transition-colors disabled:opacity-50 disabled:cursor-default"
-                              onClick={() => { if (href) openUrl(href).catch(() => {}); }}
-                              disabled={!href}
+                              className={
+                                req.is_installed
+                                  ? "inline-flex items-center gap-1.5 rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success hover:bg-success/20 hover:border-success/50 transition-colors disabled:opacity-50 disabled:cursor-default"
+                                  : "inline-flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/15 hover:border-accent/40 transition-colors disabled:opacity-50 disabled:cursor-default"
+                              }
+                              onClick={() => {
+                                if (canNavInApp && req.required_mod_id != null) {
+                                  setModIdStack((prev) => [...prev, req.required_mod_id as number]);
+                                } else if (href) {
+                                  openUrl(href).catch(() => {});
+                                }
+                              }}
+                              disabled={!canNavInApp && !href}
+                              title={titleHint}
                             >
+                              {req.is_installed && <Check size={11} />}
                               {req.mod_name || "Unknown mod"}
                               {req.notes && <span className="text-text-muted font-normal">{req.notes}</span>}
                               {req.is_external && <ExternalLink size={10} />}
@@ -399,7 +449,7 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                                   startDownload.mutate(
                                     {
                                       gameName,
-                                      data: { nexus_mod_id: modId, nexus_file_id: f.file_id },
+                                      data: { nexus_mod_id: currentModId, nexus_file_id: f.file_id },
                                     },
                                     { onSettled: () => setDownloadingFileId(null) },
                                   );
@@ -461,8 +511,8 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                       size="sm"
                       loading={endorseMod.isPending || abstainMod.isPending}
                       onClick={() => {
-                        if (detail.is_endorsed) abstainMod.mutate({ gameName, modId });
-                        else endorseMod.mutate({ gameName, modId });
+                        if (detail.is_endorsed) abstainMod.mutate({ gameName, modId: currentModId });
+                        else endorseMod.mutate({ gameName, modId: currentModId });
                       }}
                       className={detail.is_endorsed ? "text-danger" : ""}
                     >
@@ -474,8 +524,8 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                       size="sm"
                       loading={trackMod.isPending || untrackMod.isPending}
                       onClick={() => {
-                        if (detail.is_tracked) untrackMod.mutate({ gameName, modId });
-                        else trackMod.mutate({ gameName, modId });
+                        if (detail.is_tracked) untrackMod.mutate({ gameName, modId: currentModId });
+                        else trackMod.mutate({ gameName, modId: currentModId });
                       }}
                       className={detail.is_tracked ? "text-accent" : ""}
                     >
@@ -485,7 +535,7 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                   </>
                 )}
               </div>
-              {action && <div className="flex items-center gap-2">{action}</div>}
+              {action && !isDrilled && <div className="flex items-center gap-2">{action}</div>}
             </div>
           </>
         )}

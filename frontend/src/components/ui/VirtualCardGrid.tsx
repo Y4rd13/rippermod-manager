@@ -1,7 +1,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useColumnCount } from "@/hooks/use-column-count";
+import { useColumnCount, type ColumnVariant } from "@/hooks/use-column-count";
 import { useScrollContainer } from "@/hooks/use-scroll-container";
 
 interface VirtualCardGridProps<T> {
@@ -11,6 +11,8 @@ interface VirtualCardGridProps<T> {
   overscan?: number;
   remeasureDep?: unknown;
   className?: string;
+  variant?: ColumnVariant;
+  minColumnWidth?: number;
 }
 
 export function VirtualCardGrid<T>({
@@ -20,8 +22,11 @@ export function VirtualCardGrid<T>({
   overscan = 2,
   remeasureDep,
   className,
+  variant = "card",
+  minColumnWidth,
 }: VirtualCardGridProps<T>) {
-  const columnCount = useColumnCount();
+  const columnCount = useColumnCount(variant);
+  const minColPx = minColumnWidth ?? (variant === "compact" ? 120 : 200);
   const scrollContainerRef = useScrollContainer();
   const listRef = useRef<HTMLDivElement>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
@@ -82,7 +87,7 @@ export function VirtualCardGrid<T>({
               left: 0,
               width: "100%",
               transform: `translateY(${virtualRow.start - virtualizer.options.scrollMargin}px)`,
-              gridTemplateColumns: `repeat(${columnCount}, minmax(200px, 1fr))`,
+              gridTemplateColumns: `repeat(${columnCount}, minmax(${minColPx}px, 1fr))`,
             }}
           >
             {row.map((item, colIndex) => {
