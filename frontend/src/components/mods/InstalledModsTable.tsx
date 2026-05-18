@@ -510,7 +510,7 @@ function ManagedModsGrid({
               renderHead={() => (
                 <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted text-xs">
                   <th className="py-2 pr-2 w-[60px]" />
-                  <th className="py-2 pr-2 font-medium">Mod</th>
+                  <th className="py-2 pr-2 font-medium" style={{ width: "100%" }}>Mod</th>
                   <th className="py-2 pr-2 font-medium w-[100px]">Author</th>
                   <th className="py-2 pr-2 font-medium w-[70px]">Version</th>
                   <th className="py-2 pr-2 font-medium w-[90px]">Endorsements</th>
@@ -857,7 +857,7 @@ function RecognizedModsGrid({
           renderHead={() => (
             <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted text-xs">
               <th className="py-2 pr-2 w-[60px]" />
-              <th className="py-2 pr-2 font-medium">Mod</th>
+              <th className="py-2 pr-2 font-medium" style={{ width: "100%" }}>Mod</th>
               <th className="py-2 pr-2 font-medium w-[100px]">Author</th>
               <th className="py-2 pr-2 font-medium w-[70px]">Version</th>
               <th className="py-2 pr-2 font-medium w-[90px]">Endorsements</th>
