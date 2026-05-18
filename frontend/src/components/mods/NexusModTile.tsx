@@ -33,7 +33,7 @@ export function NexusModTile({
       onClick={onClick}
       onContextMenu={onContextMenu}
     >
-      <div className="relative aspect-square w-full overflow-hidden bg-surface-2">
+      <div className="relative aspect-video w-full overflow-hidden bg-surface-2">
         <img
           src={pictureUrl || PLACEHOLDER_IMG}
           alt={modName}
@@ -44,7 +44,9 @@ export function NexusModTile({
           }}
         />
         {badge && (
-          <div className="absolute top-1 left-1 flex flex-wrap gap-1">{badge}</div>
+          <div className="absolute top-1 left-1 right-1 flex flex-wrap gap-0.5 scale-90 origin-top-left">
+            {badge}
+          </div>
         )}
       </div>
       <div className="flex flex-col gap-1 p-2 min-w-0">
@@ -55,7 +57,9 @@ export function NexusModTile({
           {modName}
         </h3>
         {footer && (
-          <div className="flex items-center gap-1 text-[10px] text-text-muted">{footer}</div>
+          <div className="flex flex-wrap items-center gap-1 text-[10px] text-text-muted overflow-hidden">
+            {footer}
+          </div>
         )}
       </div>
       {action && (
