@@ -1,6 +1,17 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { api } from "@/lib/api-client";
+import { api, ApiError } from "@/lib/api-client";
+
+/** Extract the user-facing detail from an ApiError body, falling back to ``fallback``. */
+function apiErrorDetail(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    const body = err.body as { detail?: string } | null;
+    if (body && typeof body.detail === "string" && body.detail.length > 0) {
+      return body.detail;
+    }
+  }
+  return fallback;
+}
 import { formatBytes } from "@/lib/format";
 import { useDownloadStore } from "@/stores/download-store";
 import { toast } from "@/stores/toast-store";
@@ -163,7 +174,11 @@ export function useInstallMod() {
         );
       }
     },
-    onError: () => toast.error("Installation failed"),
+    onError: (err) =>
+      toast.error(
+        "Installation failed",
+        apiErrorDetail(err, "Check the backend log for details."),
+      ),
   });
 }
 

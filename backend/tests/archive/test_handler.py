@@ -187,3 +187,29 @@ class TestOpenArchive:
 
         with pytest.raises(zipfile.BadZipFile):
             open_archive(bad_zip)
+
+
+class TestRarHandler:
+    def test_missing_extractor_raises_value_error(self, tmp_path, monkeypatch):
+        """RarCannotExec must be translated into a user-actionable ValueError.
+
+        Without this translation the install endpoint returns a silent 500
+        with no body and the frontend just shows "Install failed" - what
+        ElDiablo59 reported as Bug 2.
+        """
+        import rarfile
+
+        from rippermod_manager.archive.handler import RarHandler
+
+        rar_path = tmp_path / "stub.rar"
+        rar_path.write_bytes(b"not a real rar")
+
+        def _raise(*_args, **_kwargs):
+            raise rarfile.RarCannotExec("Cannot find working tool")
+
+        monkeypatch.setattr(rarfile, "RarFile", _raise)
+
+        with pytest.raises(ValueError) as exc_info:
+            RarHandler(rar_path)
+        assert "RAR" in str(exc_info.value)
+        assert "bundle" in str(exc_info.value).lower() or "extract" in str(exc_info.value).lower()
