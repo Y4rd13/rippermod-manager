@@ -327,7 +327,7 @@ def apply_prefer_mod(
         session.commit()
     except Exception as exc:
         session.rollback()
-        logger.error("DB update failed after renames: %s — rolling back filesystem", exc)
+        logger.error("DB update failed after renames: %s, rolling back filesystem", exc)
         _rollback_renames(completed)
         return LegacyPreferModResult(
             success=False,

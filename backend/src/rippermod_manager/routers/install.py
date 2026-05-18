@@ -222,6 +222,12 @@ async def install(
         raise HTTPException(409, str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:
+        # Surface any unexpected failure (corrupt archive, missing extractor,
+        # disk I/O error, etc.) to the user with the real message instead of a
+        # silent 500 that the UI just labels "Install failed".
+        logger.exception("Install failed for %s", data.archive_filename)
+        raise HTTPException(500, f"Install failed: {exc}") from exc
 
     invalidate_update_cache(game.id, session)  # type: ignore[arg-type]
 
@@ -544,11 +550,17 @@ async def redscript_conflicts(
 @router.post("/deploy", response_model=DeployReport)
 async def deploy_game(
     game_name: str,
+    force: bool = False,
     session: Session = Depends(get_session),
 ) -> DeployReport:
-    """Deploy all enabled mods for a game via hardlinks/junctions."""
+    """Deploy all enabled mods for a game via hardlinks/junctions.
+
+    ``force=true`` opts into overwriting foreign files squatting on a
+    destination (e.g., copy-installed leftovers from another mod manager).
+    Default false: foreign collisions surface as failed ops in the report.
+    """
     game = get_game_or_404(game_name, session)
-    return deploy_service.deploy(game, session)
+    return deploy_service.deploy(game, session, force=force)
 
 
 @router.post("/undeploy", response_model=DeployReport)

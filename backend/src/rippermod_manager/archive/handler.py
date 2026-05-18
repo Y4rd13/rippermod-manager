@@ -134,14 +134,46 @@ class SevenZipHandler(ArchiveHandler):
 
 
 class RarHandler(ArchiveHandler):
-    """Handler for .rar archives using the rarfile library."""
+    """Handler for .rar archives using the rarfile library.
+
+    ``rarfile`` is a Python wrapper around an external CLI extractor.  It
+    searches PATH for these tools in order: ``unrar``, ``unar``, ``7z``,
+    ``7zz``, ``bsdtar``.  If any one of those is present, RAR extraction
+    works transparently.  If none are present, every operation raises
+    :class:`rarfile.RarCannotExec`.
+
+    We don't bundle an extractor with the installer (UnRAR's license has
+    known GPL-compatibility concerns, and bundling 7-Zip would inflate the
+    installer significantly).  Most experienced modders already have 7-Zip
+    or WinRAR installed system-wide; only users with a clean install hit
+    this error.
+
+    We translate the cryptic ``RarCannotExec`` into an actionable
+    ``ValueError`` so the install endpoint surfaces a useful message to
+    the user instead of a silent 500.
+    """
 
     def __init__(self, path: str | Path) -> None:
         try:
             import rarfile
         except ImportError as exc:
             raise ImportError("rarfile is required for .rar support: pip install rarfile") from exc
-        self._rf = rarfile.RarFile(str(path), "r")
+        try:
+            self._rf = rarfile.RarFile(str(path), "r")
+        except rarfile.RarCannotExec as exc:
+            raise ValueError(
+                "Could not open .rar archive: RipperMod needs a RAR extractor "
+                "on your system PATH and none was found. Easiest fix: install "
+                "7-Zip (https://www.7-zip.org/) AND make sure its install "
+                "folder (typically C:\\Program Files\\7-Zip) is on your PATH. "
+                "The 7-Zip installer does NOT add itself to PATH by default: "
+                "either tick that option during install, or add it manually "
+                "(Windows: Settings → Environment Variables → Path → New). "
+                "Alternatives that work the same way: WinRAR, UnRAR, or "
+                "libarchive's bsdtar. If you'd rather not install anything "
+                "extra, extract the .rar manually and drop the contents into "
+                "your game's downloaded_mods/ folder."
+            ) from exc
 
     def list_entries(self) -> list[ArchiveEntry]:
         entries: list[ArchiveEntry] = []

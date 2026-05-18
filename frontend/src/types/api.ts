@@ -728,6 +728,46 @@ export interface ResetPreferencesResult {
   message: string;
 }
 
+export interface PreferencePair {
+  winner_mod_id: number;
+  loser_mod_id: number;
+}
+
+export interface BatchPreferencesRequest {
+  add: PreferencePair[];
+  remove: PreferencePair[];
+}
+
+export interface BatchPreferencesResult {
+  success: boolean;
+  message: string;
+  added: number;
+  removed: number;
+  modlist_entries: number;
+}
+
+export interface AutoSortChange {
+  mod_id: number;
+  mod_name: string;
+  file_count: number;
+}
+
+export interface AutoSortPreview {
+  proposed_add: PreferencePair[];
+  proposed_remove: PreferencePair[];
+  affected_mods: AutoSortChange[];
+  conflict_pairs_evaluated: number;
+  rationale: string;
+}
+
+export interface AutoSortApplyResult {
+  success: boolean;
+  message: string;
+  added: number;
+  removed: number;
+  modlist_entries: number;
+}
+
 // Conflict graph types
 
 export interface ConflictGraphNode {

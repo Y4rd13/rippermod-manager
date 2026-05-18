@@ -1,6 +1,17 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { api } from "@/lib/api-client";
+import { api, ApiError } from "@/lib/api-client";
+
+/** Extract the user-facing detail from an ApiError body, falling back to ``fallback``. */
+function apiErrorDetail(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    const body = err.body as { detail?: string } | null;
+    if (body && typeof body.detail === "string" && body.detail.length > 0) {
+      return body.detail;
+    }
+  }
+  return fallback;
+}
 import { formatBytes } from "@/lib/format";
 import { useDownloadStore } from "@/stores/download-store";
 import { toast } from "@/stores/toast-store";
@@ -8,6 +19,10 @@ import type {
   ArchiveDeleteResult,
   ConflictCheckResult,
   CorrelateResult,
+  AutoSortApplyResult,
+  AutoSortPreview,
+  BatchPreferencesRequest,
+  BatchPreferencesResult,
   PreferModRequest,
   PreferModResult,
   ReindexResult,
@@ -21,6 +36,7 @@ import type {
   Game,
   GameCreate,
   GameUpdate,
+  InstalledModOut,
   InstallRequest,
   InstallResult,
   ModActionResult,
@@ -160,7 +176,11 @@ export function useInstallMod() {
         );
       }
     },
-    onError: () => toast.error("Installation failed"),
+    onError: (err) =>
+      toast.error(
+        "Installation failed",
+        apiErrorDetail(err, "Check the backend log for details."),
+      ),
   });
 }
 
@@ -184,16 +204,39 @@ export function useUninstallMod() {
 
 export function useToggleMod() {
   const qc = useQueryClient();
-  return useMutation<ToggleResult, Error, { gameName: string; modId: number }>({
+  return useMutation<
+    ToggleResult,
+    Error,
+    { gameName: string; modId: number },
+    { previous: InstalledModOut[] | undefined }
+  >({
     mutationFn: ({ gameName, modId }) =>
       api.patch(`/api/v1/games/${gameName}/install/installed/${modId}/toggle`),
-    onSuccess: (_, { gameName }) => {
+    onMutate: async ({ gameName, modId }) => {
+      // Cancel any in-flight installed-mods refetch so it doesn't clobber
+      // the optimistic flip we're about to apply.
+      const key = ["installed-mods", gameName];
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<InstalledModOut[]>(key);
+      qc.setQueryData<InstalledModOut[]>(key, (old) =>
+        old?.map((m) => (m.id === modId ? { ...m, disabled: !m.disabled } : m)),
+      );
+      return { previous };
+    },
+    onError: (_err, { gameName }, context) => {
+      // Roll back to the pre-mutation snapshot so the UI doesn't lie.
+      if (context?.previous !== undefined) {
+        qc.setQueryData(["installed-mods", gameName], context.previous);
+      }
+      toast.error("Failed to toggle mod");
+    },
+    onSettled: (_data, _err, { gameName }) => {
+      // Always refetch server truth after the mutation resolves, win or lose.
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
       qc.invalidateQueries({ queryKey: ["archive-resource-details", gameName] });
       qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
     },
-    onError: () => toast.error("Failed to toggle mod"),
   });
 }
 
@@ -733,6 +776,53 @@ export function useRemovePreference() {
       toast.success("Preference removed");
     },
     onError: () => toast.error("Failed to remove preference"),
+  });
+}
+
+export function usePreferencesBatch() {
+  const qc = useQueryClient();
+  return useMutation<
+    BatchPreferencesResult,
+    Error,
+    { gameName: string; data: BatchPreferencesRequest }
+  >({
+    mutationFn: ({ gameName, data }) =>
+      api.post(`/api/v1/games/${gameName}/load-order/preferences/batch`, data),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["modlist-view", gameName] });
+      qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
+      qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
+      qc.invalidateQueries({ queryKey: ["conflict-graph", gameName] });
+      qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+    },
+    onError: () => toast.error("Failed to update load order"),
+  });
+}
+
+export function useAutoSortPreview() {
+  return useMutation<AutoSortPreview, Error, string>({
+    mutationFn: (gameName) =>
+      api.post(`/api/v1/games/${gameName}/load-order/auto-sort/preview`),
+  });
+}
+
+export function useAutoSortApply() {
+  const qc = useQueryClient();
+  return useMutation<AutoSortApplyResult, Error, string>({
+    mutationFn: (gameName) =>
+      api.post(`/api/v1/games/${gameName}/load-order/auto-sort/apply`),
+    onSuccess: (result, gameName) => {
+      qc.invalidateQueries({ queryKey: ["modlist-view", gameName] });
+      qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
+      qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
+      qc.invalidateQueries({ queryKey: ["conflict-graph", gameName] });
+      qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      toast.success(
+        "Auto-sort applied",
+        `+${result.added} / -${result.removed} preferences, modlist.txt has ${result.modlist_entries} entries`,
+      );
+    },
+    onError: () => toast.error("Auto-sort failed"),
   });
 }
 

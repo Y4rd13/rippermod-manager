@@ -12,6 +12,7 @@ import rippermod_manager.models  # noqa: F401 — register all models with SQLMo
 from rippermod_manager.config import settings
 from rippermod_manager.database import create_db_and_tables
 from rippermod_manager.routers import api_router
+from rippermod_manager.services.pid_file import remove_pid_file, write_pid_file
 
 
 def _configure_logging() -> None:
@@ -61,10 +62,12 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 except Exception as exc:
                     logger.warning("Journal replay failed for game %s: %s", _game.id, exc)
     except Exception:
-        logger.exception("Journal replay startup hook failed — continuing anyway")
+        logger.exception("Journal replay startup hook failed, continuing anyway")
+    write_pid_file(settings.data_dir)
     logger.info("Application started")
     yield
     logger.info("Shutting down...")
+    remove_pid_file(settings.data_dir)
     try:
         from rippermod_manager.services.download_service import (
             shutdown as shutdown_downloads,

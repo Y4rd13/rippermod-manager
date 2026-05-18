@@ -108,7 +108,7 @@ function CreateProfileForm({
             loading={isPending}
             onClick={handleCreate}
             disabled={installedCount === 0}
-            title={installedCount === 0 ? "No managed mods to save — install mods first" : "Save current mod state as a profile"}
+            title={installedCount === 0 ? "No managed mods to save, install mods first" : "Save current mod state as a profile"}
           >
             <Save size={14} /> Save
           </Button>
@@ -595,7 +595,7 @@ export function ProfileManager({ profiles, gameName, isLoading = false, installe
                     <Button
                       variant="ghost"
                       size="sm"
-                      title="Load this profile — preview changes before applying"
+                      title="Load this profile; preview changes before applying"
                       loading={
                         previewProfile.isPending &&
                         previewProfile.variables?.profileId === p.id
