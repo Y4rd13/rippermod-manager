@@ -61,8 +61,8 @@ export function NexusModRow({
           }}
         />
       </td>
-      <td className="py-2 pr-3 min-w-0 max-w-[1px]">
-        <div className="flex flex-col gap-0.5 min-w-0 max-w-[360px]">
+      <td className="py-2 pr-3 min-w-0 overflow-hidden">
+        <div className="flex flex-col gap-0.5 min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             <h3
               className="text-sm font-medium text-text-primary truncate"
@@ -70,7 +70,7 @@ export function NexusModRow({
             >
               {modName}
             </h3>
-            {badge}
+            {badge && <div className="flex items-center gap-1 shrink-0">{badge}</div>}
           </div>
           {summary && (
             <p className="text-xs text-text-muted truncate" title={summary}>

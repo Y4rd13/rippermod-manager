@@ -418,15 +418,16 @@ export function NexusMatchedGrid({
             <VirtualTable
               items={filtered}
               estimateHeight={72}
+              tableClassName="table-fixed"
               renderHead={() => (
                 <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted text-xs">
                   <th className="py-2 pr-3 w-[68px]" />
                   <th className="py-2 pr-3 font-medium">Mod</th>
-                  <th className="py-2 pr-3 font-medium">Author</th>
-                  <th className="py-2 pr-3 font-medium">Version</th>
-                  <th className="py-2 pr-3 font-medium">Endorsements</th>
-                  <th className="py-2 pr-3 font-medium">Match</th>
-                  <th className="py-2 pl-2 text-right font-medium">Actions</th>
+                  <th className="py-2 pr-3 font-medium w-[140px]">Author</th>
+                  <th className="py-2 pr-3 font-medium w-[80px]">Version</th>
+                  <th className="py-2 pr-3 font-medium w-[110px]">Endorsements</th>
+                  <th className="py-2 pr-3 font-medium w-[220px]">Match</th>
+                  <th className="py-2 pl-2 text-right font-medium w-[180px]">Actions</th>
                 </tr>
               )}
               renderRow={(mod) => {
