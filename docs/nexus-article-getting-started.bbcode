@@ -69,6 +69,9 @@ Click any [i]"Download with manager"[/i] button on the Nexus Mods website. Rippe
 [b]Manual Archives[/b]
 Drop your .zip, .7z, or .rar files into the [b]downloaded_mods[/b] folder inside your game directory (e.g. [i]Cyberpunk 2077/downloaded_mods/[/i]). They'll appear in the Archives tab automatically.
 
+[b]Note on .rar files[/b]
+RipperMod doesn't bundle a RAR extractor (UnRAR's license is GPL-incompatible and bundling 7-Zip would significantly bloat the installer). For .rar archives, install [url=https://www.7-zip.org/]7-Zip[/url] or WinRAR — RipperMod picks them up automatically [i]as long as they're on your system PATH[/i]. The 7-Zip installer doesn't add itself to PATH by default, so tick that option during install or add [i]C:\Program Files\7-Zip[/i] to PATH manually afterwards. .zip and .7z archives work out of the box without any extra tools.
+
 [b]Want staging outside your game folder?[/b]
 Go to [b]Settings → Deployment → Mods staging folder[/b] and pick any folder on the same drive as your game install. RipperMod uses NTFS hardlinks to deploy, which is why same-drive is required. Reset to default falls back to [i]<game>/downloaded_mods/[/i].
 
