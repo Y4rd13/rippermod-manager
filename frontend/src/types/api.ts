@@ -545,6 +545,8 @@ export interface ModRequirement {
   url: string;
   notes: string;
   is_external: boolean;
+  is_installed: boolean;
+  installed_mod_id: number | null;
 }
 
 export interface DlcRequirement {

@@ -10,6 +10,7 @@ import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { ModQuickActions } from "@/components/mods/ModQuickActions";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { NexusModRow } from "@/components/mods/NexusModRow";
+import { NexusModTile } from "@/components/mods/NexusModTile";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
@@ -266,9 +267,9 @@ export function NexusAccountGrid({
             </div>
           );
           const footer = (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {mod.updated_at && (
-                <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(mod.updated_at))}</span>
+                <span className="text-xs text-text-muted whitespace-nowrap">{timeAgo(isoToEpoch(mod.updated_at))}</span>
               )}
               <ModQuickActions
                 isEndorsed={mod.is_endorsed}
@@ -350,23 +351,50 @@ export function NexusAccountGrid({
             <VirtualTable
               items={filtered}
               estimateHeight={72}
+              tableClassName="table-fixed"
+              dynamicHeight
               renderHead={() => (
                 <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted text-xs">
-                  <th className="py-2 pr-3 w-[68px]" />
-                  <th className="py-2 pr-3 font-medium">Mod</th>
-                  <th className="py-2 pr-3 font-medium">Author</th>
-                  <th className="py-2 pr-3 font-medium">Version</th>
-                  <th className="py-2 pr-3 font-medium">Endorsements</th>
-                  <th className="py-2 pr-3 font-medium">Updated</th>
-                  <th className="py-2 pl-2 text-right font-medium">Actions</th>
+                  <th className="py-2 pr-2 w-[60px]" />
+                  <th className="py-2 pr-2 font-medium" style={{ width: "100%" }}>Mod</th>
+                  <th className="py-2 pr-2 font-medium w-[100px]">Author</th>
+                  <th className="py-2 pr-2 font-medium w-[70px]">Version</th>
+                  <th className="py-2 pr-2 font-medium w-[90px]">Endorsements</th>
+                  <th className="py-2 pr-2 font-medium w-[100px]">Updated</th>
+                  <th className="py-2 pl-2 text-right font-medium w-[140px]">Actions</th>
                 </tr>
               )}
               renderRow={(mod) => <NexusModRow {...renderCommon(mod)} />}
             />
           );
         }
+        if (viewMode === "compact") {
+          return (
+            <VirtualCardGrid
+              key="compact"
+              items={filtered}
+              variant="compact"
+              estimateHeight={210}
+              renderItem={(mod) => {
+                const props = renderCommon(mod);
+                return (
+                  <NexusModTile
+                    modName={props.modName}
+                    pictureUrl={props.pictureUrl}
+                    badge={props.badge}
+                    footer={props.footer}
+                    action={props.action}
+                    onClick={props.onClick}
+                    onContextMenu={props.onContextMenu}
+                  />
+                );
+              }}
+            />
+          );
+        }
         return (
           <VirtualCardGrid
+            key="grid"
             items={filtered}
             renderItem={(mod) => <NexusModCard {...renderCommon(mod)} />}
           />

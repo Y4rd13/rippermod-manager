@@ -119,6 +119,38 @@ class TestModSummary:
         assert len(data["requirements"]) == 1
         assert data["requirements"][0]["mod_name"] == "Required Mod"
         assert data["requirements"][0]["required_mod_id"] == 100
+        assert data["requirements"][0]["is_installed"] is False
+        assert data["requirements"][0]["installed_mod_id"] is None
+
+    def test_requirement_marked_installed(self, client, session):
+        """When the required mod is already an InstalledMod for the same game,
+        the response should set is_installed=True and expose installed_mod_id."""
+        from rippermod_manager.models.game import Game
+        from rippermod_manager.models.install import InstalledMod
+
+        _seed_game(client)
+        _seed_mod_meta(session, mod_id=42)
+        session.add(
+            NexusModRequirement(
+                nexus_mod_id=42,
+                required_mod_id=100,
+                mod_name="Required Mod",
+                is_reverse=False,
+            )
+        )
+        from sqlmodel import select
+
+        game = session.exec(select(Game).where(Game.domain_name == "cyberpunk2077")).one()
+        installed = InstalledMod(game_id=game.id, name="Required Mod", nexus_mod_id=100)
+        session.add(installed)
+        session.commit()
+        session.refresh(installed)
+
+        r = client.get("/api/v1/nexus/mods/42/summary")
+        assert r.status_code == 200
+        req = r.json()["requirements"][0]
+        assert req["is_installed"] is True
+        assert req["installed_mod_id"] == installed.id
 
     def test_excludes_reverse_requirements(self, client, session):
         _seed_game(client)
