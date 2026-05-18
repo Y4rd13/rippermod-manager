@@ -36,6 +36,7 @@ import type {
   Game,
   GameCreate,
   GameUpdate,
+  InstalledModOut,
   InstallRequest,
   InstallResult,
   ModActionResult,
@@ -203,16 +204,39 @@ export function useUninstallMod() {
 
 export function useToggleMod() {
   const qc = useQueryClient();
-  return useMutation<ToggleResult, Error, { gameName: string; modId: number }>({
+  return useMutation<
+    ToggleResult,
+    Error,
+    { gameName: string; modId: number },
+    { previous: InstalledModOut[] | undefined }
+  >({
     mutationFn: ({ gameName, modId }) =>
       api.patch(`/api/v1/games/${gameName}/install/installed/${modId}/toggle`),
-    onSuccess: (_, { gameName }) => {
+    onMutate: async ({ gameName, modId }) => {
+      // Cancel any in-flight installed-mods refetch so it doesn't clobber
+      // the optimistic flip we're about to apply.
+      const key = ["installed-mods", gameName];
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<InstalledModOut[]>(key);
+      qc.setQueryData<InstalledModOut[]>(key, (old) =>
+        old?.map((m) => (m.id === modId ? { ...m, disabled: !m.disabled } : m)),
+      );
+      return { previous };
+    },
+    onError: (_err, { gameName }, context) => {
+      // Roll back to the pre-mutation snapshot so the UI doesn't lie.
+      if (context?.previous !== undefined) {
+        qc.setQueryData(["installed-mods", gameName], context.previous);
+      }
+      toast.error("Failed to toggle mod");
+    },
+    onSettled: (_data, _err, { gameName }) => {
+      // Always refetch server truth after the mutation resolves, win or lose.
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
       qc.invalidateQueries({ queryKey: ["archive-resource-details", gameName] });
       qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
     },
-    onError: () => toast.error("Failed to toggle mod"),
   });
 }
 
