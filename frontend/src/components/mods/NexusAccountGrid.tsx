@@ -267,9 +267,9 @@ export function NexusAccountGrid({
             </div>
           );
           const footer = (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {mod.updated_at && (
-                <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(mod.updated_at))}</span>
+                <span className="text-xs text-text-muted whitespace-nowrap">{timeAgo(isoToEpoch(mod.updated_at))}</span>
               )}
               <ModQuickActions
                 isEndorsed={mod.is_endorsed}

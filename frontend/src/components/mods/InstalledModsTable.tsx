@@ -835,12 +835,12 @@ function RecognizedModsGrid({
       />
     );
     const footer = (
-      <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         <ConfidenceBadge score={match.score} />
         <Badge variant="neutral">{match.method}</Badge>
         <CorrelationActions gameName={gameName} modGroupId={mod.id} confirmed={match.confirmed} />
         {match.updated_at && (
-          <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>
+          <span className="text-xs text-text-muted whitespace-nowrap">{timeAgo(isoToEpoch(match.updated_at))}</span>
         )}
       </div>
     );
