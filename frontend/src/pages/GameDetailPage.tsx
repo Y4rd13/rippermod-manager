@@ -452,10 +452,10 @@ export function GameDetailPage() {
           <p className="text-sm text-text-muted">{game.install_path}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={handleLaunch} loading={isLaunching} disabled={!gameVersion?.exe_path} title="Launch the game executable">
+          <Button onClick={handleLaunch} loading={isLaunching} disabled={!gameVersion?.exe_path} title="Launch the game executable">
             <Play size={16} /> Play
           </Button>
-          <Button onClick={handleFullScan} loading={isScanning} title="Scan game folder for mods, group files, and match them to Nexus Mods">
+          <Button variant="secondary" onClick={handleFullScan} loading={isScanning} title="Scan game folder for mods, group files, and match them to Nexus Mods">
             <Scan size={16} /> Scan & Correlate
           </Button>
         </div>

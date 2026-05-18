@@ -314,6 +314,23 @@ async def mod_detail(
 
     from rippermod_manager.schemas.nexus import DlcRequirementOut, ModRequirementOut
 
+    # Map {required nexus_mod_id -> installed_mod_id} for the game this mod belongs to,
+    # so each requirement can report whether it is already installed.
+    installed_by_nexus_id: dict[int, int] = {}
+    req_game = session.exec(select(Game).where(Game.domain_name == meta.game_domain)).first()
+    if req_game and req_game.id is not None:
+        from rippermod_manager.models.install import InstalledMod
+
+        installed_rows = session.exec(
+            select(InstalledMod.nexus_mod_id, InstalledMod.id).where(
+                InstalledMod.game_id == req_game.id,
+                col(InstalledMod.nexus_mod_id).is_not(None),
+            )
+        ).all()
+        for nx_id, im_id in installed_rows:
+            if nx_id is not None:
+                installed_by_nexus_id[nx_id] = im_id
+
     requirements = [
         ModRequirementOut(
             nexus_mod_id=r.nexus_mod_id,
@@ -322,6 +339,11 @@ async def mod_detail(
             url=r.url,
             notes=r.notes,
             is_external=r.is_external,
+            is_installed=r.required_mod_id is not None
+            and r.required_mod_id in installed_by_nexus_id,
+            installed_mod_id=installed_by_nexus_id.get(r.required_mod_id)
+            if r.required_mod_id is not None
+            else None,
         )
         for r in req_rows
         if not r.is_reverse
