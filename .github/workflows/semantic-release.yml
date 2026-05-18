@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to build (e.g. 1.0.0, without v prefix)"
+        description: "Version to build (e.g. 2.1.0, without 'nexus-v' prefix)"
         required: true
 
 concurrency:
@@ -53,7 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', github.event.inputs.version) || '' }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('nexus-v{0}', github.event.inputs.version) || '' }}
 
       - uses: actions/setup-node@v6
         with:
@@ -104,5 +104,5 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "v${VERSION}" --clobber \
+          gh release upload "nexus-v${VERSION}" --clobber \
             frontend/src-tauri/target/release/bundle/nsis/*-setup.exe

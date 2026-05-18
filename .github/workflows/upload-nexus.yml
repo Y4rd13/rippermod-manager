@@ -2,14 +2,14 @@ name: Upload to Nexus Mods
 
 # Fires only when the maintainer manually promotes a draft release to published
 # (or manually re-runs from Actions). Restricted to nexus-compliant tags
-# (vX.Y.Z-nexus.N) - non-nexus releases on main never trigger an upload.
+# (nexus-vX.Y.Z) - non-nexus releases on main never trigger an upload.
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to upload (e.g. v2.0.0-nexus.10)"
+        description: "Release tag to upload (e.g. nexus-v2.1.0)"
         required: true
 
 concurrency:
@@ -22,8 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: |
-      (github.event_name == 'release' && contains(github.event.release.tag_name, '-nexus.')) ||
-      (github.event_name == 'workflow_dispatch' && contains(github.event.inputs.tag, '-nexus.'))
+      (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'nexus-v')) ||
+      (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.tag, 'nexus-v'))
     permissions:
       contents: read
     env:
@@ -65,10 +65,10 @@ jobs:
           unzip -t "$zip_path"
           echo "file=./${zip_path}" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve version (strip leading 'v')
+      - name: Resolve version (strip 'nexus-v' prefix)
         id: version
         run: |
-          version="${TAG_NAME#v}"
+          version="${TAG_NAME#nexus-v}"
           echo "value=${version}" >> "$GITHUB_OUTPUT"
 
       - name: Upload to Nexus Mods
