@@ -8,6 +8,10 @@ import type {
   ArchiveDeleteResult,
   ConflictCheckResult,
   CorrelateResult,
+  AutoSortApplyResult,
+  AutoSortPreview,
+  BatchPreferencesRequest,
+  BatchPreferencesResult,
   PreferModRequest,
   PreferModResult,
   ReindexResult,
@@ -715,6 +719,53 @@ export function useRemovePreference() {
       toast.success("Preference removed");
     },
     onError: () => toast.error("Failed to remove preference"),
+  });
+}
+
+export function usePreferencesBatch() {
+  const qc = useQueryClient();
+  return useMutation<
+    BatchPreferencesResult,
+    Error,
+    { gameName: string; data: BatchPreferencesRequest }
+  >({
+    mutationFn: ({ gameName, data }) =>
+      api.post(`/api/v1/games/${gameName}/load-order/preferences/batch`, data),
+    onSuccess: (_, { gameName }) => {
+      qc.invalidateQueries({ queryKey: ["modlist-view", gameName] });
+      qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
+      qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
+      qc.invalidateQueries({ queryKey: ["conflict-graph", gameName] });
+      qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+    },
+    onError: () => toast.error("Failed to update load order"),
+  });
+}
+
+export function useAutoSortPreview() {
+  return useMutation<AutoSortPreview, Error, string>({
+    mutationFn: (gameName) =>
+      api.post(`/api/v1/games/${gameName}/load-order/auto-sort/preview`),
+  });
+}
+
+export function useAutoSortApply() {
+  const qc = useQueryClient();
+  return useMutation<AutoSortApplyResult, Error, string>({
+    mutationFn: (gameName) =>
+      api.post(`/api/v1/games/${gameName}/load-order/auto-sort/apply`),
+    onSuccess: (result, gameName) => {
+      qc.invalidateQueries({ queryKey: ["modlist-view", gameName] });
+      qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
+      qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
+      qc.invalidateQueries({ queryKey: ["conflict-graph", gameName] });
+      qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      toast.success(
+        "Auto-sort applied",
+        `+${result.added} / -${result.removed} preferences, modlist.txt has ${result.modlist_entries} entries`,
+      );
+    },
+    onError: () => toast.error("Auto-sort failed"),
   });
 }
 

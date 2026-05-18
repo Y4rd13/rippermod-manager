@@ -3,13 +3,17 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from rippermod_manager.database import get_session
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.load_order import (
+    AutoSortApplyResult,
+    AutoSortPreview,
+    BatchPreferencesRequest,
+    BatchPreferencesResult,
     LoadOrderResult,
     ModlistViewResult,
     PreferModRequest,
@@ -17,9 +21,11 @@ from rippermod_manager.schemas.load_order import (
     RemovePreferenceResult,
     ResetPreferencesResult,
 )
+from rippermod_manager.services.auto_sort_service import compute_auto_sort
 from rippermod_manager.services.load_order import get_archive_load_order
 from rippermod_manager.services.modlist_service import (
     add_preferences,
+    apply_preferences_batch,
     generate_modlist,
     get_modlist_view,
     remove_all_preferences,
@@ -141,6 +147,127 @@ async def reset_preferences(
         removed_count=removed,
         modlist_entries=len(modlist),
         message=f"Removed {removed} preference(s), modlist.txt has {len(modlist)} entries.",
+    )
+
+
+def _validate_pair_mod_ids(
+    game: Game,
+    pairs: list,
+    session: Session,
+) -> None:
+    """Ensure every mod_id referenced in pairs belongs to this game."""
+    referenced: set[int] = set()
+    for pair in pairs:
+        referenced.add(pair.winner_mod_id)
+        referenced.add(pair.loser_mod_id)
+    if not referenced:
+        return
+    found = session.exec(
+        select(InstalledMod.id).where(
+            InstalledMod.id.in_(referenced),  # type: ignore[union-attr]
+            InstalledMod.game_id == game.id,
+        )
+    ).all()
+    found_set = set(found)
+    missing = referenced - found_set
+    if missing:
+        raise HTTPException(
+            404,
+            f"Mod ID(s) not found for this game: {sorted(missing)}",
+        )
+
+
+@router.post("/preferences/batch", response_model=BatchPreferencesResult)
+async def preferences_batch(
+    game_name: str,
+    data: BatchPreferencesRequest,
+    session: Session = Depends(get_session),
+) -> BatchPreferencesResult:
+    """Apply add + remove of multiple preferences in one transaction.
+
+    Used by the drag-and-drop reorder UI: a single drop translates to a minimal
+    pairwise diff that's applied atomically and triggers exactly one modlist.txt
+    write.
+    """
+    game = get_game_or_404(game_name, session)
+
+    if not data.add and not data.remove:
+        modlist = generate_modlist(game, session)
+        return BatchPreferencesResult(
+            success=True,
+            message="No changes requested.",
+            added=0,
+            removed=0,
+            modlist_entries=len(modlist),
+        )
+
+    _validate_pair_mod_ids(game, data.add + data.remove, session)
+
+    added, removed = apply_preferences_batch(
+        game.id,  # type: ignore[arg-type]
+        [(p.winner_mod_id, p.loser_mod_id) for p in data.add],
+        [(p.winner_mod_id, p.loser_mod_id) for p in data.remove],
+        game,
+        session,
+    )
+    modlist = generate_modlist(game, session)
+    return BatchPreferencesResult(
+        success=True,
+        message=(
+            f"Applied batch: +{added} added, -{removed} removed, "
+            f"modlist.txt has {len(modlist)} entries."
+        ),
+        added=added,
+        removed=removed,
+        modlist_entries=len(modlist),
+    )
+
+
+@router.post("/auto-sort/preview", response_model=AutoSortPreview)
+async def auto_sort_preview(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> AutoSortPreview:
+    """Compute (but do not apply) a conflict-aware auto-sort plan."""
+    game = get_game_or_404(game_name, session)
+    return compute_auto_sort(game, session)
+
+
+@router.post("/auto-sort/apply", response_model=AutoSortApplyResult)
+async def auto_sort_apply(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> AutoSortApplyResult:
+    """Re-compute the auto-sort plan and apply it as preferences."""
+    game = get_game_or_404(game_name, session)
+    plan = compute_auto_sort(game, session)
+    if not plan.proposed_add and not plan.proposed_remove:
+        modlist = generate_modlist(game, session)
+        return AutoSortApplyResult(
+            success=True,
+            message=plan.rationale,
+            added=0,
+            removed=0,
+            modlist_entries=len(modlist),
+        )
+
+    added, removed = apply_preferences_batch(
+        game.id,  # type: ignore[arg-type]
+        [(p.winner_mod_id, p.loser_mod_id) for p in plan.proposed_add],
+        [(p.winner_mod_id, p.loser_mod_id) for p in plan.proposed_remove],
+        game,
+        session,
+    )
+    modlist = generate_modlist(game, session)
+    return AutoSortApplyResult(
+        success=True,
+        message=(
+            f"Auto-sort applied: +{added} preference(s), -{removed} reversed. "
+            f"modlist.txt has {len(modlist)} entries."
+        ),
+        added=added,
+        removed=removed,
+        modlist_entries=len(modlist),
     )
 
 

@@ -347,6 +347,93 @@ def get_modlist_view(game: Game, session: Session) -> ModlistViewResult:
     )
 
 
+def apply_preferences_batch(
+    game_id: int,
+    add: list[tuple[int, int]],
+    remove: list[tuple[int, int]],
+    game: Game,
+    session: Session,
+) -> tuple[int, int]:
+    """Apply a batch of preference additions and removals in one transaction.
+
+    Each tuple is ``(winner_mod_id, loser_mod_id)``.
+
+    - Removals are processed first so a pair can be flipped (remove A>B, add B>A).
+    - Self-pairs and duplicates are ignored.
+    - Reverse preferences are dropped before adding (mirror of ``add_preferences``).
+    - ``modlist.txt`` is regenerated once at the end.
+    """
+    removed = 0
+    seen_remove: set[tuple[int, int]] = set()
+    for winner_id, loser_id in remove:
+        if winner_id == loser_id:
+            continue
+        key = (winner_id, loser_id)
+        if key in seen_remove:
+            continue
+        seen_remove.add(key)
+        pref = session.exec(
+            select(LoadOrderPreference).where(
+                LoadOrderPreference.game_id == game_id,
+                LoadOrderPreference.winner_mod_id == winner_id,
+                LoadOrderPreference.loser_mod_id == loser_id,
+            )
+        ).first()
+        if pref:
+            session.delete(pref)
+            removed += 1
+
+    added = 0
+    seen_add: set[tuple[int, int]] = set()
+    for winner_id, loser_id in add:
+        if winner_id == loser_id:
+            continue
+        key = (winner_id, loser_id)
+        if key in seen_add:
+            continue
+        seen_add.add(key)
+
+        existing = session.exec(
+            select(LoadOrderPreference).where(
+                LoadOrderPreference.game_id == game_id,
+                LoadOrderPreference.winner_mod_id == winner_id,
+                LoadOrderPreference.loser_mod_id == loser_id,
+            )
+        ).first()
+        if existing:
+            continue
+
+        reverse = session.exec(
+            select(LoadOrderPreference).where(
+                LoadOrderPreference.game_id == game_id,
+                LoadOrderPreference.winner_mod_id == loser_id,
+                LoadOrderPreference.loser_mod_id == winner_id,
+            )
+        ).first()
+        if reverse:
+            session.delete(reverse)
+
+        session.add(
+            LoadOrderPreference(
+                game_id=game_id,
+                winner_mod_id=winner_id,
+                loser_mod_id=loser_id,
+            )
+        )
+        added += 1
+
+    session.commit()
+    entries = write_modlist(game, session)
+    logger.info(
+        "Batch preferences for game %d: +%d / -%d, modlist.txt has %d entries",
+        game_id,
+        added,
+        removed,
+        entries,
+    )
+    return added, removed
+
+
 def remove_all_preferences(game_id: int, game: Game, session: Session) -> int:
     """Delete all load-order preferences for a game and regenerate modlist.txt.
 
