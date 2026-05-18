@@ -1,24 +1,27 @@
 "use strict";
 
-// On nexus-compliant we ship to Nexus Mods only after the maintainer manually
-// promotes the GitHub Release from draft to published — that publish event
-// fires `.github/workflows/upload-nexus.yml`. Keep main on the default
-// auto-publish flow (it has no Nexus upload).
-const branch =
-  process.env.GITHUB_REF_NAME ||
-  process.env.BRANCH_NAME ||
-  process.env.BRANCH ||
-  "";
-
-const isNexusBranch = branch === "nexus-compliant";
+// Nexus-compliant edition release config.
+//
+// This branch ships an independent product (Full edition lives on `main`).
+// We use semantic-release's standard SemVer flow with a `nexus-v` tag prefix
+// to avoid colliding with main's `v` tags. Each commit on this branch follows
+// conventional-commits semantics (feat → minor, fix → patch, feat! → major).
+//
+// Distribution: every release is created as a GitHub draft. Nexus Mods upload
+// only fires when the maintainer manually promotes the draft to published
+// (`.github/workflows/upload-nexus.yml` listens to the `release: published`
+// event). This guarantees no surprise uploads to the public Nexus page.
+//
+// History note: prior tags used the prerelease format `v2.0.0-nexus.N`. That
+// scheme pinned the base at 2.0.0 because semantic-release prerelease branches
+// freeze the base. Migrated to independent SemVer on <date of migration>.
+// The `nexus-v2.0.0` baseline tag preserves continuity with the last
+// `v2.0.0-nexus.14` release.
 
 module.exports = {
   repositoryUrl: "https://github.com/Y4rd13/rippermod-manager",
-  tagFormat: "v${version}",
-  branches: [
-    "main",
-    { name: "nexus-compliant", channel: "nexus", prerelease: "nexus" },
-  ],
+  tagFormat: "nexus-v${version}",
+  branches: ["nexus-compliant"],
   plugins: [
     ["@semantic-release/commit-analyzer", { preset: "conventionalcommits" }],
     [
@@ -35,7 +38,7 @@ module.exports = {
     [
       "@semantic-release/github",
       {
-        draftRelease: isNexusBranch,
+        draftRelease: true,
       },
     ],
   ],
