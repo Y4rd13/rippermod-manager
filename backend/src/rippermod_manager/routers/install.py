@@ -222,6 +222,12 @@ async def install(
         raise HTTPException(409, str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:
+        # Surface any unexpected failure (corrupt archive, missing extractor,
+        # disk I/O error, etc.) to the user with the real message instead of a
+        # silent 500 that the UI just labels "Install failed".
+        logger.exception("Install failed for %s", data.archive_filename)
+        raise HTTPException(500, f"Install failed: {exc}") from exc
 
     invalidate_update_cache(game.id, session)  # type: ignore[arg-type]
 
