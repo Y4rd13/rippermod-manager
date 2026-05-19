@@ -511,3 +511,44 @@ class NexusGraphQLClient:
             query, {"slug": slug, "revision": revision, "domainName": game_domain}
         )
         return data.get("collectionRevision") or {}
+
+    async def get_collection_latest_revision(
+        self, slug: str, revision: int, game_domain: str
+    ) -> int | None:
+        """Lightweight variant of :func:`get_collection_revision` for the
+        update-check path.
+
+        Selects ONLY ``collection.latestPublishedRevision.revisionNumber``
+        -- skips the manifest (``modFiles``, all per-mod fields) + the
+        collection identity block. ~30 fewer fields per response, which
+        adds up to noticeably less bandwidth + GraphQL complexity budget
+        when ``check_updates`` walks several installed collections.
+
+        Returns the latest published revision number on Nexus, or ``None``
+        when Nexus did not return one (slug no longer published, missing
+        field, etc.). The caller treats ``None`` as a soft per-row error.
+
+        ``revision`` is still required by ``collectionRevision``'s root
+        argument signature -- pass the user's currently installed
+        revision; we only read the parent-collection field anyway.
+        """
+        query = """
+        query GetCollectionLatestRevision(
+            $slug: String!, $revision: Int!, $domainName: String!
+        ) {
+            collectionRevision(
+                slug: $slug, revision: $revision,
+                viewAdultContent: true, domainName: $domainName
+            ) {
+                collection {
+                    latestPublishedRevision { revisionNumber }
+                }
+            }
+        }
+        """
+        data = await self._execute(
+            query, {"slug": slug, "revision": revision, "domainName": game_domain}
+        )
+        block = (data.get("collectionRevision") or {}).get("collection") or {}
+        latest = (block.get("latestPublishedRevision") or {}).get("revisionNumber")
+        return latest if isinstance(latest, int) else None
