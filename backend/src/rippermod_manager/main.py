@@ -63,6 +63,25 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                     logger.warning("Journal replay failed for game %s: %s", _game.id, exc)
     except Exception:
         logger.exception("Journal replay startup hook failed, continuing anyway")
+    # Surface non-terminal Collections installs from a prior process as
+    # ``failed`` -- the orchestrator state (NXM signal registry, event
+    # queues, tasks) is in-memory and cannot be resumed across a backend
+    # restart. Users see a clear error message and can re-install.
+    try:
+        from sqlmodel import Session
+
+        from rippermod_manager.database import engine
+        from rippermod_manager.services import collection_install_service
+
+        with Session(engine) as _session:
+            recovered = collection_install_service.recover_stale_installs(_session)
+            if recovered:
+                logger.info(
+                    "Marked %d stale collection install(s) as failed on startup",
+                    recovered,
+                )
+    except Exception:
+        logger.exception("Stale collection-install recovery failed, continuing anyway")
     write_pid_file(settings.data_dir)
     logger.info("Application started")
     yield

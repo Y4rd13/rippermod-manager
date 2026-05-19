@@ -3,6 +3,7 @@ import { useEffect, useReducer } from "react";
 
 import { api } from "@/lib/api-client";
 import type {
+  CollectionActionResult,
   CollectionInstallRequest,
   CollectionPreview,
   CollectionProgressEvent,
@@ -197,6 +198,43 @@ export function useUninstallCollection(gameName: string | null) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["collections-list", gameName] });
       void qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+    },
+  });
+}
+
+/**
+ * Skip the mod a free-tier orchestrator is currently waiting on. Wakes the
+ * orchestrator with a ``CollectionModSkipped`` signal so the mod gets
+ * counted as skipped (not failed) and the install advances to the next
+ * entry without restarting the whole batch.
+ */
+export function useSkipPendingNxm(collectionId: number | null) {
+  return useMutation<
+    CollectionActionResult,
+    Error,
+    { nexusModId: number; nexusFileId: number }
+  >({
+    mutationFn: ({ nexusModId, nexusFileId }) =>
+      api.post<CollectionActionResult>(
+        `/api/v1/collections/${collectionId}/skip-pending-nxm`,
+        { nexus_mod_id: nexusModId, nexus_file_id: nexusFileId },
+      ),
+  });
+}
+
+/**
+ * Cancel an in-flight Collections install. Marks the row as ``cancelled``
+ * via the orchestrator's ``CancelledError`` handler. To also remove the
+ * row + uninstall already-completed mods, call ``useUninstallCollection``
+ * afterwards.
+ */
+export function useCancelCollectionInstall(collectionId: number | null) {
+  const qc = useQueryClient();
+  return useMutation<CollectionActionResult, Error, void>({
+    mutationFn: () =>
+      api.post<CollectionActionResult>(`/api/v1/collections/${collectionId}/cancel`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["collection-status", collectionId] });
     },
   });
 }

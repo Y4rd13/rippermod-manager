@@ -62,6 +62,24 @@ async def start_download(
         if not key_result.is_premium:
             return DownloadStartResult(requires_nxm=True)
 
+    # If a Collections install orchestrator is currently waiting for this
+    # exact (mod_id, file_id), hand the freshly-arrived NXM key to it
+    # rather than spinning up a standalone job. The orchestrator resumes
+    # its own ``create_and_start_download(...)`` with the resolved
+    # (key, expires) pair and the user sees the install continue. No-op
+    # for premium users (no orchestrator ever registers a wait) and for
+    # NXM clicks that don't match any active wait.
+    if body.nxm_key is not None and body.nxm_expires is not None:
+        from rippermod_manager.services import collection_install_service
+
+        if collection_install_service.try_route_nxm(
+            body.nexus_mod_id,
+            body.nexus_file_id,
+            body.nxm_key,
+            body.nxm_expires,
+        ):
+            return DownloadStartResult(requires_nxm=False, routed_to_collection=True)
+
     job = await download_service.create_and_start_download(
         game=game,
         nexus_mod_id=body.nexus_mod_id,

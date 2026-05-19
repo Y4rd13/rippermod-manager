@@ -530,6 +530,12 @@ export interface DownloadStartResult {
   job: DownloadJobOut | null;
   requires_nxm: boolean;
   requires_file_selection: boolean;
+  // True when the freshly-arrived nxm:// key was consumed by an in-flight
+  // Collections install orchestrator instead of starting a standalone
+  // download. The frontend suppresses the "Download started" toast in
+  // this case -- the Collections progress dialog already shows the user
+  // what's happening.
+  routed_to_collection?: boolean;
 }
 
 export interface ModActionResult {
@@ -794,6 +800,7 @@ export interface CollectionStatus {
   status:
     | "pending"
     | "downloading"
+    | "awaiting_nxm"
     | "installing"
     | "installed"
     | "partial"
@@ -817,7 +824,7 @@ export interface CollectionInstallRequest {
 }
 
 export interface CollectionProgressEvent {
-  phase: "download" | "install" | "deploy" | "done" | "error";
+  phase: "download" | "awaiting_nxm" | "install" | "deploy" | "done" | "error";
   message: string;
   percent: number;
   completed?: number;
@@ -826,4 +833,15 @@ export interface CollectionProgressEvent {
   total?: number;
   current_mod?: string;
   status?: string;
+  // Populated only when ``phase === "awaiting_nxm"``. The dialog uses
+  // ``mod_page_url`` to open the right Nexus page and the (mod_id, file_id)
+  // pair to identify the mod when the user clicks Skip.
+  mod_id?: number | null;
+  file_id?: number | null;
+  mod_page_url?: string;
+}
+
+export interface CollectionActionResult {
+  ok: boolean;
+  message: string;
 }

@@ -1,6 +1,13 @@
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, ExternalLink, Loader2, SkipForward, X, XCircle } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
-import { useCollectionStatus, useCollectionStream } from "@/hooks/use-collections";
+import {
+  useCancelCollectionInstall,
+  useCollectionStatus,
+  useCollectionStream,
+  useSkipPendingNxm,
+} from "@/hooks/use-collections";
+import { toast } from "@/stores/toast-store";
 
 interface Props {
   collectionId: number;
@@ -13,11 +20,40 @@ const TERMINAL_STATUSES = ["installed", "partial", "failed", "cancelled"];
 export function CollectionInstallProgress({ collectionId, onFinished, onCancel }: Props) {
   const { data: status } = useCollectionStatus(collectionId);
   const { latestEvent } = useCollectionStream(collectionId);
+  const skipNxm = useSkipPendingNxm(collectionId);
+  const cancelInstall = useCancelCollectionInstall(collectionId);
 
   const percent = latestEvent?.percent ?? status?.percent ?? 0;
   const currentMod = latestEvent?.current_mod ?? "";
   const phase = latestEvent?.phase ?? status?.status ?? "pending";
   const terminal = status ? TERMINAL_STATUSES.includes(status.status) : false;
+  const awaitingNxm = phase === "awaiting_nxm";
+  const modPageUrl = latestEvent?.mod_page_url ?? "";
+  const waitingModId = latestEvent?.mod_id ?? null;
+  const waitingFileId = latestEvent?.file_id ?? null;
+
+  const handleOpenModPage = () => {
+    if (!modPageUrl) return;
+    void openUrl(modPageUrl).catch(() => {
+      toast.error("Couldn't open the mod page", modPageUrl);
+    });
+  };
+
+  const handleSkip = () => {
+    if (waitingModId == null || waitingFileId == null) return;
+    skipNxm.mutate(
+      { nexusModId: waitingModId, nexusFileId: waitingFileId },
+      {
+        onError: () => toast.error("Couldn't skip this mod, try again"),
+      },
+    );
+  };
+
+  const handleCancelInstall = () => {
+    cancelInstall.mutate(undefined, {
+      onError: () => toast.error("Couldn't cancel the install, try again"),
+    });
+  };
 
   return (
     <div
@@ -51,6 +87,14 @@ export function CollectionInstallProgress({ collectionId, onFinished, onCancel }
           {terminal ? statusLabel(status?.status) : phaseLabel(phase, currentMod)}
         </p>
 
+        {awaitingNxm && (
+          <p className="mb-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
+            Free Nexus accounts can&apos;t auto-download. Click <strong>Open mod page</strong>{" "}
+            then <strong>Mod Manager Download</strong> on Nexus to continue. The install
+            resumes automatically once you do.
+          </p>
+        )}
+
         <div className="mb-3 h-2 overflow-hidden rounded-full bg-surface-0">
           <div
             className={`h-full transition-[width] ${
@@ -76,15 +120,46 @@ export function CollectionInstallProgress({ collectionId, onFinished, onCancel }
           </p>
         )}
 
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={terminal ? onFinished : onCancel}
-            className="rounded-md border border-border bg-surface-0 px-3 py-1.5 text-sm text-text-primary hover:bg-surface-2"
-          >
-            {terminal ? "Close" : "Run in background"}
-          </button>
-        </div>
+        {awaitingNxm ? (
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={handleCancelInstall}
+              disabled={cancelInstall.isPending}
+              className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-surface-0 px-3 py-1.5 text-sm text-text-primary hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <X size={14} /> Cancel install
+            </button>
+            <button
+              type="button"
+              onClick={handleSkip}
+              disabled={
+                skipNxm.isPending || waitingModId == null || waitingFileId == null
+              }
+              className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-surface-0 px-3 py-1.5 text-sm text-text-primary hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <SkipForward size={14} /> Skip mod
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenModPage}
+              disabled={!modPageUrl}
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ExternalLink size={14} /> Open mod page
+            </button>
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={terminal ? onFinished : onCancel}
+              className="rounded-md border border-border bg-surface-0 px-3 py-1.5 text-sm text-text-primary hover:bg-surface-2"
+            >
+              {terminal ? "Close" : "Run in background"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -113,6 +188,10 @@ function phaseLabel(phase: string, currentMod: string): string {
   switch (phase) {
     case "download":
       return currentMod ? `Downloading ${currentMod}` : "Downloading mods";
+    case "awaiting_nxm":
+      return currentMod
+        ? `Waiting for you to start the download for ${currentMod}`
+        : "Waiting for the next NXM download";
     case "install":
       return currentMod ? `Installing ${currentMod}` : "Installing mods";
     case "deploy":

@@ -40,8 +40,10 @@ from rippermod_manager.nexus.client import (
 from rippermod_manager.nexus.graphql_client import NexusGraphQLError
 from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.collection import (
+    CollectionActionResult,
     CollectionInstallRequest,
     CollectionPreviewOut,
+    CollectionSkipNxmRequest,
     CollectionStatusOut,
     UninstallCollectionOut,
 )
@@ -128,15 +130,13 @@ async def install_collection(
     game = get_game_or_404(game_name, session)
     api_key = _require_api_key(session)
 
-    # PR C is premium-only; free-tier per-file nxm:// flow lands in PR G (#222).
+    # Free-tier accounts go through the per-file ``awaiting_nxm`` flow inside
+    # the orchestrator (PR G, #222) -- no premium-only refusal here anymore.
+    # We still need ``is_premium`` to pick the right branch downstream.
     async with NexusClient(api_key) as client:
         key_result = await client.validate_key()
-    if not key_result.is_premium:
-        raise HTTPException(
-            400,
-            "Collections install currently requires a Nexus Premium account. "
-            "Free-tier support is tracked in issue #222.",
-        )
+    if not key_result.valid:
+        raise HTTPException(401, "Nexus API key rejected; reconfigure it in Settings.")
 
     try:
         preview = await collection_install_service.fetch_preview(
@@ -161,6 +161,7 @@ async def install_collection(
             session=session,
             api_key=api_key,
             preview=preview,
+            is_premium=key_result.is_premium,
         )
     except CollectionInstallInProgressError as exc:
         raise HTTPException(
@@ -195,6 +196,68 @@ def get_collection_status(
     if row is None:
         raise HTTPException(404, "Collection not found")
     return _row_to_status(row)
+
+
+@router.post(
+    "/collections/{collection_id}/skip-pending-nxm",
+    response_model=CollectionActionResult,
+)
+def skip_pending_nxm(
+    collection_id: int,
+    body: CollectionSkipNxmRequest,
+    session: Session = Depends(get_session),
+) -> CollectionActionResult:
+    """Skip the mod a free-tier orchestrator is currently waiting for.
+
+    The orchestrator wakes from its NXM wait, marks the mod as ``skipped``
+    (not ``failed``), and advances to the next entry. No-op when no
+    matching waiter is registered (``ok=False``, no error) -- this can
+    happen if the user clicks Skip right after the download starts on its
+    own, or after a backend restart.
+    """
+    row = session.get(InstalledCollection, collection_id)
+    if row is None:
+        raise HTTPException(404, "Collection not found")
+
+    fired = collection_install_service.request_skip_nxm(body.nexus_mod_id, body.nexus_file_id)
+    return CollectionActionResult(
+        ok=fired,
+        message=(
+            "Skip signal delivered to the orchestrator."
+            if fired
+            else "No active NXM wait for this mod; install may have already advanced."
+        ),
+    )
+
+
+@router.post(
+    "/collections/{collection_id}/cancel",
+    response_model=CollectionActionResult,
+)
+def cancel_collection_install(
+    collection_id: int,
+    session: Session = Depends(get_session),
+) -> CollectionActionResult:
+    """Cancel an in-flight orchestrator. Marks the row as ``cancelled``.
+
+    Returns ``ok=True`` when an active orchestrator was found and signalled
+    to stop. ``ok=False`` when there is nothing to cancel (already
+    finished, never started, or backend restarted in between). To remove
+    the row + its mods, follow up with ``DELETE /collections/{id}``.
+    """
+    row = session.get(InstalledCollection, collection_id)
+    if row is None:
+        raise HTTPException(404, "Collection not found")
+
+    fired = collection_install_service.cancel_install(collection_id)
+    return CollectionActionResult(
+        ok=fired,
+        message=(
+            "Cancellation signal delivered; orchestrator winding down."
+            if fired
+            else "No active install task; the row is already in a terminal state."
+        ),
+    )
 
 
 @router.delete("/collections/{collection_id}", response_model=UninstallCollectionOut)
