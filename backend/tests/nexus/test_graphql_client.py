@@ -1,3 +1,4 @@
+from typing import ClassVar
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -184,35 +185,75 @@ class TestSearchCollections:
         assert result[0]["slug"] == "test-coll"
 
 
+def _extract_graphql_block(query: str, prefix: str) -> str:
+    """Return the body of the first ``{...}`` after ``prefix`` in ``query``.
+
+    Walks the string with a brace counter so nested selection sets are handled
+    correctly. Returns ``""`` if ``prefix`` or its block isn't found.
+    """
+    idx = query.find(prefix)
+    if idx == -1:
+        return ""
+    start = query.find("{", idx)
+    if start == -1:
+        return ""
+    depth = 0
+    for i in range(start, len(query)):
+        c = query[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return query[start + 1 : i]
+    return ""
+
+
 class TestGetCollectionRevision:
     """Schema lock for the widened collection-revision query — every field
-    Collections install (#222) relies on must be in the query string."""
+    Collections install (#222) relies on must be in the query string at the
+    right nesting level. Block-scoped so an accidental ``mod { name }``
+    deletion is still caught even though ``collection { name }`` would remain.
+    """
 
-    REQUIRED_QUERY_FIELDS = (
-        # collection-level (preview dialog)
-        "name",
-        "summary",
-        "description",
-        "tileImage",
-        "user",
-        "totalDownloads",
-        # revision-level (planning + de-dup)
-        "revisionNumber",
-        "fileSize",
-        "createdAt",
-        # per-file (download plan)
-        "fileId",
-        "version",
-        "size",
-        "uri",
-        "modId",
-        "author",
-        "pictureUrl",
-    )
+    REQUIRED_FIELDS_PER_BLOCK: ClassVar[dict[str, tuple[str, ...]]] = {
+        # Top-level: revision-scoped fields used to identify + plan an install.
+        "collectionRevision(": (
+            "id",
+            "revisionNumber",
+            "revisionStatus",
+            "fileSize",
+            "createdAt",
+            "updatedAt",
+        ),
+        # Collection-level: preview dialog (author, summary, tile image).
+        "collection {": (
+            "id",
+            "slug",
+            "name",
+            "summary",
+            "description",
+            "endorsements",
+            "totalDownloads",
+            "tileImage",
+            "user",
+            "game",
+            "category",
+        ),
+        # File-level: download plan (fileId is mandatory, size for progress).
+        "file {": ("fileId", "name", "version", "size", "uri"),
+        # Mod-level (nested under file.mod): preview card data.
+        "mod {": ("modId", "name", "author", "version", "pictureUrl"),
+    }
 
     @pytest.mark.asyncio
     async def test_query_contains_install_manifest_fields(self):
-        """Catch any accidental field removal — install code reads these."""
+        """Catch any accidental field removal — install code reads these.
+
+        Uses block-scoped substring checks (not a flat ``field in query`` scan)
+        so structural regressions like deleting ``mod { name }`` while keeping
+        ``collection { name }`` still fail this test.
+        """
         captured: dict[str, str] = {}
 
         async def _capture(_url: str, json: dict) -> MagicMock:
@@ -228,8 +269,14 @@ class TestGetCollectionRevision:
                 await gql.get_collection_revision("foo", 1, "cyberpunk2077")
 
         query = captured["query"]
-        for field in self.REQUIRED_QUERY_FIELDS:
-            assert field in query, f"collection-revision query missing field {field!r}"
+        for block_prefix, required in self.REQUIRED_FIELDS_PER_BLOCK.items():
+            block = _extract_graphql_block(query, block_prefix)
+            assert block, f"collection-revision query is missing the {block_prefix!r} block"
+            for field in required:
+                assert field in block, (
+                    f"collection-revision query is missing field {field!r} "
+                    f"inside {block_prefix!r} block"
+                )
 
     @pytest.mark.asyncio
     async def test_unpacks_revision_payload(self):
