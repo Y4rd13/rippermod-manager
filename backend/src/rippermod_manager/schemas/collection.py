@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 
 class CollectionModEntry(BaseModel):
@@ -72,8 +72,15 @@ class CollectionStatusOut(BaseModel):
     finished_at: datetime | None
     error: str
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def percent(self) -> float:
+        """Aggregate progress 0-100, included in API responses.
+
+        Uses ``@computed_field`` so Pydantic v2's ``model_dump_json()``
+        serializes it — a plain ``@property`` would be silently dropped
+        from the response payload.
+        """
         if self.total_mods <= 0:
             return 0.0
         done = self.completed_mods + self.failed_mods + self.skipped_mods

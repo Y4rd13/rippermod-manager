@@ -45,6 +45,9 @@ from rippermod_manager.schemas.collection import (
     CollectionStatusOut,
 )
 from rippermod_manager.services import collection_install_service
+from rippermod_manager.services.collection_install_service import (
+    CollectionInstallInProgressError,
+)
 from rippermod_manager.services.settings_helpers import get_setting
 
 logger = logging.getLogger(__name__)
@@ -150,13 +153,20 @@ async def install_collection(
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
 
-    row = collection_install_service.start_install(
-        game=game,
-        request=body,
-        session=session,
-        api_key=api_key,
-        preview=preview,
-    )
+    try:
+        row = collection_install_service.start_install(
+            game=game,
+            request=body,
+            session=session,
+            api_key=api_key,
+            preview=preview,
+        )
+    except CollectionInstallInProgressError as exc:
+        raise HTTPException(
+            409,
+            f"Collection install {exc.collection_id} is already in progress; "
+            f"wait for it to finish (or hit the cancel endpoint) before re-installing.",
+        ) from exc
     return _row_to_status(row)
 
 

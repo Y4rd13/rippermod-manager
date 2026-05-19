@@ -71,6 +71,17 @@ _event_queues: dict[int, asyncio.Queue[CollectionProgressEvent | None]] = {}
 _background_tasks: set[asyncio.Task[Any]] = set()
 
 
+class CollectionInstallInProgressError(Exception):
+    """Raised by :func:`start_install` when the same (game, slug) is still
+    being installed. Prevents the race where a second start_install would
+    overwrite the queue + status of the first, then the first task's
+    ``finally _close_queue`` would kill the second subscriber's stream."""
+
+    def __init__(self, collection_id: int) -> None:
+        self.collection_id = collection_id
+        super().__init__(f"Collection install {collection_id} is already in progress")
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -116,6 +127,14 @@ def start_install(
     ]
 
     collection = _upsert_collection_row(game, preview, session)
+
+    # Refuse to start a second install while the first is still running for
+    # this (game, slug). Without this guard, ``_event_queues[id]`` would be
+    # overwritten and the old task's ``finally _close_queue`` would kill the
+    # new subscriber's stream mid-flight.
+    if collection.id is not None and collection.id in _event_queues:
+        raise CollectionInstallInProgressError(collection.id)
+
     collection.status = "pending"
     collection.total_mods = len(mods_to_install)
     collection.completed_mods = 0
