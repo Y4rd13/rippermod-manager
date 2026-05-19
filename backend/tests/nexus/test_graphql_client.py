@@ -350,3 +350,87 @@ class TestGetCollectionRevision:
                 result = await gql.get_collection_revision("missing", 99, "cyberpunk2077")
 
         assert result == {}
+
+
+class TestGetCollectionLatestRevision:
+    """Lightweight update-check query (#234) -- selects ONLY
+    ``collection.latestPublishedRevision.revisionNumber`` to skip the
+    full manifest payload that ``check_updates`` doesn't need."""
+
+    @pytest.mark.asyncio
+    async def test_query_is_minimal(self):
+        """The query MUST NOT include heavy fields like ``modFiles`` /
+        ``description`` / ``tileImage`` -- the whole point is to skip them."""
+        captured: dict[str, str] = {}
+
+        async def _capture(_url: str, json: dict) -> MagicMock:
+            captured["query"] = json["query"]
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.json.return_value = {"data": {"collectionRevision": {}}}
+            resp.raise_for_status = MagicMock()
+            return resp
+
+        async with NexusGraphQLClient("key") as gql:
+            with patch.object(gql.client, "post", new=_capture):
+                await gql.get_collection_latest_revision("foo", 1, "cyberpunk2077")
+
+        query = captured["query"]
+        assert "latestPublishedRevision" in query
+        assert "revisionNumber" in query
+        # Heavy fields must NOT be requested.
+        for forbidden in (
+            "modFiles",
+            "description",
+            "tileImage",
+            "fileSize",
+            "endorsements",
+        ):
+            assert forbidden not in query, f"lightweight query unexpectedly requests {forbidden!r}"
+
+    @pytest.mark.asyncio
+    async def test_returns_int_when_present(self):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            "data": {
+                "collectionRevision": {
+                    "collection": {"latestPublishedRevision": {"revisionNumber": 9}}
+                }
+            }
+        }
+        resp.raise_for_status = MagicMock()
+
+        async with NexusGraphQLClient("key") as gql:
+            with patch.object(gql.client, "post", new_callable=AsyncMock, return_value=resp):
+                result = await gql.get_collection_latest_revision("x", 1, "cyberpunk2077")
+
+        assert result == 9
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_field_missing(self):
+        """Nexus omitted the field (rare but possible) — caller treats as soft error."""
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"data": {"collectionRevision": {"collection": {}}}}
+        resp.raise_for_status = MagicMock()
+
+        async with NexusGraphQLClient("key") as gql:
+            with patch.object(gql.client, "post", new_callable=AsyncMock, return_value=resp):
+                result = await gql.get_collection_latest_revision("x", 1, "cyberpunk2077")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_revision_absent(self):
+        """``collectionRevision: null`` (slug gone) -> ``None``, not crash."""
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"data": {"collectionRevision": None}}
+        resp.raise_for_status = MagicMock()
+
+        async with NexusGraphQLClient("key") as gql:
+            with patch.object(gql.client, "post", new_callable=AsyncMock, return_value=resp):
+                result = await gql.get_collection_latest_revision("gone", 1, "cyberpunk2077")
+
+        assert result is None

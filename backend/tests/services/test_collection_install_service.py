@@ -1137,31 +1137,8 @@ class TestRecoverStaleInstalls:
 
 
 # ---------------------------------------------------------------------------
-# check_updates (PR I)
+# check_updates (PR I, refactored in #234 to use the lightweight query)
 # ---------------------------------------------------------------------------
-
-
-def _gql_rev_with_latest(latest_rev: int) -> dict:
-    """Trimmed GraphQL revision payload sufficient for check_updates."""
-    return {
-        "id": "rev_uuid",
-        "revisionNumber": 1,
-        "collection": {
-            "id": "coll_uuid",
-            "slug": "x",
-            "name": "X",
-            "summary": "",
-            "description": "",
-            "endorsements": 0,
-            "totalDownloads": 0,
-            "tileImage": {"url": ""},
-            "user": {"name": "x", "memberId": 1},
-            "game": {"id": 3333, "domainName": "cyberpunk2077", "name": "Cyberpunk 2077"},
-            "category": {"name": "x"},
-            "latestPublishedRevision": {"revisionNumber": latest_rev},
-        },
-        "modFiles": [],
-    }
 
 
 class TestCheckUpdates:
@@ -1215,12 +1192,12 @@ class TestCheckUpdates:
         row2 = self._seed_row(session, game.id, "expert", rev=5)
 
         # starter has rev 4 published (newer), expert is up to date at 5.
-        async def _fake_get_rev(slug, revision, game_domain):
-            return _gql_rev_with_latest(4 if slug == "starter" else 5)
+        async def _fake_get_latest(slug, revision, game_domain):
+            return 4 if slug == "starter" else 5
 
         with patch(
-            "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_collection_revision",
-            new=AsyncMock(side_effect=_fake_get_rev),
+            "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_collection_latest_revision",
+            new=AsyncMock(side_effect=_fake_get_latest),
         ):
             out = await svc.check_updates(
                 session=session,
@@ -1249,14 +1226,14 @@ class TestCheckUpdates:
         self._seed_row(session, game.id, "good", rev=1)
         self._seed_row(session, game.id, "bad", rev=1)
 
-        async def _fake_get_rev(slug, revision, game_domain):
+        async def _fake_get_latest(slug, revision, game_domain):
             if slug == "bad":
                 raise NexusGraphQLError([{"message": "slug not found"}])
-            return _gql_rev_with_latest(2)
+            return 2
 
         with patch(
-            "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_collection_revision",
-            new=AsyncMock(side_effect=_fake_get_rev),
+            "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_collection_latest_revision",
+            new=AsyncMock(side_effect=_fake_get_latest),
         ):
             out = await svc.check_updates(
                 session=session,
@@ -1277,13 +1254,11 @@ class TestCheckUpdates:
         game = self._seed_game(client, session)
         self._seed_row(session, game.id, "x", rev=1)
 
-        # Nexus returned a payload without latestPublishedRevision.
-        payload = _gql_rev_with_latest(0)
-        del payload["collection"]["latestPublishedRevision"]
-
+        # The lightweight query returns ``None`` when Nexus did not surface
+        # ``collection.latestPublishedRevision.revisionNumber``.
         with patch(
-            "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_collection_revision",
-            new=AsyncMock(return_value=payload),
+            "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_collection_latest_revision",
+            new=AsyncMock(return_value=None),
         ):
             out = await svc.check_updates(
                 session=session,

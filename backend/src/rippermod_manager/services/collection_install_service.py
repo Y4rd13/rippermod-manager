@@ -324,13 +324,19 @@ async def check_updates(
     """For every installed collection of ``game_id``, ask Nexus for the
     latest published revision and persist it on the row.
 
-    One Nexus GraphQL call per collection. Errors on a single collection
-    (slug deleted, network blip) are captured in the per-row ``error``
-    field rather than failing the whole batch.
+    One Nexus GraphQL call per collection via
+    :func:`NexusGraphQLClient.get_collection_latest_revision` -- the
+    lightweight query that selects only
+    ``collection.latestPublishedRevision.revisionNumber`` instead of the
+    full manifest (issue #234). Each row is committed individually so the
+    SQLite single-writer slot is held only for the row update itself,
+    NOT for the duration of all N Nexus calls.
 
-    Returns one :class:`CollectionUpdateOut` per row examined. The UI
-    refreshes ``useCollectionList`` afterwards to pick up the freshly
-    persisted ``latest_known_revision_number`` values.
+    Errors on a single collection (slug deleted, network blip) are
+    captured in the per-row ``error`` field rather than failing the
+    whole batch. Returns one :class:`CollectionUpdateOut` per row
+    examined. The UI refreshes ``useCollectionList`` afterwards to pick
+    up the freshly persisted ``latest_known_revision_number`` values.
     """
     rows = session.exec(
         select(InstalledCollection).where(InstalledCollection.game_id == game_id)
@@ -344,7 +350,9 @@ async def check_updates(
         for row in rows:
             assert row.id is not None
             try:
-                rev = await gql.get_collection_revision(row.slug, row.revision_number, game_domain)
+                latest = await gql.get_collection_latest_revision(
+                    row.slug, row.revision_number, game_domain
+                )
             except (NexusGraphQLError, NexusRateLimitError, httpx.HTTPError) as exc:
                 logger.warning(
                     "Update check failed for collection %s (rev %d): %s",
@@ -364,10 +372,7 @@ async def check_updates(
                 )
                 continue
 
-            collection = (rev or {}).get("collection") or {}
-            latest_block = collection.get("latestPublishedRevision") or {}
-            latest = latest_block.get("revisionNumber")
-            if not isinstance(latest, int):
+            if latest is None:
                 results.append(
                     CollectionUpdateOut(
                         collection_id=row.id,
@@ -380,8 +385,12 @@ async def check_updates(
                 )
                 continue
 
+            # Per-row commit shortens the SQLite writer window from "all
+            # Nexus calls" to "one DB write" -- avoids the long-running
+            # transaction flagged by the CLAUDE.md guideline.
             row.latest_known_revision_number = latest
             session.add(row)
+            session.commit()
 
             results.append(
                 CollectionUpdateOut(
@@ -393,7 +402,6 @@ async def check_updates(
                 )
             )
 
-    session.commit()
     return results
 
 
