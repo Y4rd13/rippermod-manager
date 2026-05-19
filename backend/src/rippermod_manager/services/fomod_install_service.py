@@ -291,12 +291,19 @@ def install_fomod(
     resolved_files: list[ResolvedFile],
     mod_name: str,
     nexus_mod_id: int | None = None,
+    *,
+    auto_deploy: bool = True,
 ) -> InstallResult:
     """Extract resolved FOMOD files to staging then deploy via hardlinks.
 
     Files are written to ``<game>/downloaded_mods/<safe_name>/...`` first,
     then ``deploy_service.deploy()`` creates hardlinks at the canonical
     game-dir paths — matching the same VFS model used by ``install_mod``.
+
+    ``auto_deploy`` mirrors :func:`install_mod`: set ``False`` when a caller
+    is installing several mods in a batch (e.g. Collections, #222) and wants
+    to defer the single deploy until the end of the batch instead of running
+    one per mod.
 
     Raises:
         FileNotFoundError: If the archive or game directory doesn't exist.
@@ -391,14 +398,15 @@ def install_fomod(
     session.commit()
     session.refresh(installed)
 
-    from rippermod_manager.services.vfs import deploy_service
+    if auto_deploy:
+        from rippermod_manager.services.vfs import deploy_service
 
-    deploy_service.deploy(game, session)
+        deploy_service.deploy(game, session)
 
-    # Regenerate modlist.txt to include new archives in the load order
-    from rippermod_manager.services.modlist_service import write_modlist
+        # Regenerate modlist.txt to include new archives in the load order
+        from rippermod_manager.services.modlist_service import write_modlist
 
-    write_modlist(game, session)
+        write_modlist(game, session)
 
     logger.info(
         "FOMOD installed '%s' (%d files staged, %d overwritten in staging)",

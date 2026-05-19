@@ -530,6 +530,12 @@ export interface DownloadStartResult {
   job: DownloadJobOut | null;
   requires_nxm: boolean;
   requires_file_selection: boolean;
+  // True when the freshly-arrived nxm:// key was consumed by an in-flight
+  // Collections install orchestrator instead of starting a standalone
+  // download. The frontend suppresses the "Download started" toast in
+  // this case -- the Collections progress dialog already shows the user
+  // what's happening.
+  routed_to_collection?: boolean;
 }
 
 // Trending feature types
@@ -798,4 +804,107 @@ export interface ConflictGraphResult {
   nodes: ConflictGraphNode[];
   edges: ConflictGraphEdge[];
   total_conflicts: number;
+}
+
+// -- Collections (#222) -----------------------------------------------------
+
+export interface CollectionModEntry {
+  nexus_mod_id: number;
+  nexus_file_id: number;
+  name: string;
+  version: string;
+  author: string;
+  summary: string;
+  size_bytes: number;
+  picture_url: string;
+  optional: boolean;
+  phase: number;
+}
+
+export interface CollectionPreview {
+  slug: string;
+  revision_id: string;
+  revision_number: number;
+  name: string;
+  summary: string;
+  description: string;
+  author: string;
+  tile_image_url: string;
+  endorsements: number;
+  total_downloads: number;
+  total_size_bytes: number;
+  mods: CollectionModEntry[];
+}
+
+export interface CollectionStatus {
+  id: number;
+  game_id: number;
+  slug: string;
+  revision_number: number;
+  // Newest revisionNumber observed on Nexus the last time the user ran
+  // the "Check for updates" action. ``null`` when never checked.
+  latest_known_revision_number: number | null;
+  name: string;
+  author: string;
+  summary: string;
+  tile_image_url: string;
+  status:
+    | "pending"
+    | "downloading"
+    | "awaiting_nxm"
+    | "installing"
+    | "installed"
+    | "partial"
+    | "failed"
+    | "cancelled";
+  total_mods: number;
+  completed_mods: number;
+  failed_mods: number;
+  skipped_mods: number;
+  started_at: string;
+  finished_at: string | null;
+  error: string;
+  percent: number;
+}
+
+export interface CollectionInstallRequest {
+  slug: string;
+  revision: number;
+  skip_mod_ids?: number[];
+  include_optional?: boolean;
+  // When true the existing install is cascade-uninstalled first --
+  // powers the "Update to rev N" flow.
+  force_reinstall?: boolean;
+}
+
+export interface CollectionUpdate {
+  collection_id: number;
+  slug: string;
+  current_revision_number: number;
+  latest_revision_number: number | null;
+  has_update: boolean;
+  error: string;
+}
+
+export interface CollectionProgressEvent {
+  phase: "download" | "awaiting_nxm" | "install" | "deploy" | "done" | "error";
+  message: string;
+  percent: number;
+  completed?: number;
+  failed?: number;
+  skipped?: number;
+  total?: number;
+  current_mod?: string;
+  status?: string;
+  // Populated only when ``phase === "awaiting_nxm"``. The dialog uses
+  // ``mod_page_url`` to open the right Nexus page and the (mod_id, file_id)
+  // pair to identify the mod when the user clicks Skip.
+  mod_id?: number | null;
+  file_id?: number | null;
+  mod_page_url?: string;
+}
+
+export interface CollectionActionResult {
+  ok: boolean;
+  message: string;
 }

@@ -444,7 +444,20 @@ class NexusGraphQLClient:
     async def get_collection_revision(
         self, slug: str, revision: int, game_domain: str
     ) -> dict[str, Any]:
-        """Fetch a collection revision with its mod list."""
+        """Fetch a collection revision with its full mod manifest.
+
+        Returned fields are everything the install orchestrator + preview
+        dialog need: collection identity (name, summary, description, tile,
+        author), per-revision metadata (id, status, timestamps, total size),
+        and per-mod-file rows with ``fileId``/``size``/``version`` so that
+        downloads can be planned and progress can be reported.
+
+        The shape mirrors Vortex's ``FULL_REVISION_INFO`` field selector
+        (``extensions/nexus_integration/util/graphQueries.ts``) so we stay
+        compatible with what the Nexus API surfaces today. The existing
+        ``collection_matcher`` consumer only reads ``modFiles[].file.mod``
+        fields, so widening the payload is backward compatible.
+        """
         query = """
         query GetCollectionRevision(
             $slug: String!, $revision: Int!, $domainName: String!
@@ -453,15 +466,43 @@ class NexusGraphQLClient:
                 slug: $slug, revision: $revision,
                 viewAdultContent: true, domainName: $domainName
             ) {
+                id
                 revisionNumber
+                revisionStatus
+                createdAt
+                updatedAt
+                fileSize
+                collection {
+                    id
+                    slug
+                    name
+                    summary
+                    description
+                    endorsements
+                    totalDownloads
+                    tileImage { url }
+                    user { name memberId }
+                    game { id domainName name }
+                    category { name }
+                    latestPublishedRevision { revisionNumber }
+                }
                 modFiles {
+                    optional
                     file {
+                        fileId
+                        name
+                        version
+                        size
+                        uri
                         mod {
                             modId
                             name
+                            summary
+                            author
+                            version
+                            pictureUrl
                         }
                     }
-                    optional
                 }
             }
         }

@@ -443,3 +443,41 @@ class TestInstallFomod:
 
         with Session(engine) as s, pytest.raises(ValueError, match="already installed"):
             install_fomod(game, archive, s, [], "Dup")
+
+    def test_auto_deploy_false_skips_deploy_and_modlist(self, setup, engine):
+        """``auto_deploy=False`` must NOT call deploy() / write_modlist().
+
+        This is the contract Collections install (#222 PR D) relies on so
+        that batch installs run one deploy at the end of the run instead of
+        N per-mod deploys.
+        """
+        from unittest.mock import patch
+
+        game, _game_dir, staging = setup
+        archive = staging / "Deferred.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("plugin.txt", "x")
+        resolved = [
+            ResolvedFile(
+                archive_path="plugin.txt",
+                game_relative_path="mods/plugin.txt",
+                priority=0,
+            )
+        ]
+
+        with (
+            patch("rippermod_manager.services.vfs.deploy_service.deploy") as mdeploy,
+            patch("rippermod_manager.services.modlist_service.write_modlist") as mmodlist,
+            Session(engine) as s,
+        ):
+            install_fomod(game, archive, s, resolved, "Deferred", auto_deploy=False)
+
+        mdeploy.assert_not_called()
+        mmodlist.assert_not_called()
+
+        with Session(engine) as s:
+            installed = s.exec(select(InstalledMod).where(InstalledMod.name == "Deferred")).one()
+            # Row is created (staging populated) but deploy hasn't run yet, so
+            # ``deployed`` stays at its default False.
+            assert installed.staging_dir == "Deferred"
+            assert installed.deployed is False

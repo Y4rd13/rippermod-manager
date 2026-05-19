@@ -1,3 +1,4 @@
+from typing import ClassVar
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -182,3 +183,170 @@ class TestSearchCollections:
 
         assert len(result) == 1
         assert result[0]["slug"] == "test-coll"
+
+
+def _extract_graphql_block(query: str, prefix: str) -> str:
+    """Return the body of the first ``{...}`` after ``prefix`` in ``query``.
+
+    Walks the string with a brace counter so nested selection sets are handled
+    correctly. Returns ``""`` if ``prefix`` or its block isn't found.
+    """
+    idx = query.find(prefix)
+    if idx == -1:
+        return ""
+    start = query.find("{", idx)
+    if start == -1:
+        return ""
+    depth = 0
+    for i in range(start, len(query)):
+        c = query[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return query[start + 1 : i]
+    return ""
+
+
+class TestGetCollectionRevision:
+    """Schema lock for the widened collection-revision query — every field
+    Collections install (#222) relies on must be in the query string at the
+    right nesting level. Block-scoped so an accidental ``mod { name }``
+    deletion is still caught even though ``collection { name }`` would remain.
+    """
+
+    REQUIRED_FIELDS_PER_BLOCK: ClassVar[dict[str, tuple[str, ...]]] = {
+        # Top-level: revision-scoped fields used to identify + plan an install.
+        "collectionRevision(": (
+            "id",
+            "revisionNumber",
+            "revisionStatus",
+            "fileSize",
+            "createdAt",
+            "updatedAt",
+        ),
+        # Collection-level: preview dialog (author, summary, tile image).
+        "collection {": (
+            "id",
+            "slug",
+            "name",
+            "summary",
+            "description",
+            "endorsements",
+            "totalDownloads",
+            "tileImage",
+            "user",
+            "game",
+            "category",
+        ),
+        # File-level: download plan (fileId is mandatory, size for progress).
+        "file {": ("fileId", "name", "version", "size", "uri"),
+        # Mod-level (nested under file.mod): preview card data.
+        "mod {": ("modId", "name", "author", "version", "pictureUrl"),
+    }
+
+    @pytest.mark.asyncio
+    async def test_query_contains_install_manifest_fields(self):
+        """Catch any accidental field removal — install code reads these.
+
+        Uses block-scoped substring checks (not a flat ``field in query`` scan)
+        so structural regressions like deleting ``mod { name }`` while keeping
+        ``collection { name }`` still fail this test.
+        """
+        captured: dict[str, str] = {}
+
+        async def _capture(_url: str, json: dict) -> MagicMock:
+            captured["query"] = json["query"]
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.json.return_value = {"data": {"collectionRevision": {}}}
+            resp.raise_for_status = MagicMock()
+            return resp
+
+        async with NexusGraphQLClient("key") as gql:
+            with patch.object(gql.client, "post", new=_capture):
+                await gql.get_collection_revision("foo", 1, "cyberpunk2077")
+
+        query = captured["query"]
+        for block_prefix, required in self.REQUIRED_FIELDS_PER_BLOCK.items():
+            block = _extract_graphql_block(query, block_prefix)
+            assert block, f"collection-revision query is missing the {block_prefix!r} block"
+            for field in required:
+                assert field in block, (
+                    f"collection-revision query is missing field {field!r} "
+                    f"inside {block_prefix!r} block"
+                )
+
+    @pytest.mark.asyncio
+    async def test_unpacks_revision_payload(self):
+        """Realistic Nexus response shape round-trips correctly."""
+        payload = {
+            "id": "rev_uuid",
+            "revisionNumber": 7,
+            "revisionStatus": "published",
+            "createdAt": "2026-05-01T00:00:00Z",
+            "updatedAt": "2026-05-10T00:00:00Z",
+            "fileSize": 1024,
+            "collection": {
+                "id": "coll_uuid",
+                "slug": "starter-pack",
+                "name": "Starter Pack",
+                "summary": "Solid baseline mods",
+                "description": "long description",
+                "endorsements": 42,
+                "totalDownloads": 1000,
+                "tileImage": {"url": "https://staticdelivery.nexusmods.com/tile.png"},
+                "user": {"name": "author", "memberId": 99},
+                "game": {"id": 3333, "domainName": "cyberpunk2077", "name": "Cyberpunk 2077"},
+                "category": {"name": "Overhaul"},
+            },
+            "modFiles": [
+                {
+                    "optional": False,
+                    "file": {
+                        "fileId": 12345,
+                        "name": "Cool Mod Main.zip",
+                        "version": "1.2",
+                        "size": 5000,
+                        "uri": "Cool_Mod_Main-12345.zip",
+                        "mod": {
+                            "modId": 100,
+                            "name": "Cool Mod",
+                            "summary": "Does cool things",
+                            "author": "alice",
+                            "version": "1.2",
+                            "pictureUrl": "https://staticdelivery.nexusmods.com/cool.png",
+                        },
+                    },
+                }
+            ],
+        }
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"data": {"collectionRevision": payload}}
+        resp.raise_for_status = MagicMock()
+
+        async with NexusGraphQLClient("key") as gql:
+            with patch.object(gql.client, "post", new_callable=AsyncMock, return_value=resp):
+                result = await gql.get_collection_revision("starter-pack", 7, "cyberpunk2077")
+
+        assert result["revisionNumber"] == 7
+        assert result["collection"]["name"] == "Starter Pack"
+        assert result["modFiles"][0]["file"]["fileId"] == 12345
+        assert result["modFiles"][0]["file"]["mod"]["modId"] == 100
+        assert result["modFiles"][0]["optional"] is False
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_dict_when_revision_absent(self):
+        """``None`` revision (slug/rev mismatch) becomes ``{}`` for callers."""
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"data": {"collectionRevision": None}}
+        resp.raise_for_status = MagicMock()
+
+        async with NexusGraphQLClient("key") as gql:
+            with patch.object(gql.client, "post", new_callable=AsyncMock, return_value=resp):
+                result = await gql.get_collection_revision("missing", 99, "cyberpunk2077")
+
+        assert result == {}

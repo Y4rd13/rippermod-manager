@@ -17,3 +17,9 @@ class DownloadJob(SQLModel, table=True):
     error: str = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None
+    # Links the job to an ``InstalledCollection`` install batch (#222) so the
+    # orchestrator can aggregate per-collection progress without scanning all
+    # in-flight jobs. ``None`` for stand-alone single-file downloads.
+    installed_collection_id: int | None = Field(
+        default=None, foreign_key="installed_collections.id", index=True
+    )

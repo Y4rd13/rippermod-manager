@@ -23,6 +23,18 @@ class InstalledMod(SQLModel, table=True):
     staging_dir: str = Field(default="")
     deployed: bool = Field(default=False)
     deploy_drift: bool = Field(default=False)
+    # Collection provenance — set when this mod was installed as part of an
+    # ``InstalledCollection`` bundle (#222). ``None`` for stand-alone installs.
+    installed_collection_id: int | None = Field(
+        default=None, foreign_key="installed_collections.id", index=True
+    )
+    # The collection author's install-order bucket for this mod (mirrors
+    # Vortex's ``phase`` field on ``ICollectionMod``). Phase N must finish
+    # before phase N+1 starts.
+    collection_phase: int = 0
+    # Was this mod marked optional in the collection manifest? Surfaced in
+    # the preview dialog so users can deselect optionals before install.
+    is_optional: bool = False
 
     files: list["InstalledModFile"] = Relationship(
         back_populates="installed_mod",

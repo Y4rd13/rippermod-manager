@@ -134,6 +134,40 @@ def _migrate_missing_columns() -> None:
             "mods_dir",
             "ALTER TABLE games ADD COLUMN mods_dir TEXT",
         ),
+        # -- Collections support (#222 PR B) ------------------------------------
+        (
+            "installed_mods",
+            "installed_collection_id",
+            "ALTER TABLE installed_mods ADD COLUMN installed_collection_id INTEGER "
+            "REFERENCES installed_collections(id)",
+        ),
+        (
+            "installed_mods",
+            "collection_phase",
+            "ALTER TABLE installed_mods ADD COLUMN collection_phase INTEGER DEFAULT 0",
+        ),
+        (
+            "installed_mods",
+            "is_optional",
+            "ALTER TABLE installed_mods ADD COLUMN is_optional BOOLEAN DEFAULT 0",
+        ),
+        (
+            "download_jobs",
+            "installed_collection_id",
+            "ALTER TABLE download_jobs ADD COLUMN installed_collection_id INTEGER "
+            "REFERENCES installed_collections(id)",
+        ),
+        # -- Collections update-check (#222 PR I) ------------------------------
+        # ``latest_known_revision_number`` was on the SQLModel model from PR
+        # B so ``create_all`` already covered fresh installs, but the
+        # migration framework is the authoritative ledger for column
+        # additions per CLAUDE.md. Catches the edge case of a DB that
+        # somehow predates the column.
+        (
+            "installed_collections",
+            "latest_known_revision_number",
+            "ALTER TABLE installed_collections ADD COLUMN latest_known_revision_number INTEGER",
+        ),
     ]
     with Session(engine) as session:
         for table, column, ddl in migrations:
@@ -156,6 +190,8 @@ def _migrate_unique_indexes() -> None:
             "uq_load_order_game_winner_loser",
             ["game_id", "winner_mod_id", "loser_mod_id"],
         ),
+        # One install of a given collection slug per game (#222).
+        ("installed_collections", "uq_installed_collections_game_slug", ["game_id", "slug"]),
     ]
     with Session(engine) as session:
         for table, idx_name, columns in indexes:
