@@ -233,6 +233,20 @@ def uninstall_collection(collection_id: int, session: Session) -> dict[str, int]
             )
             failed += 1
 
+    # Detach any survivors (uninstall_mod deletes its row on success, so only
+    # children whose uninstall raised still reference the collection). Without
+    # this, the FK constraint (PRAGMA foreign_keys=ON) blocks the parent
+    # delete with IntegrityError when the user uninstalls while the game is
+    # still running and some files are locked.
+    if failed > 0:
+        from sqlalchemy import update as sa_update
+
+        session.exec(  # type: ignore[call-overload]
+            sa_update(InstalledMod)
+            .where(InstalledMod.installed_collection_id == collection_id)
+            .values(installed_collection_id=None)
+        )
+
     # Drop the parent row last so child rows have their FK pointing at a
     # live row while uninstall_mod runs.
     session.delete(collection)

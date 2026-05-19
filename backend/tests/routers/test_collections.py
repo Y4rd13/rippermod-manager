@@ -336,3 +336,82 @@ class TestUninstallCollection:
             assert "in progress" in r.json()["detail"]
         finally:
             _event_queues.pop(row.id, None)
+
+    def test_cascade_with_partial_failure(self, client, session):
+        """If one child uninstall_mod raises (e.g. file locked by game),
+        the surviving child must have its FK nulled so the parent delete
+        succeeds. Without that, PRAGMA foreign_keys=ON raises IntegrityError
+        on the parent delete and the endpoint 500s."""
+        from rippermod_manager.models.collection import InstalledCollection
+        from rippermod_manager.models.install import InstalledMod
+
+        game = self._seed_game(client, session)
+        row = InstalledCollection(
+            game_id=game.id,
+            slug="partial",
+            revision_id="r",
+            revision_number=1,
+            collection_name="Partial",
+            author_name="x",
+            summary="",
+            tile_image_url="",
+            status="installed",
+            started_at=datetime.now(UTC),
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        row_id = row.id
+
+        # Seed two child mods linked to the collection.
+        child_good = InstalledMod(
+            game_id=game.id,
+            name="GoodMod",
+            source_archive="g.zip",
+            installed_collection_id=row_id,
+        )
+        child_bad = InstalledMod(
+            game_id=game.id,
+            name="BadMod",
+            source_archive="b.zip",
+            installed_collection_id=row_id,
+        )
+        session.add(child_good)
+        session.add(child_bad)
+        session.commit()
+        session.refresh(child_good)
+        session.refresh(child_bad)
+        bad_id = child_bad.id
+
+        # Patch uninstall_mod so the 2nd call raises (mimics game-running
+        # file lock). The 1st call deletes its row as normal.
+        call_count = {"n": 0}
+
+        def _fake_uninstall(mod, _game, sess):
+            call_count["n"] += 1
+            if mod.id == bad_id:
+                raise OSError("file locked by game")
+            sess.delete(mod)
+            sess.commit()
+            return None
+
+        with (
+            patch(
+                "rippermod_manager.services.install_service.uninstall_mod",
+                side_effect=_fake_uninstall,
+            ),
+            patch("rippermod_manager.services.vfs.deploy_service.deploy"),
+        ):
+            r = client.delete(f"/api/v1/collections/{row_id}")
+
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body == {"removed_mods": 1, "failed_mods": 1}
+
+        # Parent row is gone.
+        session.expire_all()
+        assert session.get(InstalledCollection, row_id) is None
+        # Surviving child still exists but is detached (FK nulled).
+        survivor = session.get(InstalledMod, bad_id)
+        assert survivor is not None
+        assert survivor.installed_collection_id is None
