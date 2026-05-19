@@ -1148,11 +1148,15 @@ async def _run_install(
         raise
     except Exception as exc:
         logger.exception("Collection %d install crashed", collection_id)
-        _update("failed", finished_at=datetime.now(UTC), error=str(exc))
+        # Truncate exception text to keep the error row tidy + avoid leaking
+        # request URLs / CDN tokens that some httpx error reprs include.
+        # Mirrors the cap ``check_updates`` uses (200 chars).
+        err_msg = str(exc)[:200]
+        _update("failed", finished_at=datetime.now(UTC), error=err_msg)
         await _emit(
             collection_id,
             phase="error",
-            message=f"Install crashed: {exc}",
+            message=f"Install crashed: {err_msg}",
             percent=_pct(),
             completed=completed,
             failed=failed,

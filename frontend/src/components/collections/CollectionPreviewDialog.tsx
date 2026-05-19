@@ -161,9 +161,12 @@ export function CollectionPreviewDialog({
                 {mods.map((mod) => {
                   const skipped = skipModIds.has(mod.nexus_mod_id);
                   const dimmed = skipped || (!includeOptional && mod.optional);
+                  // Composite key — a collection MAY include two files from
+                  // the same mod (e.g. main + patch), so ``nexus_mod_id``
+                  // alone is not unique. ``nexus_file_id`` disambiguates.
                   return (
                     <li
-                      key={mod.nexus_mod_id}
+                      key={`${mod.nexus_mod_id}-${mod.nexus_file_id}`}
                       className={`flex items-center justify-between gap-3 rounded-md border border-border bg-surface-0 p-2 ${dimmed ? "opacity-50" : ""}`}
                     >
                       <div className="flex min-w-0 items-center gap-2">
