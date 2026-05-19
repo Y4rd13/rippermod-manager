@@ -329,11 +329,16 @@ async def stream_collection_progress(
     if row is None:
         raise HTTPException(404, "Collection not found")
 
+    # Snapshot the row BEFORE entering the generator so the SSE stream
+    # doesn't depend on the ``Depends(get_session)`` lifetime. Without
+    # this, any future lazy-loaded relationship on InstalledCollection
+    # would raise ``DetachedInstanceError`` from inside ``gen``.
+    initial_snapshot = _row_to_status(row)
+
     async def gen():
-        # Emit an initial state snapshot so the UI can render immediately
+        # Emit the snapshot first so the UI can render immediately
         # without having to make a separate /status round-trip.
-        snapshot = _row_to_status(row)
-        yield f"data: {snapshot.model_dump_json()}\n\n"
+        yield f"data: {initial_snapshot.model_dump_json()}\n\n"
 
         async for event in collection_install_service.stream_events(collection_id):
             yield f"data: {event.model_dump_json()}\n\n"
