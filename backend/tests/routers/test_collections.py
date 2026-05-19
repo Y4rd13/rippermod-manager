@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from sqlmodel import select
 
 from rippermod_manager.models.collection import InstalledCollection
@@ -231,3 +232,186 @@ class TestListAndStatus:
         body = r.json()
         assert body["status"] == "downloading"
         assert body["completed_mods"] == 2
+
+
+class TestUninstallCollection:
+    """``DELETE /api/v1/collections/{id}`` cascades through child mods."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_queues(self):
+        # The in-memory _event_queues dict is module-level and persists
+        # across tests; clear it so leftover queues from earlier install
+        # tests do not false-trip the in-progress guard.
+        from rippermod_manager.services.collection_install_service import _event_queues
+
+        _event_queues.clear()
+        yield
+        _event_queues.clear()
+
+    def _seed_game(self, client, session):
+        from sqlmodel import select
+
+        from rippermod_manager.models.game import Game
+
+        client.post(
+            "/api/v1/games/",
+            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": "/cp"},
+        )
+        return session.exec(select(Game)).one()
+
+    def test_404_when_missing(self, client):
+        r = client.delete("/api/v1/collections/99999")
+        assert r.status_code == 404
+
+    def test_drops_row_and_returns_counts(self, client, session):
+        from rippermod_manager.models.collection import InstalledCollection
+        from rippermod_manager.models.install import InstalledMod
+
+        game = self._seed_game(client, session)
+        row = InstalledCollection(
+            game_id=game.id,
+            slug="abc",
+            revision_id="r",
+            revision_number=1,
+            collection_name="ABC",
+            author_name="x",
+            summary="",
+            tile_image_url="",
+            status="installed",
+            started_at=datetime.now(UTC),
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+
+        row_id = row.id
+
+        # No children -- straight delete.
+        with patch("rippermod_manager.services.vfs.deploy_service.deploy"):
+            r = client.delete(f"/api/v1/collections/{row_id}")
+        assert r.status_code == 200
+        body = r.json()
+        assert body == {"removed_mods": 0, "failed_mods": 0}
+
+        # Endpoint deleted via its own session; expire ours so we see the
+        # post-commit DB state. Use the cached id since the row is gone.
+        session.expire_all()
+        assert session.get(InstalledCollection, row_id) is None
+        assert (
+            session.exec(
+                select(InstalledMod).where(InstalledMod.installed_collection_id == row_id)
+            ).first()
+            is None
+        )
+
+    def test_returns_409_when_install_in_progress(self, client, session):
+        """Uninstalling an actively-installing collection must refuse."""
+        from rippermod_manager.models.collection import InstalledCollection
+        from rippermod_manager.services.collection_install_service import _event_queues
+
+        game = self._seed_game(client, session)
+        row = InstalledCollection(
+            game_id=game.id,
+            slug="busy",
+            revision_id="r",
+            revision_number=1,
+            collection_name="Busy",
+            author_name="x",
+            summary="",
+            tile_image_url="",
+            status="downloading",
+            started_at=datetime.now(UTC),
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+
+        # Mark the install as in-flight by registering a queue.
+        import asyncio
+
+        _event_queues[row.id] = asyncio.Queue()
+        try:
+            r = client.delete(f"/api/v1/collections/{row.id}")
+            assert r.status_code == 409
+            assert "in progress" in r.json()["detail"]
+        finally:
+            _event_queues.pop(row.id, None)
+
+    def test_cascade_with_partial_failure(self, client, session):
+        """If one child uninstall_mod raises (e.g. file locked by game),
+        the surviving child must have its FK nulled so the parent delete
+        succeeds. Without that, PRAGMA foreign_keys=ON raises IntegrityError
+        on the parent delete and the endpoint 500s."""
+        from rippermod_manager.models.collection import InstalledCollection
+        from rippermod_manager.models.install import InstalledMod
+
+        game = self._seed_game(client, session)
+        row = InstalledCollection(
+            game_id=game.id,
+            slug="partial",
+            revision_id="r",
+            revision_number=1,
+            collection_name="Partial",
+            author_name="x",
+            summary="",
+            tile_image_url="",
+            status="installed",
+            started_at=datetime.now(UTC),
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        row_id = row.id
+
+        # Seed two child mods linked to the collection.
+        child_good = InstalledMod(
+            game_id=game.id,
+            name="GoodMod",
+            source_archive="g.zip",
+            installed_collection_id=row_id,
+        )
+        child_bad = InstalledMod(
+            game_id=game.id,
+            name="BadMod",
+            source_archive="b.zip",
+            installed_collection_id=row_id,
+        )
+        session.add(child_good)
+        session.add(child_bad)
+        session.commit()
+        session.refresh(child_good)
+        session.refresh(child_bad)
+        bad_id = child_bad.id
+
+        # Patch uninstall_mod so the 2nd call raises (mimics game-running
+        # file lock). The 1st call deletes its row as normal.
+        call_count = {"n": 0}
+
+        def _fake_uninstall(mod, _game, sess):
+            call_count["n"] += 1
+            if mod.id == bad_id:
+                raise OSError("file locked by game")
+            sess.delete(mod)
+            sess.commit()
+            return None
+
+        with (
+            patch(
+                "rippermod_manager.services.install_service.uninstall_mod",
+                side_effect=_fake_uninstall,
+            ),
+            patch("rippermod_manager.services.vfs.deploy_service.deploy"),
+        ):
+            r = client.delete(f"/api/v1/collections/{row_id}")
+
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body == {"removed_mods": 1, "failed_mods": 1}
+
+        # Parent row is gone.
+        session.expire_all()
+        assert session.get(InstalledCollection, row_id) is None
+        # Surviving child still exists but is detached (FK nulled).
+        survivor = session.get(InstalledMod, bad_id)
+        assert survivor is not None
+        assert survivor.installed_collection_id is None
