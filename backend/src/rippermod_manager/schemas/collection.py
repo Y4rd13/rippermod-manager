@@ -18,8 +18,13 @@ class CollectionModEntry(BaseModel):
     picture_url: str
     optional: bool
     # Phase comes from collection.json inside the artifact (Vortex pattern).
-    # Until PR D parses that artifact, all mods sit in phase 0 (single batch).
+    # Until artifact parsing lands, all mods sit in phase 0 (single batch).
     phase: int = 0
+    # Pre-recorded FOMOD wizard answers from the collection author. Keys are
+    # the step / group / plugin *names* (case-sensitive) the user picked.
+    # ``None`` or empty -> install only the FOMOD's required files.
+    # See services/fomod_choice_resolver.py for translation to indices.
+    fomod_choices: dict[str, dict[str, list[str]]] | None = None
 
 
 class CollectionPreviewOut(BaseModel):
