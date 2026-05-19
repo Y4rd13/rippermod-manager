@@ -799,3 +799,79 @@ export interface ConflictGraphResult {
   edges: ConflictGraphEdge[];
   total_conflicts: number;
 }
+
+// -- Collections (#222) -----------------------------------------------------
+
+export interface CollectionModEntry {
+  nexus_mod_id: number;
+  nexus_file_id: number;
+  name: string;
+  version: string;
+  author: string;
+  summary: string;
+  size_bytes: number;
+  picture_url: string;
+  optional: boolean;
+  phase: number;
+}
+
+export interface CollectionPreview {
+  slug: string;
+  revision_id: string;
+  revision_number: number;
+  name: string;
+  summary: string;
+  description: string;
+  author: string;
+  tile_image_url: string;
+  endorsements: number;
+  total_downloads: number;
+  total_size_bytes: number;
+  mods: CollectionModEntry[];
+}
+
+export interface CollectionStatus {
+  id: number;
+  game_id: number;
+  slug: string;
+  revision_number: number;
+  name: string;
+  author: string;
+  summary: string;
+  tile_image_url: string;
+  status:
+    | "pending"
+    | "downloading"
+    | "installing"
+    | "installed"
+    | "partial"
+    | "failed"
+    | "cancelled";
+  total_mods: number;
+  completed_mods: number;
+  failed_mods: number;
+  skipped_mods: number;
+  started_at: string;
+  finished_at: string | null;
+  error: string;
+  percent: number;
+}
+
+export interface CollectionInstallRequest {
+  slug: string;
+  revision: number;
+  skip_mod_ids?: number[];
+  include_optional?: boolean;
+}
+
+export interface CollectionProgressEvent {
+  phase: "download" | "install" | "deploy" | "done" | "error";
+  message: string;
+  percent: number;
+  completed?: number;
+  failed?: number;
+  skipped?: number;
+  total?: number;
+  current_mod?: string;
+  status?: string;
+}
