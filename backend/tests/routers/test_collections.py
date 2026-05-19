@@ -683,29 +683,10 @@ class TestCheckUpdatesEndpoint:
         session.commit()
         session.refresh(row)
 
-        payload = {
-            "id": "rev_uuid",
-            "revisionNumber": 2,
-            "collection": {
-                "id": "coll_uuid",
-                "slug": "starter",
-                "name": "Starter",
-                "summary": "",
-                "description": "",
-                "endorsements": 0,
-                "totalDownloads": 0,
-                "tileImage": {"url": ""},
-                "user": {"name": "x", "memberId": 1},
-                "game": {"id": 3333, "domainName": "cyberpunk2077", "name": "CP"},
-                "category": {"name": "x"},
-                "latestPublishedRevision": {"revisionNumber": 5},
-            },
-            "modFiles": [],
-        }
-
+        # The lightweight query returns the latest revision number directly.
         with patch(
-            "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_collection_revision",
-            new=AsyncMock(return_value=payload),
+            "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_collection_latest_revision",
+            new=AsyncMock(return_value=5),
         ):
             r = client.post("/api/v1/games/CP/collections/check-updates")
         assert r.status_code == 200, r.text
