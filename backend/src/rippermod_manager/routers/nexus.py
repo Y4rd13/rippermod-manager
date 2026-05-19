@@ -157,38 +157,69 @@ async def _fetch_requirements(
 
 
 @router.get("/mods/{mod_id}/summary", response_model=ModSummaryOut)
-async def mod_summary(mod_id: int, session: Session = Depends(get_session)) -> ModSummaryOut:
-    """Lightweight mod summary for management UI (no description, changelogs, or file lists)."""
+async def mod_summary(
+    mod_id: int,
+    fresh: bool = Query(False),
+    session: Session = Depends(get_session),
+) -> ModSummaryOut:
+    """Lightweight mod summary for management UI (no description, changelogs, or file lists).
+
+    Pass ``?fresh=true`` to force a re-fetch from Nexus when ``meta`` is already
+    cached. Used by the in-app update check (read-only metadata refresh, no
+    auto-download or auto-install — per Nexus distribution policy).
+    """
     from rippermod_manager.models.nexus import NexusDownload, NexusModMeta, NexusModRequirement
 
     meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
 
-    if not meta:
+    needs_fetch = meta is None or fresh
+    if needs_fetch:
         api_key = get_setting(session, "nexus_api_key") or ""
         if not api_key:
-            raise HTTPException(404, "Mod metadata not found and no API key configured")
+            if meta is None:
+                raise HTTPException(404, "Mod metadata not found and no API key configured")
+            # fresh=true + no API key: silently fall back to cached metadata
+            # rather than failing the update check.
+        else:
+            from rippermod_manager.nexus.client import NexusRateLimitError
+            from rippermod_manager.nexus.graphql_client import (
+                NexusGraphQLClient,
+                NexusGraphQLError,
+            )
+            from rippermod_manager.services.nexus_helpers import (
+                graphql_mod_to_rest_info,
+                store_uid_from_gql,
+                upsert_nexus_mod,
+            )
 
-        from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
-        from rippermod_manager.services.nexus_helpers import (
-            graphql_mod_to_rest_info,
-            store_uid_from_gql,
-            upsert_nexus_mod,
-        )
+            game = session.exec(select(Game)).first()
+            if not game:
+                if meta is None:
+                    raise HTTPException(404, "No game configured")
+            else:
+                game_domain = game.domain_name
+                try:
+                    async with NexusGraphQLClient(api_key) as gql:
+                        gql_mod = await gql.get_mod(game_domain, mod_id)
+                    info = graphql_mod_to_rest_info(gql_mod)
+                    upsert_nexus_mod(session, game.id, game_domain, mod_id, info)
+                    if gql_mod.get("uid"):
+                        store_uid_from_gql(session, mod_id, gql_mod["uid"])
 
-        game = session.exec(select(Game)).first()
-        if not game:
-            raise HTTPException(404, "No game configured")
-        game_domain = game.domain_name
-
-        async with NexusGraphQLClient(api_key) as gql:
-            gql_mod = await gql.get_mod(game_domain, mod_id)
-        info = graphql_mod_to_rest_info(gql_mod)
-        upsert_nexus_mod(session, game.id, game_domain, mod_id, info)
-        if gql_mod.get("uid"):
-            store_uid_from_gql(session, mod_id, gql_mod["uid"])
-
-        await _fetch_requirements(api_key, game_domain, mod_id, session)
-        meta = session.exec(select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)).first()
+                    if meta is None:
+                        await _fetch_requirements(api_key, game_domain, mod_id, session)
+                    meta = session.exec(
+                        select(NexusModMeta).where(NexusModMeta.nexus_mod_id == mod_id)
+                    ).first()
+                except (NexusRateLimitError, NexusGraphQLError, httpx.HTTPError):
+                    # Rate-limited (NexusRateLimitError is a bare Exception, NOT
+                    # an httpx.HTTPError — per CLAUDE.md it must be caught
+                    # explicitly), GraphQL-level errors, or transport failures
+                    # all fall back to the cached row so the update check never
+                    # 500s. Bubble only if no cached metadata exists at all.
+                    logger.debug("mod_summary refresh failed for %d", mod_id, exc_info=True)
+                    if meta is None:
+                        raise
 
     if not meta:
         raise HTTPException(404, "Mod metadata not found")
@@ -215,12 +246,15 @@ async def mod_summary(mod_id: int, session: Session = Depends(get_session)) -> M
     if not req_rows and not meta.requirements_fetched_at:
         api_key = get_setting(session, "nexus_api_key") or ""
         if api_key:
+            from rippermod_manager.nexus.client import NexusRateLimitError
+            from rippermod_manager.nexus.graphql_client import NexusGraphQLError
+
             try:
                 await _fetch_requirements(api_key, meta.game_domain, mod_id, session)
                 req_rows = session.exec(
                     select(NexusModRequirement).where(NexusModRequirement.nexus_mod_id == mod_id)
                 ).all()
-            except httpx.HTTPError:
+            except (NexusRateLimitError, NexusGraphQLError, httpx.HTTPError):
                 logger.debug("Failed to backfill requirements for mod %d", mod_id, exc_info=True)
 
     # Map {required nexus_mod_id -> installed_mod_id} for the game this mod belongs to,

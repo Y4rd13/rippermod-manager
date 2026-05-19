@@ -219,3 +219,121 @@ class TestModSummary:
         # Metadata fields ARE present (policy-compliant)
         assert "picture_url" in data
         assert "name" in data
+
+    def test_fresh_refreshes_version_from_nexus(self, client, session):
+        """``?fresh=true`` must re-fetch from Nexus so the cached version is
+        refreshed (used by the in-app update notification)."""
+        from unittest.mock import AsyncMock, patch
+
+        _seed_game(client)
+        _seed_mod_meta(session, mod_id=42, version="1.0")
+        client.put(
+            "/api/v1/settings/",
+            json={"settings": {"nexus_api_key": "valid-key"}},
+        )
+
+        fresh_gql_response = {
+            "modId": 42,
+            "name": "Test Mod",
+            "summary": "",
+            "description": "",
+            "version": "2.0",  # newer than the cached "1.0"
+            "author": "Author",
+            "uid": "",
+            "createdAt": None,
+            "updatedAt": None,
+            "endorsements": 0,
+            "downloads": 0,
+            "pictureUrl": "",
+            "category": "Gameplay",
+            "status": "published",
+            "modCategory": {"name": "Gameplay"},
+            "modRequirements": {
+                "nexusRequirements": {"nodes": []},
+                "modsRequiringThisMod": {"nodes": []},
+                "dlcRequirements": [],
+            },
+        }
+        with patch(
+            "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_mod",
+            new=AsyncMock(return_value=fresh_gql_response),
+        ):
+            r = client.get("/api/v1/nexus/mods/42/summary?fresh=true")
+        assert r.status_code == 200
+        assert r.json()["version"] == "2.0"
+
+    def test_fresh_falls_back_to_cache_when_nexus_unreachable(self, client, session):
+        """If the GraphQL refresh fails (rate limit, network), ``?fresh=true``
+        must NOT 500 — fall back to the cached row so the UI still works."""
+        from unittest.mock import AsyncMock, patch
+
+        import httpx as _httpx
+
+        _seed_game(client)
+        _seed_mod_meta(session, mod_id=42, version="1.0")
+        client.put(
+            "/api/v1/settings/",
+            json={"settings": {"nexus_api_key": "valid-key"}},
+        )
+
+        with patch(
+            "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_mod",
+            new=AsyncMock(side_effect=_httpx.HTTPError("boom")),
+        ):
+            r = client.get("/api/v1/nexus/mods/42/summary?fresh=true")
+        assert r.status_code == 200
+        assert r.json()["version"] == "1.0"
+
+    def test_fresh_falls_back_to_cache_on_rate_limit(self, client, session):
+        """``NexusRateLimitError`` is a bare ``Exception`` (not ``httpx.HTTPError``)
+        per ``CLAUDE.md`` — verify ``?fresh=true`` still falls back to cache
+        when the GraphQL client raises it (100/hour limit)."""
+        from unittest.mock import AsyncMock, patch
+
+        from rippermod_manager.nexus.client import NexusRateLimitError
+
+        _seed_game(client)
+        _seed_mod_meta(session, mod_id=42, version="1.0")
+        client.put(
+            "/api/v1/settings/",
+            json={"settings": {"nexus_api_key": "valid-key"}},
+        )
+
+        with patch(
+            "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_mod",
+            new=AsyncMock(side_effect=NexusRateLimitError(0, 1000, "2026-05-18T20:00:00Z")),
+        ):
+            r = client.get("/api/v1/nexus/mods/42/summary?fresh=true")
+        assert r.status_code == 200
+        assert r.json()["version"] == "1.0"
+
+    def test_fresh_falls_back_to_cache_on_graphql_error(self, client, session):
+        """GraphQL-level errors (schema/auth) must also fall back to cache."""
+        from unittest.mock import AsyncMock, patch
+
+        from rippermod_manager.nexus.graphql_client import NexusGraphQLError
+
+        _seed_game(client)
+        _seed_mod_meta(session, mod_id=42, version="1.0")
+        client.put(
+            "/api/v1/settings/",
+            json={"settings": {"nexus_api_key": "valid-key"}},
+        )
+
+        with patch(
+            "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_mod",
+            new=AsyncMock(side_effect=NexusGraphQLError([{"message": "schema drift"}])),
+        ):
+            r = client.get("/api/v1/nexus/mods/42/summary?fresh=true")
+        assert r.status_code == 200
+        assert r.json()["version"] == "1.0"
+
+    def test_fresh_falls_back_to_cache_when_no_api_key(self, client, session):
+        """``?fresh=true`` with no API key must return the cached value rather
+        than 404 (Nexus app users can have a cached mod but no key yet)."""
+        _seed_game(client)
+        _seed_mod_meta(session, mod_id=42, version="1.0")
+
+        r = client.get("/api/v1/nexus/mods/42/summary?fresh=true")
+        assert r.status_code == 200
+        assert r.json()["version"] == "1.0"

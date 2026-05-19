@@ -1,7 +1,9 @@
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
-import { useModSummary } from "@/hooks/queries";
+import { api } from "@/lib/api-client";
 import { compareVersions, isNewerVersion, normalizeVersion } from "@/lib/version";
+import type { ModSummary } from "@/types/api";
 
 // Hard-coded because the Nexus mod ID + domain never change for RipperMod
 // Manager's own listing. Mirrors the constants in SettingsPage.
@@ -33,7 +35,17 @@ export interface AppUpdateState {
  */
 export function useAppUpdateCheck(): AppUpdateState {
   const currentVersion = __APP_VERSION__;
-  const { data: summary, isLoading } = useModSummary(RIPPERMOD_NEXUS_MOD_ID);
+  // Dedicated query (separate cache key) that asks the backend to refresh the
+  // cached mod metadata from Nexus before responding, so the version string
+  // reflects what is actually published right now and not whatever was cached
+  // on the first launch. Still read-only — no auto-download / auto-install.
+  const { data: summary, isLoading } = useQuery<ModSummary>({
+    queryKey: ["mod-summary-fresh", RIPPERMOD_NEXUS_MOD_ID],
+    queryFn: () =>
+      api.get(`/api/v1/nexus/mods/${RIPPERMOD_NEXUS_MOD_ID}/summary?fresh=true`),
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+  });
   const latestVersion = summary?.version ?? null;
 
   const hasUpdate = latestVersion != null && isNewerVersion(currentVersion, latestVersion);
