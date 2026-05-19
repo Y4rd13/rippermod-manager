@@ -2,6 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 import type { DownloadRequest, Game } from "@/types/api";
+import { useCollectionInstallStore } from "@/stores/collection-install-store";
 import { toast } from "@/stores/toast-store";
 
 export interface NxmModLink {
@@ -126,13 +127,14 @@ function handleNxmLink(
       });
       return;
     }
-    // link.kind === "collection"
-    // Collection install is tracked in #222 — until the orchestrator ships
-    // we acknowledge the link instead of silently dropping it.
-    toast.info(
-      "Collections coming soon",
-      `One-click install for "${link.slug}" (revision ${link.revision}) is being built — follow rippermod-manager#222.`,
-    );
+    // link.kind === "collection" — hand off to the install flow store. App.tsx
+    // mounts <CollectionInstallFlow> as soon as ``target`` is set, which fires
+    // the preview dialog (manifest fetch + opt-in install) without prop-drilling.
+    useCollectionInstallStore.getState().open({
+      gameName: game.name,
+      slug: link.slug,
+      revision: link.revision,
+    });
   });
 }
 
