@@ -43,6 +43,7 @@ from rippermod_manager.schemas.collection import (
     CollectionInstallRequest,
     CollectionPreviewOut,
     CollectionStatusOut,
+    UninstallCollectionOut,
 )
 from rippermod_manager.services import collection_install_service
 from rippermod_manager.services.collection_install_service import (
@@ -194,6 +195,26 @@ def get_collection_status(
     if row is None:
         raise HTTPException(404, "Collection not found")
     return _row_to_status(row)
+
+
+@router.delete("/collections/{collection_id}", response_model=UninstallCollectionOut)
+def uninstall_collection(
+    collection_id: int,
+    session: Session = Depends(get_session),
+) -> UninstallCollectionOut:
+    """Drop an InstalledCollection and uninstall every mod that was part of it.
+
+    Returns the cascade counts. Refuses (409) while the collection is still
+    being installed — cancel or wait first.
+    """
+    try:
+        result = collection_install_service.uninstall_collection(collection_id, session)
+    except RuntimeError as exc:
+        # "Install still in progress" — see comment in uninstall_collection.
+        raise HTTPException(409, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return UninstallCollectionOut(**result)
 
 
 @router.get("/collections/{collection_id}/stream")

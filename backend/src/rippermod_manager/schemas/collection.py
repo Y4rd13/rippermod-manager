@@ -104,3 +104,10 @@ class CollectionProgressEvent(BaseModel):
     total: int = 0
     current_mod: str = ""
     status: str = ""  # mirrors InstalledCollection.status when meaningful
+
+
+class UninstallCollectionOut(BaseModel):
+    """Counts returned by ``DELETE /api/v1/collections/{id}``."""
+
+    removed_mods: int
+    failed_mods: int
