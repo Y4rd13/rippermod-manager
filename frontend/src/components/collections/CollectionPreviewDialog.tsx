@@ -1,5 +1,6 @@
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Download, Loader2, Package, RefreshCw, User, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import {
@@ -17,6 +18,12 @@ interface Props {
   onClose: () => void;
   onInstallStarted: (status: CollectionStatus) => void;
 }
+
+// Each mod row is image (32px) + 2 lines of text + p-2 padding +
+// space-y-1.5 gap. ~60px is a reasonable estimate; the virtualizer
+// only uses this for initial scroll-bar sizing, so being slightly
+// off is fine.
+const MOD_ROW_HEIGHT = 60;
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -38,9 +45,24 @@ export function CollectionPreviewDialog({
   const [includeOptional, setIncludeOptional] = useState(true);
   const [skipModIds, setSkipModIds] = useState<Set<number>>(new Set());
 
-  const mods = data?.mods ?? [];
+  // Wrap in ``useMemo`` so the derived ``requiredCount`` / ``optionalCount``
+  // memos below see a stable reference between renders (otherwise the
+  // ``data?.mods ?? []`` shortcut creates a fresh ``[]`` each render).
+  const mods = useMemo(() => data?.mods ?? [], [data?.mods]);
   const requiredCount = useMemo(() => mods.filter((m) => !m.optional).length, [mods]);
   const optionalCount = useMemo(() => mods.filter((m) => m.optional).length, [mods]);
+
+  // Virtualize the mod list so collections with 100+ mods don't blow
+  // up the DOM. The scroll container is the inner div below; the
+  // header info + optional checkbox sit OUTSIDE it so they stay
+  // pinned while the list scrolls.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: mods.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => MOD_ROW_HEIGHT,
+    overscan: 5,
+  });
 
   const handleInstall = () => {
     install.mutate(
@@ -118,7 +140,11 @@ export function CollectionPreviewDialog({
           </button>
         </header>
 
-        <div className="flex-1 overflow-auto p-5">
+        {/* Body: header info + checkbox stay fixed, the mod list is its
+            own virtualized scroll area below. ``min-h-0`` is required so
+            the inner ``flex-1`` actually constrains height inside a flex
+            column. */}
+        <div className="flex min-h-0 flex-1 flex-col p-5">
           {isLoading && (
             <div className="flex items-center justify-center gap-2 py-12 text-text-muted">
               <Loader2 className="animate-spin" size={16} /> Resolving collection from Nexus...
@@ -157,45 +183,61 @@ export function CollectionPreviewDialog({
                 </label>
               )}
 
-              <ul className="space-y-1.5">
-                {mods.map((mod) => {
-                  const skipped = skipModIds.has(mod.nexus_mod_id);
-                  const dimmed = skipped || (!includeOptional && mod.optional);
-                  // Composite key — a collection MAY include two files from
-                  // the same mod (e.g. main + patch), so ``nexus_mod_id``
-                  // alone is not unique. ``nexus_file_id`` disambiguates.
-                  return (
-                    <li
-                      key={`${mod.nexus_mod_id}-${mod.nexus_file_id}`}
-                      className={`flex items-center justify-between gap-3 rounded-md border border-border bg-surface-0 p-2 ${dimmed ? "opacity-50" : ""}`}
-                    >
-                      <div className="flex min-w-0 items-center gap-2">
-                        {mod.picture_url && (
-                          <img
-                            src={mod.picture_url}
-                            alt=""
-                            className="h-8 w-8 shrink-0 rounded object-cover"
-                          />
-                        )}
-                        <div className="min-w-0">
-                          <p className="truncate text-sm text-text-primary">{mod.name}</p>
-                          <p className="truncate text-xs text-text-muted">
-                            by {mod.author} - v{mod.version} - {formatBytes(mod.size_bytes)}
-                            {mod.optional && " - optional"}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => toggleSkip(mod.nexus_mod_id)}
-                        className="text-xs text-text-muted hover:text-text-primary"
+              <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+                <ul
+                  className="relative"
+                  style={{ height: `${virtualizer.getTotalSize()}px` }}
+                >
+                  {virtualizer.getVirtualItems().map((virtualRow) => {
+                    const mod = mods[virtualRow.index];
+                    const skipped = skipModIds.has(mod.nexus_mod_id);
+                    const dimmed = skipped || (!includeOptional && mod.optional);
+                    return (
+                      <li
+                        // Composite key — a collection MAY include two files
+                        // from the same mod (e.g. main + patch), so
+                        // ``nexus_mod_id`` alone is not unique.
+                        // ``nexus_file_id`` disambiguates.
+                        key={`${mod.nexus_mod_id}-${mod.nexus_file_id}`}
+                        className={`absolute left-0 right-0 flex items-center justify-between gap-3 rounded-md border border-border bg-surface-0 p-2 ${dimmed ? "opacity-50" : ""}`}
+                        style={{
+                          top: 0,
+                          transform: `translateY(${virtualRow.start}px)`,
+                          // Reserve the estimated row height; the rounded
+                          // border + gap stays visually consistent even
+                          // without spacing utilities (we can't use
+                          // ``space-y-*`` on absolutely-positioned items).
+                          height: `${MOD_ROW_HEIGHT - 6}px`,
+                        }}
                       >
-                        {skipped ? "Include" : "Skip"}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+                        <div className="flex min-w-0 items-center gap-2">
+                          {mod.picture_url && (
+                            <img
+                              src={mod.picture_url}
+                              alt=""
+                              className="h-8 w-8 shrink-0 rounded object-cover"
+                            />
+                          )}
+                          <div className="min-w-0">
+                            <p className="truncate text-sm text-text-primary">{mod.name}</p>
+                            <p className="truncate text-xs text-text-muted">
+                              by {mod.author} - v{mod.version} - {formatBytes(mod.size_bytes)}
+                              {mod.optional && " - optional"}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleSkip(mod.nexus_mod_id)}
+                          className="text-xs text-text-muted hover:text-text-primary"
+                        >
+                          {skipped ? "Include" : "Skip"}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             </>
           )}
         </div>
