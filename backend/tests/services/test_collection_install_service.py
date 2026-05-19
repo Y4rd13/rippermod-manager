@@ -549,3 +549,134 @@ class TestRunInstallHappyPath:
         assert phases.count("download") == 2
         assert phases.count("install") == 2
         assert phases.count("deploy") == 1
+
+
+# ---------------------------------------------------------------------------
+# _install_archive -- FOMOD routing (PR D)
+# ---------------------------------------------------------------------------
+
+
+class TestInstallArchiveRouting:
+    """The orchestrator routes between install_mod (regular) and install_fomod
+    (when install_mod raises ValueError with "FOMOD" in the message)."""
+
+    def _seed_game(self, client, session):
+        from sqlmodel import select
+
+        from rippermod_manager.models.game import Game
+
+        client.post(
+            "/api/v1/games/",
+            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": "/cp"},
+        )
+        return session.exec(select(Game)).one()
+
+    def _entry(self, **overrides) -> CollectionModEntry:
+        defaults = dict(
+            nexus_mod_id=100,
+            nexus_file_id=1001,
+            name="Mod",
+            version="1.0",
+            author="alice",
+            summary="",
+            size_bytes=10,
+            picture_url="",
+            optional=False,
+        )
+        defaults.update(overrides)
+        return CollectionModEntry(**defaults)
+
+    def test_regular_archive_uses_install_mod_path(self, client, session, tmp_path):
+        game = self._seed_game(client, session)
+        archive = tmp_path / "regular.zip"
+        archive.write_bytes(b"fake zip")
+
+        with (
+            patch("rippermod_manager.services.install_service.install_mod") as minstall,
+            patch(
+                "rippermod_manager.services.collection_install_service._install_fomod_archive"
+            ) as mfomod,
+            patch("rippermod_manager.services.collection_install_service._tag_installed") as mtag,
+        ):
+            result = svc._install_archive(
+                game=game,
+                archive_path=archive,
+                entry=self._entry(),
+                collection_id=1,
+                session=session,
+            )
+
+        assert result == "completed"
+        minstall.assert_called_once()
+        mfomod.assert_not_called()
+        mtag.assert_called_once()
+
+    def test_fomod_archive_falls_through_to_fomod_path(self, client, session, tmp_path):
+        game = self._seed_game(client, session)
+        archive = tmp_path / "fomod.zip"
+        archive.write_bytes(b"fake zip")
+
+        with (
+            patch(
+                "rippermod_manager.services.install_service.install_mod",
+                side_effect=ValueError("FOMOD installer detected. ..."),
+            ),
+            patch(
+                "rippermod_manager.services.collection_install_service._install_fomod_archive",
+                return_value="completed",
+            ) as mfomod,
+        ):
+            result = svc._install_archive(
+                game=game,
+                archive_path=archive,
+                entry=self._entry(name="MyFomod"),
+                collection_id=1,
+                session=session,
+            )
+
+        assert result == "completed"
+        mfomod.assert_called_once()
+        kwargs = mfomod.call_args.kwargs
+        # mod_name comes from the archive filename (parse_mod_filename), not the
+        # entry.name -- mirrors how install_mod identifies installs.
+        assert "mod_name" in kwargs
+
+    def test_already_installed_returns_skipped(self, client, session, tmp_path):
+        game = self._seed_game(client, session)
+        archive = tmp_path / "dup.zip"
+        archive.write_bytes(b"x")
+
+        with patch(
+            "rippermod_manager.services.install_service.install_mod",
+            side_effect=ValueError("Mod 'X' is already installed. Uninstall first..."),
+        ):
+            result = svc._install_archive(
+                game=game,
+                archive_path=archive,
+                entry=self._entry(),
+                collection_id=1,
+                session=session,
+            )
+
+        assert result == "skipped"
+
+    def test_unexpected_value_error_returns_failed(self, client, session, tmp_path):
+        """ValueError that's neither FOMOD nor 'already installed' is a real
+        bug -- bubble as 'failed' so the collection counter reflects it."""
+        game = self._seed_game(client, session)
+        archive = tmp_path / "broken.zip"
+        archive.write_bytes(b"x")
+
+        with patch(
+            "rippermod_manager.services.install_service.install_mod",
+            side_effect=ValueError("Some unrelated validation failure"),
+        ):
+            result = svc._install_archive(
+                game=game,
+                archive_path=archive,
+                entry=self._entry(),
+                collection_id=1,
+                session=session,
+            )
+
+        assert result == "failed"

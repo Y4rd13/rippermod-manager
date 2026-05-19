@@ -20,10 +20,13 @@ Free-tier flow (per-file ``nxm://`` user clicks) is intentionally out of
 scope for PR C -- that lands in PR G. Callers check ``is_premium`` before
 invoking ``start_install`` and return a 400 when False.
 
-FOMOD archives also fail-skip in this PR. ``install_mod`` raises
-``ValueError("FOMOD installer detected...")`` and the orchestrator marks
-that one mod as ``skipped`` then continues with the rest. PR D introduces
-non-interactive FOMOD support with pre-recorded choices from the manifest.
+FOMOD archives are routed through :func:`_install_fomod_archive`, which
+parses the ``fomod/ModuleConfig.xml`` from the archive, resolves any
+pre-recorded ``fomod_choices`` from the manifest into FOMOD step/group/
+plugin indices via :func:`services.fomod_choice_resolver.resolve_choices`,
+then calls :func:`install_fomod` with ``auto_deploy=False``. A FOMOD
+without recorded choices installs only its required-files baseline (the
+"click through with nothing ticked" equivalent).
 """
 
 from __future__ import annotations
@@ -306,6 +309,161 @@ def _close_queue(collection_id: int) -> None:
             logger.debug("Event queue full for collection %d", collection_id)
 
 
+def _install_archive(
+    *,
+    game: Game,
+    archive_path: Path,
+    entry: CollectionModEntry,
+    collection_id: int,
+    session: Session,
+) -> str:
+    """Install one downloaded archive on behalf of a collection.
+
+    Returns one of ``"completed"`` / ``"skipped"`` / ``"failed"``. The
+    InstalledMod row (if created) is tagged with the collection FK + phase
+    + optional flag before this function returns.
+
+    Routes between :func:`install_mod` (regular archives) and
+    :func:`install_fomod` (when the archive is a FOMOD installer with
+    pre-recorded ``fomod_choices`` in the manifest, or when there are no
+    choices and we install the required-only baseline).
+    """
+    from rippermod_manager.matching.filename_parser import parse_mod_filename
+    from rippermod_manager.services.install_service import install_mod
+
+    parsed = parse_mod_filename(archive_path.name)
+
+    try:
+        install_mod(
+            game=game,
+            archive_path=archive_path,
+            session=session,
+            auto_deploy=False,
+        )
+        _tag_installed(session, game.id, parsed.name, collection_id, entry)  # type: ignore[arg-type]
+        return "completed"
+    except ValueError as exc:
+        msg = str(exc)
+        if "already installed" in msg:
+            logger.info("Collection %d: %s already installed, skipping", collection_id, parsed.name)
+            return "skipped"
+        if "FOMOD" not in msg:
+            logger.exception("Collection %d: install_mod failed for %s", collection_id, parsed.name)
+            return "failed"
+    except (OSError, RuntimeError):
+        logger.exception(
+            "Collection %d: unexpected install failure for %s", collection_id, parsed.name
+        )
+        return "failed"
+
+    # FOMOD branch: parse the config, resolve recorded choices, run the
+    # non-interactive installer.
+    return _install_fomod_archive(
+        game=game,
+        archive_path=archive_path,
+        entry=entry,
+        mod_name=parsed.name,
+        collection_id=collection_id,
+        session=session,
+    )
+
+
+def _install_fomod_archive(
+    *,
+    game: Game,
+    archive_path: Path,
+    entry: CollectionModEntry,
+    mod_name: str,
+    collection_id: int,
+    session: Session,
+) -> str:
+    """Drive the FOMOD installer non-interactively from manifest choices."""
+    from rippermod_manager.archive.handler import open_archive
+    from rippermod_manager.services.fomod_choice_resolver import resolve_choices
+    from rippermod_manager.services.fomod_config_parser import parse_fomod_config
+    from rippermod_manager.services.fomod_install_service import (
+        compute_file_list,
+        install_fomod,
+    )
+
+    try:
+        with open_archive(archive_path) as archive:
+            entries = archive.list_entries()
+            config_entry = next(
+                (
+                    e
+                    for e in entries
+                    if not e.is_dir
+                    and e.filename.replace("\\", "/").lower().endswith("fomod/moduleconfig.xml")
+                ),
+                None,
+            )
+            if config_entry is None:
+                logger.warning(
+                    "Collection %d: %s claims FOMOD but no ModuleConfig.xml found",
+                    collection_id,
+                    mod_name,
+                )
+                return "failed"
+
+            normalised = config_entry.filename.replace("\\", "/")
+            fomod_idx = normalised.lower().rfind("fomod/moduleconfig.xml")
+            fomod_prefix = normalised[:fomod_idx].rstrip("/") if fomod_idx > 0 else ""
+            xml_bytes = archive.read_file(config_entry)
+
+        config = parse_fomod_config(xml_bytes)
+        selections = resolve_choices(config, entry.fomod_choices)
+        resolved = compute_file_list(config, selections, entries, fomod_prefix)
+
+        install_fomod(
+            game=game,
+            archive_path=archive_path,
+            session=session,
+            resolved_files=resolved,
+            mod_name=mod_name,
+            nexus_mod_id=entry.nexus_mod_id,
+            auto_deploy=False,
+        )
+    except ValueError as exc:
+        if "already installed" in str(exc):
+            logger.info(
+                "Collection %d: FOMOD %s already installed, skipping", collection_id, mod_name
+            )
+            return "skipped"
+        logger.exception("Collection %d: FOMOD install rejected for %s", collection_id, mod_name)
+        return "failed"
+    except (OSError, RuntimeError):
+        logger.exception("Collection %d: FOMOD install crashed for %s", collection_id, mod_name)
+        return "failed"
+
+    _tag_installed(session, game.id, mod_name, collection_id, entry)  # type: ignore[arg-type]
+    return "completed"
+
+
+def _tag_installed(
+    session: Session,
+    game_id: int,
+    mod_name: str,
+    collection_id: int,
+    entry: CollectionModEntry,
+) -> None:
+    """Mark a freshly installed mod as part of this collection."""
+    from rippermod_manager.models.install import InstalledMod
+
+    installed = session.exec(
+        select(InstalledMod).where(
+            InstalledMod.game_id == game_id,
+            InstalledMod.name == mod_name,
+        )
+    ).first()
+    if installed is not None:
+        installed.installed_collection_id = collection_id
+        installed.collection_phase = entry.phase
+        installed.is_optional = entry.optional
+        session.add(installed)
+        session.commit()
+
+
 async def _wait_for_download(job_id: int) -> DownloadJob:
     """Poll the DB until the download job leaves the in-flight states."""
     from rippermod_manager.database import engine
@@ -335,7 +493,6 @@ async def _run_install(
     """Background task: download + install each mod, deploy once at the end."""
     from rippermod_manager.database import engine
     from rippermod_manager.services.download_service import create_and_start_download
-    from rippermod_manager.services.install_service import install_mod
     from rippermod_manager.services.vfs.deploy_service import deploy
 
     completed = 0
@@ -481,53 +638,20 @@ async def _run_install(
                 game = s.get(Game, game_id)
                 if game is None:
                     raise RuntimeError(f"Game {game_id} vanished mid-install")
-                try:
-                    install_mod(
-                        game=game,
-                        archive_path=archive_path,
-                        session=s,
-                        auto_deploy=False,
-                    )
-                    # Tag the newly created InstalledMod as part of this
-                    # collection so the Installed-tab can group it.
-                    from rippermod_manager.matching.filename_parser import parse_mod_filename
-                    from rippermod_manager.models.install import InstalledMod
+                result = _install_archive(
+                    game=game,
+                    archive_path=archive_path,
+                    entry=entry,
+                    collection_id=collection_id,
+                    session=s,
+                )
 
-                    parsed = parse_mod_filename(archive_path.name)
-                    installed = s.exec(
-                        select(InstalledMod).where(
-                            InstalledMod.game_id == game_id,
-                            InstalledMod.name == parsed.name,
-                        )
-                    ).first()
-                    if installed is not None:
-                        installed.installed_collection_id = collection_id
-                        installed.collection_phase = entry.phase
-                        installed.is_optional = entry.optional
-                        s.add(installed)
-                        s.commit()
-                    completed += 1
-                except ValueError as exc:
-                    # ``install_mod`` raises ValueError on FOMOD archives (PR D
-                    # will unblock these) and on duplicate mod names.
-                    msg = str(exc)
-                    if "FOMOD" in msg or "already installed" in msg:
-                        skipped += 1
-                        logger.info("Collection %d: skipping %s (%s)", collection_id, current, msg)
-                    else:
-                        failed += 1
-                        logger.exception(
-                            "Collection %d: install_mod failed for %s",
-                            collection_id,
-                            current,
-                        )
-                except (OSError, RuntimeError):
-                    failed += 1
-                    logger.exception(
-                        "Collection %d: unexpected install failure for %s",
-                        collection_id,
-                        current,
-                    )
+            if result == "completed":
+                completed += 1
+            elif result == "skipped":
+                skipped += 1
+            else:
+                failed += 1
 
             _update("installing")
 
