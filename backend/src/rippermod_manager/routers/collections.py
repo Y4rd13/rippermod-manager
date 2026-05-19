@@ -202,7 +202,7 @@ def get_collection_status(
     "/collections/{collection_id}/skip-pending-nxm",
     response_model=CollectionActionResult,
 )
-def skip_pending_nxm(
+async def skip_pending_nxm(
     collection_id: int,
     body: CollectionSkipNxmRequest,
     session: Session = Depends(get_session),
@@ -234,7 +234,7 @@ def skip_pending_nxm(
     "/collections/{collection_id}/cancel",
     response_model=CollectionActionResult,
 )
-def cancel_collection_install(
+async def cancel_collection_install(
     collection_id: int,
     session: Session = Depends(get_session),
 ) -> CollectionActionResult:
