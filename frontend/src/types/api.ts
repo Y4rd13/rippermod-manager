@@ -793,6 +793,9 @@ export interface CollectionStatus {
   game_id: number;
   slug: string;
   revision_number: number;
+  // Newest revisionNumber observed on Nexus the last time the user ran
+  // the "Check for updates" action. ``null`` when never checked.
+  latest_known_revision_number: number | null;
   name: string;
   author: string;
   summary: string;
@@ -821,6 +824,18 @@ export interface CollectionInstallRequest {
   revision: number;
   skip_mod_ids?: number[];
   include_optional?: boolean;
+  // When true the existing install is cascade-uninstalled first --
+  // powers the "Update to rev N" flow.
+  force_reinstall?: boolean;
+}
+
+export interface CollectionUpdate {
+  collection_id: number;
+  slug: string;
+  current_revision_number: number;
+  latest_revision_number: number | null;
+  has_update: boolean;
+  error: string;
 }
 
 export interface CollectionProgressEvent {

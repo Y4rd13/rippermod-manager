@@ -59,6 +59,7 @@ from rippermod_manager.schemas.collection import (
     CollectionModEntry,
     CollectionPreviewOut,
     CollectionProgressEvent,
+    CollectionUpdateOut,
 )
 from rippermod_manager.services.paths import resolve_mods_dir
 
@@ -152,6 +153,12 @@ def start_install(
     :func:`create_and_start_download`; free-tier users get the per-file
     ``awaiting_nxm`` flow that waits for the user to click "Mod Manager
     Download" on Nexus before each mod.
+
+    ``request.force_reinstall=True`` cascades through the existing install
+    via :func:`uninstall_collection` before kicking off the new run --
+    used by the "Update to rev N" button. Refuses with
+    :class:`CollectionInstallInProgressError` when the targeted row is
+    still actively installing.
     """
     assert game.id is not None, "game must be persisted"
 
@@ -162,6 +169,21 @@ def start_install(
         for m in preview.mods
         if m.nexus_mod_id not in skip and (request.include_optional or not m.optional)
     ]
+
+    # Force-reinstall path: cascade through the previous install BEFORE
+    # the upsert so the orchestrator starts from a clean row + zero child
+    # mods. No-op when nothing is installed yet for this (game, slug).
+    if request.force_reinstall:
+        existing = session.exec(
+            select(InstalledCollection).where(
+                InstalledCollection.game_id == game.id,
+                InstalledCollection.slug == preview.slug,
+            )
+        ).first()
+        if existing is not None and existing.id is not None:
+            if existing.id in _event_queues:
+                raise CollectionInstallInProgressError(existing.id)
+            uninstall_collection(existing.id, session)
 
     collection = _upsert_collection_row(game, preview, session)
 
@@ -294,6 +316,85 @@ def uninstall_collection(collection_id: int, session: Session) -> dict[str, int]
         logger.exception("Post-uninstall deploy failed for collection %d", collection_id)
 
     return {"removed_mods": removed, "failed_mods": failed}
+
+
+async def check_updates(
+    session: Session, game_id: int, game_domain: str, api_key: str
+) -> list[CollectionUpdateOut]:
+    """For every installed collection of ``game_id``, ask Nexus for the
+    latest published revision and persist it on the row.
+
+    One Nexus GraphQL call per collection. Errors on a single collection
+    (slug deleted, network blip) are captured in the per-row ``error``
+    field rather than failing the whole batch.
+
+    Returns one :class:`CollectionUpdateOut` per row examined. The UI
+    refreshes ``useCollectionList`` afterwards to pick up the freshly
+    persisted ``latest_known_revision_number`` values.
+    """
+    rows = session.exec(
+        select(InstalledCollection).where(InstalledCollection.game_id == game_id)
+    ).all()
+
+    results: list[CollectionUpdateOut] = []
+    if not rows:
+        return results
+
+    async with NexusGraphQLClient(api_key) as gql:
+        for row in rows:
+            assert row.id is not None
+            try:
+                rev = await gql.get_collection_revision(row.slug, row.revision_number, game_domain)
+            except (NexusGraphQLError, NexusRateLimitError, httpx.HTTPError) as exc:
+                logger.warning(
+                    "Update check failed for collection %s (rev %d): %s",
+                    row.slug,
+                    row.revision_number,
+                    exc,
+                )
+                results.append(
+                    CollectionUpdateOut(
+                        collection_id=row.id,
+                        slug=row.slug,
+                        current_revision_number=row.revision_number,
+                        latest_revision_number=row.latest_known_revision_number,
+                        has_update=False,
+                        error=str(exc)[:200],
+                    )
+                )
+                continue
+
+            collection = (rev or {}).get("collection") or {}
+            latest_block = collection.get("latestPublishedRevision") or {}
+            latest = latest_block.get("revisionNumber")
+            if not isinstance(latest, int):
+                results.append(
+                    CollectionUpdateOut(
+                        collection_id=row.id,
+                        slug=row.slug,
+                        current_revision_number=row.revision_number,
+                        latest_revision_number=row.latest_known_revision_number,
+                        has_update=False,
+                        error="Nexus did not return a latestPublishedRevision",
+                    )
+                )
+                continue
+
+            row.latest_known_revision_number = latest
+            session.add(row)
+
+            results.append(
+                CollectionUpdateOut(
+                    collection_id=row.id,
+                    slug=row.slug,
+                    current_revision_number=row.revision_number,
+                    latest_revision_number=latest,
+                    has_update=latest > row.revision_number,
+                )
+            )
+
+    session.commit()
+    return results
 
 
 # ---------------------------------------------------------------------------

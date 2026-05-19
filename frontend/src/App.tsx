@@ -49,6 +49,7 @@ function CollectionInstallMount() {
       gameName={target.gameName}
       slug={target.slug}
       revision={target.revision}
+      forceReinstall={target.forceReinstall}
       onClose={close}
     />
   );

@@ -1,4 +1,4 @@
-import { Download, Loader2, Package, User, X } from "lucide-react";
+import { Download, Loader2, Package, RefreshCw, User, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -13,6 +13,7 @@ interface Props {
   gameName: string;
   slug: string;
   revision: number;
+  forceReinstall?: boolean;
   onClose: () => void;
   onInstallStarted: (status: CollectionStatus) => void;
 }
@@ -28,6 +29,7 @@ export function CollectionPreviewDialog({
   gameName,
   slug,
   revision,
+  forceReinstall = false,
   onClose,
   onInstallStarted,
 }: Props) {
@@ -47,13 +49,17 @@ export function CollectionPreviewDialog({
         revision,
         include_optional: includeOptional,
         skip_mod_ids: Array.from(skipModIds),
+        force_reinstall: forceReinstall,
       },
       {
         onSuccess: (status) => {
           onInstallStarted(status);
         },
         onError: (err) => {
-          toast.error("Couldn't start install", err.message);
+          toast.error(
+            forceReinstall ? "Couldn't start update" : "Couldn't start install",
+            err.message,
+          );
         },
       },
     );
@@ -201,7 +207,15 @@ export function CollectionPreviewDialog({
             loading={install.isPending}
             disabled={!data || isLoading}
           >
-            <Download size={14} /> Install collection
+            {forceReinstall ? (
+              <>
+                <RefreshCw size={14} /> Update to rev {revision}
+              </>
+            ) : (
+              <>
+                <Download size={14} /> Install collection
+              </>
+            )}
           </Button>
         </footer>
       </div>

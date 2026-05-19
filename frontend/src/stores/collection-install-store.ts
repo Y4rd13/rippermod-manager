@@ -4,6 +4,12 @@ interface CollectionInstallTarget {
   gameName: string;
   slug: string;
   revision: number;
+  // True when the install is re-installing an existing collection at a
+  // newer revision (the "Update to rev N" path in
+  // InstalledCollectionsSection). The preview dialog labels the action
+  // "Update" instead of "Install" and the backend cascade-uninstalls the
+  // previous install before re-running.
+  forceReinstall?: boolean;
 }
 
 interface CollectionInstallState {

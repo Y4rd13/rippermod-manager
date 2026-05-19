@@ -484,6 +484,7 @@ class NexusGraphQLClient:
                     user { name memberId }
                     game { id domainName name }
                     category { name }
+                    latestPublishedRevision { revisionNumber }
                 }
                 modFiles {
                     optional

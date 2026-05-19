@@ -1134,3 +1134,332 @@ class TestRecoverStaleInstalls:
         for status, row_id in terminal_ids.items():
             row = session.get(InstalledCollection, row_id)
             assert row.status == status
+
+
+# ---------------------------------------------------------------------------
+# check_updates (PR I)
+# ---------------------------------------------------------------------------
+
+
+def _gql_rev_with_latest(latest_rev: int) -> dict:
+    """Trimmed GraphQL revision payload sufficient for check_updates."""
+    return {
+        "id": "rev_uuid",
+        "revisionNumber": 1,
+        "collection": {
+            "id": "coll_uuid",
+            "slug": "x",
+            "name": "X",
+            "summary": "",
+            "description": "",
+            "endorsements": 0,
+            "totalDownloads": 0,
+            "tileImage": {"url": ""},
+            "user": {"name": "x", "memberId": 1},
+            "game": {"id": 3333, "domainName": "cyberpunk2077", "name": "Cyberpunk 2077"},
+            "category": {"name": "x"},
+            "latestPublishedRevision": {"revisionNumber": latest_rev},
+        },
+        "modFiles": [],
+    }
+
+
+class TestCheckUpdates:
+    """``check_updates`` fetches the latest revision for every installed
+    collection and persists it on the row."""
+
+    def _seed_game(self, client, session):
+        from sqlmodel import select
+
+        from rippermod_manager.models.game import Game
+
+        client.post(
+            "/api/v1/games/",
+            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": "/cp"},
+        )
+        return session.exec(select(Game)).one()
+
+    def _seed_row(self, session, game_id: int, slug: str, rev: int):
+        from rippermod_manager.models.collection import InstalledCollection
+
+        row = InstalledCollection(
+            game_id=game_id,
+            slug=slug,
+            revision_id="r",
+            revision_number=rev,
+            collection_name=slug,
+            author_name="x",
+            summary="",
+            tile_image_url="",
+            status="installed",
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return row
+
+    @pytest.mark.asyncio
+    async def test_no_installed_collections_returns_empty(self, client, session):
+        game = self._seed_game(client, session)
+        out = await svc.check_updates(
+            session=session, game_id=game.id, game_domain="cyberpunk2077", api_key="k"
+        )
+        assert out == []
+
+    @pytest.mark.asyncio
+    async def test_persists_latest_and_flags_updates(self, client, session):
+        from rippermod_manager.models.collection import InstalledCollection
+
+        game = self._seed_game(client, session)
+        row1 = self._seed_row(session, game.id, "starter", rev=2)
+        row2 = self._seed_row(session, game.id, "expert", rev=5)
+
+        # starter has rev 4 published (newer), expert is up to date at 5.
+        async def _fake_get_rev(slug, revision, game_domain):
+            return _gql_rev_with_latest(4 if slug == "starter" else 5)
+
+        with patch(
+            "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_collection_revision",
+            new=AsyncMock(side_effect=_fake_get_rev),
+        ):
+            out = await svc.check_updates(
+                session=session,
+                game_id=game.id,
+                game_domain="cyberpunk2077",
+                api_key="k",
+            )
+
+        assert len(out) == 2
+        by_slug = {r.slug: r for r in out}
+        assert by_slug["starter"].latest_revision_number == 4
+        assert by_slug["starter"].has_update is True
+        assert by_slug["expert"].latest_revision_number == 5
+        assert by_slug["expert"].has_update is False
+
+        # Persisted on the rows.
+        session.expire_all()
+        assert session.get(InstalledCollection, row1.id).latest_known_revision_number == 4
+        assert session.get(InstalledCollection, row2.id).latest_known_revision_number == 5
+
+    @pytest.mark.asyncio
+    async def test_per_collection_error_does_not_poison_batch(self, client, session):
+        from rippermod_manager.nexus.graphql_client import NexusGraphQLError
+
+        game = self._seed_game(client, session)
+        self._seed_row(session, game.id, "good", rev=1)
+        self._seed_row(session, game.id, "bad", rev=1)
+
+        async def _fake_get_rev(slug, revision, game_domain):
+            if slug == "bad":
+                raise NexusGraphQLError([{"message": "slug not found"}])
+            return _gql_rev_with_latest(2)
+
+        with patch(
+            "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_collection_revision",
+            new=AsyncMock(side_effect=_fake_get_rev),
+        ):
+            out = await svc.check_updates(
+                session=session,
+                game_id=game.id,
+                game_domain="cyberpunk2077",
+                api_key="k",
+            )
+
+        by_slug = {r.slug: r for r in out}
+        assert by_slug["good"].latest_revision_number == 2
+        assert by_slug["good"].error == ""
+        assert by_slug["bad"].latest_revision_number is None
+        assert by_slug["bad"].error  # truthy
+        assert by_slug["bad"].has_update is False
+
+    @pytest.mark.asyncio
+    async def test_missing_latest_published_revision_is_error(self, client, session):
+        game = self._seed_game(client, session)
+        self._seed_row(session, game.id, "x", rev=1)
+
+        # Nexus returned a payload without latestPublishedRevision.
+        payload = _gql_rev_with_latest(0)
+        del payload["collection"]["latestPublishedRevision"]
+
+        with patch(
+            "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_collection_revision",
+            new=AsyncMock(return_value=payload),
+        ):
+            out = await svc.check_updates(
+                session=session,
+                game_id=game.id,
+                game_domain="cyberpunk2077",
+                api_key="k",
+            )
+
+        assert len(out) == 1
+        assert out[0].latest_revision_number is None
+        assert "latestPublishedRevision" in out[0].error
+
+
+# ---------------------------------------------------------------------------
+# force_reinstall in start_install (PR I)
+# ---------------------------------------------------------------------------
+
+
+class TestForceReinstall:
+    """``start_install(force_reinstall=True)`` cascade-uninstalls the
+    previous install before kicking off the new one."""
+
+    @pytest.fixture(autouse=True)
+    def _no_background(self):
+        from rippermod_manager.services.collection_install_service import _event_queues
+
+        with patch(
+            "rippermod_manager.services.collection_install_service.asyncio.create_task"
+        ) as m:
+            m.return_value.add_done_callback = lambda *_: None
+            yield
+        _event_queues.clear()
+
+    def _seed_game(self, client, session):
+        from sqlmodel import select
+
+        from rippermod_manager.models.game import Game
+
+        client.post(
+            "/api/v1/games/",
+            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": "/cp"},
+        )
+        return session.exec(select(Game)).one()
+
+    def test_force_reinstall_with_existing_row_cascades(self, client, session):
+        """A previous install exists with a child mod -- force_reinstall
+        cascades the uninstall (drops the child + the old row) before the
+        fresh install row is created."""
+        from sqlmodel import select as sql_select
+
+        from rippermod_manager.models.collection import InstalledCollection
+        from rippermod_manager.models.install import InstalledMod
+
+        game = self._seed_game(client, session)
+        # Seed an existing row + a child mod tagged with it.
+        old = InstalledCollection(
+            game_id=game.id,
+            slug="starter",
+            revision_id="old",
+            revision_number=1,
+            collection_name="Starter",
+            author_name="x",
+            summary="",
+            tile_image_url="",
+            status="installed",
+        )
+        session.add(old)
+        session.commit()
+        session.refresh(old)
+        child = InstalledMod(
+            game_id=game.id,
+            name="ChildMod",
+            source_archive="c.zip",
+            installed_collection_id=old.id,
+        )
+        session.add(child)
+        session.commit()
+
+        # Mock uninstall_mod + deploy so the cascade succeeds without touching
+        # the real install service.
+        with (
+            patch(
+                "rippermod_manager.services.install_service.uninstall_mod",
+                side_effect=lambda mod, _g, s: s.delete(mod) or s.commit(),
+            ),
+            patch("rippermod_manager.services.vfs.deploy_service.deploy"),
+        ):
+            req = CollectionInstallRequest(slug="starter", revision=2, force_reinstall=True)
+            row = svc.start_install(
+                game=game,
+                request=req,
+                session=session,
+                api_key="k",
+                preview=_make_preview(),
+                is_premium=True,
+            )
+
+        # The cascade dropped the old child mod (no leftover rows tied to the
+        # old collection's slug). SQLite recycles primary keys after a delete,
+        # so we can't compare row.id with old.id directly -- the new row may
+        # land on the same numeric id.
+        session.expire_all()
+        all_rows = session.exec(
+            sql_select(InstalledCollection).where(InstalledCollection.slug == "starter")
+        ).all()
+        assert len(all_rows) == 1, "old + new rows coexisted"
+        assert all_rows[0].id == row.id
+        assert row.status == "pending"
+
+        # Child mod from the previous install is gone -- proves the cascade ran.
+        remaining = session.exec(
+            sql_select(InstalledMod).where(InstalledMod.name == "ChildMod")
+        ).all()
+        assert remaining == []
+
+    def test_force_reinstall_refuses_when_in_progress(self, client, session):
+        """Cannot force-reinstall while the install is still running."""
+        from rippermod_manager.models.collection import InstalledCollection
+        from rippermod_manager.services.collection_install_service import (
+            CollectionInstallInProgressError,
+            _event_queues,
+        )
+
+        game = self._seed_game(client, session)
+        existing = InstalledCollection(
+            game_id=game.id,
+            slug="starter",
+            revision_id="r",
+            revision_number=1,
+            collection_name="Starter",
+            author_name="x",
+            summary="",
+            tile_image_url="",
+            status="downloading",
+        )
+        session.add(existing)
+        session.commit()
+        session.refresh(existing)
+
+        import asyncio
+
+        _event_queues[existing.id] = asyncio.Queue()
+        try:
+            req = CollectionInstallRequest(slug="starter", revision=2, force_reinstall=True)
+            with pytest.raises(CollectionInstallInProgressError):
+                svc.start_install(
+                    game=game,
+                    request=req,
+                    session=session,
+                    api_key="k",
+                    preview=_make_preview(),
+                    is_premium=True,
+                )
+        finally:
+            _event_queues.pop(existing.id, None)
+
+    def test_force_reinstall_with_no_existing_row_is_noop(self, client, session):
+        """force_reinstall=True against a fresh game just does a normal install."""
+        from sqlmodel import select as sql_select
+
+        from rippermod_manager.models.collection import InstalledCollection
+
+        game = self._seed_game(client, session)
+        req = CollectionInstallRequest(slug="starter", revision=1, force_reinstall=True)
+        with patch("rippermod_manager.services.vfs.deploy_service.deploy"):
+            row = svc.start_install(
+                game=game,
+                request=req,
+                session=session,
+                api_key="k",
+                preview=_make_preview(),
+                is_premium=True,
+            )
+        assert row.status == "pending"
+        # Single row -- no leftover dup from a phantom uninstall.
+        rows = session.exec(
+            sql_select(InstalledCollection).where(InstalledCollection.slug == "starter")
+        ).all()
+        assert len(rows) == 1

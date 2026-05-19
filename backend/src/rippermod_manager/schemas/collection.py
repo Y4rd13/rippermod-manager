@@ -55,6 +55,11 @@ class CollectionInstallRequest(BaseModel):
     # When False, every ``optional=True`` mod is also skipped. Default True so
     # the user gets the author-intended bundle unless they opt out.
     include_optional: bool = True
+    # Re-install path: when True and the row already exists, the existing
+    # install is uninstalled (cascade through child mods) before the new
+    # revision is downloaded + installed. Powers the "Update to rev N"
+    # button in :class:`InstalledCollectionsSection`.
+    force_reinstall: bool = False
 
 
 class CollectionStatusOut(BaseModel):
@@ -64,6 +69,10 @@ class CollectionStatusOut(BaseModel):
     game_id: int
     slug: str
     revision_number: int
+    # The newest revisionNumber the last update-check observed on Nexus.
+    # ``None`` when no check has run yet; the UI compares against
+    # ``revision_number`` to render an "Update available" pill.
+    latest_known_revision_number: int | None
     name: str
     author: str
     summary: str
@@ -144,3 +153,20 @@ class CollectionActionResult(BaseModel):
 
     ok: bool
     message: str = ""
+
+
+class CollectionUpdateOut(BaseModel):
+    """One entry in the ``POST /check-updates`` response.
+
+    Returned for every :class:`InstalledCollection` the check considered.
+    ``error`` is populated when the Nexus lookup for that specific
+    collection failed (e.g. slug no longer published) -- the rest of the
+    batch still completes so a single failure does not poison the run.
+    """
+
+    collection_id: int
+    slug: str
+    current_revision_number: int
+    latest_revision_number: int | None
+    has_update: bool
+    error: str = ""
