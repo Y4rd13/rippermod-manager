@@ -157,6 +157,17 @@ def _migrate_missing_columns() -> None:
             "ALTER TABLE download_jobs ADD COLUMN installed_collection_id INTEGER "
             "REFERENCES installed_collections(id)",
         ),
+        # -- Collections update-check (#222 PR I) ------------------------------
+        # ``latest_known_revision_number`` was on the SQLModel model from PR
+        # B so ``create_all`` already covered fresh installs, but the
+        # migration framework is the authoritative ledger for column
+        # additions per CLAUDE.md. Catches the edge case of a DB that
+        # somehow predates the column.
+        (
+            "installed_collections",
+            "latest_known_revision_number",
+            "ALTER TABLE installed_collections ADD COLUMN latest_known_revision_number INTEGER",
+        ),
     ]
     with Session(engine) as session:
         for table, column, ddl in migrations:

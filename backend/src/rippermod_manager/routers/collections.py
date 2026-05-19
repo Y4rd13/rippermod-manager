@@ -45,6 +45,7 @@ from rippermod_manager.schemas.collection import (
     CollectionPreviewOut,
     CollectionSkipNxmRequest,
     CollectionStatusOut,
+    CollectionUpdateOut,
     UninstallCollectionOut,
 )
 from rippermod_manager.services import collection_install_service
@@ -71,6 +72,7 @@ def _row_to_status(row: InstalledCollection) -> CollectionStatusOut:
         game_id=row.game_id,
         slug=row.slug,
         revision_number=row.revision_number,
+        latest_known_revision_number=row.latest_known_revision_number,
         name=row.collection_name,
         author=row.author_name,
         summary=row.summary,
@@ -170,6 +172,39 @@ async def install_collection(
             f"wait for it to finish (or hit the cancel endpoint) before re-installing.",
         ) from exc
     return _row_to_status(row)
+
+
+@router.post(
+    "/games/{game_name}/collections/check-updates",
+    response_model=list[CollectionUpdateOut],
+)
+async def check_collection_updates(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> list[CollectionUpdateOut]:
+    """Ask Nexus for the newest revision of every installed collection.
+
+    For each :class:`InstalledCollection` of this game, fetches
+    ``collection.latestPublishedRevision.revisionNumber`` from Nexus and
+    persists it on the row. Per-collection errors land in the response
+    payload (not raised) so a single bad slug doesn't poison the batch.
+    The UI compares ``latest_known_revision_number`` against
+    ``revision_number`` to surface an "Update available" badge.
+    """
+    game = get_game_or_404(game_name, session)
+    api_key = _require_api_key(session)
+    assert game.id is not None
+    try:
+        return await collection_install_service.check_updates(
+            session=session,
+            game_id=game.id,
+            game_domain=game.domain_name,
+            api_key=api_key,
+        )
+    except NexusRateLimitError as exc:
+        raise HTTPException(429, "Nexus rate limit reached, try again later") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Failed to reach Nexus: {exc}") from exc
 
 
 @router.get("/games/{game_name}/collections", response_model=list[CollectionStatusOut])

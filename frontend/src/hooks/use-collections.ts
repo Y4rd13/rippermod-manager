@@ -8,6 +8,7 @@ import type {
   CollectionPreview,
   CollectionProgressEvent,
   CollectionStatus,
+  CollectionUpdate,
 } from "@/types/api";
 
 const previewPath = (gameName: string, slug: string, revision: number) =>
@@ -235,6 +236,26 @@ export function useCancelCollectionInstall(collectionId: number | null) {
       api.post<CollectionActionResult>(`/api/v1/collections/${collectionId}/cancel`),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["collection-status", collectionId] });
+    },
+  });
+}
+
+/**
+ * Ask Nexus for the latest published revision of every installed
+ * collection in this game, and persist the result on each row. The
+ * resulting list is the per-collection summary; the UI also invalidates
+ * ``collections-list`` so the cached ``latest_known_revision_number``
+ * fields refresh.
+ */
+export function useCheckCollectionUpdates(gameName: string | null) {
+  const qc = useQueryClient();
+  return useMutation<CollectionUpdate[], Error, void>({
+    mutationFn: () =>
+      api.post<CollectionUpdate[]>(
+        `/api/v1/games/${encodeURIComponent(gameName!)}/collections/check-updates`,
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["collections-list", gameName] });
     },
   });
 }
