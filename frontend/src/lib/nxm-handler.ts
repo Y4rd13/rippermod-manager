@@ -4,7 +4,8 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { DownloadRequest, Game } from "@/types/api";
 import { toast } from "@/stores/toast-store";
 
-export interface NxmLink {
+export interface NxmModLink {
+  kind: "mod";
   domain: string;
   modId: number;
   fileId: number;
@@ -12,27 +13,55 @@ export interface NxmLink {
   expires: number;
 }
 
+export interface NxmCollectionLink {
+  kind: "collection";
+  domain: string;
+  slug: string;
+  revision: number;
+}
+
+export type NxmLink = NxmModLink | NxmCollectionLink;
+
 export function parseNxmUrl(raw: string): NxmLink | null {
-  // nxm://cyberpunk2077/mods/107/files/123?key=abc123&expires=1234567890
+  // Supported forms:
+  //   nxm://<game>/mods/<modId>/files/<fileId>?key=&expires=
+  //   nxm://<game>/collections/<slug>/revisions/<revision>
   try {
     const url = new URL(raw);
     if (url.protocol !== "nxm:") return null;
 
     const domain = url.hostname;
     const segments = url.pathname.split("/").filter(Boolean);
-    // Expected: ["mods", "<modId>", "files", "<fileId>"]
-    if (segments.length < 4 || segments[0] !== "mods" || segments[2] !== "files") return null;
 
-    const modId = Number(segments[1]);
-    const fileId = Number(segments[3]);
-    if (Number.isNaN(modId) || Number.isNaN(fileId)) return null;
+    if (
+      segments.length >= 4 &&
+      segments[0] === "mods" &&
+      segments[2] === "files"
+    ) {
+      const modId = Number(segments[1]);
+      const fileId = Number(segments[3]);
+      if (Number.isNaN(modId) || Number.isNaN(fileId)) return null;
 
-    const key = url.searchParams.get("key") ?? "";
-    const expires = Number(url.searchParams.get("expires") ?? "0");
+      const key = url.searchParams.get("key") ?? "";
+      const expires = Number(url.searchParams.get("expires") ?? "0");
+      if (!key || !expires) return null;
 
-    if (!key || !expires) return null;
+      return { kind: "mod", domain, modId, fileId, key, expires };
+    }
 
-    return { domain, modId, fileId, key, expires };
+    if (
+      segments.length >= 4 &&
+      segments[0] === "collections" &&
+      segments[2] === "revisions"
+    ) {
+      const slug = segments[1];
+      const revision = Number(segments[3]);
+      if (!slug || Number.isNaN(revision)) return null;
+
+      return { kind: "collection", domain, slug, revision };
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -47,11 +76,12 @@ interface NxmHandlerDeps {
 const RETRY_INTERVAL_MS = 500;
 const MAX_RETRIES = 10;
 
-function handleNxmLink(
+function resolveGame(
   link: NxmLink,
   deps: NxmHandlerDeps,
   ctx: { cancelled: boolean; retryTimers: Set<ReturnType<typeof setTimeout>> },
-  retries = 0,
+  retries: number,
+  next: (game: Game) => void,
 ) {
   if (ctx.cancelled) return;
 
@@ -60,7 +90,7 @@ function handleNxmLink(
     if (retries < MAX_RETRIES) {
       const timer = setTimeout(() => {
         ctx.retryTimers.delete(timer);
-        handleNxmLink(link, deps, ctx, retries + 1);
+        resolveGame(link, deps, ctx, retries + 1, next);
       }, RETRY_INTERVAL_MS);
       ctx.retryTimers.add(timer);
       return;
@@ -74,16 +104,35 @@ function handleNxmLink(
     toast.error("NXM link error", `No game configured for "${link.domain}"`);
     return;
   }
+  next(game);
+}
 
-  deps.navigate(`/games/${game.name}`);
-  deps.startDownload({
-    gameName: game.name,
-    data: {
-      nexus_mod_id: link.modId,
-      nexus_file_id: link.fileId,
-      nxm_key: link.key,
-      nxm_expires: link.expires,
-    },
+function handleNxmLink(
+  link: NxmLink,
+  deps: NxmHandlerDeps,
+  ctx: { cancelled: boolean; retryTimers: Set<ReturnType<typeof setTimeout>> },
+) {
+  resolveGame(link, deps, ctx, 0, (game) => {
+    deps.navigate(`/games/${game.name}`);
+    if (link.kind === "mod") {
+      deps.startDownload({
+        gameName: game.name,
+        data: {
+          nexus_mod_id: link.modId,
+          nexus_file_id: link.fileId,
+          nxm_key: link.key,
+          nxm_expires: link.expires,
+        },
+      });
+      return;
+    }
+    // link.kind === "collection"
+    // Collection install is tracked in #222 — until the orchestrator ships
+    // we acknowledge the link instead of silently dropping it.
+    toast.info(
+      "Collections coming soon",
+      `One-click install for "${link.slug}" (revision ${link.revision}) is being built — follow rippermod-manager#222.`,
+    );
   });
 }
 
