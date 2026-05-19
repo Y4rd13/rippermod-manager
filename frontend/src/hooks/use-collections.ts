@@ -98,7 +98,9 @@ interface StreamState {
   // flips, without an explicit setState-in-effect (which the lint rule
   // forbids — it would cause a cascading render on every input change).
   collectionId: number | null;
-  events: CollectionProgressEvent[];
+  // Only the latest event is ever read by the UI — historical events would
+  // cost O(n²) array copies for data nothing consumes. Keep one slot.
+  latestEvent: CollectionProgressEvent | null;
   closed: boolean;
 }
 
@@ -111,10 +113,10 @@ function streamReducer(state: StreamState, action: StreamAction): StreamState {
   switch (action.type) {
     case "reset":
       if (state.collectionId === action.collectionId) return state;
-      return { collectionId: action.collectionId, events: [], closed: false };
+      return { collectionId: action.collectionId, latestEvent: null, closed: false };
     case "event":
       if (state.collectionId !== action.collectionId) return state;
-      return { ...state, events: [...state.events, action.event] };
+      return { ...state, latestEvent: action.event };
     case "close":
       if (state.collectionId !== action.collectionId) return state;
       return { ...state, closed: true };
@@ -124,7 +126,7 @@ function streamReducer(state: StreamState, action: StreamAction): StreamState {
 export function useCollectionStream(collectionId: number | null) {
   const [state, dispatch] = useReducer(streamReducer, {
     collectionId,
-    events: [],
+    latestEvent: null,
     closed: false,
   });
 
@@ -178,5 +180,5 @@ export function useCollectionStream(collectionId: number | null) {
     };
   }, [collectionId]);
 
-  return { events: state.events, closed: state.closed };
+  return { latestEvent: state.latestEvent, closed: state.closed };
 }

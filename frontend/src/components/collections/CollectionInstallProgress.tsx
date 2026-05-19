@@ -12,12 +12,11 @@ const TERMINAL_STATUSES = ["installed", "partial", "failed", "cancelled"];
 
 export function CollectionInstallProgress({ collectionId, onFinished, onCancel }: Props) {
   const { data: status } = useCollectionStatus(collectionId);
-  const { events } = useCollectionStream(collectionId);
+  const { latestEvent } = useCollectionStream(collectionId);
 
-  const latest = events[events.length - 1];
-  const percent = latest?.percent ?? status?.percent ?? 0;
-  const currentMod = latest?.current_mod ?? "";
-  const phase = latest?.phase ?? status?.status ?? "pending";
+  const percent = latestEvent?.percent ?? status?.percent ?? 0;
+  const currentMod = latestEvent?.current_mod ?? "";
+  const phase = latestEvent?.phase ?? status?.status ?? "pending";
   const terminal = status ? TERMINAL_STATUSES.includes(status.status) : false;
 
   return (
