@@ -648,3 +648,77 @@ class TestStartDownloadRoutesToCollection:
         assert body["routed_to_collection"] is False
         assert body["job"] is not None
         assert body["job"]["file_name"] == "standalone.zip"
+
+
+class TestCheckUpdatesEndpoint:
+    """``POST /games/{name}/collections/check-updates`` returns one
+    :class:`CollectionUpdateOut` per installed collection of that game."""
+
+    def test_404_when_game_missing(self, client):
+        r = client.post("/api/v1/games/NoGame/collections/check-updates")
+        assert r.status_code == 404
+
+    def test_400_when_no_api_key(self, client):
+        _seed_game(client)
+        r = client.post("/api/v1/games/CP/collections/check-updates")
+        assert r.status_code == 400
+
+    def test_returns_per_row_summary(self, client, session):
+        _seed_game(client)
+        _set_api_key(client)
+        game = session.exec(select(Game)).one()
+        row = InstalledCollection(
+            game_id=game.id,
+            slug="starter",
+            revision_id="r",
+            revision_number=2,
+            collection_name="Starter",
+            author_name="x",
+            summary="",
+            tile_image_url="",
+            status="installed",
+            started_at=datetime.now(UTC),
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+
+        payload = {
+            "id": "rev_uuid",
+            "revisionNumber": 2,
+            "collection": {
+                "id": "coll_uuid",
+                "slug": "starter",
+                "name": "Starter",
+                "summary": "",
+                "description": "",
+                "endorsements": 0,
+                "totalDownloads": 0,
+                "tileImage": {"url": ""},
+                "user": {"name": "x", "memberId": 1},
+                "game": {"id": 3333, "domainName": "cyberpunk2077", "name": "CP"},
+                "category": {"name": "x"},
+                "latestPublishedRevision": {"revisionNumber": 5},
+            },
+            "modFiles": [],
+        }
+
+        with patch(
+            "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_collection_revision",
+            new=AsyncMock(return_value=payload),
+        ):
+            r = client.post("/api/v1/games/CP/collections/check-updates")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert len(body) == 1
+        entry = body[0]
+        assert entry["slug"] == "starter"
+        assert entry["current_revision_number"] == 2
+        assert entry["latest_revision_number"] == 5
+        assert entry["has_update"] is True
+        assert entry["error"] == ""
+
+        # Row was updated.
+        session.expire_all()
+        refreshed = session.get(InstalledCollection, row.id)
+        assert refreshed.latest_known_revision_number == 5

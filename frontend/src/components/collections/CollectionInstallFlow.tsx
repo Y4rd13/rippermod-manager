@@ -9,6 +9,7 @@ interface Props {
   gameName: string;
   slug: string;
   revision: number;
+  forceReinstall?: boolean;
   onClose: () => void;
 }
 
@@ -22,7 +23,13 @@ interface Props {
  * The progress view subsumes the "finished" state, so when the install
  * settles the same dialog flips to a summary + Close button.
  */
-export function CollectionInstallFlow({ gameName, slug, revision, onClose }: Props) {
+export function CollectionInstallFlow({
+  gameName,
+  slug,
+  revision,
+  forceReinstall,
+  onClose,
+}: Props) {
   const [installed, setInstalled] = useState<CollectionStatus | null>(null);
 
   if (installed) {
@@ -39,6 +46,7 @@ export function CollectionInstallFlow({ gameName, slug, revision, onClose }: Pro
       gameName={gameName}
       slug={slug}
       revision={revision}
+      forceReinstall={forceReinstall}
       onClose={onClose}
       onInstallStarted={setInstalled}
     />
