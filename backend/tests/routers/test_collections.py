@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from sqlmodel import select
 
 from rippermod_manager.models.collection import InstalledCollection
@@ -231,3 +232,107 @@ class TestListAndStatus:
         body = r.json()
         assert body["status"] == "downloading"
         assert body["completed_mods"] == 2
+
+
+class TestUninstallCollection:
+    """``DELETE /api/v1/collections/{id}`` cascades through child mods."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_queues(self):
+        # The in-memory _event_queues dict is module-level and persists
+        # across tests; clear it so leftover queues from earlier install
+        # tests do not false-trip the in-progress guard.
+        from rippermod_manager.services.collection_install_service import _event_queues
+
+        _event_queues.clear()
+        yield
+        _event_queues.clear()
+
+    def _seed_game(self, client, session):
+        from sqlmodel import select
+
+        from rippermod_manager.models.game import Game
+
+        client.post(
+            "/api/v1/games/",
+            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": "/cp"},
+        )
+        return session.exec(select(Game)).one()
+
+    def test_404_when_missing(self, client):
+        r = client.delete("/api/v1/collections/99999")
+        assert r.status_code == 404
+
+    def test_drops_row_and_returns_counts(self, client, session):
+        from rippermod_manager.models.collection import InstalledCollection
+        from rippermod_manager.models.install import InstalledMod
+
+        game = self._seed_game(client, session)
+        row = InstalledCollection(
+            game_id=game.id,
+            slug="abc",
+            revision_id="r",
+            revision_number=1,
+            collection_name="ABC",
+            author_name="x",
+            summary="",
+            tile_image_url="",
+            status="installed",
+            started_at=datetime.now(UTC),
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+
+        row_id = row.id
+
+        # No children -- straight delete.
+        with patch("rippermod_manager.services.vfs.deploy_service.deploy"):
+            r = client.delete(f"/api/v1/collections/{row_id}")
+        assert r.status_code == 200
+        body = r.json()
+        assert body == {"removed_mods": 0, "failed_mods": 0}
+
+        # Endpoint deleted via its own session; expire ours so we see the
+        # post-commit DB state. Use the cached id since the row is gone.
+        session.expire_all()
+        assert session.get(InstalledCollection, row_id) is None
+        assert (
+            session.exec(
+                select(InstalledMod).where(InstalledMod.installed_collection_id == row_id)
+            ).first()
+            is None
+        )
+
+    def test_returns_409_when_install_in_progress(self, client, session):
+        """Uninstalling an actively-installing collection must refuse."""
+        from rippermod_manager.models.collection import InstalledCollection
+        from rippermod_manager.services.collection_install_service import _event_queues
+
+        game = self._seed_game(client, session)
+        row = InstalledCollection(
+            game_id=game.id,
+            slug="busy",
+            revision_id="r",
+            revision_number=1,
+            collection_name="Busy",
+            author_name="x",
+            summary="",
+            tile_image_url="",
+            status="downloading",
+            started_at=datetime.now(UTC),
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+
+        # Mark the install as in-flight by registering a queue.
+        import asyncio
+
+        _event_queues[row.id] = asyncio.Queue()
+        try:
+            r = client.delete(f"/api/v1/collections/{row.id}")
+            assert r.status_code == 409
+            assert "in progress" in r.json()["detail"]
+        finally:
+            _event_queues.pop(row.id, None)

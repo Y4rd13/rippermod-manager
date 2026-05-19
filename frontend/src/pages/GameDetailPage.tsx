@@ -19,6 +19,7 @@ import { Link, useParams } from "react-router";
 
 import { ClusterDetailsPanel, ConflictSummaryWidget } from "@/components/conflicts/ConflictSummaryWidget";
 import { ArchivesList } from "@/components/mods/ArchivesList";
+import { InstalledCollectionsSection } from "@/components/collections/InstalledCollectionsSection";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
 import { ConflictsInbox } from "@/components/mods/ConflictsInbox";
 import { FomodWizard } from "@/components/mods/FomodWizard";
@@ -654,17 +655,20 @@ export function GameDetailPage() {
         <ConflictSubTabs gameName={name} gameDomain={game?.domain_name ?? ""} />
       )}
       {tab === "installed" && (
-        <InstalledModsTable
-          mods={installedMods}
-          gameName={name}
-          recognizedMods={nexusMatched}
-          archives={archives}
-          downloadJobs={downloadJobs}
-          updates={updates?.updates ?? []}
-          isLoading={installedLoading}
-          onModClick={setSelectedModId}
-          onTabChange={(t) => setTab(t as Tab)}
-        />
+        <>
+          <InstalledCollectionsSection gameName={name} />
+          <InstalledModsTable
+            mods={installedMods}
+            gameName={name}
+            recognizedMods={nexusMatched}
+            archives={archives}
+            downloadJobs={downloadJobs}
+            updates={updates?.updates ?? []}
+            isLoading={installedLoading}
+            onModClick={setSelectedModId}
+            onTabChange={(t) => setTab(t as Tab)}
+          />
+        </>
       )}
       {tab === "archives" && (
         <ArchivesList archives={archives} gameName={name} gameDomain={game.domain_name} installPath={game.install_path} isLoading={archivesLoading} />

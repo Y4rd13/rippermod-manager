@@ -182,3 +182,21 @@ export function useCollectionStream(collectionId: number | null) {
 
   return { latestEvent: state.latestEvent, closed: state.closed };
 }
+
+/**
+ * Uninstall a collection: drops the InstalledCollection row + uninstalls
+ * every mod that was tagged with it. Backend cascades + runs a final deploy.
+ */
+export function useUninstallCollection(gameName: string | null) {
+  const qc = useQueryClient();
+  return useMutation<{ removed_mods: number; failed_mods: number }, Error, number>({
+    mutationFn: (collectionId) =>
+      api.delete<{ removed_mods: number; failed_mods: number }>(
+        `/api/v1/collections/${collectionId}`,
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["collections-list", gameName] });
+      void qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+    },
+  });
+}

@@ -186,6 +186,66 @@ async def stream_events(collection_id: int) -> AsyncIterator[CollectionProgressE
         yield event
 
 
+def uninstall_collection(collection_id: int, session: Session) -> dict[str, int]:
+    """Drop an InstalledCollection and uninstall every mod that belonged to it.
+
+    Returns a small summary dict: ``{"removed_mods": N, "failed_mods": M}``.
+    The single end-of-batch deploy mirrors the install path so the game-dir
+    state lands consistent.
+
+    Refuses to run while the install is still in flight (the queue is still
+    registered) — the caller should cancel or wait first.
+    """
+    from rippermod_manager.models.install import InstalledMod
+    from rippermod_manager.services.install_service import uninstall_mod
+    from rippermod_manager.services.vfs.deploy_service import deploy
+
+    if collection_id in _event_queues:
+        # PR C's CollectionInstallInProgressError lands in this module via
+        # the same chain; until those PRs are merged + this chain rebased,
+        # raise the simpler RuntimeError that the router maps to HTTP 409.
+        raise RuntimeError(f"Collection install {collection_id} is still in progress")
+
+    collection = session.get(InstalledCollection, collection_id)
+    if collection is None:
+        raise ValueError(f"Collection {collection_id} not found")
+
+    game = session.get(Game, collection.game_id)
+    if game is None:
+        raise ValueError(f"Game {collection.game_id} not found")
+
+    children = session.exec(
+        select(InstalledMod).where(InstalledMod.installed_collection_id == collection_id)
+    ).all()
+
+    removed = 0
+    failed = 0
+    for child in children:
+        try:
+            uninstall_mod(child, game, session)
+            removed += 1
+        except (OSError, RuntimeError):
+            logger.exception(
+                "Uninstall of mod %s (id=%d) from collection %d failed",
+                child.name,
+                child.id,
+                collection_id,
+            )
+            failed += 1
+
+    # Drop the parent row last so child rows have their FK pointing at a
+    # live row while uninstall_mod runs.
+    session.delete(collection)
+    session.commit()
+
+    try:
+        deploy(game, session)
+    except (OSError, RuntimeError):
+        logger.exception("Post-uninstall deploy failed for collection %d", collection_id)
+
+    return {"removed_mods": removed, "failed_mods": failed}
+
+
 # ---------------------------------------------------------------------------
 # Internals
 # ---------------------------------------------------------------------------

@@ -196,6 +196,25 @@ def get_collection_status(
     return _row_to_status(row)
 
 
+@router.delete("/collections/{collection_id}")
+def uninstall_collection(
+    collection_id: int,
+    session: Session = Depends(get_session),
+) -> dict[str, int]:
+    """Drop an InstalledCollection and uninstall every mod that was part of it.
+
+    Returns ``{"removed_mods": N, "failed_mods": M}``. Refuses (409) while
+    the collection is still being installed — cancel or wait first.
+    """
+    try:
+        return collection_install_service.uninstall_collection(collection_id, session)
+    except RuntimeError as exc:
+        # "Install still in progress" — see comment in uninstall_collection.
+        raise HTTPException(409, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
 @router.get("/collections/{collection_id}/stream")
 async def stream_collection_progress(
     collection_id: int,
