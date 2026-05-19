@@ -203,3 +203,219 @@ class TestDeployJournalTableCreation:
             tables = {row[0] for row in result}
 
         assert "deploy_journal" in tables
+
+
+# ---------------------------------------------------------------------------
+# Collections — #222 PR B
+# ---------------------------------------------------------------------------
+
+
+_OLD_INSTALLED_MODS_PRE_COLLECTIONS_DDL = """
+CREATE TABLE installed_mods (
+    id INTEGER PRIMARY KEY,
+    game_id INTEGER NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    source_archive TEXT DEFAULT '',
+    nexus_mod_id INTEGER,
+    nexus_file_id INTEGER,
+    installed_version TEXT DEFAULT '',
+    disabled INTEGER DEFAULT 0,
+    conflict_dismissed INTEGER DEFAULT 0,
+    staging_dir TEXT DEFAULT '',
+    deployed INTEGER DEFAULT 0,
+    deploy_drift INTEGER DEFAULT 0
+)
+"""
+
+_OLD_DOWNLOAD_JOBS_PRE_COLLECTIONS_DDL = """
+CREATE TABLE download_jobs (
+    id INTEGER PRIMARY KEY,
+    game_id INTEGER NOT NULL,
+    nexus_mod_id INTEGER NOT NULL,
+    nexus_file_id INTEGER NOT NULL,
+    file_name TEXT DEFAULT '',
+    status TEXT DEFAULT 'pending',
+    progress_bytes INTEGER DEFAULT 0,
+    total_bytes INTEGER DEFAULT 0,
+    error TEXT DEFAULT ''
+)
+"""
+
+
+def _make_pre_collections_engine():
+    """In-memory engine that mimics an existing user's DB before Collections shipped."""
+    eng = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    @event.listens_for(eng, "connect")
+    def _enable_fk(dbapi_conn, _):
+        dbapi_conn.execute("PRAGMA foreign_keys=ON")
+
+    with eng.connect() as conn:
+        conn.execute(text(_OLD_INSTALLED_MODS_PRE_COLLECTIONS_DDL))
+        conn.execute(text(_OLD_DOWNLOAD_JOBS_PRE_COLLECTIONS_DDL))
+        conn.commit()
+    return eng
+
+
+class TestCollectionColumnMigration:
+    """#222 PR B — new columns on installed_mods + download_jobs."""
+
+    def test_columns_absent_before_migration(self):
+        eng = _make_pre_collections_engine()
+        im_cols = _get_column_names(eng, "installed_mods")
+        dj_cols = _get_column_names(eng, "download_jobs")
+        assert "installed_collection_id" not in im_cols
+        assert "collection_phase" not in im_cols
+        assert "is_optional" not in im_cols
+        assert "installed_collection_id" not in dj_cols
+
+    def test_migration_adds_installed_mods_collection_columns(self):
+        from rippermod_manager.database import _migrate_missing_columns
+
+        eng = _make_pre_collections_engine()
+        with patch("rippermod_manager.database.engine", eng):
+            _migrate_missing_columns()
+
+        cols = _get_column_names(eng, "installed_mods")
+        assert {"installed_collection_id", "collection_phase", "is_optional"}.issubset(cols)
+
+    def test_migration_adds_download_jobs_collection_column(self):
+        from rippermod_manager.database import _migrate_missing_columns
+
+        eng = _make_pre_collections_engine()
+        with patch("rippermod_manager.database.engine", eng):
+            _migrate_missing_columns()
+
+        cols = _get_column_names(eng, "download_jobs")
+        assert "installed_collection_id" in cols
+
+    def test_collection_columns_defaults(self):
+        """New columns must default to NULL / 0 so existing rows don't break."""
+        from rippermod_manager.database import _migrate_missing_columns
+
+        eng = _make_pre_collections_engine()
+        with patch("rippermod_manager.database.engine", eng):
+            _migrate_missing_columns()
+
+        with eng.connect() as conn:
+            rows = conn.execute(text("PRAGMA table_info(installed_mods)")).all()
+        info = {r[1]: {"type": r[2], "notnull": r[3], "dflt_value": r[4]} for r in rows}
+
+        # installed_collection_id is a nullable FK column with no default
+        assert info["installed_collection_id"]["type"].upper() == "INTEGER"
+        assert info["installed_collection_id"]["notnull"] == 0
+        # collection_phase + is_optional default to 0 (no order, not optional)
+        assert info["collection_phase"]["dflt_value"] == "0"
+        assert info["is_optional"]["dflt_value"] == "0"
+
+    def test_migration_is_idempotent(self):
+        from rippermod_manager.database import _migrate_missing_columns
+
+        eng = _make_pre_collections_engine()
+        with patch("rippermod_manager.database.engine", eng):
+            _migrate_missing_columns()
+            _migrate_missing_columns()
+
+        cols = _get_column_names(eng, "installed_mods")
+        assert {"installed_collection_id", "collection_phase", "is_optional"}.issubset(cols)
+
+
+class TestInstalledCollectionsTableCreation:
+    """#222 PR B — installed_collections table auto-created via metadata.create_all."""
+
+    def test_table_is_created_on_init(self):
+        from sqlmodel import SQLModel, create_engine
+        from sqlmodel.pool import StaticPool
+
+        # Registers InstalledCollection with SQLModel's metadata.
+        from rippermod_manager.models import collection  # noqa: F401
+        from rippermod_manager.models.collection import InstalledCollection  # noqa: F401
+
+        eng = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        SQLModel.metadata.create_all(eng)
+
+        with eng.connect() as conn:
+            tables = {
+                r[0]
+                for r in conn.execute(
+                    text("SELECT name FROM sqlite_master WHERE type='table'")
+                ).all()
+            }
+
+        assert "installed_collections" in tables
+
+    def test_table_has_expected_columns(self):
+        from sqlmodel import SQLModel, create_engine
+        from sqlmodel.pool import StaticPool
+
+        from rippermod_manager.models.collection import InstalledCollection  # noqa: F401
+
+        eng = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        SQLModel.metadata.create_all(eng)
+
+        cols = _get_column_names(eng, "installed_collections")
+        expected = {
+            "id",
+            "game_id",
+            "slug",
+            "revision_id",
+            "revision_number",
+            "latest_known_revision_number",
+            "collection_name",
+            "author_name",
+            "summary",
+            "tile_image_url",
+            "status",
+            "started_at",
+            "finished_at",
+            "error",
+            "total_mods",
+            "completed_mods",
+            "failed_mods",
+            "skipped_mods",
+        }
+        assert expected.issubset(cols), f"missing columns: {expected - cols}"
+
+    def test_unique_index_on_game_and_slug(self):
+        """Re-installing the same collection slug for a game updates the
+        existing row rather than creating a duplicate."""
+        from sqlmodel import SQLModel, create_engine
+        from sqlmodel.pool import StaticPool
+
+        from rippermod_manager.database import _migrate_unique_indexes
+        from rippermod_manager.models.collection import InstalledCollection  # noqa: F401
+
+        eng = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+
+        @event.listens_for(eng, "connect")
+        def _enable_fk(dbapi_conn, _):
+            dbapi_conn.execute("PRAGMA foreign_keys=ON")
+
+        SQLModel.metadata.create_all(eng)
+        # The migration helper needs an `app_settings` table because it also
+        # runs the keyring migration — but only _migrate_unique_indexes does
+        # the index work, so call that directly.
+        with patch("rippermod_manager.database.engine", eng):
+            _migrate_unique_indexes()
+
+        with eng.connect() as conn:
+            indexes = {
+                r[1] for r in conn.execute(text("PRAGMA index_list(installed_collections)")).all()
+            }
+        assert "uq_installed_collections_game_slug" in indexes
