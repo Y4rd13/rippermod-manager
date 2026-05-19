@@ -458,6 +458,12 @@ export function useStartDownload() {
     mutationFn: ({ gameName, data }) =>
       api.post(`/api/v1/games/${gameName}/downloads/`, data),
     onSuccess: (result, { gameName }) => {
+      if (result.routed_to_collection) {
+        // The freshly-arrived NXM key was consumed by a Collections install
+        // orchestrator -- the Collections progress dialog already shows
+        // the install advancing, no need for a download-started toast.
+        return;
+      }
       if (result.requires_nxm) {
         toast.warning("Premium required", "Open the mod on Nexus to download manually");
         return;

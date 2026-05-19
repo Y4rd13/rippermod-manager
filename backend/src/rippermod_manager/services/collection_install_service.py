@@ -1,24 +1,29 @@
 """Orchestrator for one-click Nexus Collections install (#222).
 
-PR C scope -- premium-only single-phase install (the happy path Vortex calls
-"premium auto-download"). Sequencing mirrors the rough shape of Vortex's
-``InstallDriver``:
+Sequencing mirrors the rough shape of Vortex's ``InstallDriver``:
 
   1. Resolve the Collection revision -> manifest (via GraphQL,
      :func:`nexus.graphql_client.NexusGraphQLClient.get_collection_revision`)
   2. Persist an :class:`InstalledCollection` row in ``pending`` status
   3. For each mod in the requested set:
-       - download via :func:`services.download_service.create_and_start_download`
-         (tagged with ``installed_collection_id`` for batch tracking)
+       - premium: download via
+         :func:`services.download_service.create_and_start_download` directly
+       - free-tier: emit an ``awaiting_nxm`` SSE event, wait for the user to
+         click "Mod Manager Download" on the mod's Nexus page (routed via
+         :func:`try_route_nxm` from the downloads router), then resume with
+         the resolved (key, expires) pair
        - wait for the download to finish (poll the DB)
        - install via :func:`services.install_service.install_mod` with
          ``auto_deploy=False`` so we don't redeploy N times
   4. Run :func:`services.vfs.deploy_service.deploy` once at the end
   5. Update collection status (``installed`` / ``partial`` / ``failed``)
 
-Free-tier flow (per-file ``nxm://`` user clicks) is intentionally out of
-scope for PR C -- that lands in PR G. Callers check ``is_premium`` before
-invoking ``start_install`` and return a 400 when False.
+The free-tier flow uses per-(mod, file) ``asyncio.Future`` slots registered
+in :data:`_nxm_signals`. The orchestrator registers a slot before emitting
+the SSE event (closing the click-race window), then awaits with a bounded
+timeout. :func:`request_skip_nxm` and :func:`cancel_install` provide
+explicit user-driven escape hatches; the surrounding task is cleaned up via
+:func:`cancel_install` -> ``task.cancel()``.
 
 FOMOD archives are routed through :func:`_install_fomod_archive`, which
 parses the ``fomod/ModuleConfig.xml`` from the archive, resolves any
@@ -65,6 +70,12 @@ _DOWNLOAD_POLL_INTERVAL_S = 1.0
 # Hard cap to avoid waiting forever if the download silently hangs.
 _DOWNLOAD_TIMEOUT_S = 60 * 30  # 30 min -- large mods on slow links
 
+# Free-tier flow only: how long the orchestrator waits for the user to click
+# "Mod Manager Download" on the mod's Nexus page before giving up on that
+# mod and marking it failed. 10 minutes covers slow networks / context
+# switches without leaving the install hung indefinitely.
+_NXM_AWAIT_TIMEOUT_S = 60 * 10
+
 # In-memory event queues keyed by InstalledCollection.id. The SSE endpoint
 # subscribes to one of these to stream progress events. Cleaned up when the
 # orchestrator emits its final ``done`` / ``error`` event.
@@ -72,6 +83,13 @@ _event_queues: dict[int, asyncio.Queue[CollectionProgressEvent | None]] = {}
 # Background-task tracking so we don't lose references (asyncio.create_task
 # only holds a weak ref). Mirrors the pattern in download_service.
 _background_tasks: set[asyncio.Task[Any]] = set()
+# Per-(mod_id, file_id) futures that an orchestrator awaits when it needs a
+# free-tier ``nxm://`` key. The ``nxm-callback`` path (downloads router)
+# resolves them; the ``skip-pending-nxm`` endpoint cancels them with a
+# ``CollectionModSkipped`` exception. Keyed by (mod_id, file_id) -- a single
+# user only ever has one orchestrator per game running, so we don't need a
+# collection_id in the key.
+_nxm_signals: dict[tuple[int, int], asyncio.Future[tuple[str, int]]] = {}
 
 
 class CollectionInstallInProgressError(Exception):
@@ -83,6 +101,14 @@ class CollectionInstallInProgressError(Exception):
     def __init__(self, collection_id: int) -> None:
         self.collection_id = collection_id
         super().__init__(f"Collection install {collection_id} is already in progress")
+
+
+class CollectionModSkipped(Exception):
+    """Raised inside the awaiting_nxm wait when the user clicks "Skip mod"
+    in the orchestrator's progress dialog. Delivered via
+    :func:`request_skip_nxm` -> ``future.set_exception``. The orchestrator
+    loop catches it and marks the mod as ``skipped`` (NOT ``failed``) so
+    the final status reflects the user's choice rather than an error."""
 
 
 # ---------------------------------------------------------------------------
@@ -113,11 +139,19 @@ def start_install(
     session: Session,
     api_key: str,
     preview: CollectionPreviewOut,
+    *,
+    is_premium: bool,
 ) -> InstalledCollection:
     """Persist an InstalledCollection row and spawn the background runner.
 
     Returns immediately. Caller subscribes to ``stream_events(collection.id)``
     to follow progress.
+
+    ``is_premium`` flips the orchestrator between two flavours of the
+    download phase: premium users get auto-downloads via
+    :func:`create_and_start_download`; free-tier users get the per-file
+    ``awaiting_nxm`` flow that waits for the user to click "Mod Manager
+    Download" on Nexus before each mod.
     """
     assert game.id is not None, "game must be persisted"
 
@@ -157,10 +191,12 @@ def start_install(
         _run_install(
             collection_id=collection.id,
             game_id=game.id,
+            game_domain=game.domain_name,
             install_path=game.install_path,
             mods_dir=game.mods_dir,
             api_key=api_key,
             mods=mods_to_install,
+            is_premium=is_premium,
         ),
         name=f"collection-install-{collection.id}",
     )
@@ -261,6 +297,87 @@ def uninstall_collection(collection_id: int, session: Session) -> dict[str, int]
 
 
 # ---------------------------------------------------------------------------
+# Free-tier NXM signal routing
+# ---------------------------------------------------------------------------
+
+
+def try_route_nxm(nexus_mod_id: int, nexus_file_id: int, nxm_key: str, nxm_expires: int) -> bool:
+    """Hand a freshly-arrived NXM key to a waiting orchestrator, if any.
+
+    Returns ``True`` when an orchestrator was awaiting this exact
+    ``(mod_id, file_id)`` and has been woken up. Returns ``False`` when no
+    orchestrator is waiting -- the caller (downloads router) should fall
+    back to the regular standalone-download path.
+
+    Idempotent: a second call for an already-fulfilled future is a no-op.
+    """
+    future = _nxm_signals.get((nexus_mod_id, nexus_file_id))
+    if future is None or future.done():
+        return False
+    future.set_result((nxm_key, nxm_expires))
+    return True
+
+
+def request_skip_nxm(nexus_mod_id: int, nexus_file_id: int) -> bool:
+    """Wake a waiting orchestrator with a "user skipped this mod" signal.
+
+    Distinct from :func:`cancel_install` -- this only skips ONE mod, the
+    install continues with the next entry. Returns ``True`` when an
+    orchestrator was waiting.
+    """
+    future = _nxm_signals.get((nexus_mod_id, nexus_file_id))
+    if future is None or future.done():
+        return False
+    future.set_exception(CollectionModSkipped())
+    return True
+
+
+def cancel_install(collection_id: int) -> bool:
+    """Cancel the orchestrator task for ``collection_id`` if it is running.
+
+    Returns ``True`` when a task was found and ``cancel()`` was requested.
+    The orchestrator catches :class:`asyncio.CancelledError`, marks the row
+    as ``cancelled``, and closes the SSE queue cleanly.
+    """
+    name = f"collection-install-{collection_id}"
+    for task in _background_tasks:
+        if task.get_name() == name and not task.done():
+            task.cancel()
+            return True
+    return False
+
+
+def recover_stale_installs(session: Session) -> int:
+    """Mark any non-terminal install rows as failed at app startup.
+
+    Called from the FastAPI lifespan hook. After a backend restart the
+    in-memory orchestrator state (``_event_queues``, ``_nxm_signals``) is
+    lost, so any row left in ``pending`` / ``downloading`` /
+    ``awaiting_nxm`` / ``installing`` cannot be resumed -- the user has to
+    re-install. Surface that explicitly so they don't see a stuck row.
+
+    Returns the number of rows updated.
+    """
+    stale_statuses = ("pending", "downloading", "awaiting_nxm", "installing")
+    rows = session.exec(
+        select(InstalledCollection).where(
+            InstalledCollection.status.in_(stale_statuses)  # type: ignore[union-attr]
+        )
+    ).all()
+    for row in rows:
+        row.status = "failed"
+        row.error = (
+            "Backend restarted while installing this collection. "
+            "Re-install it from Nexus to resume."
+        )
+        row.finished_at = datetime.now(UTC)
+        session.add(row)
+    if rows:
+        session.commit()
+    return len(rows)
+
+
+# ---------------------------------------------------------------------------
 # Internals
 # ---------------------------------------------------------------------------
 
@@ -353,6 +470,9 @@ async def _emit(
     total: int,
     current_mod: str = "",
     status: str = "",
+    mod_id: int | None = None,
+    file_id: int | None = None,
+    mod_page_url: str = "",
 ) -> None:
     """Push an event onto the per-install queue (if any subscriber)."""
     q = _event_queues.get(collection_id)
@@ -369,6 +489,9 @@ async def _emit(
             total=total,
             current_mod=current_mod,
             status=status,
+            mod_id=mod_id,
+            file_id=file_id,
+            mod_page_url=mod_page_url,
         )
     )
 
@@ -538,6 +661,35 @@ def _tag_installed(
         session.commit()
 
 
+def _register_nxm_wait(nexus_mod_id: int, nexus_file_id: int) -> asyncio.Future[tuple[str, int]]:
+    """Register a free-tier wait slot for ``(mod, file)``.
+
+    MUST be called BEFORE the ``awaiting_nxm`` SSE event is emitted -- the
+    emit awaits, which yields to the event loop, so a fast user click on
+    Nexus could otherwise fire :func:`try_route_nxm` before the Future is
+    in the registry, and the key would be silently dropped to the
+    standalone-download fallback (leaving the orchestrator hung until the
+    10-minute timeout).
+
+    Returns the Future the caller should ``await`` (typically via
+    :func:`asyncio.wait_for` for a bounded wait).
+    """
+    loop = asyncio.get_running_loop()
+    sig_key = (nexus_mod_id, nexus_file_id)
+    # Defensive: a previous wait for the same (mod, file) somehow left a
+    # stale future. Drop it so the fresh one isn't shadowed by an
+    # already-done shell.
+    _nxm_signals.pop(sig_key, None)
+    future: asyncio.Future[tuple[str, int]] = loop.create_future()
+    _nxm_signals[sig_key] = future
+    return future
+
+
+def _unregister_nxm_wait(nexus_mod_id: int, nexus_file_id: int) -> None:
+    """Drop a registered wait slot (call from a ``finally`` block)."""
+    _nxm_signals.pop((nexus_mod_id, nexus_file_id), None)
+
+
 async def _wait_for_download(job_id: int) -> DownloadJob:
     """Poll the DB until the download job leaves the in-flight states."""
     from rippermod_manager.database import engine
@@ -559,12 +711,20 @@ async def _run_install(
     *,
     collection_id: int,
     game_id: int,
+    game_domain: str,
     install_path: str,
     mods_dir: str | None,
     api_key: str,
     mods: list[CollectionModEntry],
+    is_premium: bool,
 ) -> None:
-    """Background task: download + install each mod, deploy once at the end."""
+    """Background task: download + install each mod, deploy once at the end.
+
+    Premium users hit :func:`create_and_start_download` directly. Free-tier
+    users get the per-file ``awaiting_nxm`` flow: emit an event, block on
+    :func:`_await_nxm_key` until the user clicks "Mod Manager Download" on
+    Nexus, then resume with the resolved (key, expires) pair.
+    """
     from rippermod_manager.database import engine
     from rippermod_manager.services.download_service import create_and_start_download
     from rippermod_manager.services.vfs.deploy_service import deploy
@@ -613,6 +773,86 @@ async def _run_install(
 
         for entry in mods:
             current = entry.name or f"mod #{entry.nexus_mod_id}"
+            nxm_key: str | None = None
+            nxm_expires: int | None = None
+
+            # Free-tier branch: ask the user to click "Mod Manager Download"
+            # on Nexus for this specific mod, then resume with the resolved
+            # nxm:// key. Premium accounts skip this block entirely.
+            if not is_premium:
+                mod_page_url = f"https://www.nexusmods.com/{game_domain}/mods/{entry.nexus_mod_id}"
+                # Register the wait slot BEFORE emitting -- the emit awaits,
+                # which yields the loop, and a fast user click on Nexus must
+                # find this slot already in place.
+                nxm_future = _register_nxm_wait(entry.nexus_mod_id, entry.nexus_file_id)
+                _update("awaiting_nxm")
+                try:
+                    await _emit(
+                        collection_id,
+                        phase="awaiting_nxm",
+                        message=(f"Click 'Mod Manager Download' on the Nexus page for {current}"),
+                        percent=_pct(),
+                        completed=completed,
+                        failed=failed,
+                        skipped=skipped,
+                        total=total,
+                        current_mod=current,
+                        status="awaiting_nxm",
+                        mod_id=entry.nexus_mod_id,
+                        file_id=entry.nexus_file_id,
+                        mod_page_url=mod_page_url,
+                    )
+                    try:
+                        nxm_key, nxm_expires = await asyncio.wait_for(
+                            nxm_future, timeout=_NXM_AWAIT_TIMEOUT_S
+                        )
+                    except CollectionModSkipped:
+                        skipped += 1
+                        logger.info(
+                            "Collection %d: user skipped mod %d (%s)",
+                            collection_id,
+                            entry.nexus_mod_id,
+                            current,
+                        )
+                        _update("downloading")
+                        await _emit(
+                            collection_id,
+                            phase="download",
+                            message=f"Skipped {current}",
+                            percent=_pct(),
+                            completed=completed,
+                            failed=failed,
+                            skipped=skipped,
+                            total=total,
+                            current_mod=current,
+                            status="downloading",
+                        )
+                        continue
+                    except TimeoutError:
+                        failed += 1
+                        logger.warning(
+                            "Collection %d: NXM wait timed out for mod %d (%s)",
+                            collection_id,
+                            entry.nexus_mod_id,
+                            current,
+                        )
+                        _update("downloading")
+                        await _emit(
+                            collection_id,
+                            phase="download",
+                            message=(f"Timed out waiting for NXM link for {current}"),
+                            percent=_pct(),
+                            completed=completed,
+                            failed=failed,
+                            skipped=skipped,
+                            total=total,
+                            current_mod=current,
+                            status="downloading",
+                        )
+                        continue
+                finally:
+                    _unregister_nxm_wait(entry.nexus_mod_id, entry.nexus_file_id)
+
             await _emit(
                 collection_id,
                 phase="download",
@@ -625,6 +865,7 @@ async def _run_install(
                 current_mod=current,
                 status="downloading",
             )
+            _update("downloading")
 
             with Session(engine) as s:
                 game = s.get(Game, game_id)
@@ -637,6 +878,8 @@ async def _run_install(
                         nexus_file_id=entry.nexus_file_id,
                         api_key=api_key,
                         session=s,
+                        nxm_key=nxm_key,
+                        nxm_expires=nxm_expires,
                     )
                     # Tag the job so the orchestrator can aggregate later.
                     job.installed_collection_id = collection_id
@@ -749,10 +992,13 @@ async def _run_install(
         except (OSError, RuntimeError):
             logger.exception("Collection %d: final deploy failed", collection_id)
 
-        # Final state -- success / partial.
-        if failed == 0 and skipped == 0:
+        # Final state -- success / partial / failed. "all-skipped" lands in
+        # ``partial`` (not ``failed``) because the skips reflect the user's
+        # choice, not an install error; free-tier skip-mod (PR G) makes
+        # that case much more common than before.
+        if completed == total:
             final_status = "installed"
-        elif completed == 0:
+        elif completed == 0 and failed > 0:
             final_status = "failed"
         else:
             final_status = "partial"
@@ -770,6 +1016,35 @@ async def _run_install(
             status=final_status,
         )
 
+    except asyncio.CancelledError:
+        logger.info("Collection %d install cancelled", collection_id)
+        _update(
+            "cancelled",
+            finished_at=datetime.now(UTC),
+            error="Install cancelled by user",
+        )
+        # Synchronous queue push: we are inside cancellation propagation,
+        # any ``await`` here would itself raise CancelledError before the
+        # subscriber sees the event. The final ``None`` sentinel goes out
+        # via ``_close_queue`` in the ``finally`` block below.
+        q = _event_queues.get(collection_id)
+        if q is not None:
+            try:
+                q.put_nowait(
+                    CollectionProgressEvent(
+                        phase="error",
+                        message="Install cancelled by user",
+                        percent=_pct(),
+                        completed=completed,
+                        failed=failed,
+                        skipped=skipped,
+                        total=total,
+                        status="cancelled",
+                    )
+                )
+            except asyncio.QueueFull:
+                logger.debug("Event queue full during cancel for collection %d", collection_id)
+        raise
     except Exception as exc:
         logger.exception("Collection %d install crashed", collection_id)
         _update("failed", finished_at=datetime.now(UTC), error=str(exc))

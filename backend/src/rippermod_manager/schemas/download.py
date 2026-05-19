@@ -38,3 +38,9 @@ class DownloadStartResult(BaseModel):
     job: DownloadJobOut | None = None
     requires_nxm: bool = False
     requires_file_selection: bool = False
+    # When a free-tier user's ``nxm://`` click matches a mod that a
+    # Collections install orchestrator is currently waiting for, the key
+    # is consumed by that orchestrator and no standalone DownloadJob is
+    # created. The frontend uses this flag to skip its "download started"
+    # toast/UI for the redirected case.
+    routed_to_collection: bool = False

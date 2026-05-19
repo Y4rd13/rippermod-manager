@@ -104,8 +104,10 @@ class TestPreview:
 
 
 class TestInstallKickoff:
-    def test_rejects_free_users_with_400(self, client):
-        """PR C is premium-only; free users get a 400 pointing at #222."""
+    def test_rejects_invalid_api_key_with_401(self, client):
+        """``validate_key`` returns ``valid=False`` on a rejected key -- the
+        endpoint surfaces that as 401 so the user knows to reconfigure
+        Settings rather than seeing a generic 500."""
         _seed_game(client)
         _set_api_key(client)
 
@@ -114,16 +116,49 @@ class TestInstallKickoff:
         with patch(
             "rippermod_manager.nexus.client.NexusClient.validate_key",
             new=AsyncMock(
-                return_value=NexusKeyResult(valid=True, is_premium=False, username="freeuser")
+                return_value=NexusKeyResult(valid=False, is_premium=False, error="HTTP 401")
             ),
         ):
             r = client.post(
                 "/api/v1/games/CP/collections/install",
                 json={"slug": "starter", "revision": 1},
             )
-        assert r.status_code == 400
-        assert "Premium" in r.json()["detail"]
-        assert "#222" in r.json()["detail"]
+        assert r.status_code == 401
+        assert "reconfigure" in r.json()["detail"].lower()
+
+    def test_free_user_starts_install_with_awaiting_nxm_flow(self, client, session):
+        """Free-tier accounts no longer get a 400 -- the orchestrator now
+        carries them through the per-file ``awaiting_nxm`` flow (PR G)."""
+        _seed_game(client)
+        _set_api_key(client)
+
+        from rippermod_manager.schemas.nexus import NexusKeyResult
+
+        with (
+            patch(
+                "rippermod_manager.nexus.client.NexusClient.validate_key",
+                new=AsyncMock(
+                    return_value=NexusKeyResult(valid=True, is_premium=False, username="freeuser")
+                ),
+            ),
+            patch(
+                "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_collection_revision",
+                new=AsyncMock(return_value=_gql_revision_payload()),
+            ),
+            patch(
+                "rippermod_manager.services.collection_install_service.asyncio.create_task"
+            ) as mtask,
+        ):
+            mtask.return_value.add_done_callback = lambda *_: None
+            r = client.post(
+                "/api/v1/games/CP/collections/install",
+                json={"slug": "starter", "revision": 1},
+            )
+        assert r.status_code == 202, r.text
+        body = r.json()
+        assert body["slug"] == "starter"
+        assert body["status"] == "pending"
+        assert body["total_mods"] == 1
 
     def test_premium_user_starts_install(self, client, session):
         _seed_game(client)
@@ -415,3 +450,201 @@ class TestUninstallCollection:
         survivor = session.get(InstalledMod, bad_id)
         assert survivor is not None
         assert survivor.installed_collection_id is None
+
+
+class TestSkipPendingNxm:
+    """``POST /collections/{id}/skip-pending-nxm`` wakes a waiting
+    orchestrator with a CollectionModSkipped signal."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_signals(self):
+        from rippermod_manager.services.collection_install_service import _nxm_signals
+
+        _nxm_signals.clear()
+        yield
+        _nxm_signals.clear()
+
+    def test_404_when_collection_missing(self, client):
+        r = client.post(
+            "/api/v1/collections/99999/skip-pending-nxm",
+            json={"nexus_mod_id": 100, "nexus_file_id": 1001},
+        )
+        assert r.status_code == 404
+
+    def test_no_waiter_returns_ok_false(self, client, session):
+        from rippermod_manager.models.collection import InstalledCollection
+
+        _seed_game(client)
+        game = session.exec(select(Game)).one()
+        row = InstalledCollection(
+            game_id=game.id,
+            slug="abc",
+            revision_id="r",
+            revision_number=1,
+            collection_name="ABC",
+            author_name="x",
+            summary="",
+            tile_image_url="",
+            status="downloading",
+            started_at=datetime.now(UTC),
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+
+        r = client.post(
+            f"/api/v1/collections/{row.id}/skip-pending-nxm",
+            json={"nexus_mod_id": 100, "nexus_file_id": 1001},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is False
+
+    @pytest.mark.asyncio
+    async def test_with_active_waiter_returns_ok_true(self, client, session):
+        from rippermod_manager.models.collection import InstalledCollection
+        from rippermod_manager.services import collection_install_service as svc
+
+        _seed_game(client)
+        game = session.exec(select(Game)).one()
+        row = InstalledCollection(
+            game_id=game.id,
+            slug="abc",
+            revision_id="r",
+            revision_number=1,
+            collection_name="ABC",
+            author_name="x",
+            summary="",
+            tile_image_url="",
+            status="awaiting_nxm",
+            started_at=datetime.now(UTC),
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+
+        # Register a wait slot like the orchestrator would.
+        future = svc._register_nxm_wait(100, 1001)
+
+        r = client.post(
+            f"/api/v1/collections/{row.id}/skip-pending-nxm",
+            json={"nexus_mod_id": 100, "nexus_file_id": 1001},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is True
+
+        # The future is now done with the skipped exception.
+        with pytest.raises(svc.CollectionModSkipped):
+            await future
+
+
+class TestCancelCollectionInstall:
+    """``POST /collections/{id}/cancel`` signals the running orchestrator."""
+
+    def test_404_when_collection_missing(self, client):
+        r = client.post("/api/v1/collections/99999/cancel")
+        assert r.status_code == 404
+
+    def test_no_task_returns_ok_false(self, client, session):
+        from rippermod_manager.models.collection import InstalledCollection
+
+        _seed_game(client)
+        game = session.exec(select(Game)).one()
+        row = InstalledCollection(
+            game_id=game.id,
+            slug="abc",
+            revision_id="r",
+            revision_number=1,
+            collection_name="ABC",
+            author_name="x",
+            summary="",
+            tile_image_url="",
+            status="installed",
+            started_at=datetime.now(UTC),
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+
+        r = client.post(f"/api/v1/collections/{row.id}/cancel")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is False
+
+
+class TestStartDownloadRoutesToCollection:
+    """``POST /games/{name}/downloads/`` intercepts NXM keys that match an
+    active Collections orchestrator wait, instead of starting a standalone
+    download. Routed responses surface ``routed_to_collection=True``."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_signals(self):
+        from rippermod_manager.services.collection_install_service import _nxm_signals
+
+        _nxm_signals.clear()
+        yield
+        _nxm_signals.clear()
+
+    @pytest.mark.asyncio
+    async def test_routed_when_waiter_present(self, client, session):
+        from rippermod_manager.services import collection_install_service as svc
+
+        _seed_game(client)
+        _set_api_key(client)
+
+        # Register a wait slot like the orchestrator would.
+        future = svc._register_nxm_wait(100, 1001)
+
+        r = client.post(
+            "/api/v1/games/CP/downloads/",
+            json={
+                "nexus_mod_id": 100,
+                "nexus_file_id": 1001,
+                "nxm_key": "intercepted",
+                "nxm_expires": 7777,
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["routed_to_collection"] is True
+        assert body["job"] is None
+
+        # The orchestrator's wait sees the routed key.
+        result = await future
+        assert result == ("intercepted", 7777)
+
+    def test_falls_through_to_standalone_when_no_waiter(self, client, session):
+        """No matching orchestrator wait -> the normal download path runs."""
+        from rippermod_manager.models.download import DownloadJob
+
+        _seed_game(client)
+        _set_api_key(client)
+
+        fake_job = DownloadJob(
+            id=1,
+            game_id=1,
+            nexus_mod_id=500,
+            nexus_file_id=5000,
+            file_name="standalone.zip",
+            status="downloading",
+        )
+
+        with patch(
+            "rippermod_manager.services.download_service.create_and_start_download",
+            new=AsyncMock(return_value=fake_job),
+        ):
+            r = client.post(
+                "/api/v1/games/CP/downloads/",
+                json={
+                    "nexus_mod_id": 500,
+                    "nexus_file_id": 5000,
+                    "nxm_key": "irrelevant",
+                    "nxm_expires": 1234,
+                },
+            )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["routed_to_collection"] is False
+        assert body["job"] is not None
+        assert body["job"]["file_name"] == "standalone.zip"

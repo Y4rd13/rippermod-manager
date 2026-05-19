@@ -95,7 +95,7 @@ class CollectionStatusOut(BaseModel):
 class CollectionProgressEvent(BaseModel):
     """One SSE event emitted by the install orchestrator."""
 
-    phase: str  # download | install | deploy | done | error
+    phase: str  # download | awaiting_nxm | install | deploy | done | error
     message: str
     percent: int  # 0-100, derived from completed/failed/skipped vs total
     completed: int = 0
@@ -104,6 +104,13 @@ class CollectionProgressEvent(BaseModel):
     total: int = 0
     current_mod: str = ""
     status: str = ""  # mirrors InstalledCollection.status when meaningful
+    # ``awaiting_nxm`` events carry the Nexus identifiers + page URL so the
+    # free-tier dialog can open the right mod page and the user's NXM click
+    # gets routed back to the right orchestrator. Empty for every other
+    # phase -- the UI keys on ``phase === "awaiting_nxm"``.
+    mod_id: int | None = None
+    file_id: int | None = None
+    mod_page_url: str = ""
 
 
 class UninstallCollectionOut(BaseModel):
@@ -111,3 +118,29 @@ class UninstallCollectionOut(BaseModel):
 
     removed_mods: int
     failed_mods: int
+
+
+class CollectionSkipNxmRequest(BaseModel):
+    """Body for ``POST /collections/{id}/skip-pending-nxm``.
+
+    Identifies which mod of an in-flight free-tier install the user wants
+    to skip. The orchestrator can only be blocked on one (mod, file) at a
+    time, but the client provides the pair explicitly so the request is
+    self-describing in logs / replay.
+    """
+
+    nexus_mod_id: int
+    nexus_file_id: int
+
+
+class CollectionActionResult(BaseModel):
+    """Generic shape for skip / cancel endpoints.
+
+    ``ok`` is ``True`` when the requested action found an active state to
+    act on (a registered NXM wait, a running orchestrator). ``ok=False``
+    means the request was a no-op (no waiter / no task), which is fine and
+    not treated as an error -- the UI just refreshes the install status.
+    """
+
+    ok: bool
+    message: str = ""
