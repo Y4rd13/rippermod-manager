@@ -28,6 +28,7 @@ from sqlmodel import Field, SQLModel
 COLLECTION_STATUS_VALUES = (
     "pending",  # manifest fetched, install not started yet
     "downloading",  # files downloading
+    "awaiting_nxm",  # free-tier flow blocked on the user clicking "Download" on Nexus
     "installing",  # files downloaded, archives being installed
     "installed",  # finished successfully
     "partial",  # finished but some mods skipped/failed (user choice or unavailable)

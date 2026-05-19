@@ -20,6 +20,8 @@ function statusBadgeClass(status: CollectionStatus["status"]): string {
     case "failed":
     case "cancelled":
       return "bg-danger/15 text-danger";
+    case "awaiting_nxm":
+      return "bg-warning/15 text-warning";
     case "downloading":
     case "installing":
     case "pending":
@@ -28,6 +30,7 @@ function statusBadgeClass(status: CollectionStatus["status"]): string {
 }
 
 function statusLabel(status: CollectionStatus["status"]): string {
+  if (status === "awaiting_nxm") return "Awaiting NXM";
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
