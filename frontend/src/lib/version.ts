@@ -9,13 +9,22 @@ export interface ParsedVersion {
 }
 
 /**
- * Strip a leading `v` and any trailing git-describe suffix (`-N-g<sha>`)
- * so build-time and Nexus-published version strings can be compared.
+ * Strip any leading non-digit prefix (e.g. ``v``, ``V``, ``nexus-v``) and any
+ * trailing git-describe suffix (``-N-g<sha>``) so build-time and
+ * Nexus-published version strings can be compared.
+ *
+ * The previous implementation only stripped a single leading ``v``/``V``, which
+ * silently broke the in-app update notification for the Nexus edition. Its
+ * tags are ``nexus-vX.Y.Z`` so ``__APP_VERSION__`` (set via
+ * ``git describe --tags``) was something like ``"nexus-v2.11.2"`` -- which
+ * failed :func:`parseVersion`'s ``/^(\d+)\.(\d+)\.(\d+).../`` regex. With both
+ * sides failing to parse, :func:`compareVersions` returned ``0`` defensively
+ * and the banner / toast never fired.
  */
 export function normalizeVersion(raw: string): string {
   if (!raw) return "";
   let s = raw.trim();
-  if (s.startsWith("v") || s.startsWith("V")) s = s.slice(1);
+  s = s.replace(/^[^\d]+/, "");
   s = s.replace(/-\d+-g[0-9a-f]{4,}$/i, "");
   return s;
 }
