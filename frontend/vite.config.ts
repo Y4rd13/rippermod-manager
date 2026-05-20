@@ -4,7 +4,9 @@ import { execSync } from "child_process";
 import { resolve } from "path";
 import { defineConfig } from "vite";
 
-function getGitVersion(): string {
+function getAppVersion(): string {
+  const envVersion = process.env.VERSION?.trim();
+  if (envVersion) return envVersion;
   try {
     return execSync("git describe --tags --always", { encoding: "utf-8" }).trim();
   } catch {
@@ -15,7 +17,7 @@ function getGitVersion(): string {
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   define: {
-    __APP_VERSION__: JSON.stringify(getGitVersion()),
+    __APP_VERSION__: JSON.stringify(getAppVersion()),
   },
   resolve: {
     alias: {
