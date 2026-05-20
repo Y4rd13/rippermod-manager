@@ -9,13 +9,14 @@ export interface ParsedVersion {
 }
 
 /**
- * Strip a leading `v` and any trailing git-describe suffix (`-N-g<sha>`)
- * so build-time and Nexus-published version strings can be compared.
+ * Strip any leading non-digit prefix (e.g. ``v``, ``V``, ``nexus-v``) and any
+ * trailing git-describe suffix (``-N-g<sha>``) so build-time and
+ * Nexus-published version strings can be compared.
  */
 export function normalizeVersion(raw: string): string {
   if (!raw) return "";
   let s = raw.trim();
-  if (s.startsWith("v") || s.startsWith("V")) s = s.slice(1);
+  s = s.replace(/^[^\d]+/, "");
   s = s.replace(/-\d+-g[0-9a-f]{4,}$/i, "");
   return s;
 }
