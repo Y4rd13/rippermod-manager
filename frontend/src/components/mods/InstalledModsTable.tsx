@@ -843,12 +843,10 @@ function RecognizedModsGrid({
     const sourceFolders = Array.from(
       new Set(mod.files.map((f) => f.source_folder).filter(Boolean)),
     );
-    const folderLabel =
-      sourceFolders.length === 0
-        ? "disk"
-        : sourceFolders.length === 1
-          ? sourceFolders[0]
-          : `${sourceFolders.length} folders`;
+    const fileCountLabel =
+      sourceFolders.length > 1
+        ? `${mod.files.length} in ${sourceFolders.length} folders`
+        : `${mod.files.length} files`;
     const PATH_PREVIEW_LIMIT = 20;
     const pathTooltip =
       mod.files.length > 0
@@ -868,7 +866,7 @@ function RecognizedModsGrid({
           title={pathTooltip}
         >
           <FolderOpen size={11} />
-          {mod.files.length} in {folderLabel}
+          {fileCountLabel}
         </span>
       ) : null;
     const footer = (
