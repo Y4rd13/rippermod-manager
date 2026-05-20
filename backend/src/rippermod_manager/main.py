@@ -96,6 +96,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     except Exception:
         logger.exception("Failed to shutdown downloads")
     try:
+        from rippermod_manager.services.app_update_service import (
+            shutdown as shutdown_app_update,
+        )
+
+        await shutdown_app_update()
+    except Exception:
+        logger.exception("Failed to shutdown app-update download")
+    try:
         from rippermod_manager.database import engine
 
         engine.dispose()

@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { openUrl } from "@tauri-apps/plugin-opener";
 
+import { AppUpdateActions } from "@/components/AppUpdateActions";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -124,20 +124,13 @@ function AppUpdateNotice() {
   if (!update.hasUpdate) return null;
   return (
     <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2.5 text-sm">
-      <div className="flex items-center gap-2 text-text-primary">
+      <div className="flex items-center gap-2 text-text-primary min-w-0">
         <Sparkles size={14} className="shrink-0 text-accent" />
-        <span>
+        <span className="truncate">
           Update to <strong>v{update.latestVersion}</strong> on Nexus Mods
         </span>
       </div>
-      <button
-        type="button"
-        onClick={() => void openUrl(update.nexusUrl)}
-        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-accent/40 bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent transition-colors hover:bg-accent/25"
-      >
-        <ExternalLink size={12} />
-        View on Nexus
-      </button>
+      <AppUpdateActions update={update} />
     </div>
   );
 }

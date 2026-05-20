@@ -5,9 +5,11 @@ import {
   PanelLeftOpen,
   RefreshCw,
   Settings,
+  Sparkles,
 } from "lucide-react";
 import { NavLink } from "react-router";
 
+import { useAppUpdateCheck } from "@/hooks/use-app-update-check";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui-store";
 
@@ -20,6 +22,7 @@ const navItems = [
 
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar } = useUIStore();
+  const update = useAppUpdateCheck();
 
   return (
     <aside
@@ -67,6 +70,22 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      {update.hasUpdate && (
+        <NavLink
+          to="/settings"
+          title={`Update to v${update.latestVersion} available`}
+          className={cn(
+            "m-2 flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-xs font-medium text-accent transition-colors hover:bg-accent/20",
+            sidebarCollapsed && "justify-center px-0",
+          )}
+        >
+          <Sparkles size={14} className="shrink-0" />
+          {!sidebarCollapsed && (
+            <span className="truncate">Update v{update.latestVersion}</span>
+          )}
+        </NavLink>
+      )}
     </aside>
   );
 }
