@@ -1,8 +1,9 @@
-import { ArrowDownToLine, CheckCircle, Crown, ExternalLink, Eye, EyeOff, FolderOpen, Heart, LogOut, RefreshCw, RotateCcw, User } from "lucide-react";
+import { ArrowDownToLine, CheckCircle, Crown, ExternalLink, Eye, EyeOff, FileText, FolderOpen, Heart, LogOut, RefreshCw, RotateCcw, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog, save } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -12,6 +13,7 @@ import { useAppUpdater } from "@/hooks/use-app-updater";
 import { useDeployStatus, useUndeploy } from "@/hooks/use-deploy";
 import { useNexusSSO } from "@/hooks/use-nexus-sso";
 import { useGame, useGames, useModDetail, useSettings } from "@/hooks/queries";
+import { api } from "@/lib/api-client";
 import { reportDeployOutcome } from "@/lib/deploy-toast";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
@@ -311,6 +313,55 @@ function AboutCard() {
   );
 }
 
+function DiagnosticsCard() {
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const data = await api.get<Record<string, unknown>>("/api/v1/diagnostics/");
+      const bundle = { app_version: __APP_VERSION__, ...data };
+      const filePath = await save({
+        title: "Export Diagnostics",
+        defaultPath: `rippermod-diagnostics-${new Date().toISOString().slice(0, 10)}.json`,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!filePath) return;
+      await writeTextFile(filePath, JSON.stringify(bundle, null, 2));
+      toast.success("Diagnostics exported");
+    } catch (err) {
+      toast.error(
+        "Export failed",
+        err instanceof Error ? err.message : "Could not build the diagnostics bundle.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold text-text-primary">Diagnostics</h2>
+          <p className="mt-1 text-sm text-text-muted">
+            Export a single file with your system info, installed mods, load order, and
+            recent app logs — handy for bug reports. No API keys are included.
+          </p>
+        </div>
+        <Button
+          onClick={handleExport}
+          loading={exporting}
+          variant="secondary"
+          className="shrink-0"
+        >
+          <FileText size={14} className="mr-1.5" /> Export diagnostics
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 export function SettingsPage() {
   const { data: settings = [] } = useSettings();
   const disconnect = useDisconnectNexus();
@@ -427,6 +478,7 @@ export function SettingsPage() {
       </Card>
 
       <DeploymentCard />
+      <DiagnosticsCard />
       <AboutCard />
     </div>
   );
