@@ -16,6 +16,7 @@ import type {
   DownloadJobOut,
   Game,
   GameVersion,
+  HealthReport,
   InstalledModOut,
   ModConflictDetail,
   ModGroup,
@@ -162,6 +163,15 @@ export function useActivity(gameName: string, limit = 200) {
     queryFn: () => api.get(`/api/v1/games/${gameName}/activity/?limit=${limit}`),
     enabled: !!gameName,
     refetchOnWindowFocus: true,
+    staleTime: 30_000,
+  });
+}
+
+export function useHealth(gameName: string) {
+  return useQuery<HealthReport>({
+    queryKey: ["health", gameName],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/health/`),
+    enabled: !!gameName,
     staleTime: 30_000,
   });
 }
