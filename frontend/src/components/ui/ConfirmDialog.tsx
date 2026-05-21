@@ -1,5 +1,5 @@
 import { AlertTriangle, type LucideIcon } from "lucide-react";
-import { useEffect, useId } from "react";
+import { type ReactNode, useEffect, useId } from "react";
 
 import { Button } from "@/components/ui/Button";
 
@@ -12,6 +12,8 @@ interface Props {
   loading?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /** Optional extra content rendered between the message and the action buttons. */
+  children?: ReactNode;
 }
 
 export function ConfirmDialog({
@@ -23,6 +25,7 @@ export function ConfirmDialog({
   loading = false,
   onConfirm,
   onCancel,
+  children,
 }: Props) {
   const dialogId = useId();
 
@@ -61,7 +64,8 @@ export function ConfirmDialog({
             {title}
           </h3>
         </div>
-        <p className="mb-6 text-sm text-text-secondary">{message}</p>
+        <p className={`text-sm text-text-secondary ${children ? "mb-3" : "mb-6"}`}>{message}</p>
+        {children && <div className="mb-6">{children}</div>}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" size="sm" disabled={loading} onClick={onCancel}>
             Cancel

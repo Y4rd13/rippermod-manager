@@ -13,6 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -21,6 +22,7 @@ import { InstalledFileSelector } from "@/components/mods/InstalledFileSelector";
 import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { CorrelationActions } from "@/components/mods/CorrelationActions";
 import { InstalledModCardAction } from "@/components/mods/InstalledModCardAction";
+import { DependentsWarning } from "@/components/mods/DependentsWarning";
 import { ModCardAction } from "@/components/mods/ModCardAction";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
@@ -46,11 +48,13 @@ import { useContextMenu } from "@/hooks/use-context-menu";
 import { useSessionState } from "@/hooks/use-session-state";
 import { useAbstainMod, useCancelDownload, useEndorseMod, useStartModDownload, useToggleMod, useTrackMod, useUninstallMod, useUntrackMod } from "@/hooks/mutations";
 import { useInstallFlow } from "@/hooks/use-install-flow";
+import { useDependents } from "@/hooks/queries";
+import { api } from "@/lib/api-client";
 import { isoToEpoch, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import { useUIStore } from "@/stores/ui-store";
-import type { AvailableArchive, DownloadJobOut, InstalledModOut, ModGroup, ModUpdate } from "@/types/api";
+import type { AvailableArchive, DependentMod, DependentsResult, DownloadJobOut, InstalledModOut, ModGroup, ModUpdate } from "@/types/api";
 
 interface GroupedMod {
   key: string;
@@ -180,6 +184,20 @@ function ManagedModsGrid({
   const abstainMod = useAbstainMod();
   const trackMod = useTrackMod();
   const untrackMod = useUntrackMod();
+  const queryClient = useQueryClient();
+
+  // Reverse-dependency guards: warn before disabling/uninstalling a mod that
+  // other installed mods declare as a requirement.
+  const [disableGuard, setDisableGuard] = useState<{
+    modIds: number[];
+    label: string;
+    dependents: DependentMod[];
+    bulk: boolean;
+  } | null>(null);
+  const [bulkDeleteDependents, setBulkDeleteDependents] = useState<DependentMod[]>([]);
+  const singleDeleteDeps = useDependents(gameName, confirmDeleteModId, {
+    enabled: confirmDeleteModId != null,
+  });
 
   const activeDownloadByModId = useMemo(() => {
     const map = new Map<number, DownloadJobOut>();
@@ -219,6 +237,46 @@ function ManagedModsGrid({
 
   const { menuState, openMenu, closeMenu } = useContextMenu<GroupedMod>();
 
+  // Installed mods that depend on any of `modIds`, excluding the acted-on set.
+  // Read-only against locally synced requirement data (no Nexus call); a failed
+  // check is non-blocking so it never prevents the user's action.
+  const collectExternalDependents = async (modIds: number[]): Promise<DependentMod[]> => {
+    try {
+      const acted = new Set(modIds);
+      const results = await Promise.all(
+        modIds.map((id) =>
+          queryClient.fetchQuery<DependentsResult>({
+            queryKey: ["dependents", gameName, id],
+            queryFn: () =>
+              api.get<DependentsResult>(
+                `/api/v1/games/${gameName}/install/installed/${id}/dependents`,
+              ),
+            staleTime: 60 * 1000,
+          }),
+        ),
+      );
+      const unique = new Map<number, DependentMod>();
+      for (const r of results) {
+        for (const d of r.dependents) {
+          if (!acted.has(d.installed_mod_id)) unique.set(d.installed_mod_id, d);
+        }
+      }
+      return [...unique.values()];
+    } catch {
+      return [];
+    }
+  };
+
+  const disableMods = async (modIds: number[], deselect: boolean) => {
+    try {
+      for (const id of modIds) {
+        await toggleMod.mutateAsync({ gameName, modId: id });
+      }
+    } finally {
+      if (deselect) bulk.deselectAll();
+    }
+  };
+
   // Helper: run action on a single entry, or show file selector for multi-entry groups
   const runOrSelect = (type: FileActionType, group: GroupedMod): Promise<void> => {
     if (group.entries.length === 1) {
@@ -230,9 +288,24 @@ function ManagedModsGrid({
 
   const executeFileAction = async (type: FileActionType, modId: number) => {
     switch (type) {
-      case "toggle":
+      case "toggle": {
+        const target = allMods.find((m) => m.id === modId);
+        // Only guard when DISABLING — enabling can't break dependents.
+        if (target && !target.disabled) {
+          const deps = await collectExternalDependents([modId]);
+          if (deps.length > 0) {
+            setDisableGuard({
+              modIds: [modId],
+              label: target.nexus_name || target.name,
+              dependents: deps,
+              bulk: false,
+            });
+            break;
+          }
+        }
         await toggleMod.mutateAsync({ gameName, modId });
         break;
+      }
       case "delete":
         setConfirmDeleteModId(modId);
         break;
@@ -368,13 +441,19 @@ function ManagedModsGrid({
     const targets = sorted
       .filter((g) => bulk.selectedIds.has(g.key))
       .flatMap((g) => g.entries.filter((e) => !e.disabled));
-    try {
-      for (const mod of targets) {
-        await toggleMod.mutateAsync({ gameName, modId: mod.id });
-      }
-    } finally {
-      bulk.deselectAll();
+    const ids = targets.map((m) => m.id);
+    if (ids.length === 0) return;
+    const deps = await collectExternalDependents(ids);
+    if (deps.length > 0) {
+      setDisableGuard({
+        modIds: ids,
+        label: `${ids.length} mod${ids.length !== 1 ? "s" : ""}`,
+        dependents: deps,
+        bulk: true,
+      });
+      return;
     }
+    await disableMods(ids, true);
   };
 
   const handleBulkDelete = async () => {
@@ -431,7 +510,15 @@ function ManagedModsGrid({
             <PowerOff size={12} className="mr-1" /> Disable
           </Button>
         )}
-        <Button size="sm" variant="danger" onClick={() => setConfirmDelete(true)}>
+        <Button
+          size="sm"
+          variant="danger"
+          onClick={async () => {
+            const ids = selectedGroups.flatMap((g) => g.entries.map((e) => e.id));
+            setBulkDeleteDependents(await collectExternalDependents(ids));
+            setConfirmDelete(true);
+          }}
+        >
           <Trash2 size={12} className="mr-1" /> Delete
         </Button>
       </BulkActionBar>
@@ -732,7 +819,11 @@ function ManagedModsGrid({
           icon={Trash2}
           onConfirm={handleBulkDelete}
           onCancel={() => setConfirmDelete(false)}
-        />
+        >
+          {bulkDeleteDependents.length > 0 && (
+            <DependentsWarning dependents={bulkDeleteDependents} />
+          )}
+        </ConfirmDialog>
       )}
 
       {confirmDeleteMod && (
@@ -748,7 +839,33 @@ function ManagedModsGrid({
             setConfirmDeleteModId(null);
           }}
           onCancel={() => setConfirmDeleteModId(null)}
-        />
+        >
+          {singleDeleteDeps.data && singleDeleteDeps.data.count > 0 && (
+            <DependentsWarning dependents={singleDeleteDeps.data.dependents} />
+          )}
+        </ConfirmDialog>
+      )}
+
+      {disableGuard && (
+        <ConfirmDialog
+          title={disableGuard.bulk ? "Disable Selected Mods?" : "Disable Mod?"}
+          message={
+            disableGuard.bulk
+              ? `Disabling ${disableGuard.label} may break other installed mods that depend on them.`
+              : `Disabling "${disableGuard.label}" may break other installed mods that depend on it.`
+          }
+          confirmLabel="Disable anyway"
+          variant="warning"
+          icon={PowerOff}
+          loading={toggleMod.isPending}
+          onConfirm={async () => {
+            await disableMods(disableGuard.modIds, disableGuard.bulk);
+            setDisableGuard(null);
+          }}
+          onCancel={() => setDisableGuard(null)}
+        >
+          <DependentsWarning dependents={disableGuard.dependents} />
+        </ConfirmDialog>
       )}
     </>
   );
