@@ -560,7 +560,20 @@ async def deploy_game(
     Default false: foreign collisions surface as failed ops in the report.
     """
     game = get_game_or_404(game_name, session)
-    return deploy_service.deploy(game, session, force=force)
+    report = deploy_service.deploy(game, session, force=force)
+    # Logged here (not in the service) so automatic post-install deploys don't
+    # produce a redundant entry; only user-triggered deploys with real work do.
+    if report.total > 0:
+        from rippermod_manager.services.activity_service import record_activity
+
+        record_activity(
+            session,
+            game_id=game.id,
+            action="deploy",
+            target=f"{report.done} file{'s' if report.done != 1 else ''}",
+            detail=f"{report.failed} failed" if report.failed else "",
+        )
+    return report
 
 
 @router.post("/undeploy", response_model=DeployReport)
@@ -570,7 +583,17 @@ async def undeploy_game(
 ) -> DeployReport:
     """Remove all deployed hardlinks/junctions for a game."""
     game = get_game_or_404(game_name, session)
-    return deploy_service.undeploy(game, session)
+    report = deploy_service.undeploy(game, session)
+    if report.total > 0:
+        from rippermod_manager.services.activity_service import record_activity
+
+        record_activity(
+            session,
+            game_id=game.id,
+            action="undeploy",
+            target=f"{report.done} file{'s' if report.done != 1 else ''}",
+        )
+    return report
 
 
 @router.get("/deploy/status", response_model=DriftReport)

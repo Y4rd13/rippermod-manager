@@ -268,6 +268,15 @@ def install_mod(
         len(extracted_paths),
         overwritten,
     )
+    from rippermod_manager.services.activity_service import record_activity
+
+    record_activity(
+        session,
+        game_id=game.id,
+        action="install",
+        target=parsed.name,
+        detail=f"{len(extracted_paths)} files",
+    )
     return InstallResult(
         installed_mod_id=installed.id,  # type: ignore[arg-type]
         name=parsed.name,
@@ -347,6 +356,15 @@ def uninstall_mod(
     write_modlist(game, session)
 
     logger.info("Uninstalled '%s' (%d files removed)", installed_mod.name, file_count)
+    from rippermod_manager.services.activity_service import record_activity
+
+    record_activity(
+        session,
+        game_id=game.id,
+        action="uninstall",
+        target=installed_mod.name,
+        detail=f"{file_count} files",
+    )
     return UninstallResult(files_deleted=file_count, directories_removed=0)
 
 
@@ -481,6 +499,16 @@ def toggle_mod(
 
     action = "Disabled" if should_disable else "Enabled"
     logger.info("%s '%s' (%d files affected)", action, installed_mod.name, affected)
+    if commit:
+        from rippermod_manager.services.activity_service import record_activity
+
+        record_activity(
+            session,
+            game_id=game.id,
+            action="disable" if should_disable else "enable",
+            target=installed_mod.name,
+            detail=f"{affected} files",
+        )
     return ToggleResult(disabled=should_disable, files_affected=affected)
 
 

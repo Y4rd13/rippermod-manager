@@ -1,5 +1,6 @@
 import {
   Gamepad2,
+  History,
   Home,
   PanelLeftClose,
   PanelLeftOpen,
@@ -16,6 +17,7 @@ const navItems = [
   { to: "/dashboard", icon: Home, label: "Dashboard" },
   { to: "/games", icon: Gamepad2, label: "Games" },
   { to: "/updates", icon: RefreshCw, label: "Updates" },
+  { to: "/activity", icon: History, label: "Activity" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
