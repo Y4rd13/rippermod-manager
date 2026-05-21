@@ -171,6 +171,70 @@ class TestCancel:
         assert r.status_code == 200
         assert r.json()["state"] == "idle"
 
+    @respx.mock
+    def test_cancel_during_download_resets_and_removes_part_file(
+        self, client, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "rippermod_manager.routers.app_update.settings",
+            type("S", (), {"data_dir": tmp_path})(),
+        )
+        _set_api_key(client)
+        respx.get(f"{BASE_URL}/v1/games/cyberpunk2077/mods/27781.json").mock(
+            return_value=httpx.Response(200, json={"version": "2.11.5"})
+        )
+        respx.get(f"{BASE_URL}/v1/games/cyberpunk2077/mods/27781/files.json").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "files": [
+                        {
+                            "file_id": 9001,
+                            "file_name": "setup.exe",
+                            "version": "2.11.5",
+                            "size_in_bytes": 10 * 1024 * 1024,
+                            "uploaded_timestamp": 1700000000,
+                        }
+                    ]
+                },
+            )
+        )
+        respx.get(
+            f"{BASE_URL}/v1/games/cyberpunk2077/mods/27781/files/9001/download_link.json"
+        ).mock(
+            return_value=httpx.Response(200, json=[{"URI": "https://cdn.example.test/setup.exe"}])
+        )
+
+        async def _slow_body(_request):
+            async def _gen():
+                # Yield one chunk so the task gets past stream() setup, then block on the
+                # cancel event so cancel() actually interrupts mid-flight.
+                yield b"x" * 1024
+                while not (
+                    app_update_service._cancel_event is not None
+                    and app_update_service._cancel_event.is_set()
+                ):
+                    await asyncio.sleep(0.05)
+                yield b""
+
+            return httpx.Response(
+                200,
+                content=_gen(),
+                headers={"Content-Length": str(10 * 1024 * 1024)},
+            )
+
+        respx.get("https://cdn.example.test/setup.exe").mock(side_effect=_slow_body)
+
+        r = client.post("/api/v1/app-update/download")
+        assert r.json()["state"] == "downloading"
+        dest_path = Path(r.json()["path"])
+        part_path = dest_path.with_suffix(dest_path.suffix + ".part")
+
+        r2 = client.post("/api/v1/app-update/download/cancel")
+        assert r2.status_code == 200
+        assert r2.json()["state"] in ("idle", "ready")
+        assert not part_path.exists()
+
 
 class TestPickLatestInstaller:
     def test_picks_version_match_over_newer_upload(self):
