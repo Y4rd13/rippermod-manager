@@ -335,6 +335,25 @@ function ManagedModsGrid({
       }
       return;
     }
+    if (type === "toggle") {
+      // Mirror the single-mod and bulk-disable guards: warn before disabling
+      // entries that other installed mods depend on. All entries share a
+      // nexus_mod_id (same dependents); on confirm we toggle every entry, which
+      // preserves the original "select all" behavior.
+      const disablingIds = entries.filter((e) => !e.disabled).map((e) => e.id);
+      if (disablingIds.length > 0) {
+        const deps = await collectExternalDependents(disablingIds);
+        if (deps.length > 0) {
+          setDisableGuard({
+            modIds: entries.map((e) => e.id),
+            label: entries[0]?.nexus_name || entries[0]?.name || `${entries.length} files`,
+            dependents: deps,
+            bulk: false,
+          });
+          return;
+        }
+      }
+    }
     for (const entry of entries) {
       switch (type) {
         case "toggle":
