@@ -1,3 +1,4 @@
+from rippermod_manager.models.activity import ActivityLog
 from rippermod_manager.models.archive_index import ArchiveEntryIndex
 from rippermod_manager.models.collection import (
     COLLECTION_STATUS_VALUES,
@@ -21,6 +22,7 @@ from rippermod_manager.models.settings import AppSetting, PCSpecs
 
 __all__ = [
     "COLLECTION_STATUS_VALUES",
+    "ActivityLog",
     "AppSetting",
     "ArchiveEntryIndex",
     "ConflictEvidence",
