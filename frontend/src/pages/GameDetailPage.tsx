@@ -19,6 +19,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Link, useParams } from "react-router";
 
 import { ClusterDetailsPanel, ConflictSummaryWidget } from "@/components/conflicts/ConflictSummaryWidget";
+import { HealthWidget } from "@/components/HealthWidget";
 import { ArchivesList } from "@/components/mods/ArchivesList";
 import { InstalledCollectionsSection } from "@/components/collections/InstalledCollectionsSection";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -37,6 +38,7 @@ import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { UpdatesTable } from "@/components/mods/UpdatesTable";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ScanProgress, type ScanLog } from "@/components/ui/ScanProgress";
 import { useDeploy } from "@/hooks/use-deploy";
 import { useInstallFlow } from "@/hooks/use-install-flow";
@@ -60,7 +62,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import { useUIStore } from "@/stores/ui-store";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
-import type { ModUpdate } from "@/types/api";
+import type { HealthReport, ModUpdate } from "@/types/api";
 
 const ArchiveResourceConflicts = lazy(() =>
   import("@/components/conflicts/ArchiveResourceConflicts").then((m) => ({
@@ -93,6 +95,7 @@ function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomai
   ];
   return (
     <div className="space-y-4">
+      <HealthWidget gameName={gameName} />
       <ConflictSummaryWidget gameName={gameName} />
       <div className="flex gap-1 border-b border-border">
         {subTabs.map(({ key, label }) => (
@@ -181,6 +184,7 @@ export function GameDetailPage() {
   );
 
   const [isLaunching, setIsLaunching] = useState(false);
+  const [launchGate, setLaunchGate] = useState<HealthReport | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scanLogs, setScanLogs] = useState<ScanLog[]>([]);
   const [scanPercent, setScanPercent] = useState(0);
@@ -243,7 +247,7 @@ export function GameDetailPage() {
     };
   }, []);
 
-  const handleLaunch = async () => {
+  const runDeployAndLaunch = async () => {
     if (!game || !gameVersion?.exe_path) return;
     setIsLaunching(true);
     try {
@@ -283,6 +287,22 @@ export function GameDetailPage() {
     } finally {
       setIsLaunching(false);
     }
+  };
+
+  const handleLaunch = async () => {
+    if (!game || !gameVersion?.exe_path) return;
+    // Pre-launch health gate: warn (but allow override) on critical issues a
+    // deploy won't fix -- e.g. a missing required mod. Never blocks on error.
+    try {
+      const health = await api.get<HealthReport>(`/api/v1/games/${game.name}/health/`);
+      if (health.critical > 0) {
+        setLaunchGate(health);
+        return;
+      }
+    } catch {
+      // a health-check failure must not prevent launching
+    }
+    await runDeployAndLaunch();
   };
 
   const handleFullScan = async () => {
@@ -780,6 +800,35 @@ export function GameDetailPage() {
           onConfirm={(renames) => modalFlow.confirmPreviewInstall(renames)}
           onCancel={modalFlow.dismissPreview}
         />
+      )}
+
+      {launchGate && (
+        <ConfirmDialog
+          title="Launch anyway?"
+          message={`${launchGate.critical} critical issue${launchGate.critical !== 1 ? "s" : ""} may stop mods from working:`}
+          confirmLabel="Launch anyway"
+          variant="warning"
+          icon={AlertTriangle}
+          onConfirm={() => {
+            setLaunchGate(null);
+            void runDeployAndLaunch();
+          }}
+          onCancel={() => setLaunchGate(null)}
+        >
+          <ul className="max-h-40 space-y-1 overflow-y-auto text-xs text-text-secondary">
+            {launchGate.issues
+              .filter((i) => i.severity === "critical")
+              .map((i, idx) => (
+                <li key={idx}>
+                  •{" "}
+                  {i.mod_name && (
+                    <span className="font-medium text-text-primary">{i.mod_name}</span>
+                  )}{" "}
+                  {i.message}
+                </li>
+              ))}
+          </ul>
+        </ConfirmDialog>
       )}
 
       {modalFlow.fomodArchive && (

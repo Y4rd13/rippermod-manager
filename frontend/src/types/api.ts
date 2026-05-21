@@ -305,6 +305,23 @@ export interface ActivityLogEntry {
   created_at: string;
 }
 
+export interface HealthIssueOut {
+  kind: string;
+  severity: string;
+  message: string;
+  suggested_fix: string;
+  mod_name: string;
+  installed_mod_id: number | null;
+}
+
+export interface HealthReport {
+  issues: HealthIssueOut[];
+  critical: number;
+  warning: number;
+  info: number;
+  ok: boolean;
+}
+
 export interface FileConflict {
   file_path: string;
   owning_mod_id: number;
