@@ -285,6 +285,17 @@ export interface ToggleResult {
   files_affected: number;
 }
 
+export interface DependentMod {
+  installed_mod_id: number;
+  name: string;
+  nexus_mod_id: number | null;
+}
+
+export interface DependentsResult {
+  dependents: DependentMod[];
+  count: number;
+}
+
 export interface FileConflict {
   file_path: string;
   owning_mod_id: number;

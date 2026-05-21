@@ -11,6 +11,7 @@ import type {
   ConflictKind,
   ConflictsOverview,
   ConflictSummaryResult,
+  DependentsResult,
   DownloadJobOut,
   Game,
   GameVersion,
@@ -131,6 +132,26 @@ export function useInstalledMods(gameName: string) {
     queryFn: () =>
       api.get(`/api/v1/games/${gameName}/install/installed`),
     enabled: !!gameName,
+  });
+}
+
+/**
+ * Installed mods that declare `modId` as a requirement (reverse dependencies).
+ * Reads locally synced requirement data only — no Nexus call — so the dialog
+ * stays instant. `options.enabled` lets callers fetch lazily (e.g. only while a
+ * confirm dialog is open).
+ */
+export function useDependents(
+  gameName: string,
+  modId: number | null,
+  options?: { enabled?: boolean },
+) {
+  return useQuery<DependentsResult>({
+    queryKey: ["dependents", gameName, modId],
+    queryFn: () =>
+      api.get(`/api/v1/games/${gameName}/install/installed/${modId}/dependents`),
+    enabled: (options?.enabled ?? true) && !!gameName && modId != null,
+    staleTime: 60 * 1000,
   });
 }
 
