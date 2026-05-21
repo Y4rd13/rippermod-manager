@@ -266,6 +266,14 @@ async def _run_download(
                 job.progress_bytes = final_size
                 s.add(job)
                 s.commit()
+                from rippermod_manager.services.activity_service import record_activity
+
+                record_activity(
+                    s,
+                    game_id=job.game_id,
+                    action="download",
+                    target=job.file_name or f"mod {job.nexus_mod_id}",
+                )
 
     except asyncio.CancelledError:
         part_path.unlink(missing_ok=True)

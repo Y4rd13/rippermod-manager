@@ -296,6 +296,15 @@ export interface DependentsResult {
   count: number;
 }
 
+export interface ActivityLogEntry {
+  id: number;
+  action: string;
+  target: string;
+  detail: string;
+  status: string;
+  created_at: string;
+}
+
 export interface FileConflict {
   file_path: string;
   owning_mod_id: number;

@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from "react-router";
 
 import { OnboardingLayout } from "@/layouts/OnboardingLayout";
 import { RootLayout } from "@/layouts/RootLayout";
+import { ActivityPage } from "@/pages/ActivityPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { GameDetailPage } from "@/pages/GameDetailPage";
 import { GamesPage } from "@/pages/GamesPage";
@@ -28,6 +29,7 @@ export const router = createBrowserRouter([
           { path: "games", element: <GamesPage /> },
           { path: "games/:name", element: <GameDetailPage /> },
           { path: "updates", element: <UpdatesPage /> },
+          { path: "activity", element: <ActivityPage /> },
           { path: "settings", element: <SettingsPage /> },
         ],
       },
