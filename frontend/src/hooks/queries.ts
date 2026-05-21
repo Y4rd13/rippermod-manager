@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/lib/api-client";
 import type {
+  ActivityLogEntry,
   ArchiveConflictSummariesResult,
   ArchiveContentsResult,
   ArchivePreviewResult,
@@ -153,6 +154,16 @@ export function useDependents(
       api.get(`/api/v1/games/${gameName}/install/installed/${modId}/dependents`),
     enabled: (options?.enabled ?? true) && !!gameName && modId != null,
     staleTime: 60 * 1000,
+  });
+}
+
+export function useActivity(gameName: string, limit = 200) {
+  return useQuery<ActivityLogEntry[]>({
+    queryKey: ["activity", gameName, limit],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/activity/?limit=${limit}`),
+    enabled: !!gameName,
+    refetchOnWindowFocus: true,
+    staleTime: 30_000,
   });
 }
 
