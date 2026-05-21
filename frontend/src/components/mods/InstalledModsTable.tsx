@@ -198,6 +198,10 @@ function ManagedModsGrid({
     bulk: boolean;
   } | null>(null);
   const [bulkDeleteDependents, setBulkDeleteDependents] = useState<DependentMod[]>([]);
+  const [multiDeleteGuard, setMultiDeleteGuard] = useState<{
+    entries: InstalledModOut[];
+    dependents: DependentMod[];
+  } | null>(null);
   const singleDeleteDeps = useDependents(gameName, confirmDeleteModId, {
     enabled: confirmDeleteModId != null,
   });
@@ -270,7 +274,8 @@ function ManagedModsGrid({
     }
   };
 
-  const disableMods = async (modIds: number[], deselect: boolean) => {
+  // Toggle (enable/disable) each id in sequence; the caller decides the intent.
+  const toggleMods = async (modIds: number[], deselect: boolean) => {
     try {
       for (const id of modIds) {
         await toggleMod.mutateAsync({ gameName, modId: id });
@@ -335,6 +340,13 @@ function ManagedModsGrid({
       }
       return;
     }
+    if (type === "delete") {
+      // Multi-entry "Select All -> Delete" had no confirmation; route it through a
+      // confirm dialog with the reverse-dependency warning, like single/bulk delete.
+      const deps = await collectExternalDependents(entries.map((e) => e.id));
+      setMultiDeleteGuard({ entries, dependents: deps });
+      return;
+    }
     if (type === "toggle") {
       // Mirror the single-mod and bulk-disable guards: warn before disabling
       // entries that other installed mods depend on. All entries share a
@@ -355,14 +367,7 @@ function ManagedModsGrid({
       }
     }
     for (const entry of entries) {
-      switch (type) {
-        case "toggle":
-          await toggleMod.mutateAsync({ gameName, modId: entry.id });
-          break;
-        case "delete":
-          await uninstallMod.mutateAsync({ gameName, modId: entry.id });
-          break;
-      }
+      await toggleMod.mutateAsync({ gameName, modId: entry.id });
     }
   };
 
@@ -464,7 +469,7 @@ function ManagedModsGrid({
       });
       return;
     }
-    await disableMods(ids, true);
+    await toggleMods(ids, true);
   };
 
   const handleBulkDelete = async () => {
@@ -870,12 +875,34 @@ function ManagedModsGrid({
           icon={PowerOff}
           loading={toggleMod.isPending}
           onConfirm={async () => {
-            await disableMods(disableGuard.modIds, disableGuard.bulk);
+            await toggleMods(disableGuard.modIds, disableGuard.bulk);
             setDisableGuard(null);
           }}
           onCancel={() => setDisableGuard(null)}
         >
           <DependentsWarning dependents={disableGuard.dependents} />
+        </ConfirmDialog>
+      )}
+
+      {multiDeleteGuard && (
+        <ConfirmDialog
+          title={`Delete ${multiDeleteGuard.entries.length} File${multiDeleteGuard.entries.length !== 1 ? "s" : ""}?`}
+          message="Permanently delete the selected files and their contents? This cannot be undone."
+          confirmLabel="Delete"
+          variant="danger"
+          icon={Trash2}
+          loading={uninstallMod.isPending}
+          onConfirm={async () => {
+            for (const entry of multiDeleteGuard.entries) {
+              await uninstallMod.mutateAsync({ gameName, modId: entry.id });
+            }
+            setMultiDeleteGuard(null);
+          }}
+          onCancel={() => setMultiDeleteGuard(null)}
+        >
+          {multiDeleteGuard.dependents.length > 0 && (
+            <DependentsWarning dependents={multiDeleteGuard.dependents} />
+          )}
         </ConfirmDialog>
       )}
     </>
