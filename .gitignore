@@ -41,6 +41,7 @@ docs/*
 !docs/nexus-api-usage.md
 !docs/architecture.md
 !docs/dual-release-strategy.md
+!docs/feature-testing-guide.md
 !docs/assets/
 !docs/assets/**
 # docs/superpowers/ is internal planning/spec; not published.
