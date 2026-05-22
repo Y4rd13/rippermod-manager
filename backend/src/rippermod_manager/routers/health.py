@@ -14,8 +14,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/games/{game_name}/health", tags=["health"])
 
 
+# Plain `def`: check_health blocks on FS + sync DB, so Starlette runs it in a threadpool.
 @router.get("/", response_model=HealthReport)
-async def get_health(
+def get_health(
     game_name: str,
     session: Session = Depends(get_session),
 ) -> HealthReport:
