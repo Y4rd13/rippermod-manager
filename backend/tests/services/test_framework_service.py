@@ -78,6 +78,18 @@ class TestFetchLatest:
         out = await svc.fetch_latest_versions("cyberpunk2077", gql, [2380, 4198])
         assert out == {2380: "1.30.0", 4198: "1.27.0"}
 
+    async def test_normalizes_nexus_version(self):
+        # A Nexus "v"-prefixed version is cleaned like the on-disk one (no "vv1.30.0").
+        gql = _StubGQL({2380: {"version": "v1.30.0"}})
+        assert await svc.fetch_latest_versions("cyberpunk2077", gql, [2380]) == {2380: "1.30.0"}
+
+    async def test_keeps_unparseable_version_raw(self):
+        # Non-semver versions fall back to the raw string rather than being dropped.
+        gql = _StubGQL({2380: {"version": "2025-build-7"}})
+        assert await svc.fetch_latest_versions("cyberpunk2077", gql, [2380]) == {
+            2380: "2025-build-7"
+        }
+
     async def test_skips_blank_versions(self):
         gql = _StubGQL({2380: {"version": ""}, 4198: {}})
         assert await svc.fetch_latest_versions("cyberpunk2077", gql, [2380, 4198]) == {}
