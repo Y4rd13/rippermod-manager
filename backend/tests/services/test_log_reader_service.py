@@ -107,3 +107,12 @@ class TestReadLogErrors:
         _write(tmp_path, "red4ext/plugins/ArchiveXL/ArchiveXL.log", lines)
         archivexl = [e for e in svc.read_log_errors(str(tmp_path)) if e["source"] == "ArchiveXL"]
         assert len(archivexl) == svc._MAX_PER_SOURCE
+
+    def test_keeps_spdlog_critical_as_error(self, tmp_path):
+        # spdlog's "critical" is the most severe level — surface it, don't drop it.
+        line = "[2026-05-18 18:22:48.000] [n] [critical] hard crash"
+        _write(tmp_path, "red4ext/logs/red4ext-1.log", [line])
+        out = svc.read_log_errors(str(tmp_path))
+        assert len(out) == 1
+        assert out[0]["level"] == "error"
+        assert out[0]["message"] == "hard crash"
