@@ -6,7 +6,7 @@ paths:
 # Backend rules
 
 ## FastAPI patterns
-- Use `async def` for handlers that `await` async I/O. Handlers doing only blocking/sync work (file I/O, CPU-bound, sync DB queries) MUST be plain `def` — Starlette runs `def` handlers in a threadpool so they don't block the event loop, whereas an `async def` doing sync work stalls it. Precedent: `settings`, `load_order`, `diagnostics`, `health`
+- Use `async def` for handlers that `await` async I/O. Handlers doing only blocking/sync work (file I/O, CPU-bound, sync DB queries) MUST be plain `def` — Starlette runs `def` handlers in a threadpool so they don't block the event loop, whereas an `async def` doing sync work stalls it. Precedent: `settings`, `diagnostics`, `health`
 - Use `Depends(get_session)` for DB sessions — never create sessions manually in handlers
 - Return Pydantic/SQLModel schemas from endpoints, not raw dicts
 - B008 is ignored in routers (FastAPI `Depends()` in default args is intentional)
