@@ -46,7 +46,9 @@ _PARSERS: dict[str, re.Pattern[str]] = {
     "cet": _CET_RE,
     "redscript": _REDSCRIPT_RE,
 }
-_LEVEL_NORMALIZE = {"warn": "warning", "err": "error"}
+# Map spdlog's level aliases; "critical" is the most severe spdlog level (e.g.
+# RED4ext crash reports) — surface it as an error rather than dropping it.
+_LEVEL_NORMALIZE = {"warn": "warning", "err": "error", "critical": "error"}
 _KEEP = {"error", "warning"}
 
 # (label, relative path or glob under the install, format key, is_glob)
