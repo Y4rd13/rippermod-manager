@@ -7,6 +7,7 @@ from rippermod_manager.routers.conflicts import router as conflicts_router
 from rippermod_manager.routers.diagnostics import router as diagnostics_router
 from rippermod_manager.routers.downloads import router as downloads_router
 from rippermod_manager.routers.fomod import router as fomod_router
+from rippermod_manager.routers.frameworks import router as frameworks_router
 from rippermod_manager.routers.games import router as games_router
 from rippermod_manager.routers.health import router as health_router
 from rippermod_manager.routers.install import router as install_router
@@ -22,6 +23,7 @@ from rippermod_manager.routers.updates import router as updates_router
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(games_router)
 api_router.include_router(health_router)
+api_router.include_router(frameworks_router)
 api_router.include_router(mods_router)
 api_router.include_router(install_router)
 api_router.include_router(load_order_router)

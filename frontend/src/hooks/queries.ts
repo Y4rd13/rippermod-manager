@@ -14,6 +14,7 @@ import type {
   ConflictSummaryResult,
   DependentsResult,
   DownloadJobOut,
+  FrameworkStatus,
   Game,
   GameVersion,
   HealthReport,
@@ -173,6 +174,15 @@ export function useHealth(gameName: string) {
     queryFn: () => api.get(`/api/v1/games/${gameName}/health/`),
     enabled: !!gameName,
     staleTime: 30_000,
+  });
+}
+
+export function useFrameworks(gameName: string) {
+  return useQuery<FrameworkStatus[]>({
+    queryKey: ["frameworks", gameName],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/frameworks/`),
+    enabled: !!gameName,
+    staleTime: 60_000,
   });
 }
 
