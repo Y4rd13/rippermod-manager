@@ -322,6 +322,17 @@ export interface HealthReport {
   ok: boolean;
 }
 
+export interface FrameworkStatus {
+  key: string;
+  name: string;
+  installed: boolean;
+  version: string | null;
+  version_known: boolean;
+  latest_version: string | null;
+  outdated: boolean;
+  nexus_url: string;
+}
+
 export interface FileConflict {
   file_path: string;
   owning_mod_id: number;
