@@ -113,7 +113,9 @@ async def fetch_latest_versions(
         return {}
     latest: dict[int, str] = {}
     for mod_id, gql_mod in batch.items():
-        version = graphql_mod_to_rest_info(gql_mod).get("version") or ""
+        raw = graphql_mod_to_rest_info(gql_mod).get("version") or ""
+        # Normalize like the on-disk version so display + comparison stay consistent.
+        version = _clean_semver(raw) or raw
         if version:
             latest[mod_id] = version
     return latest
