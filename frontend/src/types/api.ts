@@ -897,3 +897,25 @@ export interface CollectionActionResult {
   ok: boolean;
   message: string;
 }
+
+export interface SaveBackup {
+  id: string;
+  created_at: string | null;
+  reason: string | null;
+  file_count: number | null;
+  size_bytes: number | null;
+}
+
+export interface SaveBackupStatus {
+  enabled: boolean;
+  save_dir: string;
+  save_dir_exists: boolean;
+  backups: SaveBackup[];
+}
+
+export interface SaveBackupActionResult {
+  created: boolean;
+  restored: boolean;
+  backup: SaveBackup | null;
+  restored_to: string | null;
+}

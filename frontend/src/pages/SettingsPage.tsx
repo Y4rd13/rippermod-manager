@@ -1,4 +1,4 @@
-import { CheckCircle, Crown, ExternalLink, Eye, EyeOff, FileText, FolderOpen, Heart, LogOut, RotateCcw, Sparkles, User } from "lucide-react";
+import { CheckCircle, Crown, ExternalLink, Eye, EyeOff, FileText, FolderOpen, Heart, LogOut, RotateCcw, Save, Sparkles, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import { AppUpdateActions } from "@/components/AppUpdateActions";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Switch } from "@/components/ui/Switch";
 import { useAbstainMod, useDisconnectNexus, useEndorseMod, useTrackMod, useUntrackMod, useUpdateGame } from "@/hooks/mutations";
 import {
   RIPPERMOD_NEXUS_MOD_ID,
@@ -17,6 +18,13 @@ import {
 } from "@/hooks/use-app-update-check";
 import { useDeployStatus, useUndeploy } from "@/hooks/use-deploy";
 import { useNexusSSO } from "@/hooks/use-nexus-sso";
+import {
+  useBackupNow,
+  useRestoreSaveBackup,
+  useSaveBackups,
+  useSetSaveBackupEnabled,
+  useSetSaveBackupPath,
+} from "@/hooks/use-save-backups";
 import { useGame, useGames, useModSummary, useSettings } from "@/hooks/queries";
 import { api } from "@/lib/api-client";
 import { reportDeployOutcome } from "@/lib/deploy-toast";
@@ -300,6 +308,153 @@ function DiagnosticsCard() {
   );
 }
 
+function formatBytes(n: number | null | undefined): string {
+  if (!n) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = n;
+  let i = 0;
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024;
+    i += 1;
+  }
+  return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+function SaveBackupsCard() {
+  const { data: status } = useSaveBackups();
+  const backupNow = useBackupNow();
+  const restore = useRestoreSaveBackup();
+  const setEnabled = useSetSaveBackupEnabled();
+  const setPath = useSetSaveBackupPath();
+  const [restoreId, setRestoreId] = useState<string | null>(null);
+
+  const backups = status?.backups ?? [];
+
+  const handleBackupNow = () => {
+    backupNow.mutate(undefined, {
+      onSuccess: () => toast.success("Save backup created"),
+      onError: (e) => toast.error("Backup failed", e.message),
+    });
+  };
+
+  const handlePickFolder = async () => {
+    const picked = await openDialog({
+      directory: true,
+      multiple: false,
+      title: "Choose save game folder",
+      defaultPath: status?.save_dir,
+    });
+    if (typeof picked !== "string") return;
+    setPath.mutate(picked);
+  };
+
+  const handleRestore = () => {
+    if (!restoreId) return;
+    restore.mutate(restoreId, {
+      onSuccess: () => {
+        toast.success("Saves restored");
+        setRestoreId(null);
+      },
+      onError: (e) => {
+        toast.error("Restore failed", e.message);
+        setRestoreId(null);
+      },
+    });
+  };
+
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold text-text-primary">Save Backups</h2>
+          <p className="mt-1 text-sm text-text-muted">
+            Snapshots your Cyberpunk 2077 saves before each deploy, so a bad mod can&apos;t cost
+            you progress. Keeps the 10 most recent.
+          </p>
+        </div>
+        <Button
+          onClick={handleBackupNow}
+          loading={backupNow.isPending}
+          variant="secondary"
+          className="shrink-0"
+        >
+          <Save size={14} className="mr-1.5" /> Backup now
+        </Button>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        <Switch
+          checked={status?.enabled ?? true}
+          onChange={(v) => setEnabled.mutate(v)}
+          disabled={setEnabled.isPending}
+          label="Automatically back up before deploying"
+        />
+
+        <div className="flex items-center gap-2">
+          <div
+            className="flex-1 truncate rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs font-mono text-text-secondary"
+            title={status?.save_dir}
+          >
+            {status?.save_dir ?? "—"}
+          </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={handlePickFolder}
+            loading={setPath.isPending}
+          >
+            <FolderOpen size={14} /> Change…
+          </Button>
+        </div>
+        {status && !status.save_dir_exists && (
+          <p className="text-[11px] text-warning">
+            Save folder not found yet — backups will begin once Cyberpunk 2077 has created it.
+          </p>
+        )}
+
+        {backups.length > 0 ? (
+          <ul className="divide-y divide-border rounded-md border border-border">
+            {backups.map((b) => (
+              <li key={b.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-text-primary">
+                    {b.created_at ? new Date(b.created_at).toLocaleString() : b.id}
+                  </p>
+                  <p className="text-xs text-text-muted">
+                    {b.reason ?? "manual"} · {b.file_count ?? 0} files · {formatBytes(b.size_bytes)}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setRestoreId(b.id)}
+                  className="shrink-0"
+                >
+                  <RotateCcw size={14} /> Restore
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-text-muted">No backups yet.</p>
+        )}
+      </div>
+
+      {restoreId && (
+        <ConfirmDialog
+          title="Restore save backup"
+          message="This copies the backed-up saves into your Cyberpunk 2077 save folder, overwriting saves with the same name. Your current saves are snapshotted first, and the game must be closed."
+          confirmLabel="Restore"
+          icon={RotateCcw}
+          loading={restore.isPending}
+          onConfirm={handleRestore}
+          onCancel={() => setRestoreId(null)}
+        />
+      )}
+    </Card>
+  );
+}
+
 export function SettingsPage() {
   const { data: settings = [] } = useSettings();
   const disconnect = useDisconnectNexus();
@@ -417,6 +572,7 @@ export function SettingsPage() {
 
       <DeploymentCard />
       <DiagnosticsCard />
+      <SaveBackupsCard />
       <AboutCard />
     </div>
   );
