@@ -56,11 +56,12 @@ from rippermod_manager.services.vfs.untracked import find_untracked_files
 
 logger = logging.getLogger(__name__)
 
+# Plain `def`: every handler does blocking I/O + sync DB, so Starlette threadpools them.
 router = APIRouter(prefix="/games/{game_name}/install", tags=["install"])
 
 
 @router.get("/available", response_model=list[AvailableArchive])
-async def list_archives(
+def list_archives(
     game_name: str,
     session: Session = Depends(get_session),
 ) -> list[AvailableArchive]:
@@ -130,7 +131,7 @@ async def list_archives(
 
 
 @router.get("/installed", response_model=list[InstalledModOut])
-async def list_installed(
+def list_installed(
     game_name: str,
     session: Session = Depends(get_session),
 ) -> list[InstalledModOut]:
@@ -201,7 +202,7 @@ async def list_installed(
 
 
 @router.post("/", response_model=InstallResult, status_code=201)
-async def install(
+def install(
     game_name: str,
     data: InstallRequest,
     background_tasks: BackgroundTasks,
@@ -249,7 +250,7 @@ async def install(
 
 
 @router.delete("/installed/{mod_id}", response_model=UninstallResult)
-async def uninstall(
+def uninstall(
     game_name: str,
     mod_id: int,
     session: Session = Depends(get_session),
@@ -265,7 +266,7 @@ async def uninstall(
 
 
 @router.get("/installed/{mod_id}/dependents", response_model=DependentsResult)
-async def dependents(
+def dependents(
     game_name: str,
     mod_id: int,
     session: Session = Depends(get_session),
@@ -312,7 +313,7 @@ async def dependents(
 
 
 @router.patch("/installed/{mod_id}/toggle", response_model=ToggleResult)
-async def toggle(
+def toggle(
     game_name: str,
     mod_id: int,
     session: Session = Depends(get_session),
@@ -326,7 +327,7 @@ async def toggle(
 
 
 @router.get("/preview", response_model=ArchivePreviewResult)
-async def preview_archive(
+def preview_archive(
     game_name: str,
     archive_filename: str,
     session: Session = Depends(get_session),
@@ -378,7 +379,7 @@ async def preview_archive(
 
 
 @router.get("/conflicts", response_model=ConflictCheckResult)
-async def conflicts(
+def conflicts(
     game_name: str,
     archive_filename: str,
     session: Session = Depends(get_session),
@@ -395,7 +396,7 @@ async def conflicts(
 
 
 @router.delete("/archives/{filename}", response_model=ArchiveDeleteResult)
-async def delete_archive_endpoint(
+def delete_archive_endpoint(
     game_name: str,
     filename: str,
     session: Session = Depends(get_session),
@@ -409,7 +410,7 @@ async def delete_archive_endpoint(
 
 
 @router.put("/archives/{filename}/nexus-link", response_model=NexusLinkResult)
-async def link_archive(
+def link_archive(
     game_name: str,
     filename: str,
     body: NexusLinkBody,
@@ -441,7 +442,7 @@ async def link_archive(
 
 
 @router.delete("/archives/{filename}/nexus-link", status_code=204)
-async def unlink_archive(
+def unlink_archive(
     game_name: str,
     filename: str,
     session: Session = Depends(get_session),
@@ -463,7 +464,7 @@ async def unlink_archive(
 
 
 @router.post("/archives/cleanup-orphans", response_model=OrphanCleanupResult)
-async def cleanup_orphans(
+def cleanup_orphans(
     game_name: str,
     session: Session = Depends(get_session),
 ) -> OrphanCleanupResult:
@@ -473,7 +474,7 @@ async def cleanup_orphans(
 
 
 @router.get("/archives/{filename}/contents", response_model=ArchiveContentsResult)
-async def archive_contents(
+def archive_contents(
     game_name: str,
     filename: str,
     session: Session = Depends(get_session),
@@ -538,7 +539,7 @@ async def archive_contents(
 
 
 @router.get("/redscript-conflicts", response_model=RedscriptConflictResult)
-async def redscript_conflicts(
+def redscript_conflicts(
     game_name: str,
     session: Session = Depends(get_session),
 ) -> RedscriptConflictResult:
@@ -548,7 +549,7 @@ async def redscript_conflicts(
 
 
 @router.post("/deploy", response_model=DeployReport)
-async def deploy_game(
+def deploy_game(
     game_name: str,
     force: bool = False,
     session: Session = Depends(get_session),
@@ -577,7 +578,7 @@ async def deploy_game(
 
 
 @router.post("/undeploy", response_model=DeployReport)
-async def undeploy_game(
+def undeploy_game(
     game_name: str,
     session: Session = Depends(get_session),
 ) -> DeployReport:
@@ -597,7 +598,7 @@ async def undeploy_game(
 
 
 @router.get("/deploy/status", response_model=DriftReport)
-async def deploy_status(
+def deploy_status(
     game_name: str,
     session: Session = Depends(get_session),
 ) -> DriftReport:
@@ -607,9 +608,7 @@ async def deploy_status(
 
 
 @router.get("/untracked-files", response_model=UntrackedFilesResponse)
-async def untracked(
-    game_name: str, session: Session = Depends(get_session)
-) -> UntrackedFilesResponse:
+def untracked(game_name: str, session: Session = Depends(get_session)) -> UntrackedFilesResponse:
     """List files under known mod roots that are not claimed by any installed mod."""
     game = get_game_or_404(game_name, session)
     return UntrackedFilesResponse(files=find_untracked_files(game, session))
