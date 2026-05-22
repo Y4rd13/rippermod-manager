@@ -25,6 +25,7 @@ from rippermod_manager.schemas.deploy import (
     RedmodDeployResult,
 )
 from rippermod_manager.services.paths import get_mods_dir
+from rippermod_manager.services.save_backup_service import maybe_backup_for_deploy
 from rippermod_manager.services.vfs.primitives import (
     AlreadyExistsError,
     VfsError,
@@ -455,6 +456,7 @@ def deploy(game: Game, session: Session, *, force: bool = False) -> DeployReport
     pre = pre_flight_check(game)
     if not pre.ok:
         return DeployReport(total=0, done=0, failed=0, results=[], preflight=pre)
+    maybe_backup_for_deploy(game, session)
     plan, skipped = plan_deploy(game, session)
     report = execute_plan(plan, session, force=force)
     report.skipped_existing = skipped
