@@ -19,6 +19,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Link, useParams } from "react-router";
 
 import { ClusterDetailsPanel, ConflictSummaryWidget } from "@/components/conflicts/ConflictSummaryWidget";
+import { FrameworksWidget } from "@/components/FrameworksWidget";
 import { HealthWidget } from "@/components/HealthWidget";
 import { ArchivesList } from "@/components/mods/ArchivesList";
 import { InstalledCollectionsSection } from "@/components/collections/InstalledCollectionsSection";
@@ -96,6 +97,7 @@ function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomai
   return (
     <div className="space-y-4">
       <HealthWidget gameName={gameName} />
+      <FrameworksWidget gameName={gameName} />
       <ConflictSummaryWidget gameName={gameName} />
       <div className="flex gap-1 border-b border-border">
         {subTabs.map(({ key, label }) => (
