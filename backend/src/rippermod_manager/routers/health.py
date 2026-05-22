@@ -14,8 +14,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/games/{game_name}/health", tags=["health"])
 
 
+# Plain `def` (not async): check_health does blocking I/O — a drift probe and
+# an untracked-file scan — plus sync DB queries. Starlette runs `def` handlers
+# in a threadpool, so this stays off the event loop. See .claude/rules/backend.md.
 @router.get("/", response_model=HealthReport)
-async def get_health(
+def get_health(
     game_name: str,
     session: Session = Depends(get_session),
 ) -> HealthReport:
