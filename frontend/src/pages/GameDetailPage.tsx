@@ -21,6 +21,7 @@ import { Link, useParams } from "react-router";
 import { ClusterDetailsPanel, ConflictSummaryWidget } from "@/components/conflicts/ConflictSummaryWidget";
 import { FrameworksWidget } from "@/components/FrameworksWidget";
 import { HealthWidget } from "@/components/HealthWidget";
+import { LogErrorsWidget } from "@/components/LogErrorsWidget";
 import { ArchivesList } from "@/components/mods/ArchivesList";
 import { InstalledCollectionsSection } from "@/components/collections/InstalledCollectionsSection";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -98,6 +99,7 @@ function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomai
     <div className="space-y-4">
       <HealthWidget gameName={gameName} />
       <FrameworksWidget gameName={gameName} />
+      <LogErrorsWidget gameName={gameName} />
       <ConflictSummaryWidget gameName={gameName} />
       <div className="flex gap-1 border-b border-border">
         {subTabs.map(({ key, label }) => (
