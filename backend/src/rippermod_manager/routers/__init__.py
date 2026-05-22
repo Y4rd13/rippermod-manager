@@ -12,6 +12,7 @@ from rippermod_manager.routers.games import router as games_router
 from rippermod_manager.routers.health import router as health_router
 from rippermod_manager.routers.install import router as install_router
 from rippermod_manager.routers.load_order import router as load_order_router
+from rippermod_manager.routers.logs import router as logs_router
 from rippermod_manager.routers.mods import router as mods_router
 from rippermod_manager.routers.nexus import router as nexus_router
 from rippermod_manager.routers.onboarding import router as onboarding_router
@@ -24,6 +25,7 @@ api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(games_router)
 api_router.include_router(health_router)
 api_router.include_router(frameworks_router)
+api_router.include_router(logs_router)
 api_router.include_router(mods_router)
 api_router.include_router(install_router)
 api_router.include_router(load_order_router)
