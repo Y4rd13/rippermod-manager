@@ -19,6 +19,7 @@ import type {
   GameVersion,
   HealthReport,
   InstalledModOut,
+  LogError,
   ModConflictDetail,
   ModDetail,
   ModGroup,
@@ -184,6 +185,15 @@ export function useFrameworks(gameName: string) {
     queryFn: () => api.get(`/api/v1/games/${gameName}/frameworks/`),
     enabled: !!gameName,
     staleTime: 60_000,
+  });
+}
+
+export function useLogErrors(gameName: string) {
+  return useQuery<LogError[]>({
+    queryKey: ["log-errors", gameName],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/log-errors/`),
+    enabled: !!gameName,
+    staleTime: 30_000,
   });
 }
 

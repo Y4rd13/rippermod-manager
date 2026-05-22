@@ -333,6 +333,14 @@ export interface FrameworkStatus {
   nexus_url: string;
 }
 
+export interface LogError {
+  source: string;
+  level: string;
+  timestamp: string;
+  message: string;
+  mod_name: string | null;
+}
+
 export interface FileConflict {
   file_path: string;
   owning_mod_id: number;
