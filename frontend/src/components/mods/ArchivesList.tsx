@@ -5,6 +5,7 @@ import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 
 import { ArchiveTreeModal } from "@/components/mods/ArchiveTreeModal";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
+import { DependentsWarning } from "@/components/mods/DependentsWarning";
 import { FomodWizard } from "@/components/mods/FomodWizard";
 import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { Badge } from "@/components/ui/Badge";
@@ -27,7 +28,7 @@ import {
   useStartModDownload,
   useUninstallMod,
 } from "@/hooks/mutations";
-import { useDownloadJobs } from "@/hooks/queries";
+import { useDependents, useDownloadJobs } from "@/hooks/queries";
 import { toast } from "@/stores/toast-store";
 import { useBulkSelect } from "@/hooks/use-bulk-select";
 import { useSessionState } from "@/hooks/use-session-state";
@@ -117,6 +118,9 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
   }, [downloadJobs]);
   const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
   const [confirmUninstall, setConfirmUninstall] = useState<{ filename: string; modId: number } | null>(null);
+  const uninstallDeps = useDependents(gameName, confirmUninstall?.modId ?? null, {
+    enabled: confirmUninstall != null,
+  });
   const [fomodArchive, setFomodArchive] = useState<string | null>(null);
   const [selectedArchive, setSelectedArchive] = useState<string | null>(null);
   const [confirmCleanup, setConfirmCleanup] = useState(false);
@@ -718,7 +722,11 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
             setConfirmUninstall(null);
           }}
           onCancel={() => setConfirmUninstall(null)}
-        />
+        >
+          {uninstallDeps.data && uninstallDeps.data.count > 0 && (
+            <DependentsWarning dependents={uninstallDeps.data.dependents} />
+          )}
+        </ConfirmDialog>
       )}
 
       {fomodArchive && (
