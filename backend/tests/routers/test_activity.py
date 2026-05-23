@@ -4,14 +4,14 @@ import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from rippermod_manager.models.activity import ActivityLog
 from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.services import activity_service
 from rippermod_manager.services.activity_service import record_activity
-from rippermod_manager.services.install_service import install_mod, toggle_mod
+from rippermod_manager.services.install_service import install_mod, toggle_mod, uninstall_mod
 
 
 def _make_game(session: Session, name: str, domain: str) -> Game:
@@ -198,3 +198,44 @@ class TestActivityUndo:
         # undo g2's entry through g1's URL -> 404 (not this game's entry)
         resp = client.post(f"/api/v1/games/Cyberpunk 2077/activity/{acts[0]['id']}/undo")
         assert resp.status_code == 404
+
+    def test_undo_uninstall_reinstalls(self, client, engine, tmp_path):
+        with Session(engine) as s:
+            game = _make_real_game(s, tmp_path)
+            game_id = game.id
+            archive = _sample_archive(Path(game.install_path) / "downloaded_mods")
+            result = install_mod(game, archive, s, auto_deploy=False)
+            uninstall_mod(s.get(InstalledMod, result.installed_mod_id), game, s)
+            assert s.get(InstalledMod, result.installed_mod_id) is None
+
+        acts = client.get("/api/v1/games/Cyberpunk 2077/activity/").json()
+        uninstall_entry = next(a for a in acts if a["action"] == "uninstall")
+        assert uninstall_entry["undoable"] is True
+
+        resp = client.post(f"/api/v1/games/Cyberpunk 2077/activity/{uninstall_entry['id']}/undo")
+        assert resp.status_code == 200
+
+        with Session(engine) as s:
+            mods = s.exec(select(InstalledMod).where(InstalledMod.game_id == game_id)).all()
+            assert len(mods) == 1  # reinstalled from the original archive
+        # The undo appended exactly one (non-undoable) "undo" row -- no duplicate
+        # "install" entry from the internal install_mod call.
+        acts = client.get("/api/v1/games/Cyberpunk 2077/activity/").json()
+        undo_rows = [a for a in acts if a["action"] == "undo"]
+        assert len(undo_rows) == 1
+        assert undo_rows[0]["undoable"] is False
+        assert sum(1 for a in acts if a["action"] == "install") == 1  # only the original
+
+    def test_undo_uninstall_missing_archive_is_409(self, client, engine, tmp_path):
+        with Session(engine) as s:
+            game = _make_real_game(s, tmp_path)
+            archive = _sample_archive(Path(game.install_path) / "downloaded_mods")
+            result = install_mod(game, archive, s, auto_deploy=False)
+            uninstall_mod(s.get(InstalledMod, result.installed_mod_id), game, s)
+            archive.unlink()  # original archive gone -> reinstall can't run
+
+        acts = client.get("/api/v1/games/Cyberpunk 2077/activity/").json()
+        uninstall_entry = next(a for a in acts if a["action"] == "uninstall")
+
+        resp = client.post(f"/api/v1/games/Cyberpunk 2077/activity/{uninstall_entry['id']}/undo")
+        assert resp.status_code == 409

@@ -252,6 +252,8 @@ export function useUndoActivity() {
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
       qc.invalidateQueries({ queryKey: ["updates", gameName] });
       qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
+      qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
+      qc.invalidateQueries({ queryKey: ["archive-resource-details", gameName] });
       toast.success("Action undone");
     },
     onError: (err) => {

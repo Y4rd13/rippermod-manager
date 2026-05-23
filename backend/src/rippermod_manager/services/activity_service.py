@@ -5,6 +5,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, col, select
 
 from rippermod_manager.models.activity import ActivityLog
+from rippermod_manager.models.game import Game
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ class ActivityUndoError(Exception):
     (mod gone, archive missing, name collision). The router maps it to 409."""
 
 
-def undo_entry(session: Session, entry: ActivityLog, game) -> str:
+def undo_entry(session: Session, entry: ActivityLog, game: Game) -> str:
     """Reverse the action recorded by ``entry`` (Tier A+B); return a short
     description of the inverse performed.
 
@@ -112,7 +113,7 @@ def undo_entry(session: Session, entry: ActivityLog, game) -> str:
         # Restore the state captured before the original toggle. Binary, so one
         # toggle reaches it; a no-op if it's already in that state.
         if entry.prior_disabled is None or mod.disabled != entry.prior_disabled:
-            install_service.toggle_mod(mod, game, session)
+            install_service.toggle_mod(mod, game, session, record_history=False)
         return f"restored {mod.name}"
     if action == "install":
         mod = (
@@ -122,7 +123,7 @@ def undo_entry(session: Session, entry: ActivityLog, game) -> str:
         )
         if mod is None:
             raise ActivityUndoError("The mod is no longer installed.")
-        install_service.uninstall_mod(mod, game, session)
+        install_service.uninstall_mod(mod, game, session, record_history=False)
         return f"uninstalled {entry.target}"
     if action == "uninstall":
         if not entry.source_archive:
@@ -133,7 +134,7 @@ def undo_entry(session: Session, entry: ActivityLog, game) -> str:
         if not archive_path.exists():
             raise ActivityUndoError("The original archive is no longer available.")
         try:
-            install_service.install_mod(game, archive_path, session)
+            install_service.install_mod(game, archive_path, session, record_history=False)
         except (ValueError, FileNotFoundError) as exc:
             raise ActivityUndoError(str(exc)) from exc
         return f"reinstalled {entry.target}"
