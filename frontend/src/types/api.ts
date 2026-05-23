@@ -326,9 +326,11 @@ export interface FrameworkStatus {
   key: string;
   name: string;
   installed: boolean;
+  manager_status: "active" | "deploy_pending" | "disabled" | "not_installed";
   version: string | null;
   version_known: boolean;
   latest_version: string | null;
+  latest_is_cached: boolean;
   outdated: boolean;
   nexus_url: string;
 }

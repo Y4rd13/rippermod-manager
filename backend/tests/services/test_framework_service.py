@@ -3,6 +3,8 @@
 import httpx
 import pytest
 
+from rippermod_manager.models.install import InstalledMod
+from rippermod_manager.models.nexus import NexusModMeta
 from rippermod_manager.services import framework_service as svc
 
 
@@ -101,3 +103,45 @@ class TestFetchLatest:
     async def test_empty_ids_no_call(self):
         gql = _StubGQL(exc=AssertionError("should not be called"))
         assert await svc.fetch_latest_versions("cyberpunk2077", gql, []) == {}
+
+
+class TestManagerState:
+    def test_manager_status_resolution(self):
+        assert svc.manager_status(True, None) == "active"
+        assert svc.manager_status(True, True) == "active"
+        assert svc.manager_status(False, True) == "deploy_pending"
+        assert svc.manager_status(False, False) == "disabled"
+        assert svc.manager_status(False, None) == "not_installed"
+
+    def test_framework_manager_state_aggregates(self, session, make_game):
+        game = make_game(name="A")
+        other = make_game(name="B", install_path="/games/b")
+        # RED4ext (2380): two rows — one disabled, one enabled → enabled wins.
+        session.add(InstalledMod(game_id=game.id, name="r4-a", nexus_mod_id=2380, disabled=True))
+        session.add(InstalledMod(game_id=game.id, name="r4-b", nexus_mod_id=2380, disabled=False))
+        # CET (107): single row, disabled.
+        session.add(InstalledMod(game_id=game.id, name="cet", nexus_mod_id=107, disabled=True))
+        # A non-framework mod and a framework on another game are both ignored.
+        session.add(InstalledMod(game_id=game.id, name="misc", nexus_mod_id=99999, disabled=False))
+        session.add(InstalledMod(game_id=other.id, name="txl", nexus_mod_id=4197, disabled=False))
+        session.commit()
+
+        state = svc.framework_manager_state(session, game.id)
+        assert state[2380] is True  # any-enabled wins over a disabled sibling
+        assert state[107] is False  # all matching rows disabled
+        assert 99999 not in state  # not a framework id
+        assert 4197 not in state  # belongs to another game
+
+
+class TestCachedLatest:
+    def test_reads_and_cleans(self, session):
+        session.add(NexusModMeta(nexus_mod_id=2380, version="v1.30.0"))
+        session.add(NexusModMeta(nexus_mod_id=4198, version="1.27.0"))
+        session.add(NexusModMeta(nexus_mod_id=107, version=""))  # blank → skipped
+        session.commit()
+
+        out = svc.cached_latest_versions(session, [2380, 4198, 107, 1511])
+        assert out == {2380: "1.30.0", 4198: "1.27.0"}
+
+    def test_empty_ids(self, session):
+        assert svc.cached_latest_versions(session, []) == {}
