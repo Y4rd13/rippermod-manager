@@ -276,6 +276,8 @@ def install_mod(
         action="install",
         target=parsed.name,
         detail=f"{len(extracted_paths)} files",
+        installed_mod_id=installed.id,
+        undoable=True,
     )
     return InstallResult(
         installed_mod_id=installed.id,  # type: ignore[arg-type]
@@ -306,6 +308,9 @@ def uninstall_mod(
     game_dir = Path(game.install_path)
     _ = installed_mod.files
     file_count = len(installed_mod.files)
+    # Capture undo metadata before the row is deleted below.
+    undo_mod_id = installed_mod.id
+    undo_archive = installed_mod.source_archive
     junction_dirs_seen: set[str] = set()
 
     for f in installed_mod.files:
@@ -368,6 +373,9 @@ def uninstall_mod(
         action="uninstall",
         target=installed_mod.name,
         detail=f"{file_count} files",
+        installed_mod_id=undo_mod_id,
+        source_archive=undo_archive,
+        undoable=True,
     )
     return UninstallResult(files_deleted=file_count, directories_removed=0)
 
@@ -517,6 +525,9 @@ def toggle_mod(
             action="disable" if should_disable else "enable",
             target=installed_mod.name,
             detail=f"{affected} files",
+            installed_mod_id=installed_mod.id,
+            prior_disabled=not should_disable,
+            undoable=True,
         )
     return ToggleResult(disabled=should_disable, files_affected=affected)
 

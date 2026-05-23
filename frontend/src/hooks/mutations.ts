@@ -16,6 +16,7 @@ import { formatBytes } from "@/lib/format";
 import { useDownloadStore } from "@/stores/download-store";
 import { toast } from "@/stores/toast-store";
 import type {
+  ActivityLogEntry,
   ArchiveDeleteResult,
   ConflictCheckResult,
   CorrelateResult,
@@ -235,6 +236,34 @@ export function useToggleMod() {
       qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
       qc.invalidateQueries({ queryKey: ["archive-resource-details", gameName] });
       qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
+    },
+  });
+}
+
+export function useUndoActivity() {
+  const qc = useQueryClient();
+  return useMutation<ActivityLogEntry, Error, { gameName: string; entryId: number }>({
+    mutationFn: ({ gameName, entryId }) =>
+      api.post(`/api/v1/games/${gameName}/activity/${entryId}/undo`),
+    onSuccess: (_, { gameName }) => {
+      // An undo can reinstall/uninstall/toggle, so refresh the broad set.
+      qc.invalidateQueries({ queryKey: ["activity", gameName] });
+      qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
+      qc.invalidateQueries({ queryKey: ["updates", gameName] });
+      qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
+      toast.success("Action undone");
+    },
+    onError: (err) => {
+      // Surface the server's 409 reason (mod gone, archive missing, …) when present.
+      const detail =
+        err instanceof ApiError &&
+        err.body &&
+        typeof err.body === "object" &&
+        "detail" in err.body
+          ? String((err.body as { detail: unknown }).detail)
+          : undefined;
+      toast.error("Couldn't undo", detail);
     },
   });
 }
