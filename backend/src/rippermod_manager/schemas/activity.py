@@ -10,3 +10,6 @@ class ActivityLogOut(BaseModel):
     detail: str
     status: str
     created_at: datetime
+    installed_mod_id: int | None = None
+    undoable: bool = False
+    undone_at: datetime | None = None

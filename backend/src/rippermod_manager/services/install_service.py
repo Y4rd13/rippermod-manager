@@ -73,6 +73,7 @@ def install_mod(
     skip_conflicts: list[str] | None = None,
     file_renames: dict[str, str] | None = None,
     auto_deploy: bool = True,
+    record_history: bool = True,
 ) -> InstallResult:
     """Extract an archive to staging and deploy via hardlinks into the game directory.
 
@@ -268,15 +269,18 @@ def install_mod(
         len(extracted_paths),
         overwritten,
     )
-    from rippermod_manager.services.activity_service import record_activity
+    if record_history:
+        from rippermod_manager.services.activity_service import record_activity
 
-    record_activity(
-        session,
-        game_id=game.id,
-        action="install",
-        target=parsed.name,
-        detail=f"{len(extracted_paths)} files",
-    )
+        record_activity(
+            session,
+            game_id=game.id,
+            action="install",
+            target=parsed.name,
+            detail=f"{len(extracted_paths)} files",
+            installed_mod_id=installed.id,
+            undoable=True,
+        )
     return InstallResult(
         installed_mod_id=installed.id,  # type: ignore[arg-type]
         name=parsed.name,
@@ -291,6 +295,8 @@ def uninstall_mod(
     installed_mod: InstalledMod,
     game: Game,
     session: Session,
+    *,
+    record_history: bool = True,
 ) -> UninstallResult:
     """Remove a mod's game-dir links and its staging subtree."""
     # Snapshot saves before this destructive change (best-effort, deduped).
@@ -306,6 +312,9 @@ def uninstall_mod(
     game_dir = Path(game.install_path)
     _ = installed_mod.files
     file_count = len(installed_mod.files)
+    # Capture undo metadata before the row is deleted below.
+    undo_mod_id = installed_mod.id
+    undo_archive = installed_mod.source_archive
     junction_dirs_seen: set[str] = set()
 
     for f in installed_mod.files:
@@ -360,15 +369,19 @@ def uninstall_mod(
     write_modlist(game, session)
 
     logger.info("Uninstalled '%s' (%d files removed)", installed_mod.name, file_count)
-    from rippermod_manager.services.activity_service import record_activity
+    if record_history:
+        from rippermod_manager.services.activity_service import record_activity
 
-    record_activity(
-        session,
-        game_id=game.id,
-        action="uninstall",
-        target=installed_mod.name,
-        detail=f"{file_count} files",
-    )
+        record_activity(
+            session,
+            game_id=game.id,
+            action="uninstall",
+            target=installed_mod.name,
+            detail=f"{file_count} files",
+            installed_mod_id=undo_mod_id,
+            source_archive=undo_archive,
+            undoable=True,
+        )
     return UninstallResult(files_deleted=file_count, directories_removed=0)
 
 
@@ -378,6 +391,7 @@ def toggle_mod(
     session: Session,
     *,
     commit: bool = True,
+    record_history: bool = True,
 ) -> ToggleResult:
     """Flip ``installed_mod.disabled`` and deploy/undeploy that mod's files.
 
@@ -508,7 +522,7 @@ def toggle_mod(
 
     action = "Disabled" if should_disable else "Enabled"
     logger.info("%s '%s' (%d files affected)", action, installed_mod.name, affected)
-    if commit:
+    if commit and record_history:
         from rippermod_manager.services.activity_service import record_activity
 
         record_activity(
@@ -517,6 +531,9 @@ def toggle_mod(
             action="disable" if should_disable else "enable",
             target=installed_mod.name,
             detail=f"{affected} files",
+            installed_mod_id=installed_mod.id,
+            prior_disabled=not should_disable,
+            undoable=True,
         )
     return ToggleResult(disabled=should_disable, files_affected=affected)
 
