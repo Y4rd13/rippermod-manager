@@ -24,6 +24,32 @@ def _migrate_missing_columns() -> None:
             "picture_url",
             "ALTER TABLE nexus_mod_meta ADD COLUMN picture_url TEXT DEFAULT ''",
         ),
+        # Activity-log undo metadata (Tier A+B). Additive, no data loss.
+        (
+            "activity_log",
+            "installed_mod_id",
+            "ALTER TABLE activity_log ADD COLUMN installed_mod_id INTEGER",
+        ),
+        (
+            "activity_log",
+            "source_archive",
+            "ALTER TABLE activity_log ADD COLUMN source_archive TEXT DEFAULT ''",
+        ),
+        (
+            "activity_log",
+            "prior_disabled",
+            "ALTER TABLE activity_log ADD COLUMN prior_disabled BOOLEAN",
+        ),
+        (
+            "activity_log",
+            "undoable",
+            "ALTER TABLE activity_log ADD COLUMN undoable BOOLEAN DEFAULT 0",
+        ),
+        (
+            "activity_log",
+            "undone_at",
+            "ALTER TABLE activity_log ADD COLUMN undone_at TIMESTAMP",
+        ),
         (
             "nexus_downloads",
             "is_tracked",
