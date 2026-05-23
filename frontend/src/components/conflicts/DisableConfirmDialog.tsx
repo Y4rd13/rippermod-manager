@@ -1,8 +1,10 @@
 import { Power, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { DependentsWarning } from "@/components/mods/DependentsWarning";
 import { Button } from "@/components/ui/Button";
 import { useToggleMod, useUninstallMod } from "@/hooks/mutations";
+import { useDependents } from "@/hooks/queries";
 
 interface Props {
   gameName: string;
@@ -15,6 +17,7 @@ interface Props {
 export function DisableConfirmDialog({ gameName, modId, modName, onClose, children }: Props) {
   const toggleMod = useToggleMod();
   const uninstallMod = useUninstallMod();
+  const { data: deps } = useDependents(gameName, modId);
 
   return (
     <div
@@ -35,6 +38,7 @@ export function DisableConfirmDialog({ gameName, modId, modName, onClose, childr
         <div className="text-sm text-text-secondary space-y-3 mb-4">
           <p>This will disable the mod and all its archives.</p>
           {children}
+          {deps && deps.count > 0 && <DependentsWarning dependents={deps.dependents} />}
           <p className="text-xs text-text-muted">
             The mod can be re-enabled later from the Installed Mods or Archives tab.
             If uninstalled, it can be reinstalled from the Archives tab.
