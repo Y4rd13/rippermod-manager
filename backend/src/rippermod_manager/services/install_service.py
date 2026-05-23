@@ -293,11 +293,15 @@ def uninstall_mod(
     session: Session,
 ) -> UninstallResult:
     """Remove a mod's game-dir links and its staging subtree."""
+    # Snapshot saves before this destructive change (best-effort, deduped).
+    from rippermod_manager.services.save_backup_service import maybe_backup_before
     from rippermod_manager.services.vfs.primitives import (
         VfsError,
         remove_junction,
     )
     from rippermod_manager.services.vfs.primitives import unlink as vfs_unlink
+
+    maybe_backup_before(game, session, reason="pre-uninstall")
 
     game_dir = Path(game.install_path)
     _ = installed_mod.files
@@ -399,6 +403,11 @@ def toggle_mod(
     _ = installed_mod.files  # touch relationship to load files
 
     if should_disable:
+        # Snapshot saves before disabling (best-effort, deduped, CP2077 only).
+        from rippermod_manager.services.save_backup_service import maybe_backup_before
+
+        maybe_backup_before(game, session, reason="pre-disable")
+
         # Disable path: remove game-dir hardlinks, leave staging intact.
         junction_dirs_seen: set[str] = set()
         for f in installed_mod.files:
