@@ -532,6 +532,34 @@ def test_undeploy_surfaces_preflight_when_game_running(in_memory_session, sample
     assert report.preflight.game_running is True
 
 
+def test_undeploy_triggers_save_backup(in_memory_session, sample_game, monkeypatch):
+    """undeploy takes a pre-undeploy save snapshot once past the game-running gate."""
+    session = in_memory_session
+    game = sample_game
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "rippermod_manager.services.vfs.deploy_service.maybe_backup_before",
+        lambda g, s, *, reason: calls.append(reason),
+    )
+    with patch("rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=False):
+        undeploy(game, session)
+    assert calls == ["pre-undeploy"]
+
+
+def test_undeploy_refused_skips_save_backup(in_memory_session, sample_game, monkeypatch):
+    """A refused undeploy (game running) must not snapshot — the hook is after the gate."""
+    session = in_memory_session
+    game = sample_game
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "rippermod_manager.services.vfs.deploy_service.maybe_backup_before",
+        lambda g, s, *, reason: calls.append(reason),
+    )
+    with patch("rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=True):
+        undeploy(game, session)
+    assert calls == []
+
+
 def test_plan_skips_junction_when_dir_already_exists(in_memory_session, sample_game):
     """If a junction's destination dir already exists, plan_deploy treats it as up-to-date."""
     session = in_memory_session

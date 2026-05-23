@@ -122,16 +122,37 @@ class TestRestore:
             svc.restore_backup(save_env.session, "20200101-000000-000000")
 
 
-class TestDeployHook:
+class TestActionHook:
     def test_backs_up_cyberpunk(self, save_env):
         _write_save(save_env.save_dir)
-        svc.maybe_backup_for_deploy(SimpleNamespace(domain_name="cyberpunk2077"), save_env.session)
+        svc.maybe_backup_before(
+            SimpleNamespace(domain_name="cyberpunk2077"), save_env.session, reason="pre-deploy"
+        )
+        assert len(svc.list_backups(save_env.session)) == 1
+
+    def test_records_reason(self, save_env):
+        _write_save(save_env.save_dir)
+        svc.maybe_backup_before(
+            SimpleNamespace(domain_name="cyberpunk2077"), save_env.session, reason="pre-uninstall"
+        )
+        backups = svc.list_backups(save_env.session)
+        assert len(backups) == 1
+        assert backups[0]["reason"] == "pre-uninstall"
+
+    def test_dedupes_across_consecutive_actions(self, save_env):
+        # Two risky actions in a row with unchanged saves → a single backup.
+        _write_save(save_env.save_dir)
+        game = SimpleNamespace(domain_name="cyberpunk2077")
+        svc.maybe_backup_before(game, save_env.session, reason="pre-uninstall")
+        svc.maybe_backup_before(game, save_env.session, reason="pre-deploy")
         assert len(svc.list_backups(save_env.session)) == 1
 
     def test_skips_non_cyberpunk(self, save_env):
         _write_save(save_env.save_dir)
-        svc.maybe_backup_for_deploy(
-            SimpleNamespace(domain_name="skyrimspecialedition"), save_env.session
+        svc.maybe_backup_before(
+            SimpleNamespace(domain_name="skyrimspecialedition"),
+            save_env.session,
+            reason="pre-deploy",
         )
         assert svc.list_backups(save_env.session) == []
 
@@ -139,7 +160,9 @@ class TestDeployHook:
         set_setting(save_env.session, svc.ENABLED_KEY, "false")
         save_env.session.commit()
         _write_save(save_env.save_dir)
-        svc.maybe_backup_for_deploy(SimpleNamespace(domain_name="cyberpunk2077"), save_env.session)
+        svc.maybe_backup_before(
+            SimpleNamespace(domain_name="cyberpunk2077"), save_env.session, reason="pre-deploy"
+        )
         assert svc.list_backups(save_env.session) == []
 
     def test_never_raises_on_failure(self, save_env, monkeypatch):
@@ -147,5 +170,7 @@ class TestDeployHook:
             raise OSError("disk full")
 
         monkeypatch.setattr(svc, "create_backup", boom)
-        # must not propagate — a backup failure can't abort a deploy
-        svc.maybe_backup_for_deploy(SimpleNamespace(domain_name="cyberpunk2077"), save_env.session)
+        # must not propagate — a backup failure can't abort the operation
+        svc.maybe_backup_before(
+            SimpleNamespace(domain_name="cyberpunk2077"), save_env.session, reason="pre-deploy"
+        )
