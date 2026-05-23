@@ -746,3 +746,38 @@ class TestVfsHardlinks:
         assert os.path.samefile(staging_path, game_path), (
             "re-enabled file must be a hardlink to staging"
         )
+
+    def test_uninstall_triggers_save_backup(self, tmp_game, sample_archive, monkeypatch):
+        """uninstall_mod takes a pre-uninstall save snapshot before removing files."""
+        game, session = tmp_game
+        result = install_mod(game, sample_archive, session)
+        installed = session.exec(
+            select(InstalledMod).where(InstalledMod.id == result.installed_mod_id)
+        ).one()
+
+        from rippermod_manager.services import save_backup_service
+
+        calls: list[str] = []
+        monkeypatch.setattr(
+            save_backup_service, "maybe_backup_before", lambda g, s, *, reason: calls.append(reason)
+        )
+        uninstall_mod(installed, game, session)
+        assert calls == ["pre-uninstall"]
+
+    def test_disable_triggers_backup_enable_does_not(self, tmp_game, sample_archive, monkeypatch):
+        """Disabling snapshots saves; re-enabling does not."""
+        game, session = tmp_game
+        result = install_mod(game, sample_archive, session)
+        installed = session.exec(
+            select(InstalledMod).where(InstalledMod.id == result.installed_mod_id)
+        ).one()
+
+        from rippermod_manager.services import save_backup_service
+
+        calls: list[str] = []
+        monkeypatch.setattr(
+            save_backup_service, "maybe_backup_before", lambda g, s, *, reason: calls.append(reason)
+        )
+        toggle_mod(installed, game, session)  # disable → backup
+        toggle_mod(installed, game, session)  # re-enable → no backup
+        assert calls == ["pre-disable"]
