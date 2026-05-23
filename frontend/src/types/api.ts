@@ -303,6 +303,9 @@ export interface ActivityLogEntry {
   detail: string;
   status: string;
   created_at: string;
+  installed_mod_id: number | null;
+  undoable: boolean;
+  undone_at: string | null;
 }
 
 export interface HealthIssueOut {

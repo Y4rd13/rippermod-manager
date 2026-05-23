@@ -1,8 +1,12 @@
-import { History } from "lucide-react";
+import { History, Undo2 } from "lucide-react";
+import { useState } from "react";
 
 import { Card } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useUndoActivity } from "@/hooks/mutations";
 import { useActivity, useGames } from "@/hooks/queries";
 import { isoToEpoch, timeAgo } from "@/lib/format";
+import type { ActivityLogEntry } from "@/types/api";
 
 const ACTION_LABELS: Record<string, string> = {
   install: "Installed",
@@ -12,10 +16,31 @@ const ACTION_LABELS: Record<string, string> = {
   deploy: "Deployed",
   undeploy: "Undeployed",
   download: "Downloaded",
+  undo: "Undid",
 };
+
+// Actions whose inverse is implemented (Tier A+B). Others are observe-only.
+const UNDOABLE_ACTIONS = new Set(["install", "uninstall", "enable", "disable"]);
+
+function undoMessage(e: ActivityLogEntry): string {
+  switch (e.action) {
+    case "install":
+      return `Undo installing "${e.target}"? This uninstalls the mod and removes its files from the game.`;
+    case "uninstall":
+      return `Undo uninstalling "${e.target}"? This reinstalls it from the original archive — its prior load order and enabled state aren't restored.`;
+    case "enable":
+      return `Undo enabling "${e.target}"? This disables it again.`;
+    case "disable":
+      return `Undo disabling "${e.target}"? This re-enables it.`;
+    default:
+      return "Undo this action?";
+  }
+}
 
 function GameActivity({ gameName }: { gameName: string }) {
   const { data: entries = [], isLoading } = useActivity(gameName);
+  const undoActivity = useUndoActivity();
+  const [confirmUndo, setConfirmUndo] = useState<ActivityLogEntry | null>(null);
 
   if (isLoading) {
     return <p className="py-4 text-sm text-text-muted">Loading…</p>;
@@ -32,7 +57,8 @@ function GameActivity({ gameName }: { gameName: string }) {
             <th className="py-1.5 pr-3 font-medium">Action</th>
             <th className="py-1.5 pr-3 font-medium">Mod</th>
             <th className="py-1.5 pr-3 font-medium">Details</th>
-            <th className="py-1.5 font-medium">When</th>
+            <th className="py-1.5 pr-3 font-medium">When</th>
+            <th className="py-1.5 font-medium" />
           </tr>
         </thead>
         <tbody>
@@ -47,16 +73,44 @@ function GameActivity({ gameName }: { gameName: string }) {
                 {e.target || "—"}
               </td>
               <td className="py-1.5 pr-3 text-text-muted">{e.detail || "—"}</td>
-              <td
-                className="whitespace-nowrap py-1.5 text-text-muted"
-                title={e.created_at}
-              >
+              <td className="whitespace-nowrap py-1.5 pr-3 text-text-muted" title={e.created_at}>
                 {timeAgo(isoToEpoch(e.created_at))}
+              </td>
+              <td className="whitespace-nowrap py-1.5 text-right">
+                {e.undone_at ? (
+                  <span className="text-xs text-text-muted">Undone</span>
+                ) : e.undoable && UNDOABLE_ACTIONS.has(e.action) ? (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmUndo(e)}
+                    disabled={undoActivity.isPending}
+                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text-secondary disabled:opacity-50"
+                  >
+                    <Undo2 size={12} /> Undo
+                  </button>
+                ) : null}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+      {confirmUndo && (
+        <ConfirmDialog
+          title="Undo action?"
+          message={undoMessage(confirmUndo)}
+          confirmLabel="Undo"
+          variant="warning"
+          icon={Undo2}
+          loading={undoActivity.isPending}
+          onConfirm={() =>
+            undoActivity.mutate(
+              { gameName, entryId: confirmUndo.id },
+              { onSuccess: () => setConfirmUndo(null), onError: () => setConfirmUndo(null) },
+            )
+          }
+          onCancel={() => setConfirmUndo(null)}
+        />
+      )}
     </div>
   );
 }
