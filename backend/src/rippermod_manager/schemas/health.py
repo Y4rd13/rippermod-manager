@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 class HealthIssueOut(BaseModel):
     # kind: missing_requirement | disabled_requirement | outdated |
-    #       failed_install | foreign_files | untracked_files
+    #       failed_install | misplaced_files | foreign_files | untracked_files
     kind: str
     severity: str  # critical | warning | info
     message: str
