@@ -116,3 +116,98 @@ class TestReadLogErrors:
         assert len(out) == 1
         assert out[0]["level"] == "error"
         assert out[0]["message"] == "hard crash"
+
+
+class TestAttribution:
+    def test_candidate_redscript_bare_path(self):
+        # a bare path in a redscript error is relative to r6/scripts
+        assert (
+            svc._candidate_path("redscript", "type mismatch in MyMod/Foo.reds", None, "")
+            == "r6/scripts/mymod/foo.reds"
+        )
+
+    def test_candidate_redscript_absolute_path(self):
+        cand = svc._candidate_path(
+            "redscript",
+            r"error in G:\games\cp2077\red4ext\plugins\ArchiveXL\Scripts\ArchiveXL.reds",
+            None,
+            "g:/games/cp2077",
+        )
+        assert cand == "red4ext/plugins/archivexl/scripts/archivexl.reds"
+
+    def test_candidate_red4ext_dll(self):
+        assert (
+            svc._candidate_path(
+                "RED4ext",
+                r"Loading plugin from 'red4ext\plugins\Codeware\Codeware.dll'...",
+                None,
+                "",
+            )
+            == "red4ext/plugins/codeware/codeware.dll"
+        )
+
+    def test_candidate_cet_mods_folder(self):
+        assert (
+            svc._candidate_path("CET", r"loaded ('mods\AppearanceMenuMod')", None, "")
+            == "bin/x64/plugins/cyber_engine_tweaks/mods/appearancemenumod"
+        )
+
+    def test_candidate_archivexl_depot_path_is_unattributable(self):
+        # ArchiveXL carries virtual depot paths, not on-disk paths -> no candidate
+        assert (
+            svc._candidate_path("ArchiveXL", 'Factory "mod\\foo\\items.csv" missing', None, "")
+            is None
+        )
+
+    def test_candidate_tweakxl_uses_last_reading(self):
+        assert (
+            svc._candidate_path("TweakXL", "Vendors.x: Unknown property foo.", "mytweak.yaml", "")
+            == "r6/tweaks/mytweak.yaml"
+        )
+        # without a preceding "Reading" line there's nothing to attribute to
+        assert svc._candidate_path("TweakXL", "Vendors.x: Unknown property foo.", None, "") is None
+
+    def test_attribution_sets_mod_name_on_owned_path(self, tmp_path):
+        _write(
+            tmp_path,
+            "r6/logs/redscript_rCURRENT.log",
+            ["[ERROR - Mon, 18 May 2026] type mismatch in MyMod/Foo.reds"],
+        )
+        out = svc.read_log_errors(str(tmp_path), {"r6/scripts/mymod/foo.reds": "My Mod"})
+        assert len(out) == 1
+        assert out[0]["mod_name"] == "My Mod"
+
+    def test_attribution_miss_leaves_none(self, tmp_path):
+        _write(
+            tmp_path,
+            "r6/logs/redscript_rCURRENT.log",
+            ["[ERROR - Mon, 18 May 2026] type mismatch in Other/Bar.reds"],
+        )
+        out = svc.read_log_errors(str(tmp_path), {"r6/scripts/mymod/foo.reds": "My Mod"})
+        assert out[0]["mod_name"] is None
+
+    def test_tweakxl_stateful_attribution(self, tmp_path):
+        _write(
+            tmp_path,
+            "red4ext/plugins/TweakXL/TweakXL.log",
+            [
+                '[2026-05-18 18:22:47.544] [n] [info] Reading "MyTweak.yaml"...',
+                "[2026-05-18 18:22:48.000] [n] [error] Vendors.x: Unknown property foo.",
+            ],
+        )
+        out = svc.read_log_errors(str(tmp_path), {"r6/tweaks/mytweak.yaml": "Tweak Mod"})
+        tweak = [e for e in out if e["source"] == "TweakXL"]
+        assert len(tweak) == 1
+        assert tweak[0]["mod_name"] == "Tweak Mod"
+
+    def test_cet_attribution_via_dir_prefix(self, tmp_path):
+        _write(
+            tmp_path,
+            "bin/x64/plugins/cyber_engine_tweaks/cyber_engine_tweaks.log",
+            ["[2026-03-09 17:53:03 UTC-03:00] [error] [F()] [123] init failed in mods\\MyCetMod"],
+        )
+        owners = {"bin/x64/plugins/cyber_engine_tweaks/mods/mycetmod/init.lua": "My CET Mod"}
+        out = svc.read_log_errors(str(tmp_path), owners)
+        cet = [e for e in out if e["source"] == "CET"]
+        assert len(cet) == 1
+        assert cet[0]["mod_name"] == "My CET Mod"
