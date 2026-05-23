@@ -3,7 +3,7 @@
 from sqlmodel import Session
 
 from rippermod_manager.models.game import Game
-from rippermod_manager.models.install import InstalledMod
+from rippermod_manager.models.install import InstalledMod, InstalledModFile
 from rippermod_manager.models.nexus import NexusModRequirement
 
 
@@ -13,6 +13,19 @@ def _make_game(session: Session) -> Game:
     session.commit()
     session.refresh(game)
     return game
+
+
+def _install_with_files(
+    s: Session, game: Game, name: str, nexus_id: int, paths: list[str], *, disabled: bool = False
+) -> InstalledMod:
+    mod = InstalledMod(
+        game_id=game.id, name=name, nexus_mod_id=nexus_id, disabled=disabled, deployed=True
+    )
+    s.add(mod)
+    s.flush()
+    for p in paths:
+        s.add(InstalledModFile(installed_mod_id=mod.id, relative_path=p))
+    return mod
 
 
 class TestHealthCheck:
@@ -157,3 +170,66 @@ class TestHealthCheck:
         kinds = {i["kind"] for i in resp.json()["issues"]}
         assert "foreign_files" not in kinds
         assert "untracked_files" not in kinds
+
+
+class TestMisplacedFiles:
+    def test_all_files_outside_is_warning(self, client, engine):
+        with Session(engine) as s:
+            game = _make_game(s)
+            _install_with_files(
+                s, game, "JunkMod", 100, ["ReadmeFolder/readme.txt", "docs/guide.pdf"]
+            )
+            s.commit()
+
+        data = client.get("/api/v1/games/Cyberpunk 2077/health/").json()
+        misplaced = [i for i in data["issues"] if i["kind"] == "misplaced_files"]
+        assert len(misplaced) == 1
+        assert misplaced[0]["severity"] == "warning"
+        assert misplaced[0]["mod_name"] == "JunkMod"
+        assert "none of its 2" in misplaced[0]["message"]
+        assert data["ok"] is True  # warning, not critical -- doesn't block launch
+
+    def test_healthy_layout_has_no_misplaced(self, client, engine):
+        with Session(engine) as s:
+            game = _make_game(s)
+            _install_with_files(
+                s,
+                game,
+                "GoodMod",
+                100,
+                ["archive/pc/mod/x.archive", "bin/x64/plugins/cyber_engine_tweaks/mods/y/init.lua"],
+            )
+            s.commit()
+
+        data = client.get("/api/v1/games/Cyberpunk 2077/health/").json()
+        assert "misplaced_files" not in {i["kind"] for i in data["issues"]}
+
+    def test_partial_outside_is_info(self, client, engine):
+        with Session(engine) as s:
+            game = _make_game(s)
+            _install_with_files(s, game, "MixedMod", 100, ["r6/scripts/a.reds", "JunkDir/b.bin"])
+            s.commit()
+
+        data = client.get("/api/v1/games/Cyberpunk 2077/health/").json()
+        misplaced = [i for i in data["issues"] if i["kind"] == "misplaced_files"]
+        assert len(misplaced) == 1
+        assert misplaced[0]["severity"] == "info"
+        assert "1 of 2" in misplaced[0]["message"]
+
+    def test_redmod_layout_not_misplaced(self, client, engine):
+        with Session(engine) as s:
+            game = _make_game(s)
+            _install_with_files(s, game, "MyREDmod", 100, ["mods/MyREDmod/info.json"])
+            s.commit()
+
+        data = client.get("/api/v1/games/Cyberpunk 2077/health/").json()
+        assert "misplaced_files" not in {i["kind"] for i in data["issues"]}
+
+    def test_disabled_mod_excluded(self, client, engine):
+        with Session(engine) as s:
+            game = _make_game(s)
+            _install_with_files(s, game, "DisabledJunk", 100, ["JunkDir/x.bin"], disabled=True)
+            s.commit()
+
+        data = client.get("/api/v1/games/Cyberpunk 2077/health/").json()
+        assert "misplaced_files" not in {i["kind"] for i in data["issues"]}
