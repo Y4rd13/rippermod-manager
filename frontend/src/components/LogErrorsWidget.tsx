@@ -62,6 +62,14 @@ export function LogErrorsWidget({ gameName }: { gameName: string }) {
                 <span className="mr-1.5 rounded bg-surface-3 px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
                   {e.source}
                 </span>
+                {e.mod_name && (
+                  <span
+                    className="mr-1.5 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent"
+                    title="Attributed to this installed mod"
+                  >
+                    {e.mod_name}
+                  </span>
+                )}
                 <span className="break-words text-text-secondary">{e.message}</span>
               </div>
             </li>
