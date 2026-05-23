@@ -1,11 +1,11 @@
 """Save game backups.
 
-Snapshots the player's Cyberpunk 2077 save folder before risky operations (a
-VFS deploy) and lets the user restore a previous snapshot. All work is local
-filesystem I/O via ``shutil`` — no Nexus calls.
+Snapshots the player's Cyberpunk 2077 save folder before risky operations
+(deploy, undeploy, uninstall, disable) and lets the user restore a previous
+snapshot. All work is local filesystem I/O via ``shutil`` — no Nexus calls.
 
-The pre-deploy hook is **best-effort**: a failure here is logged and swallowed
-so it never aborts a deploy (the same contract as ``redmod_deploy``).
+The pre-action hook is **best-effort**: a failure here is logged and swallowed
+so it never aborts the operation (the same contract as ``redmod_deploy``).
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ PATH_KEY = "save_backup_path"
 _DEFAULT_SAVE_REL = Path("Saved Games") / "CD Projekt Red" / "Cyberpunk 2077"
 CYBERPUNK_DOMAIN = "cyberpunk2077"
 
-MAX_BACKUPS = 10
+MAX_BACKUPS = 15
 MANIFEST_NAME = "manifest.json"
 _SAVES_SUBDIR = "saves"
 # Backup folder names are UTC timestamps; restore handles must match this exactly
@@ -207,12 +207,15 @@ def restore_backup(session: Session, backup_id: str) -> dict:
     return {"id": backup_id, "restored_to": str(save_dir)}
 
 
-def maybe_backup_for_deploy(game: Game, session: Session) -> None:
-    """Best-effort pre-deploy save snapshot. Never raises — a backup failure must
-    not abort the deploy. No-op for non-Cyberpunk games or when disabled."""
+def maybe_backup_before(game: Game, session: Session, *, reason: str) -> None:
+    """Best-effort save snapshot before a risky operation (deploy, undeploy,
+    uninstall, disable). Never raises — a backup failure must not abort the
+    operation. No-op for non-Cyberpunk games or when disabled. The signature
+    dedupe in ``create_backup`` means a run of risky actions with unchanged
+    saves yields a single backup."""
     if game.domain_name != CYBERPUNK_DOMAIN or not is_enabled(session):
         return
     try:
-        create_backup(session, reason="pre-deploy", force=False)
+        create_backup(session, reason=reason, force=False)
     except OSError as exc:
-        logger.warning("pre-deploy save backup failed: %s", exc)
+        logger.warning("%s save backup failed: %s", reason, exc)
