@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from sqlmodel import Session, select
 
 from rippermod_manager.models.game import Game
-from rippermod_manager.models.install import InstalledMod
+from rippermod_manager.models.install import InstalledMod, InstalledModFile
 from rippermod_manager.models.nexus import NexusModRequirement
 from rippermod_manager.schemas.deploy import DriftReport
 
@@ -35,6 +35,7 @@ def check_health(game: Game, session: Session) -> list[HealthIssue]:
     issues += _check_requirements(installed, session)
     issues += _check_outdated(game, session)
     issues += _check_install_integrity(installed, drift)
+    issues += _check_misplaced_files(installed, game, session)
     issues += _check_foreign_and_untracked(game, installed, drift, session)
     return issues
 
@@ -149,6 +150,78 @@ def _check_install_integrity(
                 installed_mod_id=mod_id,
             )
         )
+    return issues
+
+
+def _check_misplaced_files(
+    installed: list[InstalledMod], game: Game, session: Session
+) -> list[HealthIssue]:
+    """Flag enabled mods whose files land under no recognized mod folder.
+
+    The app's VFS chooses every destination, so a mod can't literally be
+    "installed into the wrong directory" -- but an archive with an unrecognized
+    layout can stage files outside every known mod root, where the game won't
+    load them. DB-only + offline: compares each file's top-level path component
+    against the game's known roots.
+    """
+    from rippermod_manager.services.archive_layout import known_roots_for_game
+
+    known_roots = known_roots_for_game(game.domain_name)
+    if not known_roots:
+        return []  # unknown game -- can't classify, skip rather than false-flag
+    by_id = {m.id: m for m in installed if not m.disabled and m.id is not None}
+    if not by_id:
+        return []
+    file_rows = session.exec(
+        select(InstalledModFile.installed_mod_id, InstalledModFile.relative_path).where(
+            InstalledModFile.installed_mod_id.in_(list(by_id.keys()))  # type: ignore[union-attr]
+        )
+    ).all()
+    total: dict[int, int] = {}
+    outside: dict[int, int] = {}
+    for mod_id, rel_path in file_rows:
+        total[mod_id] = total.get(mod_id, 0) + 1
+        first = rel_path.replace("\\", "/").split("/")[0].lower()
+        if first not in known_roots:
+            outside[mod_id] = outside.get(mod_id, 0) + 1
+
+    issues: list[HealthIssue] = []
+    for mod_id, n_total in total.items():
+        n_out = outside.get(mod_id, 0)
+        if n_out == 0:
+            continue
+        m = by_id[mod_id]
+        if n_out == n_total:
+            issues.append(
+                HealthIssue(
+                    kind="misplaced_files",
+                    severity="warning",
+                    mod_name=m.name,
+                    message=(
+                        f"none of its {n_total} file(s) are under a recognized mod folder "
+                        "-- the game won't load it."
+                    ),
+                    suggested_fix=(
+                        "Reinstall from the original archive, or check it isn't a "
+                        "FOMOD/manual-layout mod."
+                    ),
+                    installed_mod_id=mod_id,
+                )
+            )
+        else:
+            issues.append(
+                HealthIssue(
+                    kind="misplaced_files",
+                    severity="info",
+                    mod_name=m.name,
+                    message=(
+                        f"{n_out} of {n_total} file(s) are outside recognized mod folders "
+                        "and won't load."
+                    ),
+                    suggested_fix="Reinstall from the original archive if those files matter.",
+                    installed_mod_id=mod_id,
+                )
+            )
     return issues
 
 
