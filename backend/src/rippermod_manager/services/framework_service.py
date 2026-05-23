@@ -25,6 +25,7 @@ from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.models.nexus import NexusModMeta
 from rippermod_manager.nexus.client import NexusPremiumRequiredError, NexusRateLimitError
 from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
+from rippermod_manager.schemas.framework import ManagerStatus
 from rippermod_manager.services.nexus_helpers import graphql_mod_to_rest_info
 
 logger = logging.getLogger(__name__)
@@ -122,7 +123,7 @@ def framework_manager_state(session: Session, game_id: int) -> dict[int, bool]:
     return state
 
 
-def manager_status(marker_present: bool, managed_enabled: bool | None) -> str:
+def manager_status(marker_present: bool, managed_enabled: bool | None) -> ManagerStatus:
     """Resolve a framework's manager status from its on-disk marker plus the
     manager state (``managed_enabled`` is ``None`` when the manager has no row):
 
