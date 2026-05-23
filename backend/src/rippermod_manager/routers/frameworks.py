@@ -28,29 +28,37 @@ async def get_frameworks(
     game = get_game_or_404(game_name, session)
     # Blocking pefile / filesystem detection runs off the event loop.
     detected = await run_in_threadpool(svc.detect_frameworks, game.install_path)
+    ids = [d["nexus_mod_id"] for d in detected]
 
-    latest: dict[int, str] = {}
+    # Manager state + a cached latest-version baseline let the widget say
+    # something useful even offline / without a Nexus key.
+    mgr = svc.framework_manager_state(session, game.id)
+    cached = svc.cached_latest_versions(session, ids)
+
+    live: dict[int, str] = {}
     api_key = get_setting(session, "nexus_api_key")
     if api_key:
         async with NexusGraphQLClient(api_key) as gql:
-            latest = await svc.fetch_latest_versions(
-                game.domain_name, gql, [d["nexus_mod_id"] for d in detected]
-            )
+            live = await svc.fetch_latest_versions(game.domain_name, gql, ids)
 
     report: list[FrameworkStatus] = []
     for d in detected:
-        latest_v = latest.get(d["nexus_mod_id"])
+        mod_id = d["nexus_mod_id"]
+        latest_v = live.get(mod_id) or cached.get(mod_id)
+        latest_is_cached = latest_v is not None and mod_id not in live
         outdated = bool(d["version"] and latest_v and is_newer_version(latest_v, d["version"]))
         report.append(
             FrameworkStatus(
                 key=d["key"],
                 name=d["name"],
                 installed=d["installed"],
+                manager_status=svc.manager_status(d["installed"], mgr.get(mod_id)),
                 version=d["version"],
                 version_known=d["version_known"],
                 latest_version=latest_v,
+                latest_is_cached=latest_is_cached,
                 outdated=outdated,
-                nexus_url=f"https://www.nexusmods.com/{game.domain_name}/mods/{d['nexus_mod_id']}",
+                nexus_url=f"https://www.nexusmods.com/{game.domain_name}/mods/{mod_id}",
             )
         )
     return report
