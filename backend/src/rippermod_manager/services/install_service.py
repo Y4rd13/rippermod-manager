@@ -329,7 +329,8 @@ def adopt_mod(
 
     Raises:
         FileNotFoundError: game directory missing.
-        ValueError: a mod with the same name is already installed.
+        ValueError: a mod with the same name is already installed, or no paths
+            were adoptable (all missing / non-file / traversal-rejected).
         VfsError / OSError: a move/hardlink failed (this mod is rolled back first).
     """
     game_dir = Path(game.install_path)
@@ -425,6 +426,13 @@ def adopt_mod(
         done_entries.append(entry)
         moved.append((staging_path, game_path))
         adopted.append(rel_norm)
+
+    if not adopted:
+        # Every path was missing / non-file / traversal-rejected. Don't leave a
+        # phantom 0-file InstalledMod behind; the orchestrator records this as a
+        # per-group error.
+        shutil.rmtree(staging_root, ignore_errors=True)
+        raise ValueError(f"No adoptable files for '{name}' (all paths missing or skipped).")
 
     installed = InstalledMod(
         game_id=game.id,  # type: ignore[arg-type]
