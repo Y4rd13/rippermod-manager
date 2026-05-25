@@ -280,6 +280,20 @@ export interface UninstallResult {
   directories_removed: number;
 }
 
+export interface AdoptGroup {
+  name: string;
+  relative_paths: string[];
+  nexus_mod_id?: number | null;
+}
+
+export interface AdoptResult {
+  adopted_mods: number;
+  adopted_files: number;
+  skipped_files: number;
+  game_running: boolean;
+  errors: string[];
+}
+
 export interface ToggleResult {
   disabled: boolean;
   files_affected: number;
