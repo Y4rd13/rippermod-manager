@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   Archive,
+  Boxes,
   ChevronRight,
   Eye,
   FolderOpen,
@@ -49,6 +50,7 @@ import {
   useConflictsOverview,
   useDownloadJobs,
   useEndorsedMods,
+  useFrameworks,
   useGame,
   useGameVersion,
   useInstalledMods,
@@ -98,7 +100,6 @@ function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomai
   return (
     <div className="space-y-4">
       <HealthWidget gameName={gameName} />
-      <FrameworksWidget gameName={gameName} />
       <LogErrorsWidget gameName={gameName} />
       <ConflictSummaryWidget gameName={gameName} />
       <div className="flex gap-1 border-b border-border">
@@ -167,6 +168,7 @@ export function GameDetailPage() {
   const { data: trendingResult, isLoading: trendingLoading, dataUpdatedAt: trendingUpdatedAt } = useTrendingMods(name);
   const { data: updates, isLoading: updatesLoading } = useUpdates(name);
   const { data: conflictsOverview, isLoading: conflictsLoading } = useConflictsOverview(name);
+  const { data: frameworks = [], isLoading: frameworksLoading } = useFrameworks(name);
   const { data: downloadJobs = [] } = useDownloadJobs(name);
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("installed");
@@ -186,6 +188,25 @@ export function GameDetailPage() {
     () => new Set(installedMods.filter((m) => m.nexus_mod_id != null).map((m) => m.nexus_mod_id!)),
     [installedMods],
   );
+
+  // At-a-glance summary of the core modding frameworks for the header stat card.
+  // Missing/disabled are critical (won't load); outdated/deploy-pending are warnings.
+  const fwSummary = useMemo(() => {
+    const missing = frameworks.filter((f) => f.manager_status === "not_installed").length;
+    const disabled = frameworks.filter((f) => f.manager_status === "disabled").length;
+    const outdated = frameworks.filter((f) => f.outdated).length;
+    const pending = frameworks.filter((f) => f.manager_status === "deploy_pending").length;
+    const parts: string[] = [];
+    if (missing) parts.push(`${missing} missing`);
+    if (disabled) parts.push(`${disabled} disabled`);
+    if (outdated) parts.push(`${outdated} outdated`);
+    if (pending) parts.push(`${pending} to deploy`);
+    const count = missing + disabled + outdated + pending;
+    const tone: "danger" | "warning" | "success" =
+      missing || disabled ? "danger" : count ? "warning" : "success";
+    const label = count === 0 ? "All OK" : parts.length === 1 ? parts.join(", ") : `${count} issues`;
+    return { count, tone, label, detail: parts.join(", "), total: frameworks.length };
+  }, [frameworks]);
 
   const [isLaunching, setIsLaunching] = useState(false);
   const [launchGate, setLaunchGate] = useState<HealthReport | null>(null);
@@ -432,8 +453,8 @@ export function GameDetailPage() {
             <div className="h-9 w-36 bg-surface-2 rounded-lg" />
           </div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          {Array.from({ length: 5 }, (_, i) => (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          {Array.from({ length: 6 }, (_, i) => (
             <div key={i} className="rounded-xl border border-border bg-surface-1 p-5">
               <div className="flex items-center gap-3">
                 <div className="h-5 w-5 bg-surface-2 rounded" />
@@ -490,7 +511,7 @@ export function GameDetailPage() {
         <ScanProgress logs={scanLogs} percent={scanPercent} phase={scanPhase} />
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card
           className="hover:border-success/40 transition-colors"
           onClick={() => { setTab("matched"); setMatchedSubTab("scan-details"); }}
@@ -566,6 +587,41 @@ export function GameDetailPage() {
               <p className="text-xs text-text-muted">Conflicts</p>
               <p className="text-lg font-bold text-text-primary">
                 {conflictsLoading ? "--" : (conflictsOverview?.mods_affected ?? 0)}
+              </p>
+            </div>
+          </div>
+        </Card>
+        <Card
+          className={cn(
+            "transition-colors",
+            fwSummary.tone === "danger"
+              ? "hover:border-danger/40"
+              : fwSummary.tone === "warning"
+                ? "hover:border-warning/40"
+                : "hover:border-success/40",
+          )}
+          onClick={() => setTab("installed")}
+          title={
+            fwSummary.count > 0
+              ? `Core frameworks needing attention: ${fwSummary.detail}`
+              : "Core modding frameworks (RED4ext, redscript, ArchiveXL, TweakXL, Codeware, CET) — all installed and current"
+          }
+        >
+          <div className="flex items-center gap-3">
+            <Boxes
+              size={18}
+              className={
+                fwSummary.tone === "danger"
+                  ? "text-danger"
+                  : fwSummary.tone === "warning"
+                    ? "text-warning"
+                    : "text-success"
+              }
+            />
+            <div>
+              <p className="text-xs text-text-muted">Frameworks</p>
+              <p className="text-lg font-bold text-text-primary">
+                {frameworksLoading ? "--" : fwSummary.label}
               </p>
             </div>
           </div>
@@ -713,6 +769,9 @@ export function GameDetailPage() {
       )}
       {tab === "installed" && (
         <>
+          <div className="mb-4">
+            <FrameworksWidget gameName={name} />
+          </div>
           <InstalledCollectionsSection gameName={name} />
           <InstalledModsTable
             mods={installedMods}
