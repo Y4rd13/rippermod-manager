@@ -163,7 +163,7 @@ export function GameDetailPage() {
   const { data: trackedMods = [], isLoading: trackedLoading, dataUpdatedAt: trackedUpdatedAt } = useTrackedMods(name);
   const { data: updates, isLoading: updatesLoading } = useUpdates(name);
   const { data: conflictsOverview, isLoading: conflictsLoading } = useConflictsOverview(name);
-  const { data: frameworks = [] } = useFrameworks(name);
+  const { data: frameworks = [], isLoading: frameworksLoading } = useFrameworks(name);
   const { data: downloadJobs = [] } = useDownloadJobs(name);
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("installed");
@@ -607,7 +607,9 @@ export function GameDetailPage() {
             />
             <div>
               <p className="text-xs text-text-muted">Frameworks</p>
-              <p className="text-lg font-bold text-text-primary">{fwSummary.label}</p>
+              <p className="text-lg font-bold text-text-primary">
+                {frameworksLoading ? "--" : fwSummary.label}
+              </p>
             </div>
           </div>
         </Card>
