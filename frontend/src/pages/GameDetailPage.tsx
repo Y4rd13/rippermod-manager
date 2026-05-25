@@ -1,7 +1,6 @@
 import {
   AlertTriangle,
   Archive,
-  Boxes,
   ChevronRight,
   Eye,
   FolderOpen,
@@ -20,6 +19,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Link, useParams } from "react-router";
 
 import { ClusterDetailsPanel, ConflictSummaryWidget } from "@/components/conflicts/ConflictSummaryWidget";
+import { FrameworksStatCard } from "@/components/FrameworksStatCard";
 import { FrameworksWidget } from "@/components/FrameworksWidget";
 import { HealthWidget } from "@/components/HealthWidget";
 import { LogErrorsWidget } from "@/components/LogErrorsWidget";
@@ -50,7 +50,6 @@ import {
   useConflictsOverview,
   useDownloadJobs,
   useEndorsedMods,
-  useFrameworks,
   useGame,
   useGameVersion,
   useInstalledMods,
@@ -168,7 +167,6 @@ export function GameDetailPage() {
   const { data: trendingResult, isLoading: trendingLoading, dataUpdatedAt: trendingUpdatedAt } = useTrendingMods(name);
   const { data: updates, isLoading: updatesLoading } = useUpdates(name);
   const { data: conflictsOverview, isLoading: conflictsLoading } = useConflictsOverview(name);
-  const { data: frameworks = [], isLoading: frameworksLoading } = useFrameworks(name);
   const { data: downloadJobs = [] } = useDownloadJobs(name);
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("installed");
@@ -189,24 +187,22 @@ export function GameDetailPage() {
     [installedMods],
   );
 
-  // At-a-glance summary of the core modding frameworks for the header stat card.
-  // Missing/disabled are critical (won't load); outdated/deploy-pending are warnings.
-  const fwSummary = useMemo(() => {
-    const missing = frameworks.filter((f) => f.manager_status === "not_installed").length;
-    const disabled = frameworks.filter((f) => f.manager_status === "disabled").length;
-    const outdated = frameworks.filter((f) => f.outdated).length;
-    const pending = frameworks.filter((f) => f.manager_status === "deploy_pending").length;
-    const parts: string[] = [];
-    if (missing) parts.push(`${missing} missing`);
-    if (disabled) parts.push(`${disabled} disabled`);
-    if (outdated) parts.push(`${outdated} outdated`);
-    if (pending) parts.push(`${pending} to deploy`);
-    const count = missing + disabled + outdated + pending;
-    const tone: "danger" | "warning" | "success" =
-      missing || disabled ? "danger" : count ? "warning" : "success";
-    const label = count === 0 ? "All OK" : parts.length === 1 ? parts.join(", ") : `${count} issues`;
-    return { count, tone, label, detail: parts.join(", "), total: frameworks.length };
-  }, [frameworks]);
+  const frameworksPanelRef = useRef<HTMLDivElement>(null);
+  const [highlightFrameworks, setHighlightFrameworks] = useState(false);
+
+  // Header "Frameworks" card → jump to the Installed tab, scroll the panel into
+  // view, and flash a highlight ring so the card→detail link is obvious.
+  const goToFrameworks = useCallback(() => {
+    setTab("installed");
+    setHighlightFrameworks(true);
+  }, []);
+
+  useEffect(() => {
+    if (!highlightFrameworks || tab !== "installed") return;
+    frameworksPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const t = window.setTimeout(() => setHighlightFrameworks(false), 1600);
+    return () => window.clearTimeout(t);
+  }, [highlightFrameworks, tab]);
 
   const [isLaunching, setIsLaunching] = useState(false);
   const [launchGate, setLaunchGate] = useState<HealthReport | null>(null);
@@ -591,41 +587,7 @@ export function GameDetailPage() {
             </div>
           </div>
         </Card>
-        <Card
-          className={cn(
-            "transition-colors",
-            fwSummary.tone === "danger"
-              ? "hover:border-danger/40"
-              : fwSummary.tone === "warning"
-                ? "hover:border-warning/40"
-                : "hover:border-success/40",
-          )}
-          onClick={() => setTab("installed")}
-          title={
-            fwSummary.count > 0
-              ? `Core frameworks needing attention: ${fwSummary.detail}`
-              : "Core modding frameworks (RED4ext, redscript, ArchiveXL, TweakXL, Codeware, CET) — all installed and current"
-          }
-        >
-          <div className="flex items-center gap-3">
-            <Boxes
-              size={18}
-              className={
-                fwSummary.tone === "danger"
-                  ? "text-danger"
-                  : fwSummary.tone === "warning"
-                    ? "text-warning"
-                    : "text-success"
-              }
-            />
-            <div>
-              <p className="text-xs text-text-muted">Frameworks</p>
-              <p className="text-lg font-bold text-text-primary">
-                {frameworksLoading ? "--" : fwSummary.label}
-              </p>
-            </div>
-          </div>
-        </Card>
+        <FrameworksStatCard gameName={name} onOpen={goToFrameworks} />
       </div>
 
       <div className="relative">
@@ -769,7 +731,13 @@ export function GameDetailPage() {
       )}
       {tab === "installed" && (
         <>
-          <div className="mb-4">
+          <div
+            ref={frameworksPanelRef}
+            className={cn(
+              "mb-4 scroll-mt-4 rounded-xl transition-shadow duration-500",
+              highlightFrameworks && "ring-2 ring-warning ring-offset-2 ring-offset-surface-0",
+            )}
+          >
             <FrameworksWidget gameName={name} />
           </div>
           <InstalledCollectionsSection gameName={name} />
