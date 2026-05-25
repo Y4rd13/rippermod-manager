@@ -69,7 +69,7 @@ class DeployJournalEntry(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     game_id: int = Field(foreign_key="games.id", index=True)
-    operation: str  # link | unlink | junction | rm_junction
+    operation: str  # link | unlink | junction | rm_junction | adopt
     src: str
     dst: str
     status: str = Field(default="pending")  # pending | done | failed

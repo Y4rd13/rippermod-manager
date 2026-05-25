@@ -495,6 +495,18 @@ def replay_pending_journal(game: Game, session: Session) -> None:
     ).all()
     for entry in pending:
         try:
+            if entry.operation == "adopt":
+                # Roll FORWARD: the moved bytes are safe in staging (src). If the
+                # game-dir hardlink (dst) never got created, recreate it so the
+                # game file is not left missing. Never delete the staging copy.
+                src = Path(entry.src)
+                dst = Path(entry.dst)
+                if src.exists() and not dst.exists():
+                    hardlink(src, dst)
+                entry.status = "done"
+                entry.error = entry.error or "rolled forward by journal replay"
+                session.add(entry)
+                continue
             if entry.operation == "link":
                 unlink(Path(entry.dst))
             elif entry.operation == "junction":

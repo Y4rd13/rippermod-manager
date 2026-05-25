@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlmodel import Session, select
 
-from rippermod_manager.constants import CYBERPUNK_DEFAULT_PATHS
+from rippermod_manager.constants import CYBERPUNK_DEFAULT_PATHS, is_vanilla_path
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
 
@@ -31,6 +31,7 @@ def find_untracked_files(game: Game, session: Session) -> list[str]:
         for p in root.rglob("*"):
             if p.is_file():
                 rel = p.relative_to(install).as_posix().lower()
-                if rel not in owned:
-                    untracked.append(rel)
+                if rel in owned or is_vanilla_path(rel):
+                    continue
+                untracked.append(rel)
     return sorted(untracked)
