@@ -45,7 +45,7 @@ from rippermod_manager.services.archive_layout import (
 from rippermod_manager.services.nexus_helpers import match_local_to_nexus_file
 from rippermod_manager.services.paths import get_mods_dir
 from rippermod_manager.services.vfs.naming import unique_staging_name
-from rippermod_manager.services.vfs.primitives import VfsError, hardlink
+from rippermod_manager.services.vfs.primitives import VfsError, hardlink, same_volume
 
 logger = logging.getLogger(__name__)
 
@@ -347,6 +347,14 @@ def adopt_mod(
 
     staging_parent = get_mods_dir(game)
     staging_parent.mkdir(parents=True, exist_ok=True)
+    # os.replace is only atomic within one volume, and the hardlink back requires
+    # the same volume too. Game creation already rejects a cross-volume mods_dir,
+    # but assert it here so a misconfigured setup fails fast with a clear message.
+    if not same_volume(staging_parent, game_dir):
+        raise VfsError(
+            "Staging dir and game dir are on different volumes; adopt requires the "
+            "same volume (hardlinks + atomic move). Move downloaded_mods onto the game's drive."
+        )
     safe_name = unique_staging_name(staging_parent, name)
     staging_root = staging_parent / safe_name
     staging_root.mkdir(parents=True, exist_ok=True)
@@ -354,6 +362,7 @@ def adopt_mod(
     adopted: list[str] = []
     skipped = 0
     moved: list[tuple[Path, Path]] = []
+    done_entries: list[DeployJournalEntry] = []
     game_root_resolved = game_dir.resolve()
     staging_root_resolved = staging_root.resolve()
 
@@ -391,13 +400,29 @@ def adopt_mod(
             logger.error("adopt failed for %s: %s", game_path, exc)
             entry.status = "failed"
             entry.error = str(exc)
+            # The sibling files we already moved are about to be rolled back on
+            # disk, so flip their journal rows to "failed" too — leaving them
+            # "done" would orphan rows that describe an adopt that never landed.
+            for de in done_entries:
+                de.status = "failed"
+                de.error = "rolled back: adopt failed for a sibling file"
+                session.add(de)
             session.add(entry)
             session.commit()
+            # If the move succeeded but the hardlink didn't, the current file now
+            # lives ONLY in staging — move it back to the game dir so the rmtree
+            # below can't delete the user's only copy.
+            if staging_path.exists() and not game_path.exists():
+                try:
+                    shutil.move(str(staging_path), str(game_path))
+                except OSError:
+                    logger.exception("adopt current-file recovery failed for %s", game_path)
             _rollback_adopt(moved)
             shutil.rmtree(staging_root, ignore_errors=True)
             raise
         entry.status = "done"
         session.add(entry)
+        done_entries.append(entry)
         moved.append((staging_path, game_path))
         adopted.append(rel_norm)
 

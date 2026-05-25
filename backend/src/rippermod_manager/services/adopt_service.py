@@ -20,8 +20,6 @@ from rippermod_manager.services.vfs.primitives import is_game_running
 
 logger = logging.getLogger(__name__)
 
-GAME_EXE = "Cyberpunk2077.exe"
-
 
 @dataclass
 class AdoptReport:
@@ -47,7 +45,7 @@ def adopt_detected(
     the rest.
     """
     report = AdoptReport()
-    if is_game_running(GAME_EXE):
+    if is_game_running():  # defaults to Cyberpunk2077.exe
         report.game_running = True
         report.errors.append("Cyberpunk 2077 is running. Close it and retry.")
         return report

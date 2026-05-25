@@ -128,3 +128,44 @@ def test_adopted_files_report_as_linked_not_foreign(session, game):
     assert report.linked == 2
     assert report.foreign == 0
     assert report.missing == 0
+
+
+def test_adopt_rolls_back_all_files_and_marks_journal_failed_on_failure(session, game, monkeypatch):
+    from rippermod_manager.models.install import DeployJournalEntry
+    from rippermod_manager.services import install_service
+
+    _put(game, "archive/pc/mod/a.archive", b"A")
+    _put(game, "archive/pc/mod/b.archive", b"B")
+
+    real_hardlink = install_service.hardlink
+    calls = {"n": 0}
+
+    def flaky_hardlink(src, dst):
+        calls["n"] += 1
+        if calls["n"] == 2:  # fail on the 2nd file (after its move into staging)
+            raise OSError("boom")
+        return real_hardlink(src, dst)
+
+    monkeypatch.setattr(install_service, "hardlink", flaky_hardlink)
+
+    with pytest.raises(OSError):
+        adopt_mod(game, "RB", ["archive/pc/mod/a.archive", "archive/pc/mod/b.archive"], session)
+
+    # No data loss: BOTH files restored to the game dir as real files.
+    assert (Path(game.install_path) / "archive/pc/mod/a.archive").read_bytes() == b"A"
+    assert (Path(game.install_path) / "archive/pc/mod/b.archive").read_bytes() == b"B"
+    assert session.exec(select(InstalledMod).where(InstalledMod.name == "RB")).first() is None
+    # No journal row left "done" — all flipped to "failed" on rollback.
+    entries = session.exec(select(DeployJournalEntry)).all()
+    assert entries
+    assert all(e.status == "failed" for e in entries)
+
+
+def test_adopt_refuses_cross_volume(session, game, monkeypatch):
+    from rippermod_manager.services import install_service
+    from rippermod_manager.services.vfs.primitives import VfsError
+
+    monkeypatch.setattr(install_service, "same_volume", lambda *a, **k: False)
+    _put(game, "archive/pc/mod/cv.archive")
+    with pytest.raises(VfsError, match="different volumes"):
+        adopt_mod(game, "CV", ["archive/pc/mod/cv.archive"], session)

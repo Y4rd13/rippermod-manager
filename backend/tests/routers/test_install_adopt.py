@@ -45,3 +45,13 @@ def test_adopt_endpoint_404_for_unknown_game(client):
         json={"groups": []},
     )
     assert resp.status_code == 404
+
+
+def test_adopt_stream_404_for_unknown_game(client):
+    # adopt-stream does a pre-flight get_game_or_404 before streaming, so an
+    # unknown game returns an immediate HTTP 404 (not a 200 + SSE error event).
+    resp = client.post(
+        "/api/v1/games/NoSuchGame/install/adopt-stream",
+        json={"groups": []},
+    )
+    assert resp.status_code == 404

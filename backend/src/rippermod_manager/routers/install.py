@@ -638,8 +638,14 @@ def adopt(
 
 
 @router.post("/adopt-stream")
-def adopt_stream(game_name: str, body: AdoptRequest) -> StreamingResponse:
+def adopt_stream(
+    game_name: str,
+    body: AdoptRequest,
+    session: Session = Depends(get_session),
+) -> StreamingResponse:
     """Stream per-mod progress while adopting on-disk mods (mirrors the scan stream)."""
+    get_game_or_404(game_name, session)  # immediate 404 for an unknown game
+
     import json
     import queue
     import threading
