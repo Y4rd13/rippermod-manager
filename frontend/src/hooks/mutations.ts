@@ -226,6 +226,7 @@ export function useAdoptMods() {
         "conflict-summary",
         "archive-conflict-summaries",
         "archive-resource-details",
+        "health",
       ]) {
         qc.invalidateQueries({ queryKey: [key, gameName] });
       }
