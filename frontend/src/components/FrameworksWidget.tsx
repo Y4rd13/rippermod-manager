@@ -114,8 +114,7 @@ function FrameworkRow({ fw }: { fw: FrameworkStatus }) {
             variant="warning"
             title={fw.latest_is_cached ? "Latest known version (cached, may be stale)" : "Update available on Nexus"}
           >
-            ↑ v{fw.latest_version}
-            {fw.latest_is_cached ? " *" : ""}
+            {fw.latest_version ? `↑ v${fw.latest_version}${fw.latest_is_cached ? " *" : ""}` : "Update available"}
           </Badge>
         </>
       )}
