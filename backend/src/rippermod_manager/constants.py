@@ -3,14 +3,42 @@ from typing import TypedDict
 
 CYBERPUNK_DEFAULT_PATHS = [
     ("archive/pc/mod", "Main mod archives", True),
+    ("archive/pc/patch", "Priority mod archives", True),
     ("bin/x64/plugins/cyber_engine_tweaks/mods", "CET script mods", True),
     ("red4ext/plugins", "RED4ext plugins", True),
     ("r6/scripts", "Redscript mods", True),
     ("r6/tweaks", "TweakXL tweaks", True),
+    ("r6/config", "Mod config", True),
     ("bin/x64/plugins", "ASI/plugin loaders", True),
     ("mods", "REDmod mods", True),
     ("engine", "Engine config tweaks", True),
 ]
+# bin/x64 is deliberately NOT a scan root: ~60 version-volatile vanilla DLLs
+# (PhysX, DLSS/FSR, ICU, curl, ...) live loose there, and a denylist for them
+# would be unmaintainable. Loose ASI mods are covered by bin/x64/plugins.
+
+# Vanilla Cyberpunk 2077 files that live under scanned roots but must never be
+# detected or adopted as mods. Lowercased, forward-slashed, install-relative.
+# r6/config holds a small, stable set of vanilla input/UI config; mod content
+# there (e.g. cybercmd/) is intentionally NOT listed so it stays detectable.
+CYBERPUNK_VANILLA_DENYLIST = {
+    "r6/config/inputcontexts.xml",
+    "r6/config/inputdeadzones.xml",
+    "r6/config/inputusermappings.xml",
+    "r6/config/uiinputactions.xml",
+    "r6/config/bumperssettings.json",
+}
+
+# Vanilla subtrees (prefix match) under scanned roots.
+CYBERPUNK_VANILLA_PREFIXES = ("r6/config/settings/",)
+
+
+def is_vanilla_path(rel_path: str) -> bool:
+    """True if a game-relative path is a known vanilla file/subtree to skip in detection."""
+    norm = rel_path.replace("\\", "/").lower()
+    if norm in CYBERPUNK_VANILLA_DENYLIST:
+        return True
+    return any(norm.startswith(prefix) for prefix in CYBERPUNK_VANILLA_PREFIXES)
 
 
 class GameRegistryEntry(TypedDict):
