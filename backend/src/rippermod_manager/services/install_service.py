@@ -22,7 +22,11 @@ from rippermod_manager.matching.filename_parser import parse_mod_filename
 from rippermod_manager.models.correlation import ModNexusCorrelation
 from rippermod_manager.models.download import DownloadJob
 from rippermod_manager.models.game import Game
-from rippermod_manager.models.install import InstalledMod, InstalledModFile
+from rippermod_manager.models.install import (
+    DeployJournalEntry,
+    InstalledMod,
+    InstalledModFile,
+)
 from rippermod_manager.models.nexus import NexusDownload
 from rippermod_manager.nexus.client import NexusClient
 from rippermod_manager.schemas.install import (
@@ -41,6 +45,7 @@ from rippermod_manager.services.archive_layout import (
 from rippermod_manager.services.nexus_helpers import match_local_to_nexus_file
 from rippermod_manager.services.paths import get_mods_dir
 from rippermod_manager.services.vfs.naming import unique_staging_name
+from rippermod_manager.services.vfs.primitives import VfsError, hardlink
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +292,179 @@ def install_mod(
         files_extracted=len(extracted_paths),
         files_skipped=skipped,
         files_overwritten=overwritten,
+        installed_mod_name_safe=safe_name,
+    )
+
+
+def _rollback_adopt(moved: list[tuple[Path, Path]]) -> None:
+    """Undo a partial adopt: for each (staging_path, game_path) already moved,
+    remove the game-dir hardlink and move the real file back to the game dir."""
+    for staging_path, game_path in reversed(moved):
+        try:
+            if game_path.exists():
+                game_path.unlink()
+            shutil.move(str(staging_path), str(game_path))
+        except OSError:
+            logger.exception("adopt rollback failed for %s", game_path)
+
+
+def adopt_mod(
+    game: Game,
+    name: str,
+    relative_paths: list[str],
+    session: Session,
+    *,
+    nexus_mod_id: int | None = None,
+    record_history: bool = True,
+) -> InstallResult:
+    """Bring already-on-disk files under management WITHOUT re-downloading.
+
+    The inverse of ``install_mod``: each game-dir file is *moved* into a per-mod
+    staging dir (``downloaded_mods/<safe_name>/``) and hardlinked back to its
+    original game-dir path (same inode -> existing config and runtime in-place
+    writes persist). Produces ``InstalledMod`` + ``InstalledModFile`` rows
+    identical in shape to a normal install, so toggle/uninstall/deploy/drift
+    work unchanged. Every move+hardlink is journaled (``operation="adopt"``)
+    for crash forward-recovery.
+
+    Raises:
+        FileNotFoundError: game directory missing.
+        ValueError: a mod with the same name is already installed.
+        VfsError / OSError: a move/hardlink failed (this mod is rolled back first).
+    """
+    game_dir = Path(game.install_path)
+    if not game_dir.is_dir():
+        raise FileNotFoundError(f"Game directory not found: {game_dir}")
+
+    existing = session.exec(
+        select(InstalledMod).where(
+            InstalledMod.game_id == game.id,
+            InstalledMod.name == name,
+        )
+    ).first()
+    if existing:
+        raise ValueError(f"Mod '{name}' is already installed. Uninstall first to re-adopt.")
+
+    staging_parent = get_mods_dir(game)
+    staging_parent.mkdir(parents=True, exist_ok=True)
+    safe_name = unique_staging_name(staging_parent, name)
+    staging_root = staging_parent / safe_name
+    staging_root.mkdir(parents=True, exist_ok=True)
+
+    adopted: list[str] = []
+    skipped = 0
+    moved: list[tuple[Path, Path]] = []
+    game_root_resolved = game_dir.resolve()
+    staging_root_resolved = staging_root.resolve()
+
+    for rel in relative_paths:
+        rel_norm = rel.replace("\\", "/")
+        game_path = game_dir / rel_norm
+        staging_path = staging_root / rel_norm
+        # Path-traversal guard: both ends must stay inside their roots.
+        try:
+            game_path.resolve().relative_to(game_root_resolved)
+            staging_path.resolve().relative_to(staging_root_resolved)
+        except ValueError:
+            logger.warning("adopt: skipping path-traversal entry: %s", rel)
+            skipped += 1
+            continue
+        if not game_path.is_file():
+            logger.warning("adopt: not a file, skipping: %s", game_path)
+            skipped += 1
+            continue
+        staging_path.parent.mkdir(parents=True, exist_ok=True)
+
+        entry = DeployJournalEntry(
+            game_id=game.id,  # type: ignore[arg-type]
+            operation="adopt",
+            src=str(staging_path),
+            dst=str(game_path),
+            status="pending",
+        )
+        session.add(entry)
+        session.commit()  # write-ahead before the FS mutation
+        try:
+            os.replace(game_path, staging_path)  # atomic move (same volume)
+            hardlink(staging_path, game_path)  # link back; same inode
+        except (OSError, VfsError) as exc:
+            logger.error("adopt failed for %s: %s", game_path, exc)
+            entry.status = "failed"
+            entry.error = str(exc)
+            session.add(entry)
+            session.commit()
+            _rollback_adopt(moved)
+            shutil.rmtree(staging_root, ignore_errors=True)
+            raise
+        entry.status = "done"
+        session.add(entry)
+        moved.append((staging_path, game_path))
+        adopted.append(rel_norm)
+
+    installed = InstalledMod(
+        game_id=game.id,  # type: ignore[arg-type]
+        name=name,
+        staging_dir=safe_name,
+        source_archive="",  # first-class "no archive" state
+        nexus_mod_id=nexus_mod_id,
+        deployed=True,  # files are already hardlinked into the game dir
+    )
+    session.add(installed)
+    session.flush()
+
+    # Link to the scanned mod group for the same Nexus id (enables update tracking).
+    if nexus_mod_id:
+        corr = session.exec(
+            select(ModNexusCorrelation)
+            .join(NexusDownload, ModNexusCorrelation.nexus_download_id == NexusDownload.id)
+            .where(NexusDownload.nexus_mod_id == nexus_mod_id)
+            .order_by(ModNexusCorrelation.score.desc())  # type: ignore[union-attr]
+        ).first()
+        if corr:
+            installed.mod_group_id = corr.mod_group_id
+
+    for rel_path in adopted:
+        session.add(
+            InstalledModFile(
+                installed_mod_id=installed.id,  # type: ignore[arg-type]
+                relative_path=rel_path,
+                source_path=rel_path,
+                link_kind="hardlink",
+            )
+        )
+
+    session.commit()
+    session.refresh(installed)
+
+    from rippermod_manager.services.archive_index_service import index_mod_archives
+    from rippermod_manager.services.modlist_service import write_modlist
+
+    _ = installed.files
+    index_mod_archives(game, installed, session)
+    session.commit()
+    write_modlist(game, session)
+
+    logger.info("Adopted '%s' (%d files moved to staging)", name, len(adopted))
+    if record_history:
+        from rippermod_manager.services.activity_service import record_activity
+
+        # NOT undoable: adopt moved the originals into staging, so the activity-log
+        # undo (which uninstalls = rmtree staging) would delete the user's files.
+        record_activity(
+            session,
+            game_id=game.id,
+            action="adopt",
+            target=name,
+            detail=f"{len(adopted)} files",
+            installed_mod_id=installed.id,
+            undoable=False,
+        )
+    return InstallResult(
+        installed_mod_id=installed.id,  # type: ignore[arg-type]
+        name=name,
+        files_extracted=len(adopted),
+        files_skipped=skipped,
+        files_overwritten=0,
         installed_mod_name_safe=safe_name,
     )
 
