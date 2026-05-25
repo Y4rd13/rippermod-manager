@@ -17,6 +17,8 @@ import { useDownloadStore } from "@/stores/download-store";
 import { toast } from "@/stores/toast-store";
 import type {
   ActivityLogEntry,
+  AdoptGroup,
+  AdoptResult,
   ArchiveDeleteResult,
   ConflictCheckResult,
   CorrelateResult,
@@ -200,6 +202,47 @@ export function useUninstallMod() {
       toast.success("Mod uninstalled");
     },
     onError: () => toast.error("Failed to uninstall mod"),
+  });
+}
+
+export function useAdoptMods() {
+  const qc = useQueryClient();
+  return useMutation<AdoptResult, Error, { gameName: string; groups: AdoptGroup[] }>({
+    mutationFn: ({ gameName, groups }) =>
+      api.post(`/api/v1/games/${gameName}/install/adopt`, { groups }),
+    onSuccess: (result, { gameName }) => {
+      if (result.game_running) {
+        toast.error("Game is running", "Close Cyberpunk 2077 and try again.");
+        return;
+      }
+      // Adopt converts detected -> managed and moves files: refresh the same
+      // keys install/uninstall touch, plus "mods" (the detected list shrinks).
+      for (const key of [
+        "installed-mods",
+        "mods",
+        "available-archives",
+        "updates",
+        "conflict-summary",
+        "archive-conflict-summaries",
+        "archive-resource-details",
+      ]) {
+        qc.invalidateQueries({ queryKey: [key, gameName] });
+      }
+      if (result.adopted_mods > 0) {
+        toast.success(
+          `Adopted ${result.adopted_mods} mod${result.adopted_mods === 1 ? "" : "s"}`,
+          `${result.adopted_files} file${result.adopted_files === 1 ? "" : "s"} now managed`,
+        );
+      }
+      if (result.errors.length > 0) {
+        toast.warning(
+          `${result.errors.length} mod${result.errors.length === 1 ? "" : "s"} skipped`,
+          result.errors.slice(0, 3).join(" · "),
+        );
+      }
+    },
+    onError: (err) =>
+      toast.error("Adopt failed", apiErrorDetail(err, "Check the backend log for details.")),
   });
 }
 
