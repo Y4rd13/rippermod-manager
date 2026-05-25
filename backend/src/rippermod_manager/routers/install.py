@@ -3,6 +3,7 @@
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
 from rippermod_manager.database import get_session
@@ -637,13 +638,11 @@ def adopt(
 
 
 @router.post("/adopt-stream")
-def adopt_stream(game_name: str, body: AdoptRequest) -> "StreamingResponse":
+def adopt_stream(game_name: str, body: AdoptRequest) -> StreamingResponse:
     """Stream per-mod progress while adopting on-disk mods (mirrors the scan stream)."""
     import json
     import queue
     import threading
-
-    from fastapi.responses import StreamingResponse
 
     from rippermod_manager.database import engine
     from rippermod_manager.models.game import Game
@@ -676,7 +675,7 @@ def adopt_stream(game_name: str, body: AdoptRequest) -> "StreamingResponse":
                         "errors": report.errors,
                     }
                 )
-        except Exception as exc:  # noqa: BLE001 - top-level stream handler
+        except Exception as exc:  # top-level stream handler: never break the SSE
             q.put({"phase": "error", "message": str(exc), "percent": 0})
         finally:
             q.put(None)

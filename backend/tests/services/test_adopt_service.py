@@ -114,3 +114,17 @@ def test_adopt_skips_missing_or_nonfile_paths(session, game):
     )
     assert result.files_extracted == 1
     assert result.files_skipped == 1
+
+
+def test_adopted_files_report_as_linked_not_foreign(session, game):
+    from rippermod_manager.services.vfs.deploy_service import detect_drift
+
+    _put(game, "archive/pc/mod/d1.archive")
+    _put(game, "r6/tweaks/d2.tweak")
+    adopt_mod(game, "DriftMod", ["archive/pc/mod/d1.archive", "r6/tweaks/d2.tweak"], session)
+
+    report = detect_drift(game, session)
+    assert report.total == 2
+    assert report.linked == 2
+    assert report.foreign == 0
+    assert report.missing == 0
