@@ -19,17 +19,28 @@ interface AttentionItem {
  */
 function summarize(frameworks: FrameworkStatus[]) {
   const attention: AttentionItem[] = [];
+  let missing = 0;
+  let disabled = 0;
+  let outdated = 0;
+  let pending = 0;
+  // Classify each framework once (severity order) and tally in the same pass so
+  // the counts stay consistent with attention.length even when a framework
+  // matches several states (e.g. disabled AND outdated → counted once).
   for (const f of frameworks) {
-    if (f.manager_status === "not_installed") attention.push({ name: f.name, note: "not installed", danger: true });
-    else if (f.manager_status === "disabled") attention.push({ name: f.name, note: "disabled", danger: true });
-    else if (f.outdated)
+    if (f.manager_status === "not_installed") {
+      attention.push({ name: f.name, note: "not installed", danger: true });
+      missing++;
+    } else if (f.manager_status === "disabled") {
+      attention.push({ name: f.name, note: "disabled", danger: true });
+      disabled++;
+    } else if (f.outdated) {
       attention.push({ name: f.name, note: f.latest_version ? `→ v${f.latest_version}` : "update available", danger: false });
-    else if (f.manager_status === "deploy_pending") attention.push({ name: f.name, note: "not deployed", danger: false });
+      outdated++;
+    } else if (f.manager_status === "deploy_pending") {
+      attention.push({ name: f.name, note: "not deployed", danger: false });
+      pending++;
+    }
   }
-  const missing = frameworks.filter((f) => f.manager_status === "not_installed").length;
-  const disabled = frameworks.filter((f) => f.manager_status === "disabled").length;
-  const outdated = frameworks.filter((f) => f.outdated).length;
-  const pending = frameworks.filter((f) => f.manager_status === "deploy_pending").length;
   const parts: string[] = [];
   if (missing) parts.push(`${missing} missing`);
   if (disabled) parts.push(`${disabled} disabled`);
@@ -37,7 +48,8 @@ function summarize(frameworks: FrameworkStatus[]) {
   if (pending) parts.push(`${pending} to deploy`);
   const count = attention.length;
   const tone: "danger" | "warning" | "success" = missing || disabled ? "danger" : count ? "warning" : "success";
-  const label = count === 0 ? "All OK" : parts.length === 1 ? parts.join(", ") : `${count} issues`;
+  const label =
+    count === 0 ? "All OK" : parts.length === 1 ? parts.join(", ") : `${count} ${count === 1 ? "issue" : "issues"}`;
   return { count, tone, label, detail: parts.join(", "), attention };
 }
 
