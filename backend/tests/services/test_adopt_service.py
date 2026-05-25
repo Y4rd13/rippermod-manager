@@ -169,3 +169,10 @@ def test_adopt_refuses_cross_volume(session, game, monkeypatch):
     _put(game, "archive/pc/mod/cv.archive")
     with pytest.raises(VfsError, match="different volumes"):
         adopt_mod(game, "CV", ["archive/pc/mod/cv.archive"], session)
+
+
+def test_adopt_raises_when_nothing_adopted(session, game):
+    # All paths missing -> no phantom 0-file InstalledMod; raise instead.
+    with pytest.raises(ValueError, match="No adoptable files"):
+        adopt_mod(game, "Empty", ["archive/pc/mod/ghost.archive"], session)
+    assert session.exec(select(InstalledMod).where(InstalledMod.name == "Empty")).first() is None

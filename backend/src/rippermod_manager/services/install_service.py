@@ -426,6 +426,13 @@ def adopt_mod(
         moved.append((staging_path, game_path))
         adopted.append(rel_norm)
 
+    if not adopted:
+        # Every path was missing / non-file / traversal-rejected. Don't leave a
+        # phantom 0-file InstalledMod behind; the orchestrator records this as a
+        # per-group error.
+        shutil.rmtree(staging_root, ignore_errors=True)
+        raise ValueError(f"No adoptable files for '{name}' (all paths missing or skipped).")
+
     installed = InstalledMod(
         game_id=game.id,  # type: ignore[arg-type]
         name=name,
