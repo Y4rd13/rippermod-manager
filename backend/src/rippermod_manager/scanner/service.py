@@ -4,6 +4,7 @@ from pathlib import Path
 import xxhash
 from sqlmodel import Session, select
 
+from rippermod_manager.constants import is_vanilla_path
 from rippermod_manager.matching.grouper import group_mod_files
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
@@ -27,6 +28,8 @@ INTERESTING_EXTENSIONS = {
     ".toml",
     ".xml",
     ".csv",
+    ".tweak",
+    ".preset",
 }
 
 SKIP_DIRS = {"__pycache__", ".git", "node_modules", ".vscode"}
@@ -53,6 +56,9 @@ def _discover_files(game: Game) -> list[tuple[Path, str]]:
             if any(part in SKIP_DIRS for part in file_path.parts):
                 continue
             if file_path.suffix.lower() in INTERESTING_EXTENSIONS:
+                rel = file_path.relative_to(install_path).as_posix()
+                if is_vanilla_path(rel):
+                    continue
                 files.append((file_path, mod_path_entry.relative_path))
     return files
 
