@@ -31,7 +31,9 @@ class TestCreateGame:
         )
         assert r.status_code == 201
         paths = r.json()["mod_paths"]
-        assert len(paths) == 8
+        assert len(paths) == 10
+        rels = {p["relative_path"] for p in paths}
+        assert {"archive/pc/patch", "r6/config"} <= rels
 
     def test_custom_paths(self, client):
         r = client.post(

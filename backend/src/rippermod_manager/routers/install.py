@@ -3,6 +3,7 @@
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
 from rippermod_manager.database import get_session
@@ -17,6 +18,8 @@ from rippermod_manager.schemas.deploy import (
     UntrackedFilesResponse,
 )
 from rippermod_manager.schemas.install import (
+    AdoptRequest,
+    AdoptResult,
     ArchiveContentsResult,
     ArchiveDeleteResult,
     ArchiveEntryOut,
@@ -36,6 +39,7 @@ from rippermod_manager.schemas.install import (
     UninstallResult,
 )
 from rippermod_manager.schemas.redscript import RedscriptConflictResult
+from rippermod_manager.services.adopt_service import adopt_detected
 from rippermod_manager.services.conflict_service import check_conflicts
 from rippermod_manager.services.download_dates import archive_download_dates
 from rippermod_manager.services.install_service import (
@@ -612,3 +616,83 @@ def untracked(game_name: str, session: Session = Depends(get_session)) -> Untrac
     """List files under known mod roots that are not claimed by any installed mod."""
     game = get_game_or_404(game_name, session)
     return UntrackedFilesResponse(files=find_untracked_files(game, session))
+
+
+@router.post("/adopt", response_model=AdoptResult)
+def adopt(
+    game_name: str,
+    body: AdoptRequest,
+    session: Session = Depends(get_session),
+) -> AdoptResult:
+    """Adopt existing on-disk mods into management (move to staging + hardlink back)."""
+    game = get_game_or_404(game_name, session)
+    groups = [g.model_dump() for g in body.groups]
+    report = adopt_detected(game, groups, session)
+    return AdoptResult(
+        adopted_mods=report.adopted_mods,
+        adopted_files=report.adopted_files,
+        skipped_files=report.skipped_files,
+        game_running=report.game_running,
+        errors=report.errors,
+    )
+
+
+@router.post("/adopt-stream")
+def adopt_stream(
+    game_name: str,
+    body: AdoptRequest,
+    session: Session = Depends(get_session),
+) -> StreamingResponse:
+    """Stream per-mod progress while adopting on-disk mods (mirrors the scan stream)."""
+    get_game_or_404(game_name, session)  # immediate 404 for an unknown game
+
+    import json
+    import queue
+    import threading
+
+    from rippermod_manager.database import engine
+    from rippermod_manager.models.game import Game
+
+    groups = [g.model_dump() for g in body.groups]
+    q: queue.Queue[dict | None] = queue.Queue()
+
+    def on_progress(phase: str, message: str, percent: int) -> None:
+        q.put({"phase": phase, "message": message, "percent": percent})
+
+    def run() -> None:
+        try:
+            with Session(engine) as s:
+                game = s.exec(select(Game).where(Game.name == game_name)).first()
+                if not game:
+                    q.put(
+                        {"phase": "error", "message": f"Game '{game_name}' not found", "percent": 0}
+                    )
+                    return
+                report = adopt_detected(game, groups, s, on_progress=on_progress)
+                q.put(
+                    {
+                        "phase": "result",
+                        "message": "done",
+                        "percent": 100,
+                        "adopted_mods": report.adopted_mods,
+                        "adopted_files": report.adopted_files,
+                        "skipped_files": report.skipped_files,
+                        "game_running": report.game_running,
+                        "errors": report.errors,
+                    }
+                )
+        except Exception as exc:  # top-level stream handler: never break the SSE
+            q.put({"phase": "error", "message": str(exc), "percent": 0})
+        finally:
+            q.put(None)
+
+    threading.Thread(target=run, daemon=True).start()
+
+    def event_stream():
+        while True:
+            item = q.get()
+            if item is None:
+                break
+            yield f"data: {json.dumps(item)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")

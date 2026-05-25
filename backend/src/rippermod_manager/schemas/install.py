@@ -133,3 +133,21 @@ class DependentModOut(BaseModel):
 class DependentsResult(BaseModel):
     dependents: list[DependentModOut]
     count: int
+
+
+class AdoptGroup(BaseModel):
+    name: str
+    relative_paths: list[str]
+    nexus_mod_id: int | None = None
+
+
+class AdoptRequest(BaseModel):
+    groups: list[AdoptGroup]
+
+
+class AdoptResult(BaseModel):
+    adopted_mods: int
+    adopted_files: int
+    skipped_files: int
+    game_running: bool
+    errors: list[str]
