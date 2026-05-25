@@ -329,7 +329,8 @@ def adopt_mod(
 
     Raises:
         FileNotFoundError: game directory missing.
-        ValueError: a mod with the same name is already installed.
+        ValueError: a mod with the same name is already installed, or no paths
+            were adoptable (all missing / non-file / traversal-rejected).
         VfsError / OSError: a move/hardlink failed (this mod is rolled back first).
     """
     game_dir = Path(game.install_path)
