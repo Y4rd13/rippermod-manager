@@ -1367,7 +1367,7 @@ export function InstalledModsTable({
             <div className="flex items-center gap-2">
               {onReviewAdopt && (
                 <Button size="sm" onClick={onReviewAdopt}>
-                  Review &amp; adopt ({filteredRecognized.length})
+                  Review &amp; adopt
                 </Button>
               )}
               <SortSelect

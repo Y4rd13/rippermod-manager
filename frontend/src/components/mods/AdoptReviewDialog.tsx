@@ -9,11 +9,11 @@ import type { AdoptGroup, ModFileOut, ModGroup } from "@/types/api";
 /** Best-effort mod-type label from where the first file lives on disk. */
 function inferType(files: ModFileOut[]): string {
   const p = (files[0]?.file_path ?? "").toLowerCase();
-  if (p.includes("cyber_engine_tweaks")) return "CET";
+  if (p.includes("cyber_engine_tweaks/")) return "CET";
   if (p.startsWith("red4ext/")) return "RED4ext";
-  if (p.startsWith("r6/scripts")) return "redscript";
-  if (p.startsWith("r6/tweaks")) return "tweak";
-  if (p.startsWith("r6/config")) return "config";
+  if (p.startsWith("r6/scripts/")) return "redscript";
+  if (p.startsWith("r6/tweaks/")) return "tweak";
+  if (p.startsWith("r6/config/")) return "config";
   if (p.startsWith("mods/")) return "REDmod";
   if (p.startsWith("archive/")) return "archive";
   return "files";
