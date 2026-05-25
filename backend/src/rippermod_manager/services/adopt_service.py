@@ -16,7 +16,7 @@ from rippermod_manager.models.game import Game
 from rippermod_manager.services.install_service import adopt_mod
 from rippermod_manager.services.progress import ProgressCallback, noop_progress
 from rippermod_manager.services.save_backup_service import maybe_backup_before
-from rippermod_manager.services.vfs.primitives import is_game_running
+from rippermod_manager.services.vfs.primitives import VfsError, is_game_running
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,10 @@ def adopt_detected(
             report.adopted_mods += 1
             report.adopted_files += result.files_extracted
             report.skipped_files += result.files_skipped
-        except (ValueError, OSError) as exc:
+        except (ValueError, OSError, VfsError) as exc:
+            # VfsError extends Exception (not OSError); adopt_mod can re-raise it
+            # (same_volume guard, or a wrapped hardlink error), so catch it here
+            # to preserve per-group isolation.
             logger.error("adopt_detected: group '%s' failed: %s", name, exc)
             report.errors.append(f"{name}: {exc}")
             session.rollback()

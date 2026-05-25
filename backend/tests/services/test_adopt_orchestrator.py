@@ -73,3 +73,33 @@ def test_continues_past_a_failing_group(session, game, monkeypatch):
     assert report.adopted_mods == 1
     assert len(report.errors) == 1
     assert "Taken" in report.errors[0]
+
+
+def test_continues_past_a_vfs_error(session, game, monkeypatch):
+    # VfsError is not an OSError; the orchestrator must still catch it and keep
+    # per-group isolation rather than letting it abort the remaining groups.
+    from rippermod_manager.services.vfs.primitives import VfsError
+
+    monkeypatch.setattr(adopt_service, "is_game_running", lambda *a, **k: False)
+    _put(game, "archive/pc/mod/ok.archive")
+
+    real_adopt = adopt_service.adopt_mod
+
+    def flaky_adopt(game_, name, paths, sess, **kw):
+        if name == "Bad":
+            raise VfsError("hardlink boom")
+        return real_adopt(game_, name, paths, sess, **kw)
+
+    monkeypatch.setattr(adopt_service, "adopt_mod", flaky_adopt)
+
+    report = adopt_service.adopt_detected(
+        game,
+        [
+            {"name": "Bad", "relative_paths": ["archive/pc/mod/missing.archive"]},
+            {"name": "OK", "relative_paths": ["archive/pc/mod/ok.archive"]},
+        ],
+        session,
+    )
+    assert report.adopted_mods == 1  # OK still adopted after Bad failed
+    assert len(report.errors) == 1
+    assert "Bad" in report.errors[0]
