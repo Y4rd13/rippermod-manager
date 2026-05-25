@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Scan,
   UserCheck,
+  X,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,6 +19,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Link, useParams } from "react-router";
 
 import { ClusterDetailsPanel, ConflictSummaryWidget } from "@/components/conflicts/ConflictSummaryWidget";
+import { AdoptReviewDialog } from "@/components/mods/AdoptReviewDialog";
 import { FrameworksStatCard } from "@/components/FrameworksStatCard";
 import { FrameworksWidget } from "@/components/FrameworksWidget";
 import { HealthWidget } from "@/components/HealthWidget";
@@ -148,6 +150,9 @@ const TABS: { key: Tab; label: string; Icon: typeof Package; description: string
 export function GameDetailPage() {
   const { name = "" } = useParams();
   const setActiveGame = useUIStore((s) => s.setActiveGame);
+  const adoptBannerDismissed = useUIStore((s) => s.adoptBannerDismissedByGame[name] ?? false);
+  const dismissAdoptBanner = useUIStore((s) => s.dismissAdoptBanner);
+  const [adoptOpen, setAdoptOpen] = useState(false);
   useEffect(() => {
     setActiveGame(name || null);
     return () => setActiveGame(null);
@@ -370,10 +375,15 @@ export function GameDetailPage() {
   const nexusMatched = useMemo(() => mods.filter((m) => m.nexus_match), [mods]);
   const enabledCount = installedMods.filter((m) => !m.disabled).length;
 
-  const recognizedNotInstalled = useMemo(() => {
-    const installedIds = new Set(installedMods.filter((m) => m.nexus_mod_id != null).map((m) => m.nexus_mod_id!));
-    return nexusMatched.filter((m) => m.nexus_match && !installedIds.has(m.nexus_match.nexus_mod_id)).length;
+  const adoptableMods = useMemo(() => {
+    const installedIds = new Set(
+      installedMods.filter((m) => m.nexus_mod_id != null).map((m) => m.nexus_mod_id!),
+    );
+    return nexusMatched.filter(
+      (m) => m.nexus_match && !installedIds.has(m.nexus_match.nexus_mod_id),
+    );
   }, [nexusMatched, installedMods]);
+  const recognizedNotInstalled = adoptableMods.length;
 
   const tabCounts = useMemo<Partial<Record<Tab, number>>>(() => ({
     installed: installedLoading ? undefined : installedMods.length + recognizedNotInstalled,
@@ -577,6 +587,42 @@ export function GameDetailPage() {
         <FrameworksStatCard gameName={name} onOpen={goToFrameworks} />
       </div>
 
+      {recognizedNotInstalled > 0 && !adoptBannerDismissed && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent/5 p-4">
+          <div className="flex items-center gap-3">
+            <Package size={20} className="shrink-0 text-accent" />
+            <div>
+              <p className="text-sm font-medium text-text-primary">
+                {recognizedNotInstalled} mod{recognizedNotInstalled === 1 ? "" : "s"} detected on disk{" "}
+                {recognizedNotInstalled === 1 ? "isn't" : "aren't"} managed yet
+              </p>
+              <p className="text-xs text-text-muted">
+                Adopt them to unlock profiles, updates, and clean uninstall — without re-downloading.
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                setTab("installed");
+                setAdoptOpen(true);
+              }}
+            >
+              Review &amp; adopt
+            </Button>
+            <button
+              type="button"
+              onClick={() => dismissAdoptBanner(name)}
+              title="Dismiss"
+              className="rounded p-1 text-text-muted hover:text-text-primary"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="relative">
         {canScrollLeft && (
           <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 z-10 bg-gradient-to-r from-surface-0 to-transparent" />
@@ -718,6 +764,7 @@ export function GameDetailPage() {
             isLoading={installedLoading}
             onModClick={setSelectedModId}
             onTabChange={(t) => setTab(t as Tab)}
+            onReviewAdopt={recognizedNotInstalled > 0 ? () => setAdoptOpen(true) : undefined}
           />
         </>
       )}
@@ -839,6 +886,13 @@ export function GameDetailPage() {
           onCancel={modalFlow.dismissConflicts}
           onSkip={modalFlow.handleInstallWithSkip}
           onOverwrite={modalFlow.handleInstallOverwrite}
+        />
+      )}
+      {adoptOpen && (
+        <AdoptReviewDialog
+          gameName={name}
+          mods={adoptableMods}
+          onClose={() => setAdoptOpen(false)}
         />
       )}
     </div>

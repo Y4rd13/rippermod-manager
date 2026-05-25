@@ -115,6 +115,7 @@ interface Props {
   isLoading?: boolean;
   onModClick?: (nexusModId: number) => void;
   onTabChange?: (tab: string) => void;
+  onReviewAdopt?: () => void;
 }
 
 type SortKey = "name" | "version" | "files" | "disabled" | "updated";
@@ -1188,6 +1189,7 @@ export function InstalledModsTable({
   isLoading,
   onModClick,
   onTabChange,
+  onReviewAdopt,
 }: Props) {
   const [filter, setFilter] = useState("");
   const [chip, setChip] = useSessionState<ChipKey>(`installed-chip-${gameName}`, "all");
@@ -1359,14 +1361,21 @@ export function InstalledModsTable({
       {filteredRecognized.length > 0 && scope !== "installed" && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-text-primary" title="Mods found on disk and matched to Nexus. Click Install to manage them">
+            <h3 className="text-sm font-semibold text-text-primary" title="Mods found on disk and matched to Nexus. Adopt them to bring them under management.">
               Detected on Disk ({filteredRecognized.length})
             </h3>
-            <SortSelect
-              value={recognizedSort}
-              onChange={(v) => setRecognizedSort(v as RecognizedSortKey)}
-              options={RECOGNIZED_SORT_OPTIONS}
-            />
+            <div className="flex items-center gap-2">
+              {onReviewAdopt && (
+                <Button size="sm" onClick={onReviewAdopt}>
+                  Review &amp; adopt
+                </Button>
+              )}
+              <SortSelect
+                value={recognizedSort}
+                onChange={(v) => setRecognizedSort(v as RecognizedSortKey)}
+                options={RECOGNIZED_SORT_OPTIONS}
+              />
+            </div>
           </div>
           <p className="text-xs text-text-muted mb-3">
             These mods were detected on disk and matched to Nexus &mdash; sometimes by
