@@ -82,6 +82,7 @@ export function useDeploy(gameName: string | null) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["deploy-status", gameName] });
       void qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      void qc.invalidateQueries({ queryKey: ["health", gameName] });
     },
   });
 }
@@ -92,6 +93,7 @@ export function useUndeploy(gameName: string | null) {
     mutationFn: () => api.post<DeployReport>(undeployPath(gameName!)),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["deploy-status", gameName] });
+      void qc.invalidateQueries({ queryKey: ["health", gameName] });
     },
   });
 }

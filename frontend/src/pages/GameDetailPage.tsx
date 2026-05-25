@@ -22,6 +22,7 @@ import { ClusterDetailsPanel, ConflictSummaryWidget } from "@/components/conflic
 import { AdoptReviewDialog } from "@/components/mods/AdoptReviewDialog";
 import { FrameworksStatCard } from "@/components/FrameworksStatCard";
 import { FrameworksWidget } from "@/components/FrameworksWidget";
+import { HealthStatCard } from "@/components/HealthStatCard";
 import { HealthWidget } from "@/components/HealthWidget";
 import { LogErrorsWidget } from "@/components/LogErrorsWidget";
 import { ArchivesList } from "@/components/mods/ArchivesList";
@@ -97,7 +98,6 @@ function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomai
   ];
   return (
     <div className="space-y-4">
-      <HealthWidget gameName={gameName} />
       <LogErrorsWidget gameName={gameName} />
       <ConflictSummaryWidget gameName={gameName} />
       <div className="flex gap-1 border-b border-border">
@@ -150,6 +150,7 @@ const TABS: { key: Tab; label: string; Icon: typeof Package; description: string
 export function GameDetailPage() {
   const { name = "" } = useParams();
   const setActiveGame = useUIStore((s) => s.setActiveGame);
+  const warnBeforeLaunch = useUIStore((s) => s.warnBeforeLaunch);
   const adoptBannerDismissed = useUIStore((s) => s.adoptBannerDismissedByGame[name] ?? false);
   const dismissAdoptBanner = useUIStore((s) => s.dismissAdoptBanner);
   const [adoptOpen, setAdoptOpen] = useState(false);
@@ -197,6 +198,22 @@ export function GameDetailPage() {
     const t = window.setTimeout(() => setHighlightFrameworks(false), 1600);
     return () => window.clearTimeout(t);
   }, [highlightFrameworks, tab]);
+
+  const healthPanelRef = useRef<HTMLDivElement>(null);
+  const [highlightHealth, setHighlightHealth] = useState(false);
+
+  // Header "Health" card → jump to the Installed tab and flash the health panel.
+  const goToHealth = useCallback(() => {
+    setTab("installed");
+    setHighlightHealth(true);
+  }, []);
+
+  useEffect(() => {
+    if (!highlightHealth || tab !== "installed") return;
+    healthPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const t = window.setTimeout(() => setHighlightHealth(false), 1600);
+    return () => window.clearTimeout(t);
+  }, [highlightHealth, tab]);
 
   const [isLaunching, setIsLaunching] = useState(false);
   const [launchGate, setLaunchGate] = useState<HealthReport | null>(null);
@@ -307,15 +324,18 @@ export function GameDetailPage() {
   const handleLaunch = async () => {
     if (!game || !gameVersion?.exe_path) return;
     // Pre-launch health gate: warn (but allow override) on critical issues a
-    // deploy won't fix -- e.g. a missing required mod. Never blocks on error.
-    try {
-      const health = await api.get<HealthReport>(`/api/v1/games/${game.name}/health/`);
-      if (health.critical > 0) {
-        setLaunchGate(health);
-        return;
+    // deploy won't fix -- e.g. a missing required mod. Opt-out via Settings;
+    // never blocks on error.
+    if (warnBeforeLaunch) {
+      try {
+        const health = await api.get<HealthReport>(`/api/v1/games/${game.name}/health/`);
+        if (health.critical > 0) {
+          setLaunchGate(health);
+          return;
+        }
+      } catch {
+        // a health-check failure must not prevent launching
       }
-    } catch {
-      // a health-check failure must not prevent launching
     }
     await runDeployAndLaunch();
   };
@@ -446,8 +466,8 @@ export function GameDetailPage() {
             <div className="h-9 w-36 bg-surface-2 rounded-lg" />
           </div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-          {Array.from({ length: 6 }, (_, i) => (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4">
+          {Array.from({ length: 7 }, (_, i) => (
             <div key={i} className="rounded-xl border border-border bg-surface-1 p-5">
               <div className="flex items-center gap-3">
                 <div className="h-5 w-5 bg-surface-2 rounded" />
@@ -504,7 +524,7 @@ export function GameDetailPage() {
         <ScanProgress logs={scanLogs} percent={scanPercent} phase={scanPhase} />
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4">
         <Card
           className="hover:border-success/40 transition-colors"
           onClick={() => { setTab("matched"); setMatchedSubTab("scan-details"); }}
@@ -585,6 +605,7 @@ export function GameDetailPage() {
           </div>
         </Card>
         <FrameworksStatCard gameName={name} onOpen={goToFrameworks} />
+        <HealthStatCard gameName={name} onOpen={goToHealth} />
       </div>
 
       {recognizedNotInstalled > 0 && !adoptBannerDismissed && (
@@ -745,6 +766,15 @@ export function GameDetailPage() {
       {tab === "installed" && (
         <>
           <div
+            ref={healthPanelRef}
+            className={cn(
+              "mb-4 scroll-mt-4 rounded-xl transition-shadow duration-500",
+              highlightHealth && "ring-2 ring-warning ring-offset-2 ring-offset-surface-0",
+            )}
+          >
+            <HealthWidget gameName={name} onGoToUpdates={() => setTab("updates")} />
+          </div>
+          <div
             ref={frameworksPanelRef}
             className={cn(
               "mb-4 scroll-mt-4 rounded-xl transition-shadow duration-500",
@@ -855,19 +885,54 @@ export function GameDetailPage() {
           }}
           onCancel={() => setLaunchGate(null)}
         >
-          <ul className="max-h-40 space-y-1 overflow-y-auto text-xs text-text-secondary">
-            {launchGate.issues
-              .filter((i) => i.severity === "critical")
-              .map((i, idx) => (
-                <li key={idx}>
-                  •{" "}
-                  {i.mod_name && (
-                    <span className="font-medium text-text-primary">{i.mod_name}</span>
-                  )}{" "}
-                  {i.message}
-                </li>
-              ))}
-          </ul>
+          <div className="space-y-3">
+            <ul className="max-h-32 space-y-1.5 overflow-y-auto text-xs">
+              {launchGate.issues
+                .filter((i) => i.severity === "critical")
+                .map((i, idx) => (
+                  <li key={idx} className="text-text-secondary">
+                    <span className="text-danger">• </span>
+                    {i.mod_name && (
+                      <span className="font-medium text-text-primary">{i.mod_name}</span>
+                    )}{" "}
+                    {i.message}
+                    {i.suggested_fix && (
+                      <span className="block pl-3 text-text-muted">→ {i.suggested_fix}</span>
+                    )}
+                  </li>
+                ))}
+            </ul>
+            {launchGate.warning > 0 && (
+              <div>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                  Also worth checking
+                </p>
+                <ul className="max-h-24 space-y-1 overflow-y-auto text-xs text-text-secondary">
+                  {launchGate.issues
+                    .filter((i) => i.severity === "warning")
+                    .map((i, idx) => (
+                      <li key={idx}>
+                        <span className="text-warning">• </span>
+                        {i.mod_name && (
+                          <span className="font-medium text-text-primary">{i.mod_name}</span>
+                        )}{" "}
+                        {i.message}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setLaunchGate(null);
+                goToHealth();
+              }}
+              className="text-xs font-medium text-accent hover:underline"
+            >
+              Fix issues first →
+            </button>
+          </div>
         </ConfirmDialog>
       )}
 

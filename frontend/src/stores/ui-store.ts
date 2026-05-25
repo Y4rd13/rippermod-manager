@@ -8,10 +8,12 @@ interface UIState {
   activeGameName: string | null;
   viewModeByTab: Record<string, ModViewMode>;
   adoptBannerDismissedByGame: Record<string, boolean>;
+  warnBeforeLaunch: boolean;
   toggleSidebar: () => void;
   setActiveGame: (name: string | null) => void;
   setViewMode: (tabKey: string, mode: ModViewMode) => void;
   dismissAdoptBanner: (gameName: string) => void;
+  setWarnBeforeLaunch: (value: boolean) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -21,6 +23,7 @@ export const useUIStore = create<UIState>()(
       activeGameName: null,
       viewModeByTab: {},
       adoptBannerDismissedByGame: {},
+      warnBeforeLaunch: true,
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setActiveGame: (name) => set({ activeGameName: name }),
       setViewMode: (tabKey, mode) =>
@@ -29,6 +32,7 @@ export const useUIStore = create<UIState>()(
         set((s) => ({
           adoptBannerDismissedByGame: { ...s.adoptBannerDismissedByGame, [gameName]: true },
         })),
+      setWarnBeforeLaunch: (value) => set({ warnBeforeLaunch: value }),
     }),
     {
       name: "rmm-ui",
@@ -37,6 +41,7 @@ export const useUIStore = create<UIState>()(
         sidebarCollapsed: state.sidebarCollapsed,
         viewModeByTab: state.viewModeByTab,
         adoptBannerDismissedByGame: state.adoptBannerDismissedByGame,
+        warnBeforeLaunch: state.warnBeforeLaunch,
       }),
     },
   ),
