@@ -5,6 +5,7 @@ import {
   Eye,
   FolderOpen,
   Heart,
+  HeartPulse,
   Link2,
   Package,
   Play,
@@ -22,10 +23,8 @@ import { Link, useParams } from "react-router";
 import { ClusterDetailsPanel, ConflictSummaryWidget } from "@/components/conflicts/ConflictSummaryWidget";
 import { AdoptReviewDialog } from "@/components/mods/AdoptReviewDialog";
 import { FrameworksStatCard } from "@/components/FrameworksStatCard";
-import { FrameworksWidget } from "@/components/FrameworksWidget";
 import { HealthStatCard } from "@/components/HealthStatCard";
-import { HealthWidget } from "@/components/HealthWidget";
-import { LogErrorsWidget } from "@/components/LogErrorsWidget";
+import { HealthTab } from "@/components/HealthTab";
 import { ArchivesList } from "@/components/mods/ArchivesList";
 import { InstalledCollectionsSection } from "@/components/collections/InstalledCollectionsSection";
 import { ConflictDialog } from "@/components/mods/ConflictDialog";
@@ -55,6 +54,7 @@ import {
   useEndorsedMods,
   useGame,
   useGameVersion,
+  useHealth,
   useInstalledMods,
   useMods,
   useProfiles,
@@ -101,7 +101,6 @@ function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomai
   ];
   return (
     <div className="space-y-4">
-      <LogErrorsWidget gameName={gameName} />
       <ConflictSummaryWidget gameName={gameName} />
       <div className="flex gap-1 border-b border-border">
         {subTabs.map(({ key, label }) => (
@@ -135,11 +134,12 @@ function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomai
   );
 }
 
-type Tab = "installed" | "matched" | "archives" | "updates" | "conflicts" | "profiles" | "trending" | "endorsed" | "tracked";
+type Tab = "installed" | "health" | "matched" | "archives" | "updates" | "conflicts" | "profiles" | "trending" | "endorsed" | "tracked";
 
 const TABS: { key: Tab; label: string; Icon: typeof Package; description: string }[] = [
   // Management
   { key: "installed", label: "Installed", Icon: UserCheck, description: "Mods currently installed on your game. Toggle on/off, uninstall, or check deploy drift." },
+  { key: "health", label: "Health", Icon: HeartPulse, description: "Pre-launch check: requirements, install integrity, core frameworks, and mod errors." },
   { key: "archives", label: "Archives", Icon: Archive, description: "Mod archives in your downloaded_mods folder, ready to install." },
   { key: "updates", label: "Updates", Icon: RefreshCw, description: "Newer versions of your installed mods available on Nexus." },
   { key: "conflicts", label: "Conflicts", Icon: AlertTriangle, description: "File and resource conflicts between your installed mods." },
@@ -173,6 +173,7 @@ export function GameDetailPage() {
   const { data: trendingResult, isLoading: trendingLoading, dataUpdatedAt: trendingUpdatedAt } = useTrendingMods(name);
   const { data: updates, isLoading: updatesLoading } = useUpdates(name);
   const { data: conflictsOverview, isLoading: conflictsLoading } = useConflictsOverview(name);
+  const { data: healthReport } = useHealth(name);
   const { data: downloadJobs = [] } = useDownloadJobs(name);
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("installed");
@@ -193,38 +194,25 @@ export function GameDetailPage() {
     [installedMods],
   );
 
-  const frameworksPanelRef = useRef<HTMLDivElement>(null);
-  const [highlightFrameworks, setHighlightFrameworks] = useState(false);
+  const [focusFrameworks, setFocusFrameworks] = useState(false);
 
-  // Header "Frameworks" card → jump to the Installed tab, scroll the panel into
-  // view, and flash a highlight ring so the card→detail link is obvious.
+  // Header cards open the Health tab. "Frameworks" also scrolls to + flashes its
+  // section there; "Health" just lands at the top (the readiness banner).
   const goToFrameworks = useCallback(() => {
-    setTab("installed");
-    setHighlightFrameworks(true);
+    setTab("health");
+    setFocusFrameworks(true);
   }, []);
-
-  useEffect(() => {
-    if (!highlightFrameworks || tab !== "installed") return;
-    frameworksPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    const t = window.setTimeout(() => setHighlightFrameworks(false), 1600);
-    return () => window.clearTimeout(t);
-  }, [highlightFrameworks, tab]);
-
-  const healthPanelRef = useRef<HTMLDivElement>(null);
-  const [highlightHealth, setHighlightHealth] = useState(false);
-
-  // Header "Health" card → jump to the Installed tab and flash the health panel.
   const goToHealth = useCallback(() => {
-    setTab("installed");
-    setHighlightHealth(true);
+    setTab("health");
+    setFocusFrameworks(false);
   }, []);
 
+  // Clear the frameworks-focus flag after the flash so it doesn't re-fire.
   useEffect(() => {
-    if (!highlightHealth || tab !== "installed") return;
-    healthPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    const t = window.setTimeout(() => setHighlightHealth(false), 1600);
+    if (!focusFrameworks) return;
+    const t = window.setTimeout(() => setFocusFrameworks(false), 1600);
     return () => window.clearTimeout(t);
-  }, [highlightHealth, tab]);
+  }, [focusFrameworks]);
 
   const [isLaunching, setIsLaunching] = useState(false);
   const [launchGate, setLaunchGate] = useState<HealthReport | null>(null);
@@ -690,6 +678,14 @@ export function GameDetailPage() {
               {key === "updates" && (updates?.updates_available ?? 0) > 0 && (
                 <span className="h-1.5 w-1.5 rounded-full bg-warning inline-block" />
               )}
+              {key === "health" && (healthReport?.critical ?? 0) > 0 && (
+                <span className="h-1.5 w-1.5 rounded-full bg-danger inline-block" />
+              )}
+              {key === "health" &&
+                (healthReport?.critical ?? 0) === 0 &&
+                (healthReport?.warning ?? 0) > 0 && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-warning inline-block" />
+                )}
             </button>
           ))}
         </div>
@@ -796,26 +792,15 @@ export function GameDetailPage() {
       {tab === "conflicts" && (
         <ConflictSubTabs gameName={name} gameDomain={game?.domain_name ?? ""} />
       )}
+      {tab === "health" && (
+        <HealthTab
+          gameName={name}
+          focusFrameworks={focusFrameworks}
+          onGoToUpdates={() => setTab("updates")}
+        />
+      )}
       {tab === "installed" && (
         <>
-          <div
-            ref={healthPanelRef}
-            className={cn(
-              "mb-4 scroll-mt-4 rounded-xl transition-shadow duration-500",
-              highlightHealth && "ring-2 ring-warning ring-offset-2 ring-offset-surface-0",
-            )}
-          >
-            <HealthWidget gameName={name} onGoToUpdates={() => setTab("updates")} />
-          </div>
-          <div
-            ref={frameworksPanelRef}
-            className={cn(
-              "mb-4 scroll-mt-4 rounded-xl transition-shadow duration-500",
-              highlightFrameworks && "ring-2 ring-warning ring-offset-2 ring-offset-surface-0",
-            )}
-          >
-            <FrameworksWidget gameName={name} />
-          </div>
           <InstalledCollectionsSection gameName={name} />
           <InstalledModsTable
             mods={installedMods}
