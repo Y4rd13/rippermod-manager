@@ -13,7 +13,10 @@ router = APIRouter(prefix="/diagnostics", tags=["diagnostics"])
 
 
 @router.get("/")
-def get_diagnostics(session: Session = Depends(get_session)) -> dict[str, Any]:
+def get_diagnostics(
+    redact: bool = False, session: Session = Depends(get_session)
+) -> dict[str, Any]:
     """One-click diagnostics bundle for bug reports: system info, the per-game
-    mod inventory + load order + game version, and the app log tail. No secrets."""
-    return build_diagnostics(session)
+    mod inventory + load order + game version, and the app log tail. No secrets.
+    Pass ``?redact=true`` to anonymise home-dir paths before sharing."""
+    return build_diagnostics(session, redact=redact)
