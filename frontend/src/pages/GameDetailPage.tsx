@@ -139,8 +139,8 @@ type Tab = "installed" | "health" | "matched" | "archives" | "updates" | "confli
 const TABS: { key: Tab; label: string; Icon: typeof Package; description: string }[] = [
   // Management
   { key: "installed", label: "Installed", Icon: UserCheck, description: "Mods currently installed on your game. Toggle on/off, uninstall, or check deploy drift." },
-  { key: "health", label: "Health", Icon: HeartPulse, description: "Pre-launch check: requirements, install integrity, core frameworks, and mod errors." },
   { key: "archives", label: "Archives", Icon: Archive, description: "Mod archives in your downloaded_mods folder, ready to install." },
+  { key: "health", label: "Health", Icon: HeartPulse, description: "Pre-launch check: requirements, install integrity, core frameworks, and mod errors." },
   { key: "updates", label: "Updates", Icon: RefreshCw, description: "Newer versions of your installed mods available on Nexus." },
   { key: "conflicts", label: "Conflicts", Icon: AlertTriangle, description: "File and resource conflicts between your installed mods." },
   { key: "profiles", label: "Profiles", Icon: FolderOpen, description: "Save and switch between enabled/disabled mod snapshots." },
