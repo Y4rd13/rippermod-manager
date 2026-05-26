@@ -331,6 +331,7 @@ export interface HealthIssueOut {
   installed_mod_id: number | null;
   nexus_url: string | null;
   action_mod_id: number | null;
+  required_name: string;
 }
 
 export interface HealthReport {
