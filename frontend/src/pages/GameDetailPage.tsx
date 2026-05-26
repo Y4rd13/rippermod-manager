@@ -606,7 +606,7 @@ export function GameDetailPage() {
                 {recognizedNotInstalled === 1 ? "isn't" : "aren't"} managed yet
               </p>
               <p className="text-xs text-text-muted">
-                Adopt them to unlock profiles, updates, and clean uninstall — without re-downloading.
+                Adopt them to unlock profiles, updates, and clean uninstall, without re-downloading.
               </p>
             </div>
           </div>

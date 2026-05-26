@@ -77,7 +77,7 @@ export function FrameworksStatCard({ gameName, onOpen }: { gameName: string; onO
       title={
         s.count > 0
           ? `Frameworks needing attention: ${s.detail}`
-          : "Core modding frameworks (RED4ext, redscript, ArchiveXL, TweakXL, Codeware, CET) — all installed and current"
+          : "Core modding frameworks (RED4ext, redscript, ArchiveXL, TweakXL, Codeware, CET), all installed and current"
       }
     >
       <div className="flex items-center gap-3">

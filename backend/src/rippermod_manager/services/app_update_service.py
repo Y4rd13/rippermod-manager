@@ -111,7 +111,7 @@ async def start_download(api_key: str | None, data_dir: Path) -> AppUpdateStatus
         return _fail("premium_required", "A Premium Nexus account is required for in-app download")
     except NexusRateLimitError as exc:
         logger.warning("App update metadata fetch hit Nexus rate limit: %s", exc)
-        return _fail("rate_limited", "Nexus API rate limit reached — try again later")
+        return _fail("rate_limited", "Nexus API rate limit reached, try again later")
     except httpx.HTTPError as exc:
         logger.warning("App update metadata fetch failed: %s", exc)
         return _fail("network_error", f"Could not reach Nexus: {exc}")

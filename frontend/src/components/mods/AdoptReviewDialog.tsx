@@ -114,7 +114,7 @@ export function AdoptReviewDialog({ gameName, mods, onClose }: Props) {
                 Adopt your existing mods
               </h3>
               <p className="mt-0.5 text-xs text-text-muted">
-                Bring mods detected on disk under management — without re-downloading.
+                Bring mods detected on disk under management, without re-downloading.
               </p>
             </div>
           </div>
@@ -130,7 +130,7 @@ export function AdoptReviewDialog({ gameName, mods, onClose }: Props) {
         <div className="flex-1 overflow-y-auto p-5">
           <p className="mb-4 rounded-lg border border-border bg-surface-2 p-3 text-xs text-text-secondary">
             Adopting <span className="font-medium text-text-primary">moves</span> these files into
-            managed storage and hardlinks them back — the game sees the exact same files, nothing is
+            managed storage and hardlinks them back, so the game sees the exact same files, nothing is
             re-extracted or reordered, and your existing configs are preserved.
           </p>
 
@@ -187,7 +187,7 @@ export function AdoptReviewDialog({ gameName, mods, onClose }: Props) {
                     ✓ {Math.round(m.nexus_match.score * 100)}%
                   </Badge>
                 ) : (
-                  <Badge variant="neutral" title="No Nexus match — adopted as a local mod">
+                  <Badge variant="neutral" title="No Nexus match, adopted as a local mod">
                     local
                   </Badge>
                 )}

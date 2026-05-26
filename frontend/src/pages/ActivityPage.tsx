@@ -27,7 +27,7 @@ function undoMessage(e: ActivityLogEntry): string {
     case "install":
       return `Undo installing "${e.target}"? This uninstalls the mod and removes its files from the game.`;
     case "uninstall":
-      return `Undo uninstalling "${e.target}"? This reinstalls it from the original archive — its prior load order and enabled state aren't restored.`;
+      return `Undo uninstalling "${e.target}"? This reinstalls it from the original archive, but its prior load order and enabled state aren't restored.`;
     case "enable":
       return `Undo enabling "${e.target}"? This disables it again.`;
     case "disable":
@@ -70,9 +70,9 @@ function GameActivity({ gameName }: { gameName: string }) {
                 </span>
               </td>
               <td className="max-w-xs truncate py-1.5 pr-3 text-text-secondary">
-                {e.target || "—"}
+                {e.target || "-"}
               </td>
-              <td className="py-1.5 pr-3 text-text-muted">{e.detail || "—"}</td>
+              <td className="py-1.5 pr-3 text-text-muted">{e.detail || "-"}</td>
               <td className="whitespace-nowrap py-1.5 pr-3 text-text-muted" title={e.created_at}>
                 {timeAgo(isoToEpoch(e.created_at))}
               </td>
