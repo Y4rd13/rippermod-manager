@@ -171,6 +171,7 @@ export function useInstallMod() {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
       qc.invalidateQueries({ queryKey: ["updates", gameName] });
+      qc.invalidateQueries({ queryKey: ["health", gameName] });
       toast.success("Mod installed", `${result.files_extracted} files extracted`);
       if (result.files_overwritten > 0) {
         toast.warning(
@@ -199,6 +200,7 @@ export function useUninstallMod() {
       qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
       qc.invalidateQueries({ queryKey: ["archive-resource-details", gameName] });
       qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
+      qc.invalidateQueries({ queryKey: ["health", gameName] });
       toast.success("Mod uninstalled");
     },
     onError: () => toast.error("Failed to uninstall mod"),
@@ -225,6 +227,7 @@ export function useAdoptMods() {
         "conflict-summary",
         "archive-conflict-summaries",
         "archive-resource-details",
+        "health",
       ]) {
         qc.invalidateQueries({ queryKey: [key, gameName] });
       }
@@ -280,6 +283,7 @@ export function useToggleMod() {
       qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
       qc.invalidateQueries({ queryKey: ["archive-resource-details", gameName] });
       qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
+      qc.invalidateQueries({ queryKey: ["health", gameName] });
     },
   });
 }
@@ -298,6 +302,7 @@ export function useUndoActivity() {
       qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
       qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
       qc.invalidateQueries({ queryKey: ["archive-resource-details", gameName] });
+      qc.invalidateQueries({ queryKey: ["health", gameName] });
       toast.success("Action undone");
     },
     onError: (err) => {

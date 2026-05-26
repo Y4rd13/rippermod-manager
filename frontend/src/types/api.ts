@@ -329,6 +329,8 @@ export interface HealthIssueOut {
   suggested_fix: string;
   mod_name: string;
   installed_mod_id: number | null;
+  nexus_url: string | null;
+  action_mod_id: number | null;
 }
 
 export interface HealthReport {
