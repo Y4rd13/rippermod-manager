@@ -50,3 +50,57 @@ class TestDiagnostics:
         resp = client.get("/api/v1/diagnostics/")
         assert resp.status_code == 200
         assert "SECRET-KEY-DO-NOT-LEAK" not in resp.text
+
+    def test_redacted_flag_reflects_param(self, client, engine):
+        with Session(engine) as s:
+            s.add(Game(name="Cyberpunk 2077", domain_name="cyberpunk2077", install_path="/games/x"))
+            s.commit()
+
+        assert client.get("/api/v1/diagnostics/").json()["redacted"] is False
+        assert client.get("/api/v1/diagnostics/?redact=true").json()["redacted"] is True
+
+    def test_redact_replaces_home_dir_in_paths(self, client, engine):
+        # With redact on, a path under the user's home dir is anonymised to ~,
+        # so the OS username doesn't leak when the report is shared.
+        from pathlib import Path
+
+        home = str(Path.home())
+        with Session(engine) as s:
+            s.add(
+                Game(
+                    name="Cyberpunk 2077",
+                    domain_name="cyberpunk2077",
+                    install_path=f"{home}/Games/CP2077",
+                )
+            )
+            s.commit()
+
+        plain = client.get("/api/v1/diagnostics/").json()
+        assert plain["games"][0]["install_path"] == f"{home}/Games/CP2077"
+
+        red = client.get("/api/v1/diagnostics/?redact=true").json()
+        assert red["games"][0]["install_path"] == "~/Games/CP2077"
+
+
+class TestScrubSecrets:
+    def test_masks_credential_values_but_keeps_content(self):
+        from rippermod_manager.services.diagnostics_service import _scrub_secrets
+
+        assert "MY-KEY" not in _scrub_secrets("APIKEY: MY-KEY")
+        assert "topsecret" not in _scrub_secrets("api_key=topsecret loaded")
+        assert "abc123" not in _scrub_secrets("GET https://cdn/file?key=abc123&expires=9")
+        # ordinary log content is preserved
+        assert _scrub_secrets("loaded RED4ext plugin") == "loaded RED4ext plugin"
+
+
+class TestRedactPath:
+    def test_only_matches_on_separator_boundary(self):
+        from rippermod_manager.services.diagnostics_service import _redact_path
+
+        assert _redact_path("/home/jo/Games/CP", "/home/jo") == "~/Games/CP"
+        assert _redact_path("/home/jo", "/home/jo") == "~"
+        assert _redact_path("C:\\Users\\jo\\Games", "C:\\Users\\jo") == "~\\Games"
+        # a sibling whose name merely starts with the home basename is untouched
+        assert _redact_path("/home/john/Games", "/home/jo") == "/home/john/Games"
+        # no home (redact off) is a passthrough
+        assert _redact_path("/home/jo/Games", None) == "/home/jo/Games"
