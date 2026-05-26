@@ -169,6 +169,7 @@ class TestHealthCheck:
         data = client.get("/api/v1/games/Cyberpunk 2077/health/").json()
         miss = next(i for i in data["issues"] if i["kind"] == "missing_requirement")
         assert miss["nexus_url"] == "https://www.nexusmods.com/cyberpunk2077/mods/100"
+        assert miss["required_name"] == "BaseMod"
 
     def test_disabled_requirement_carries_action_mod_id(self, client, engine):
         # The "Enable" action targets the disabled REQUIRED mod, not the requiring one.
@@ -199,34 +200,23 @@ class TestHealthCheck:
         data = client.get("/api/v1/games/Cyberpunk 2077/health/").json()
         dis = next(i for i in data["issues"] if i["kind"] == "disabled_requirement")
         assert dis["action_mod_id"] == base_id
+        assert dis["required_name"] == "BaseMod"
 
-    def test_outdated_mod_is_info(self, client, engine, monkeypatch):
-        from rippermod_manager.services import update_service
-        from rippermod_manager.services.update_service import UpdateResult
-
+    def test_health_does_not_report_outdated(self, client, engine):
+        # Outdated mods are the Updates tab's domain; the health check no longer
+        # re-reports them (that duplicated the Updates count and triple-listed
+        # outdated frameworks). The Health view shows a single pointer instead.
         with Session(engine) as s:
-            _make_game(s)
-
-        def fake_check(game_id, game_domain, session):
-            return UpdateResult(
-                total_checked=1,
-                updates=[
-                    {
-                        "installed_mod_id": 5,
-                        "display_name": "OldMod",
-                        "reason": "Newer version available: v2.0",
-                    }
-                ],
+            game = _make_game(s)
+            s.add(
+                InstalledMod(
+                    game_id=game.id, name="ModA", nexus_mod_id=100, disabled=False, deployed=True
+                )
             )
+            s.commit()
 
-        monkeypatch.setattr(update_service, "check_cached_updates", fake_check)
-        resp = client.get("/api/v1/games/Cyberpunk 2077/health/")
-        data = resp.json()
-        outdated = [i for i in data["issues"] if i["kind"] == "outdated"]
-        assert len(outdated) == 1
-        assert outdated[0]["mod_name"] == "OldMod"  # from the "display_name" key
-        assert outdated[0]["severity"] == "info"
-        assert "v2.0" in outdated[0]["message"]  # from the "reason" key
+        data = client.get("/api/v1/games/Cyberpunk 2077/health/").json()
+        assert "outdated" not in {i["kind"] for i in data["issues"]}
 
     def test_handles_missing_game_dir_gracefully(self, client, engine):
         # Installed mods + a non-existent install_path: the drift/untracked scans

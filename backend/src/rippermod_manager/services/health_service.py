@@ -27,13 +27,15 @@ class HealthIssue:
     installed_mod_id: int | None = None
     nexus_url: str | None = None  # missing_requirement -> the required mod's Nexus page
     action_mod_id: int | None = None  # disabled_requirement -> the mod to enable
+    required_name: str = ""  # missing/disabled_requirement -> the required mod's name
 
 
 def check_health(game: Game, session: Session) -> list[HealthIssue]:
     """Scan the current setup for the problems that most often break a launch.
 
-    Read-only and offline: reuses already-synced requirement data, the cached
-    update check, and VFS drift detection. No Nexus calls.
+    Read-only and offline: reuses already-synced requirement data and VFS drift
+    detection. No Nexus calls. Outdated mods are the Updates tab's domain, so the
+    health check doesn't re-report them.
     """
     installed = list(
         session.exec(select(InstalledMod).where(InstalledMod.game_id == game.id)).all()
@@ -41,7 +43,6 @@ def check_health(game: Game, session: Session) -> list[HealthIssue]:
     drift = _safe_drift(game, session)
     issues: list[HealthIssue] = []
     issues += _check_requirements(installed, game, session)
-    issues += _check_outdated(game, session)
     issues += _check_install_integrity(installed, drift)
     issues += _check_misplaced_files(installed, game, session)
     issues += _check_foreign_and_untracked(game, installed, drift, session)
@@ -98,6 +99,7 @@ def _check_requirements(
                         message=f'requires "{r.mod_name}", which is not installed.',
                         suggested_fix=f"Install {r.mod_name} from Nexus Mods.",
                         installed_mod_id=mod.id,
+                        required_name=r.mod_name,
                         nexus_url=(
                             f"https://www.nexusmods.com/{game.domain_name}/mods/{r.required_mod_id}"
                         ),
@@ -112,28 +114,10 @@ def _check_requirements(
                         message=f'requires "{r.mod_name}", which is installed but disabled.',
                         suggested_fix=f"Enable {r.mod_name}.",
                         installed_mod_id=mod.id,
+                        required_name=r.mod_name,
                         action_mod_id=by_nexus[r.required_mod_id].id,
                     )
                 )
-    return issues
-
-
-def _check_outdated(game: Game, session: Session) -> list[HealthIssue]:
-    from rippermod_manager.services.update_service import check_cached_updates
-
-    result = check_cached_updates(game.id, game.domain_name, session)
-    issues: list[HealthIssue] = []
-    for u in result.updates:
-        issues.append(
-            HealthIssue(
-                kind="outdated",
-                severity="info",
-                mod_name=u.get("display_name") or "A mod",
-                message=u.get("reason") or "A newer version is available.",
-                suggested_fix="Update it from the Updates tab.",
-                installed_mod_id=u.get("installed_mod_id"),
-            )
-        )
     return issues
 
 
