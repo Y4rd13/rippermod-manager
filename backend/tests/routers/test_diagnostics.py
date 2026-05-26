@@ -91,3 +91,16 @@ class TestScrubSecrets:
         assert "abc123" not in _scrub_secrets("GET https://cdn/file?key=abc123&expires=9")
         # ordinary log content is preserved
         assert _scrub_secrets("loaded RED4ext plugin") == "loaded RED4ext plugin"
+
+
+class TestRedactPath:
+    def test_only_matches_on_separator_boundary(self):
+        from rippermod_manager.services.diagnostics_service import _redact_path
+
+        assert _redact_path("/home/jo/Games/CP", "/home/jo") == "~/Games/CP"
+        assert _redact_path("/home/jo", "/home/jo") == "~"
+        assert _redact_path("C:\\Users\\jo\\Games", "C:\\Users\\jo") == "~\\Games"
+        # a sibling whose name merely starts with the home basename is untouched
+        assert _redact_path("/home/john/Games", "/home/jo") == "/home/john/Games"
+        # no home (redact off) is a passthrough
+        assert _redact_path("/home/jo/Games", None) == "/home/jo/Games"

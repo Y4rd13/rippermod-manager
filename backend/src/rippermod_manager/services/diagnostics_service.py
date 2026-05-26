@@ -34,10 +34,18 @@ def _scrub_secrets(line: str) -> str:
 
 
 def _redact_path(path: str | None, home: str | None) -> str | None:
-    """Replace the user's home-dir prefix with ~ so the OS username doesn't leak."""
+    """Replace the user's home-dir prefix with ~ so the OS username doesn't leak.
+
+    Only matches on a path-separator boundary, so a sibling home like ``/home/jo``
+    never partially rewrites ``/home/john/...``.
+    """
     if not path or not home:
         return path
-    return "~" + path[len(home) :] if path.startswith(home) else path
+    if path == home:
+        return "~"
+    if path.startswith(home + "/") or path.startswith(home + "\\"):
+        return "~" + path[len(home) :]
+    return path
 
 
 def build_diagnostics(session: Session, *, redact: bool = False) -> dict[str, Any]:
@@ -132,8 +140,11 @@ def _read_log_tail(lines: int = LOG_TAIL_LINES, home: str | None = None) -> list
             raw = [line.rstrip("\n") for line in deque(f, maxlen=lines)]
     except OSError:
         return []
+    home_re = re.compile(re.escape(home) + r"(?=[/\\]|$)") if home else None
     out: list[str] = []
     for line in raw:
         scrubbed = _scrub_secrets(line)
-        out.append(scrubbed.replace(home, "~") if home else scrubbed)
+        if home_re:
+            scrubbed = home_re.sub("~", scrubbed)
+        out.append(scrubbed)
     return out

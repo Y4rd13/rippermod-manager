@@ -332,7 +332,8 @@ function buildDiagnosticsSummary(d: DiagBundle): string {
     lines.push(`Game: ${g.name}${ver} — ${mods.length} mods, ${enabled} enabled`);
   }
   const errors = (d.log_tail ?? [])
-    .filter((l) => /\b(error|warn|fail|exception|traceback)\b/i.test(l))
+    // No trailing \b so log-level names match in full ("WARNING", "failed").
+    .filter((l) => /\b(?:error|warn|fail|exception|traceback)/i.test(l))
     .slice(-8);
   if (errors.length > 0) {
     lines.push("", "Recent errors / warnings:");
