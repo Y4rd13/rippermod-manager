@@ -193,7 +193,7 @@ def restore_backup(session: Session, backup_id: str) -> dict:
     if not saves_src.is_dir():
         raise FileNotFoundError(f"backup not found: {backup_id}")
     if is_game_running():
-        raise GameRunningError("Cyberpunk 2077 is running — close the game before restoring saves.")
+        raise GameRunningError("Cyberpunk 2077 is running, close the game before restoring saves.")
 
     save_dir = resolve_save_dir(session)
     try:
