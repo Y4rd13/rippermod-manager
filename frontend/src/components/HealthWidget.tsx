@@ -230,7 +230,7 @@ export function HealthWidget({
       <div className="rounded-xl border border-border bg-surface-1 p-4">
         <div className="flex items-center gap-2 text-sm text-text-secondary">
           <ShieldCheck size={16} className="shrink-0 text-success" />
-          No issues found — your setup looks ready to launch.
+          No issues found, your setup looks ready to launch.
           {updatesPointer}
         </div>
       </div>

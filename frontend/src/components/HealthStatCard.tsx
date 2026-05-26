@@ -60,8 +60,8 @@ export function HealthStatCard({ gameName, onOpen }: { gameName: string; onOpen:
       onClick={onOpen}
       title={
         s.attention.length > 0
-          ? "Pre-launch check found issues — click for details and one-click fixes"
-          : "Pre-launch check — no blocking issues found"
+          ? "Pre-launch check found issues, click for details and one-click fixes"
+          : "Pre-launch check complete, no blocking issues found"
       }
     >
       <div className="flex items-center gap-3">

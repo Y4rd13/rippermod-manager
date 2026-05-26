@@ -62,7 +62,7 @@ export function UpdateBanner() {
 
           {status === "ready" && (
             <span className="text-sm font-medium text-success">
-              Update installed — restart to apply
+              Update installed, restart to apply
             </span>
           )}
         </div>

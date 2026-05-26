@@ -48,7 +48,7 @@ export function FrameworksWidget({ gameName }: { gameName: string }) {
         </span>
       </div>
       <p className="mt-1 text-xs text-text-muted">
-        Core mods most others depend on — keep them current, especially right after a Cyberpunk patch.
+        Core mods most others depend on, and worth keeping current, especially right after a Cyberpunk patch.
       </p>
 
       {needsAttention.length > 0 && (
@@ -71,7 +71,7 @@ export function FrameworksWidget({ gameName }: { gameName: string }) {
                 key={fw.key}
                 type="button"
                 onClick={() => void openUrl(fw.nexus_url)}
-                title={`${fw.name}${fw.version_known && fw.version ? ` v${fw.version}` : " (version unknown)"} — open on Nexus`}
+                title={`${fw.name}${fw.version_known && fw.version ? ` v${fw.version}` : " (version unknown)"} - open on Nexus`}
                 className="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2 py-0.5 text-xs text-success transition-colors hover:bg-success/20"
               >
                 <Check size={11} className="shrink-0" />
