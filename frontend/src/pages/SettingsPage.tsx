@@ -269,7 +269,7 @@ function LaunchCard() {
         <h2 className="text-lg font-semibold text-text-primary">Launch</h2>
         <p className="mt-1 text-sm text-text-muted">
           Runs the pre-launch health check when you press Play and warns before launching if a
-          critical issue could stop your mods from loading. Warnings never block — you can always
+          critical issue could stop your mods from loading. Warnings never block, so you can always
           launch anyway.
         </p>
       </div>
@@ -323,13 +323,13 @@ function buildDiagnosticsSummary(d: DiagBundle): string {
   }
   for (const g of d.games ?? []) {
     if (g.error) {
-      lines.push(`Game: ${g.name} — diagnostics unavailable`);
+      lines.push(`Game: ${g.name} - diagnostics unavailable`);
       continue;
     }
     const mods = g.mods ?? [];
     const enabled = mods.filter((m) => m.enabled).length;
     const ver = g.game_version ? ` (v${g.game_version})` : "";
-    lines.push(`Game: ${g.name}${ver} — ${mods.length} mods, ${enabled} enabled`);
+    lines.push(`Game: ${g.name}${ver} - ${mods.length} mods, ${enabled} enabled`);
   }
   const errors = (d.log_tail ?? [])
     // No trailing \b so log-level names match in full ("WARNING", "failed").
@@ -530,7 +530,7 @@ function SaveBackupsCard() {
             className="flex-1 truncate rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs font-mono text-text-secondary"
             title={status?.save_dir}
           >
-            {status?.save_dir ?? "—"}
+            {status?.save_dir ?? "-"}
           </div>
           <Button
             size="sm"
@@ -543,7 +543,7 @@ function SaveBackupsCard() {
         </div>
         {status && !status.save_dir_exists && (
           <p className="text-[11px] text-warning">
-            Save folder not found yet — backups will begin once Cyberpunk 2077 has created it.
+            Save folder not found yet, backups will begin once Cyberpunk 2077 has created it.
           </p>
         )}
 

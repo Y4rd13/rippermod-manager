@@ -51,7 +51,7 @@ export function HealthTab({
           <AlertTriangle size={18} className="shrink-0 text-danger" />
         )}
         {ready ? (
-          "Ready to launch — no critical issues found."
+          "Ready to launch, no critical issues found."
         ) : (
           <span>
             <strong className="text-danger">
