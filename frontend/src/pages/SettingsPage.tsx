@@ -1,9 +1,10 @@
-import { CheckCircle, Crown, ExternalLink, Eye, EyeOff, FileText, FolderOpen, Heart, LogOut, RotateCcw, Save, Sparkles, User } from "lucide-react";
+import { CheckCircle, ClipboardCopy, Crown, ExternalLink, Eye, EyeOff, FileText, FolderOpen, Heart, LogOut, RotateCcw, Save, Sparkles, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { open as openDialog, save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
+import { openPath } from "@tauri-apps/plugin-opener";
 
 import { AppUpdateActions } from "@/components/AppUpdateActions";
 import { Button } from "@/components/ui/Button";
@@ -283,22 +284,107 @@ function LaunchCard() {
   );
 }
 
+interface DiagSystem {
+  platform?: string;
+  python_version?: string;
+  ram_total_gb?: number;
+  cpu_logical?: number;
+}
+interface DiagMod {
+  name: string;
+  enabled: boolean;
+}
+interface DiagGame {
+  name: string;
+  error?: string;
+  game_version?: string | null;
+  mods?: DiagMod[];
+}
+interface DiagBundle {
+  app_version?: string;
+  redacted?: boolean;
+  system?: DiagSystem;
+  games?: DiagGame[];
+  log_tail?: string[];
+}
+
+/** Condense the diagnostics bundle into a readable summary to paste into a bug report. */
+function buildDiagnosticsSummary(d: DiagBundle): string {
+  const lines: string[] = [`RipperMod Manager ${d.app_version ?? "(unknown version)"}`];
+  const sys = d.system;
+  if (sys?.platform) {
+    const bits = [
+      sys.platform,
+      sys.python_version ? `Python ${sys.python_version}` : null,
+      sys.ram_total_gb ? `${sys.ram_total_gb} GB RAM` : null,
+      sys.cpu_logical ? `${sys.cpu_logical} cores` : null,
+    ].filter(Boolean);
+    lines.push(`OS: ${bits.join(" · ")}`);
+  }
+  for (const g of d.games ?? []) {
+    if (g.error) {
+      lines.push(`Game: ${g.name} — diagnostics unavailable`);
+      continue;
+    }
+    const mods = g.mods ?? [];
+    const enabled = mods.filter((m) => m.enabled).length;
+    const ver = g.game_version ? ` (v${g.game_version})` : "";
+    lines.push(`Game: ${g.name}${ver} — ${mods.length} mods, ${enabled} enabled`);
+  }
+  const errors = (d.log_tail ?? [])
+    // No trailing \b so log-level names match in full ("WARNING", "failed").
+    .filter((l) => /\b(?:error|warn|fail|exception|traceback)/i.test(l))
+    .slice(-8);
+  if (errors.length > 0) {
+    lines.push("", "Recent errors / warnings:");
+    for (const e of errors) lines.push(`  ${e}`);
+  }
+  if (d.redacted) lines.push("", "(personal paths redacted)");
+  return lines.join("\n");
+}
+
 function DiagnosticsCard() {
   const [exporting, setExporting] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [redact, setRedact] = useState(true);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
+
+  const fetchBundle = async (): Promise<DiagBundle> => {
+    const data = await api.get<DiagBundle>(`/api/v1/diagnostics/?redact=${redact}`);
+    return { app_version: __APP_VERSION__, ...data };
+  };
+
+  const handleCopy = async () => {
+    setCopying(true);
+    try {
+      const summary = buildDiagnosticsSummary(await fetchBundle());
+      await navigator.clipboard.writeText(summary);
+      toast.success("Report copied", "Paste it straight into your bug report.");
+    } catch (err) {
+      toast.error(
+        "Copy failed",
+        err instanceof Error ? err.message : "Could not build the report.",
+      );
+    } finally {
+      setCopying(false);
+    }
+  };
 
   const handleExport = async () => {
     setExporting(true);
     try {
-      const data = await api.get<Record<string, unknown>>("/api/v1/diagnostics/");
-      const bundle = { app_version: __APP_VERSION__, ...data };
+      const bundle = await fetchBundle();
+      // YYYY-MM-DD-HH-MM-SS so a second export the same day doesn't collide.
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
       const filePath = await save({
         title: "Export Diagnostics",
-        defaultPath: `rippermod-diagnostics-${new Date().toISOString().slice(0, 10)}.json`,
+        defaultPath: `rippermod-diagnostics-${stamp}.json`,
         filters: [{ name: "JSON", extensions: ["json"] }],
       });
       if (!filePath) return;
       await writeTextFile(filePath, JSON.stringify(bundle, null, 2));
-      toast.success("Diagnostics exported");
+      setLastSaved(filePath);
+      toast.success("Diagnostics exported", filePath);
     } catch (err) {
       toast.error(
         "Export failed",
@@ -311,22 +397,47 @@ function DiagnosticsCard() {
 
   return (
     <Card>
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold text-text-primary">Diagnostics</h2>
-          <p className="mt-1 text-sm text-text-muted">
-            Export a single file with your system info, installed mods, load order, and
-            recent app logs — handy for bug reports. No API keys are included.
-          </p>
+      <div className="min-w-0">
+        <h2 className="text-lg font-semibold text-text-primary">Diagnostics</h2>
+        <p className="mt-1 text-sm text-text-muted">
+          Bundle your system info, installed mods, load order, and recent app logs for a bug
+          report. <span className="text-text-secondary">No API keys are ever included.</span> Copy a
+          readable summary to paste into a thread, or export the full JSON.
+        </p>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        <Switch
+          checked={redact}
+          onChange={setRedact}
+          label="Redact personal paths (replace your home folder with ~)"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button onClick={handleCopy} loading={copying} variant="secondary">
+            <ClipboardCopy size={14} className="mr-1.5" /> Copy report
+          </Button>
+          <Button onClick={handleExport} loading={exporting} variant="secondary">
+            <FileText size={14} className="mr-1.5" /> Export file
+          </Button>
         </div>
-        <Button
-          onClick={handleExport}
-          loading={exporting}
-          variant="secondary"
-          className="shrink-0"
-        >
-          <FileText size={14} className="mr-1.5" /> Export diagnostics
-        </Button>
+        {lastSaved && (
+          <div className="flex items-center gap-2 text-xs text-text-muted">
+            <span className="min-w-0 truncate" title={lastSaved}>
+              Saved {lastSaved.replace(/^.*[/\\]/, "")}
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                openPath(lastSaved.replace(/[/\\][^/\\]*$/, "")).catch((e) =>
+                  toast.error("Could not open folder", String(e)),
+                )
+              }
+              className="inline-flex shrink-0 items-center gap-1 text-accent hover:underline"
+            >
+              <FolderOpen size={12} /> Open folder
+            </button>
+          </div>
+        )}
       </div>
     </Card>
   );
