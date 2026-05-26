@@ -125,6 +125,81 @@ class TestHealthCheck:
         resp = client.get("/api/v1/games/Nonexistent/health/")
         assert resp.status_code == 404
 
+    def test_framework_requirement_not_double_reported(self, client, engine):
+        # A mod requires ArchiveXL (nexus 4198, a core framework) which is NOT
+        # installed. The Frameworks card owns framework status, so the health
+        # check must NOT also report it as a missing requirement.
+        with Session(engine) as s:
+            game = _make_game(s)
+            s.add(
+                InstalledMod(
+                    game_id=game.id, name="SomeMod", nexus_mod_id=200, disabled=False, deployed=True
+                )
+            )
+            s.add(
+                NexusModRequirement(
+                    nexus_mod_id=200, required_mod_id=4198, mod_name="ArchiveXL", is_external=False
+                )
+            )
+            s.commit()
+
+        data = client.get("/api/v1/games/Cyberpunk 2077/health/").json()
+        assert "missing_requirement" not in {i["kind"] for i in data["issues"]}
+
+    def test_missing_requirement_carries_nexus_url(self, client, engine):
+        # The "Get on Nexus" action needs the required mod's Nexus page URL.
+        with Session(engine) as s:
+            game = _make_game(s)
+            s.add(
+                InstalledMod(
+                    game_id=game.id,
+                    name="AddonMod",
+                    nexus_mod_id=200,
+                    disabled=False,
+                    deployed=True,
+                )
+            )
+            s.add(
+                NexusModRequirement(
+                    nexus_mod_id=200, required_mod_id=100, mod_name="BaseMod", is_external=False
+                )
+            )
+            s.commit()
+
+        data = client.get("/api/v1/games/Cyberpunk 2077/health/").json()
+        miss = next(i for i in data["issues"] if i["kind"] == "missing_requirement")
+        assert miss["nexus_url"] == "https://www.nexusmods.com/cyberpunk2077/mods/100"
+
+    def test_disabled_requirement_carries_action_mod_id(self, client, engine):
+        # The "Enable" action targets the disabled REQUIRED mod, not the requiring one.
+        with Session(engine) as s:
+            game = _make_game(s)
+            base = InstalledMod(
+                game_id=game.id, name="BaseMod", nexus_mod_id=100, disabled=True, deployed=True
+            )
+            s.add(base)
+            s.add(
+                InstalledMod(
+                    game_id=game.id,
+                    name="AddonMod",
+                    nexus_mod_id=200,
+                    disabled=False,
+                    deployed=True,
+                )
+            )
+            s.add(
+                NexusModRequirement(
+                    nexus_mod_id=200, required_mod_id=100, mod_name="BaseMod", is_external=False
+                )
+            )
+            s.commit()
+            s.refresh(base)
+            base_id = base.id
+
+        data = client.get("/api/v1/games/Cyberpunk 2077/health/").json()
+        dis = next(i for i in data["issues"] if i["kind"] == "disabled_requirement")
+        assert dis["action_mod_id"] == base_id
+
     def test_outdated_mod_is_info(self, client, engine, monkeypatch):
         from rippermod_manager.services import update_service
         from rippermod_manager.services.update_service import UpdateResult

@@ -321,6 +321,30 @@ function AboutCard() {
   );
 }
 
+function LaunchCard() {
+  const warnBeforeLaunch = useUIStore((s) => s.warnBeforeLaunch);
+  const setWarnBeforeLaunch = useUIStore((s) => s.setWarnBeforeLaunch);
+  return (
+    <Card>
+      <div className="min-w-0">
+        <h2 className="text-lg font-semibold text-text-primary">Launch</h2>
+        <p className="mt-1 text-sm text-text-muted">
+          Runs the pre-launch health check when you press Play and warns before launching if a
+          critical issue could stop your mods from loading. Warnings never block — you can always
+          launch anyway.
+        </p>
+      </div>
+      <div className="mt-4">
+        <Switch
+          checked={warnBeforeLaunch}
+          onChange={setWarnBeforeLaunch}
+          label="Warn before launch on critical issues"
+        />
+      </div>
+    </Card>
+  );
+}
+
 function DiagnosticsCard() {
   const [exporting, setExporting] = useState(false);
 
@@ -633,6 +657,7 @@ export function SettingsPage() {
       </Card>
 
       <DeploymentCard />
+      <LaunchCard />
       <DiagnosticsCard />
       <SaveBackupsCard />
       <AboutCard />

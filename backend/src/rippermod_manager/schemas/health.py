@@ -10,6 +10,9 @@ class HealthIssueOut(BaseModel):
     suggested_fix: str = ""
     mod_name: str = ""
     installed_mod_id: int | None = None
+    # Optional action targets so the UI can offer a one-click fix:
+    nexus_url: str | None = None  # missing_requirement -> the required mod's Nexus page
+    action_mod_id: int | None = None  # disabled_requirement -> the mod to enable
 
 
 class HealthReport(BaseModel):

@@ -3,12 +3,18 @@ from dataclasses import dataclass
 
 from sqlmodel import Session, select
 
+from rippermod_manager.constants import FRAMEWORKS
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
 from rippermod_manager.models.nexus import NexusModRequirement
 from rippermod_manager.schemas.deploy import DriftReport
 
 logger = logging.getLogger(__name__)
+
+# Core frameworks have their own dedicated monitor (the Frameworks card), so the
+# health check skips requirement issues that point at one of them -- otherwise a
+# missing/disabled framework would be reported in two places.
+_FRAMEWORK_NEXUS_IDS = frozenset(fw["nexus_mod_id"] for fw in FRAMEWORKS)
 
 
 @dataclass
@@ -19,6 +25,8 @@ class HealthIssue:
     suggested_fix: str = ""
     mod_name: str = ""
     installed_mod_id: int | None = None
+    nexus_url: str | None = None  # missing_requirement -> the required mod's Nexus page
+    action_mod_id: int | None = None  # disabled_requirement -> the mod to enable
 
 
 def check_health(game: Game, session: Session) -> list[HealthIssue]:
@@ -32,7 +40,7 @@ def check_health(game: Game, session: Session) -> list[HealthIssue]:
     )
     drift = _safe_drift(game, session)
     issues: list[HealthIssue] = []
-    issues += _check_requirements(installed, session)
+    issues += _check_requirements(installed, game, session)
     issues += _check_outdated(game, session)
     issues += _check_install_integrity(installed, drift)
     issues += _check_misplaced_files(installed, game, session)
@@ -50,7 +58,9 @@ def _safe_drift(game: Game, session: Session) -> DriftReport | None:
         return None
 
 
-def _check_requirements(installed: list[InstalledMod], session: Session) -> list[HealthIssue]:
+def _check_requirements(
+    installed: list[InstalledMod], game: Game, session: Session
+) -> list[HealthIssue]:
     by_nexus = {m.nexus_mod_id: m for m in installed if m.nexus_mod_id is not None}
     enabled_nexus = {nid for nid, m in by_nexus.items() if not m.disabled}
     enabled_ids = [
@@ -77,6 +87,8 @@ def _check_requirements(installed: list[InstalledMod], session: Session) -> list
         for r in reqs_by_mod.get(mod.nexus_mod_id, []):
             if r.required_mod_id is None:
                 continue
+            if r.required_mod_id in _FRAMEWORK_NEXUS_IDS:
+                continue  # the Frameworks card owns core-framework status
             if r.required_mod_id not in by_nexus:
                 issues.append(
                     HealthIssue(
@@ -86,6 +98,9 @@ def _check_requirements(installed: list[InstalledMod], session: Session) -> list
                         message=f'requires "{r.mod_name}", which is not installed.',
                         suggested_fix=f"Install {r.mod_name} from Nexus Mods.",
                         installed_mod_id=mod.id,
+                        nexus_url=(
+                            f"https://www.nexusmods.com/{game.domain_name}/mods/{r.required_mod_id}"
+                        ),
                     )
                 )
             elif r.required_mod_id not in enabled_nexus:
@@ -97,6 +112,7 @@ def _check_requirements(installed: list[InstalledMod], session: Session) -> list
                         message=f'requires "{r.mod_name}", which is installed but disabled.',
                         suggested_fix=f"Enable {r.mod_name}.",
                         installed_mod_id=mod.id,
+                        action_mod_id=by_nexus[r.required_mod_id].id,
                     )
                 )
     return issues
