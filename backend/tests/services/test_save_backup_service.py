@@ -198,3 +198,15 @@ class TestActionHook:
         svc.maybe_backup_before(
             SimpleNamespace(domain_name="cyberpunk2077"), save_env.session, reason="pre-deploy"
         )
+
+
+def test_validate_save_dir_turns_unlistable_folder_into_value_error(tmp_path, monkeypatch):
+    folder = tmp_path / "locked"
+    folder.mkdir()
+
+    def _deny(self):
+        raise PermissionError("access denied")
+
+    monkeypatch.setattr(type(folder), "iterdir", _deny)
+    with pytest.raises(ValueError, match="cannot be read"):
+        svc.validate_save_dir(str(folder))

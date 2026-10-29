@@ -1061,3 +1061,25 @@ def test_undeploy_ignores_unflagged_mod_with_nothing_linked(in_memory_session, s
         report = undeploy(game, session)
 
     assert report.total == 0
+
+
+def test_undeploy_reads_ownership_once(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    _hardlinked_mod(session, game, name="One", rel="r6/scripts/one.reds")
+    _hardlinked_mod(session, game, name="Two", rel="r6/scripts/two.reds")
+    from rippermod_manager.services.vfs import deploy_service as ds
+
+    real = ds.owners_by_key
+    calls = []
+
+    def _counting(*a, **kw):
+        calls.append(1)
+        return real(*a, **kw)
+
+    with (
+        patch.object(ds, "owners_by_key", _counting),
+        patch("rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=False),
+    ):
+        undeploy(game, session)
+
+    assert len(calls) == 1

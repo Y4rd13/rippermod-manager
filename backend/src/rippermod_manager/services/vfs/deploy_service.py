@@ -28,7 +28,7 @@ from rippermod_manager.schemas.deploy import (
 )
 from rippermod_manager.services.paths import get_mods_dir
 from rippermod_manager.services.save_backup_service import maybe_backup_before
-from rippermod_manager.services.vfs.ownership import owners_by_key, path_key, winner_map
+from rippermod_manager.services.vfs.ownership import Owner, owners_by_key, path_key, winner_map
 from rippermod_manager.services.vfs.primitives import (
     AlreadyExistsError,
     VfsError,
@@ -458,17 +458,24 @@ def restore_displaced(
     return not_restored
 
 
-def plan_remove_mod_links(game: Game, mod: InstalledMod, session: Session) -> DeployPlan:
+def plan_remove_mod_links(
+    game: Game,
+    mod: InstalledMod,
+    session: Session,
+    owners: dict[str, list[Owner]] | None = None,
+) -> DeployPlan:
     """Plan the removal of *mod*'s own game-dir links.
 
     One ``unlink`` per hardlinked file and one ``rm_junction`` per REDmod
     root, each carrying the mod's staged source so ``execute_plan`` can check
     the destination really is this mod's link. Paths currently linked to
     another owner of the same key are left out: they are that owner's.
+    Pass *owners* when planning several mods against one unchanged DB state.
     """
     install = Path(game.install_path)
     staging_root = get_mods_dir(game)
-    owners = owners_by_key(session, game.id)  # type: ignore[arg-type]
+    if owners is None:
+        owners = owners_by_key(session, game.id)  # type: ignore[arg-type]
     plan = DeployPlan(game_id=game.id)  # type: ignore[arg-type]
     seen_roots: set[str] = set()
     _ = mod.files
@@ -548,9 +555,10 @@ def undeploy(game: Game, session: Session) -> DeployReport:
     # unflagged mod only the destinations that really are its links are removed.
     mods = session.exec(select(InstalledMod).where(InstalledMod.game_id == game.id)).all()
 
+    owners = owners_by_key(session, game.id)  # type: ignore[arg-type]
     ops: list[DeployOp] = []
     for mod in mods:
-        mod_ops = plan_remove_mod_links(game, mod, session).ops
+        mod_ops = plan_remove_mod_links(game, mod, session, owners).ops
         if not mod.deployed:
             mod_ops = [op for op in mod_ops if _is_own_link(op)]
         ops.extend(mod_ops)

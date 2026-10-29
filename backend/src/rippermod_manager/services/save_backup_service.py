@@ -97,9 +97,12 @@ def validate_save_dir(path: str) -> Path:
         raise ValueError(f"Folder not found: {path}")
     if candidate.resolve() == default_save_dir().resolve():
         return candidate
-    has_save = any(
-        child.is_dir() and (child / "sav.dat").is_file() for child in candidate.iterdir()
-    )
+    try:
+        has_save = any(
+            child.is_dir() and (child / "sav.dat").is_file() for child in candidate.iterdir()
+        )
+    except OSError as exc:
+        raise ValueError(f"The folder cannot be read: {path} ({exc.strerror or exc})") from exc
     if not has_save:
         raise ValueError(
             "This does not look like a Cyberpunk 2077 save folder: no subfolder contains sav.dat."

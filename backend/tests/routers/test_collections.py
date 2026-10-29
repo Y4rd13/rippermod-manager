@@ -339,6 +339,49 @@ class TestUninstallCollection:
             is None
         )
 
+    def test_detaches_download_jobs_of_the_collection(self, client, session):
+        """Completed jobs keep the collection id; with FKs on they must not block the delete."""
+        from rippermod_manager.models.collection import InstalledCollection
+        from rippermod_manager.models.download import DownloadJob
+
+        game = self._seed_game(client, session)
+        row = InstalledCollection(
+            game_id=game.id,
+            slug="abc",
+            revision_id="r",
+            revision_number=1,
+            collection_name="ABC",
+            author_name="x",
+            summary="",
+            tile_image_url="",
+            status="installed",
+            started_at=datetime.now(UTC),
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        row_id = row.id
+        job = DownloadJob(
+            game_id=game.id,
+            nexus_mod_id=1,
+            nexus_file_id=2,
+            file_name="a.zip",
+            status="completed",
+            installed_collection_id=row_id,
+        )
+        session.add(job)
+        session.commit()
+        job_id = job.id
+
+        with patch("rippermod_manager.services.vfs.deploy_service.deploy"):
+            r = client.delete(f"/api/v1/collections/{row_id}")
+        assert r.status_code == 200
+
+        session.expire_all()
+        assert session.get(InstalledCollection, row_id) is None
+        kept = session.get(DownloadJob, job_id)
+        assert kept is not None and kept.installed_collection_id is None
+
     def test_returns_409_when_install_in_progress(self, client, session):
         """Uninstalling an actively-installing collection must refuse."""
         from rippermod_manager.models.collection import InstalledCollection
