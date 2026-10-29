@@ -3,12 +3,26 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Loader2, ServerCrash } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
+import { getApiToken, TOKEN_HEADER } from "@/lib/api-client";
 
 const HEALTH_URL = "http://127.0.0.1:8425/health";
+const DEEP_HEALTH_URL = "http://127.0.0.1:8425/health/deep";
 const POLL_INTERVAL = 1000;
 const MAX_DEV_POLLS = 60;
 
-type Status = "waiting" | "ready" | "failed";
+type Status = "waiting" | "ready" | "failed" | "token-rejected";
+
+/** Dev only: a 401 here means the backend on 8425 was started with another token. */
+async function tokenIsRejected(): Promise<boolean> {
+  try {
+    const token = await getApiToken();
+    const res = await fetch(DEEP_HEALTH_URL, { headers: { [TOKEN_HEADER]: token } });
+    return res.status === 401;
+  } catch {
+    // No token available, or the request failed: let the app surface it.
+    return false;
+  }
+}
 
 function useBackendStatus(): Status {
   const [status, setStatus] = useState<Status>("waiting");
@@ -25,7 +39,8 @@ function useBackendStatus(): Status {
           try {
             const res = await fetch(HEALTH_URL);
             if (res.ok) {
-              setStatus("ready");
+              const rejected = await tokenIsRejected();
+              if (!cancelled) setStatus(rejected ? "token-rejected" : "ready");
               return;
             }
           } catch {
@@ -70,6 +85,24 @@ export function BackendGate({ children }: { children: ReactNode }) {
 
   if (status === "ready") {
     return <>{children}</>;
+  }
+
+  if (status === "token-rejected") {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-surface-0 text-center">
+        <ServerCrash className="h-12 w-12 text-danger" />
+        <h1 className="text-xl font-semibold text-text-primary">
+          Token rejected: another backend is running on port 8425.
+        </h1>
+        <p className="max-w-md text-sm text-text-secondary">
+          Stop it, or start the backend and the frontend with the same RMM_API_TOKEN
+          (VITE_API_TOKEN for Vite alone).
+        </p>
+        <Button variant="secondary" onClick={() => window.location.reload()}>
+          Retry
+        </Button>
+      </div>
+    );
   }
 
   if (status === "failed") {
