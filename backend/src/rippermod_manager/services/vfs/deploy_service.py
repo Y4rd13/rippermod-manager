@@ -518,6 +518,13 @@ def plan_remove_mod_links(game: Game, mod: InstalledMod, session: Session) -> De
     return plan
 
 
+def _is_own_link(op: DeployOp) -> bool:
+    """True iff the destination of a removal op is currently the mod's own link."""
+    if op.operation == "rm_junction":
+        return junction_points_into(Path(op.dst), Path(op.src))
+    return verify_link(Path(op.src), Path(op.dst))
+
+
 def undeploy(game: Game, session: Session) -> DeployReport:
     """Remove all deployed hardlinks/junctions for a game and mark mods as undeployed.
 
@@ -536,16 +543,17 @@ def undeploy(game: Game, session: Session) -> DeployReport:
 
     maybe_backup_before(game, session, reason="pre-undeploy")
 
-    mods = session.exec(
-        select(InstalledMod).where(
-            InstalledMod.game_id == game.id,
-            InstalledMod.deployed.is_(True),  # type: ignore[union-attr]
-        )
-    ).all()
+    # Every mod, not only deployed=True: a deploy with one failed op never sets
+    # the flag, yet the mods it did link have live links in the game dir. For an
+    # unflagged mod only the destinations that really are its links are removed.
+    mods = session.exec(select(InstalledMod).where(InstalledMod.game_id == game.id)).all()
 
     ops: list[DeployOp] = []
     for mod in mods:
-        ops.extend(plan_remove_mod_links(game, mod, session).ops)
+        mod_ops = plan_remove_mod_links(game, mod, session).ops
+        if not mod.deployed:
+            mod_ops = [op for op in mod_ops if _is_own_link(op)]
+        ops.extend(mod_ops)
 
     plan = DeployPlan(game_id=game.id, ops=ops)
     report = execute_plan(plan, session)

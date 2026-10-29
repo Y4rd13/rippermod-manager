@@ -1026,3 +1026,38 @@ def test_plan_skips_redmod_junction_the_winner_already_holds(in_memory_session, 
     plan, skipped = plan_deploy(game, session)
 
     assert plan.ops == [] and skipped == 1
+
+
+def test_undeploy_removes_links_of_mod_left_unflagged_by_a_partial_deploy(
+    in_memory_session, sample_game
+):
+    # A deploy with one failed op never sets deployed=True, even for the mods it
+    # did link. Undeploy must still remove those links (verified as this mod's).
+    session, game = in_memory_session, sample_game
+    mod, staged = _hardlinked_mod(session, game)
+    mod.deployed = False
+    session.add(mod)
+    session.commit()
+    dst = Path(game.install_path) / "r6" / "scripts" / "a.reds"
+    dst.parent.mkdir(parents=True)
+    os.link(staged, dst)
+
+    with patch("rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=False):
+        report = undeploy(game, session)
+
+    assert not dst.exists()
+    assert staged.exists()
+    assert report.done == 1 and report.failed == 0
+
+
+def test_undeploy_ignores_unflagged_mod_with_nothing_linked(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    mod, _staged = _hardlinked_mod(session, game)
+    mod.deployed = False
+    session.add(mod)
+    session.commit()
+
+    with patch("rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=False):
+        report = undeploy(game, session)
+
+    assert report.total == 0
