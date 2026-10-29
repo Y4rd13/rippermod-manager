@@ -204,6 +204,13 @@ def _migrate_missing_columns() -> None:
             "latest_known_revision_number",
             "ALTER TABLE installed_collections ADD COLUMN latest_known_revision_number INTEGER",
         ),
+        # Per-path win order (P0 hardening, S4). Existing rows start at 0 and are
+        # backfilled on startup by services.vfs.ownership.backfill_win_seq.
+        (
+            "installed_mod_files",
+            "win_seq",
+            "ALTER TABLE installed_mod_files ADD COLUMN win_seq INTEGER DEFAULT 0",
+        ),
     ]
     with Session(engine) as session:
         for table, column, ddl in migrations:

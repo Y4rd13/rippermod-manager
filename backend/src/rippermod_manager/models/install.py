@@ -50,6 +50,10 @@ class InstalledModFile(SQLModel, table=True):
     relative_path: str = Field(index=True)
     source_path: str = Field(default="")
     link_kind: str = Field(default="hardlink")  # hardlink | junction | copy
+    # Per-path win order (S4): among enabled mods that ship the same path, the
+    # highest win_seq is linked. Each install/adopt gets a value above every
+    # existing row; 0 means "not assigned yet" (pre-migration rows, backfilled).
+    win_seq: int = Field(default=0)
 
     installed_mod: InstalledMod | None = Relationship(back_populates="files")
 

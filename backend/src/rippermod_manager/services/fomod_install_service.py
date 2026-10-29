@@ -28,6 +28,7 @@ from rippermod_manager.services.fomod_config_parser import (
 )
 from rippermod_manager.services.paths import get_mods_dir
 from rippermod_manager.services.vfs.naming import unique_staging_name
+from rippermod_manager.services.vfs.ownership import next_win_seq
 
 logger = logging.getLogger(__name__)
 
@@ -405,6 +406,8 @@ def install_fomod(
     session.add(installed)
     session.flush()
 
+    # The newest install wins every path it ships (S4).
+    win_seq = next_win_seq(session, game.id)  # type: ignore[arg-type]
     for rel_path in extracted_paths:
         rel_norm = rel_path.replace("\\", "/")
         link_kind = (
@@ -418,6 +421,7 @@ def install_fomod(
                 relative_path=rel_path,
                 source_path=rel_path,
                 link_kind=link_kind,
+                win_seq=win_seq,
             )
         )
 

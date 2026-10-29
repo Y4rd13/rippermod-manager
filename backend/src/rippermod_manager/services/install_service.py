@@ -46,6 +46,7 @@ from rippermod_manager.services.archive_layout import (
 from rippermod_manager.services.nexus_helpers import match_local_to_nexus_file
 from rippermod_manager.services.paths import get_mods_dir
 from rippermod_manager.services.vfs.naming import unique_staging_name
+from rippermod_manager.services.vfs.ownership import next_win_seq
 from rippermod_manager.services.vfs.primitives import VfsError, hardlink, same_volume
 
 logger = logging.getLogger(__name__)
@@ -245,6 +246,8 @@ def install_mod(
         if corr:
             installed.mod_group_id = corr.mod_group_id
 
+    # The newest install wins every path it ships (S4); Skip never extracted them.
+    win_seq = next_win_seq(session, game.id)  # type: ignore[arg-type]
     for rel_path in extracted_paths:
         link_kind = (
             "junction"
@@ -257,6 +260,7 @@ def install_mod(
                 relative_path=rel_path,
                 source_path=rel_path,
                 link_kind=link_kind,
+                win_seq=win_seq,
             )
         )
 
@@ -468,6 +472,8 @@ def adopt_mod(
         if corr:
             installed.mod_group_id = corr.mod_group_id
 
+    # Adopted files are the ones linked in the game dir right now: they win.
+    win_seq = next_win_seq(session, game.id)  # type: ignore[arg-type]
     for rel_path in adopted:
         session.add(
             InstalledModFile(
@@ -475,6 +481,7 @@ def adopt_mod(
                 relative_path=rel_path,
                 source_path=rel_path,
                 link_kind="hardlink",
+                win_seq=win_seq,
             )
         )
 
