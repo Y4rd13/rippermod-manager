@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import Session
 
 from rippermod_manager.config import settings
+from rippermod_manager.services.paths import is_unc_path
 from rippermod_manager.services.settings_helpers import get_setting
 
 if TYPE_CHECKING:
@@ -30,7 +31,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# App-setting keys (managed through the generic /settings endpoint).
+# App-setting keys. ENABLED_KEY goes through /settings; PATH_KEY only through
+# PUT /save-backups/path, which runs validate_save_dir.
 ENABLED_KEY = "save_backup_enabled"
 PATH_KEY = "save_backup_path"
 
@@ -55,13 +57,54 @@ def is_enabled(session: Session) -> bool:
     return get_setting(session, ENABLED_KEY) != "false"
 
 
+def default_save_dir() -> Path:
+    """Cyberpunk 2077's default save folder under the user profile."""
+    return Path(os.path.expanduser("~")) / _DEFAULT_SAVE_REL
+
+
+def _is_safe_override(path: str) -> bool:
+    return bool(path) and not is_unc_path(path) and Path(path).is_absolute()
+
+
 def resolve_save_dir(session: Session) -> Path:
     """The folder to back up: the configured override, else the default
-    Cyberpunk 2077 path under the user profile."""
+    Cyberpunk 2077 path under the user profile.
+
+    An override that is UNC or relative (stored before ``validate_save_dir``
+    existed) is ignored, so ``copytree`` never reads from or writes to it.
+    """
     override = get_setting(session, PATH_KEY)
-    if override:
+    if override and _is_safe_override(override):
         return Path(override)
-    return Path(os.path.expanduser("~")) / _DEFAULT_SAVE_REL
+    if override:
+        logger.warning("Ignoring unsafe save backup folder override: %r", override)
+    return default_save_dir()
+
+
+def validate_save_dir(path: str) -> Path:
+    """Return *path* as a save folder override, or raise ``ValueError``.
+
+    It must be a local (not UNC), absolute, existing directory that is either
+    the default Cyberpunk 2077 save folder or holds at least one save
+    subfolder (a subfolder with ``sav.dat``).
+    """
+    if is_unc_path(path):
+        raise ValueError("Network (UNC) paths are not allowed for the save folder.")
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        raise ValueError("The save folder must be an absolute path.")
+    if not candidate.is_dir():
+        raise ValueError(f"Folder not found: {path}")
+    if candidate.resolve() == default_save_dir().resolve():
+        return candidate
+    has_save = any(
+        child.is_dir() and (child / "sav.dat").is_file() for child in candidate.iterdir()
+    )
+    if not has_save:
+        raise ValueError(
+            "This does not look like a Cyberpunk 2077 save folder: no subfolder contains sav.dat."
+        )
+    return candidate
 
 
 def _signature(save_dir: Path) -> str:

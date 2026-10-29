@@ -1,3 +1,6 @@
+import pytest
+
+
 class TestListSettings:
     def test_empty(self, client):
         r = client.get("/api/v1/settings/")
@@ -18,31 +21,51 @@ class TestListSettings:
     def test_shows_non_sensitive(self, client):
         client.put(
             "/api/v1/settings/",
-            json={"settings": {"theme": "dark"}},
+            json={"settings": {"save_backup_enabled": "false"}},
         )
         r = client.get("/api/v1/settings/")
         settings = r.json()
-        theme = next(s for s in settings if s["key"] == "theme")
-        assert theme["value"] == "dark"
+        enabled = next(s for s in settings if s["key"] == "save_backup_enabled")
+        assert enabled["value"] == "false"
 
 
 class TestUpdateSettings:
     def test_creates(self, client):
         r = client.put(
             "/api/v1/settings/",
-            json={"settings": {"new_key": "new_val"}},
+            json={"settings": {"save_backup_enabled": "true"}},
         )
         assert r.status_code == 200
         data = r.json()
-        assert data[0]["key"] == "new_key"
-        assert data[0]["value"] == "new_val"
+        assert data[0]["key"] == "save_backup_enabled"
+        assert data[0]["value"] == "true"
 
     def test_updates_existing(self, client):
-        client.put("/api/v1/settings/", json={"settings": {"k": "v1"}})
-        client.put("/api/v1/settings/", json={"settings": {"k": "v2"}})
+        client.put("/api/v1/settings/", json={"settings": {"save_backup_enabled": "true"}})
+        client.put("/api/v1/settings/", json={"settings": {"save_backup_enabled": "false"}})
         r = client.get("/api/v1/settings/")
-        val = next(s for s in r.json() if s["key"] == "k")
-        assert val["value"] == "v2"
+        val = next(s for s in r.json() if s["key"] == "save_backup_enabled")
+        assert val["value"] == "false"
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"save_backup_path": "C:/Windows"},
+            {"theme": "dark"},
+            {"save_backup_enabled": "maybe"},
+            # One bad key rejects the whole request, valid keys included.
+            {"save_backup_enabled": "false", "save_backup_path": "/tmp"},
+        ],
+    )
+    def test_rejects_keys_outside_allowlist(self, client, payload):
+        r = client.put("/api/v1/settings/", json={"settings": payload})
+        assert r.status_code == 422
+        assert client.get("/api/v1/settings/").json() == []
+
+    def test_allowlist_matches_plan(self):
+        from rippermod_manager.routers.settings import ALLOWED_SETTING_KEYS
+
+        assert frozenset({"nexus_api_key", "save_backup_enabled"}) == ALLOWED_SETTING_KEYS
 
     def test_masks_in_response(self, client):
         r = client.put(

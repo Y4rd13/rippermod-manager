@@ -32,3 +32,9 @@ class SaveBackupActionResult(BaseModel):
     restored: bool = False
     backup: SaveBackupOut | None = None
     restored_to: str | None = None
+
+
+class SaveBackupPathUpdate(BaseModel):
+    """New save folder override; an empty string goes back to the default."""
+
+    path: str = ""

@@ -41,6 +41,30 @@ class TestSettings:
     def test_resolve_uses_override(self, save_env):
         assert svc.resolve_save_dir(save_env.session) == save_env.save_dir
 
+    @pytest.mark.parametrize("stored", [r"\\evil\share", "//evil/share", "relative/saves"])
+    def test_resolve_ignores_stored_unc_override(self, save_env, stored):
+        # A value saved through the old free-form settings endpoint, before validation.
+        set_setting(save_env.session, svc.PATH_KEY, stored)
+        save_env.session.commit()
+        assert svc.resolve_save_dir(save_env.session) == svc.default_save_dir()
+
+
+class TestIsUncPath:
+    @pytest.mark.parametrize(
+        ("path", "expected"),
+        [
+            (r"\\server\share", True),
+            ("//server/share", True),
+            (r"C:\Users\me", False),
+            ("/home/me", False),
+            ("", False),
+        ],
+    )
+    def test_is_unc_path(self, path, expected):
+        from rippermod_manager.services.paths import is_unc_path
+
+        assert is_unc_path(path) is expected
+
 
 class TestCreateAndList:
     def test_create_then_list(self, save_env):
