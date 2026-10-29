@@ -1,3 +1,4 @@
+import stat
 import zipfile
 
 import pytest
@@ -134,6 +135,114 @@ class TestZipHandler:
 
         assert "subdir/file.txt" in result
         assert "subdir/" not in result
+
+
+class TestExtractEntries:
+    def test_zip_extract_entries_writes_bytes(self, tmp_path):
+        zip_path = tmp_path / "x.zip"
+        _make_zip(zip_path, {"a.txt": b"aaa", "d/b.txt": b"bbb"})
+        out = tmp_path / "out"
+        scratch = tmp_path / "scratch"
+        scratch.mkdir()
+
+        with ZipHandler(zip_path) as handler:
+            entries = {e.filename: e for e in handler.list_entries()}
+            written = handler.extract_entries(
+                [(entries["a.txt"], out / "a.txt"), (entries["d/b.txt"], out / "x" / "b.txt")],
+                scratch,
+            )
+
+        assert written == {"a.txt", "d/b.txt"}
+        assert (out / "a.txt").read_bytes() == b"aaa"
+        assert (out / "x" / "b.txt").read_bytes() == b"bbb"
+
+    def test_7z_extract_entries_leaves_scratch_empty(self, tmp_path):
+        import py7zr
+
+        from rippermod_manager.archive.handler import SevenZipHandler
+
+        arc = tmp_path / "x.7z"
+        with py7zr.SevenZipFile(arc, "w") as z:
+            z.writestr(b"one", "a.txt")
+            z.writestr(b"two", "d/b.txt")
+        out = tmp_path / "out"
+        scratch = tmp_path / "scratch"
+        scratch.mkdir()
+
+        with SevenZipHandler(arc) as handler:
+            entries = {e.filename: e for e in handler.list_entries()}
+            written = handler.extract_entries(
+                [(entries["a.txt"], out / "a.txt"), (entries["d/b.txt"], out / "b.txt")],
+                scratch,
+            )
+
+        assert written == {"a.txt", "d/b.txt"}
+        assert (out / "a.txt").read_bytes() == b"one"
+        assert (out / "b.txt").read_bytes() == b"two"
+        assert list(scratch.iterdir()) == []
+
+
+_UNIX_EXT = 0x8000  # py7zr FILE_ATTRIBUTE_UNIX_EXTENSION: st_mode lives in the high 16 bits
+
+
+class TestSevenZipSpecialEntries:
+    """Only regular files and directories may come out of a .7z (S10)."""
+
+    @staticmethod
+    def _handler_with_attributes(tmp_path, attributes: int):
+        import py7zr
+
+        from rippermod_manager.archive.handler import SevenZipHandler
+
+        arc = tmp_path / "special.7z"
+        with py7zr.SevenZipFile(arc, "w") as z:
+            z.writestr(b"x", "entry")
+        handler = SevenZipHandler(arc)
+        # Forge the entry type the way a hostile archive header would.
+        handler._archive.files[0]._file_info["attributes"] = attributes
+        return handler
+
+    @pytest.mark.parametrize(
+        "attributes",
+        [
+            pytest.param(
+                stat.FILE_ATTRIBUTE_REPARSE_POINT
+                | stat.FILE_ATTRIBUTE_DIRECTORY
+                | _UNIX_EXT
+                | (stat.S_IFDIR << 16),
+                id="junction-with-unix-dir-mode",
+            ),
+            pytest.param(
+                stat.FILE_ATTRIBUTE_REPARSE_POINT | stat.FILE_ATTRIBUTE_DIRECTORY,
+                id="windows-junction",
+            ),
+            pytest.param(stat.FILE_ATTRIBUTE_REPARSE_POINT, id="reparse-point"),
+            pytest.param(_UNIX_EXT | (stat.S_IFSOCK << 16), id="socket"),
+            pytest.param(_UNIX_EXT | (stat.S_IFIFO << 16), id="fifo"),
+        ],
+    )
+    def test_rejects_non_regular_entries(self, tmp_path, attributes):
+        handler = self._handler_with_attributes(tmp_path, attributes)
+        try:
+            with pytest.raises(ValueError, match="symbolic link, junction or other special"):
+                handler._reject_unsafe_entries()
+        finally:
+            handler.close()
+
+    @pytest.mark.parametrize(
+        "attributes",
+        [
+            pytest.param(_UNIX_EXT | (stat.S_IFREG << 16), id="unix-regular"),
+            pytest.param(stat.FILE_ATTRIBUTE_ARCHIVE, id="windows-regular"),
+            pytest.param(stat.FILE_ATTRIBUTE_DIRECTORY, id="windows-directory"),
+        ],
+    )
+    def test_accepts_regular_files_and_directories(self, tmp_path, attributes):
+        handler = self._handler_with_attributes(tmp_path, attributes)
+        try:
+            handler._reject_unsafe_entries()
+        finally:
+            handler.close()
 
 
 class TestOpenArchive:

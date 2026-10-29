@@ -323,6 +323,42 @@ class TestSevenZipInstall:
         assert session.exec(select(InstalledMod)).all() == []
 
 
+class TestStreamingInstall:
+    def test_install_streams_without_loading_the_whole_file(
+        self, session, game, game_dir, staging_dir
+    ):
+        import tracemalloc
+
+        archive = staging_dir / "BigMod.zip"
+        _make_zip(archive, {"mods/big.bin": os.urandom(16 * 1024**2)})
+
+        tracemalloc.start()
+        try:
+            install_mod(game, archive, session)
+            peak = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+
+        assert (game_dir / "mods" / "big.bin").stat().st_size == 16 * 1024**2
+        assert peak < 8 * 1024**2
+
+    def test_install_rejects_high_compression_7z(
+        self, session, game, game_dir, staging_dir, monkeypatch
+    ):
+        from rippermod_manager.archive import guards
+
+        archive = staging_dir / "Bomb.7z"
+        _make_7z(archive, {"mods/zeros.bin": bytes(4 * 1024**2)})
+        monkeypatch.setattr(guards, "RATIO_MIN_BYTES", 1024**2)
+
+        with pytest.raises(ValueError, match="compression ratio"):
+            install_mod(game, archive, session)
+
+        assert not (staging_dir / "Bomb").exists()
+        assert not (game_dir / "mods" / "zeros.bin").exists()
+        assert session.exec(select(InstalledMod)).all() == []
+
+
 class TestUninstallMod:
     def test_removes_files_and_db_record(self, session, game, game_dir, staging_dir):
         archive = staging_dir / "ToRemove.zip"

@@ -17,6 +17,7 @@ from pathlib import Path
 import httpx
 from sqlmodel import Session, select
 
+from rippermod_manager.archive.guards import check_extraction_budget, ensure_inside
 from rippermod_manager.archive.handler import ArchiveEntry, open_archive
 from rippermod_manager.matching.filename_parser import parse_mod_filename
 from rippermod_manager.models.correlation import ModNexusCorrelation
@@ -129,64 +130,75 @@ def install_mod(
     skipped = 0
     overwritten = 0
 
-    with open_archive(archive_path) as archive:
-        all_entries = archive.list_entries()
+    try:
+        with open_archive(archive_path) as archive:
+            all_entries = archive.list_entries()
 
-        known_roots = known_roots_for_game(game.domain_name)
-        layout_result = detect_layout(all_entries, known_roots)
+            known_roots = known_roots_for_game(game.domain_name)
+            layout_result = detect_layout(all_entries, known_roots)
 
-        if layout_result.layout == ArchiveLayout.FOMOD:
-            raise ValueError(
-                "FOMOD installer detected. This archive requires a FOMOD-aware "
-                "tool (Vortex, MO2) to install."
-            )
+            if layout_result.layout == ArchiveLayout.FOMOD:
+                raise ValueError(
+                    "FOMOD installer detected. This archive requires a FOMOD-aware "
+                    "tool (Vortex, MO2) to install."
+                )
 
-        # Pre-filter entries to determine which files to extract
-        valid_entries: list[tuple[ArchiveEntry, str, str]] = []
-        for entry in all_entries:
-            if entry.is_dir:
-                continue
+            # Pre-filter entries to determine which files to extract
+            valid_entries: list[tuple[ArchiveEntry, str, str]] = []
+            for entry in all_entries:
+                if entry.is_dir:
+                    continue
 
-            transformed = apply_layout_transform(entry.filename, layout_result)
-            if transformed is None:
-                logger.debug("Skipping entry outside wrapper: %s", entry.filename)
-                skipped += 1
-                continue
-            normalised = transformed
+                transformed = apply_layout_transform(entry.filename, layout_result)
+                if transformed is None:
+                    logger.debug("Skipping entry outside wrapper: %s", entry.filename)
+                    skipped += 1
+                    continue
+                normalised = transformed
 
-            if normalised in rename_map:
-                normalised = rename_map[normalised]
+                if normalised in rename_map:
+                    normalised = rename_map[normalised]
 
-            normalised_lower = normalised.lower()
-            if normalised_lower in skip_set:
-                skipped += 1
-                continue
-            # Path traversal guard: ensure target stays under staging_root
-            staging_target = staging_root / normalised
-            try:
-                staging_target.resolve().relative_to(staging_root.resolve())
-            except ValueError:
-                logger.warning("Skipping path traversal entry: %s", entry.filename)
-                skipped += 1
-                continue
-            valid_entries.append((entry, normalised, normalised_lower))
+                normalised_lower = normalised.lower()
+                if normalised_lower in skip_set:
+                    skipped += 1
+                    continue
+                # Path traversal guard: ensure target stays under staging_root
+                staging_target = staging_root / normalised
+                try:
+                    staging_target.resolve().relative_to(staging_root.resolve())
+                except ValueError:
+                    logger.warning("Skipping path traversal entry: %s", entry.filename)
+                    skipped += 1
+                    continue
+                valid_entries.append((entry, normalised, normalised_lower))
 
-        # Batch read all valid entries in a single pass (avoids O(N²) for 7z)
-        entries_to_read = [e for e, _, _ in valid_entries]
-        file_contents = archive.read_all_files(entries_to_read)
+            # Refuse bombs and oversize archives before writing anything
+            check_extraction_budget([e for e, _, _ in valid_entries], staging_parent)
 
-        for entry, normalised, _normalised_lower in valid_entries:
-            data = file_contents.get(entry.filename)
-            if data is None:
-                logger.warning("Batch read missed entry: %s", entry.filename)
-                skipped += 1
-                continue
-            staging_target = staging_root / normalised
-            if staging_target.exists():
-                overwritten += 1
-            staging_target.parent.mkdir(parents=True, exist_ok=True)
-            staging_target.write_bytes(data)
-            extracted_paths.append(normalised)
+            targets: list[tuple[ArchiveEntry, Path]] = []
+            seen_targets: set[Path] = set()
+            for entry, normalised, _normalised_lower in valid_entries:
+                staging_target = staging_root / normalised
+                if staging_target in seen_targets:
+                    overwritten += 1
+                seen_targets.add(staging_target)
+                targets.append((entry, staging_target))
+
+            # Stream each entry to staging, one open at a time
+            written = archive.extract_entries(targets, staging_parent)
+
+            for entry, normalised, _normalised_lower in valid_entries:
+                if entry.filename not in written:
+                    logger.warning("Extraction missed entry: %s", entry.filename)
+                    skipped += 1
+                    continue
+                ensure_inside(staging_root, staging_root / normalised)
+                extracted_paths.append(normalised)
+    except Exception:
+        # Leave no half-written staging folder behind, then surface the error.
+        shutil.rmtree(staging_root, ignore_errors=True)
+        raise
 
     installed = InstalledMod(
         game_id=game.id,  # type: ignore[arg-type]

@@ -8,11 +8,13 @@ via hardlinks into the game directory (same VFS model as install_service).
 from __future__ import annotations
 
 import logging
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
 from sqlmodel import Session, select
 
+from rippermod_manager.archive.guards import check_extraction_budget, ensure_inside
 from rippermod_manager.archive.handler import ArchiveEntry, open_archive
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
@@ -338,33 +340,57 @@ def install_fomod(
     skipped = 0
     overwritten = 0
 
-    with open_archive(archive_path) as archive:
-        all_entries = archive.list_entries()
-        entries_to_read = [e for e in all_entries if e.filename in archive_path_set]
-        file_contents = archive.read_all_files(entries_to_read)
+    try:
+        with open_archive(archive_path) as archive:
+            entries_by_name = {
+                e.filename: e
+                for e in archive.list_entries()
+                if not e.is_dir and e.filename in archive_path_set
+            }
 
-        for rf in resolved_files:
-            data = file_contents.get(rf.archive_path)
-            if data is None:
-                logger.warning("FOMOD: archive entry not found: %s", rf.archive_path)
-                skipped += 1
-                continue
+            planned: list[tuple[ArchiveEntry, ResolvedFile, Path]] = []
+            seen_targets: set[Path] = set()
+            for rf in resolved_files:
+                entry = entries_by_name.get(rf.archive_path)
+                if entry is None:
+                    logger.warning("FOMOD: archive entry not found: %s", rf.archive_path)
+                    skipped += 1
+                    continue
 
-            # Path-traversal guard: target must stay inside staging_root
-            target = staging_root / rf.game_relative_path
-            try:
-                target.resolve().relative_to(staging_root.resolve())
-            except ValueError:
-                logger.warning("FOMOD: skipping path traversal entry: %s", rf.game_relative_path)
-                skipped += 1
-                continue
+                # Path-traversal guard: target must stay inside staging_root
+                target = staging_root / rf.game_relative_path
+                try:
+                    target.resolve().relative_to(staging_root.resolve())
+                except ValueError:
+                    logger.warning(
+                        "FOMOD: skipping path traversal entry: %s", rf.game_relative_path
+                    )
+                    skipped += 1
+                    continue
 
-            if target.exists():
-                overwritten += 1
+                if target in seen_targets:
+                    overwritten += 1
+                seen_targets.add(target)
+                planned.append((entry, rf, target))
 
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(data)
-            extracted_paths.append(rf.game_relative_path)
+            # Refuse bombs and oversize archives before writing anything. One
+            # archive entry can feed several targets, so each one is counted.
+            check_extraction_budget([e for e, _, _ in planned], staging_parent)
+
+            # Stream each entry to staging, one open at a time
+            written = archive.extract_entries([(e, t) for e, _, t in planned], staging_parent)
+
+            for entry, rf, target in planned:
+                if entry.filename not in written:
+                    logger.warning("FOMOD: extraction missed entry: %s", rf.archive_path)
+                    skipped += 1
+                    continue
+                ensure_inside(staging_root, target)
+                extracted_paths.append(rf.game_relative_path)
+    except Exception:
+        # Leave no half-written staging folder behind, then surface the error.
+        shutil.rmtree(staging_root, ignore_errors=True)
+        raise
 
     installed = InstalledMod(
         game_id=game.id,  # type: ignore[arg-type]
