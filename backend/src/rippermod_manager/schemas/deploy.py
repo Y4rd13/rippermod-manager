@@ -12,6 +12,7 @@ class DeployOp(BaseModel):
     src: str  # staging-relative for link/junction; ignored for unlink/rm_junction
     dst: str  # game-relative
     installed_mod_id: int | None = None
+    relative_path: str = ""  # game-relative path ("/"), filled by plan_deploy
 
 
 class DeployPlan(BaseModel):

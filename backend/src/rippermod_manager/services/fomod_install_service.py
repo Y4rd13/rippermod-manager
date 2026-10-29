@@ -428,10 +428,11 @@ def install_fomod(
     session.commit()
     session.refresh(installed)
 
+    deploy_report = None
     if auto_deploy:
         from rippermod_manager.services.vfs import deploy_service
 
-        deploy_service.deploy(game, session)
+        deploy_report = deploy_service.deploy(game, session)
 
         # Regenerate modlist.txt to include new archives in the load order
         from rippermod_manager.services.modlist_service import write_modlist
@@ -451,4 +452,5 @@ def install_fomod(
         files_skipped=skipped,
         files_overwritten=overwritten,
         installed_mod_name_safe=safe_name,
+        deploy=deploy_report,
     )

@@ -26,6 +26,7 @@ from rippermod_manager.schemas.deploy import (
 )
 from rippermod_manager.services.paths import get_mods_dir
 from rippermod_manager.services.save_backup_service import maybe_backup_before
+from rippermod_manager.services.vfs.ownership import owners_by_key, winner_map
 from rippermod_manager.services.vfs.primitives import (
     AlreadyExistsError,
     VfsError,
@@ -86,73 +87,113 @@ def pre_flight_check(game: Game) -> PreflightReport:
     return report
 
 
-def plan_deploy(game: Game, session: Session) -> tuple[DeployPlan, int]:
-    """Build a DeployPlan from the installed-mod manifest for a game.
+def _redmod_root(relative_path: str) -> str | None:
+    """``<name>`` for a file under ``mods/<name>/...``, else None."""
+    parts = relative_path.replace("\\", "/").split("/")
+    if len(parts) >= 2 and parts[0] == "mods":
+        return parts[1]
+    return None
 
-    Enumerates all enabled InstalledMod rows and their InstalledModFile rows,
-    producing one DeployOp per file (link) or per REDmod subtree root (junction).
-    Junction ops are deduplicated: only one junction per mods/<name> directory.
 
-    Hardlink and junction ops are skipped when the destination already matches
-    the staged source (idempotent re-deploy). Returns the plan plus the count of
-    skipped ops so callers can surface "already up to date" without false drift.
+def plan_deploy(
+    game: Game, session: Session, *, paths: set[str] | None = None
+) -> tuple[DeployPlan, int]:
+    """Build a DeployPlan that links the winner of every destination path (S4).
+
+    For each ownership key (``ownership.path_key``) only the enabled owner with
+    the highest ``win_seq`` is linked: one ``link`` per hardlinked file, one
+    ``junction`` per REDmod ``mods/<name>`` root. When the destination is
+    currently the hardlink of another owner of the same key, an ``unlink``
+    (carrying that owner's staged source, so execution can verify it) runs
+    before the ``link``. ``paths`` restricts the plan to those keys.
+
+    Ops whose destination already matches the winner's staged source are
+    skipped (idempotent re-deploy); the count of skipped ops is returned
+    alongside the plan so callers can surface "already up to date".
     """
     install = Path(game.install_path)
     staging_root = get_mods_dir(game)
 
-    mods = session.exec(
-        select(InstalledMod).where(
-            InstalledMod.game_id == game.id,
-            InstalledMod.disabled.is_(False),  # type: ignore[union-attr]
-        )
-    ).all()
-
     plan = DeployPlan(game_id=game.id)
-    junction_dirs_seen: set[str] = set()
     skipped_existing = 0
+    owners = owners_by_key(session, game.id)  # type: ignore[arg-type]
 
-    for mod in mods:
-        _ = mod.files  # touch relationship to load files
-        for f in mod.files:
-            src = staging_root / mod.staging_dir / f.source_path.replace("\\", "/")
-            dst = install / f.relative_path.replace("\\", "/")
-            if f.link_kind == "junction":
-                parts = f.relative_path.replace("\\", "/").split("/")
-                if len(parts) >= 2 and parts[0] == "mods":
-                    redmod_dst = install / "mods" / parts[1]
-                    redmod_src = staging_root / mod.staging_dir / "mods" / parts[1]
-                    key = str(redmod_dst)
-                    if key in junction_dirs_seen:
-                        continue
-                    junction_dirs_seen.add(key)
-                    # Idempotency: junction already in place (any reparse-point dir).
-                    # We don't read reparse-point targets; presence is treated as ours.
-                    if redmod_dst.is_dir():
-                        skipped_existing += 1
-                        continue
-                    plan.ops.append(
-                        DeployOp(
-                            operation="junction",
-                            src=str(redmod_src),
-                            dst=str(redmod_dst),
-                            installed_mod_id=mod.id,
-                        )
-                    )
-                    continue
-            # Idempotency: hardlink already points to the staged source.
-            if verify_link(src, dst):
+    for key, (mod, f) in winner_map(session, game.id).items():  # type: ignore[arg-type]
+        if paths is not None and key not in paths:
+            continue
+        redmod_name = _redmod_root(f.relative_path) if f.link_kind == "junction" else None
+        if redmod_name is not None:
+            redmod_dst = install / "mods" / redmod_name
+            redmod_src = staging_root / mod.staging_dir / "mods" / redmod_name
+            # Idempotency: junction already in place (any reparse-point dir).
+            # We don't read reparse-point targets; presence is treated as ours.
+            if redmod_dst.is_dir():
                 skipped_existing += 1
                 continue
             plan.ops.append(
                 DeployOp(
-                    operation="link",
-                    src=str(src),
-                    dst=str(dst),
+                    operation="junction",
+                    src=str(redmod_src),
+                    dst=str(redmod_dst),
                     installed_mod_id=mod.id,
+                    relative_path=f"mods/{redmod_name}",
                 )
             )
+            continue
+
+        rel = f.relative_path.replace("\\", "/")
+        src = staging_root / mod.staging_dir / f.source_path.replace("\\", "/")
+        dst = install / rel
+        # Idempotency: hardlink already points to the winner's staged source.
+        if verify_link(src, dst):
+            skipped_existing += 1
+            continue
+        # Hand the path over: drop the link of the owner that held it before.
+        for other_mod, other_f in owners.get(key, []):
+            if other_mod.id == mod.id or other_f.link_kind == "junction":
+                continue
+            other_src = (
+                staging_root / other_mod.staging_dir / other_f.source_path.replace("\\", "/")
+            )
+            if verify_link(other_src, dst):
+                plan.ops.append(
+                    DeployOp(
+                        operation="unlink",
+                        src=str(other_src),
+                        dst=str(dst),
+                        installed_mod_id=other_mod.id,
+                        relative_path=rel,
+                    )
+                )
+                break
+        plan.ops.append(
+            DeployOp(
+                operation="link",
+                src=str(src),
+                dst=str(dst),
+                installed_mod_id=mod.id,
+                relative_path=rel,
+            )
+        )
 
     return plan, skipped_existing
+
+
+def relink_paths(game: Game, session: Session, paths: set[str]) -> DeployReport:
+    """Link the current winner of each key in *paths* (no redMod compile).
+
+    Used right after a mod gives paths up (uninstall, disable) so the next
+    owner takes them over in the same operation, and on enable.
+    """
+    if not paths:
+        return DeployReport(total=0, done=0, failed=0)
+    pre = pre_flight_check(game)
+    if not pre.ok:
+        return DeployReport(total=0, done=0, failed=0, results=[], preflight=pre)
+    plan, skipped = plan_deploy(game, session, paths=paths)
+    report = execute_plan(plan, session)
+    report.skipped_existing = skipped
+    return report
 
 
 def execute_plan(plan: DeployPlan, session: Session, *, force: bool = False) -> DeployReport:

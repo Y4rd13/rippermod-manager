@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from rippermod_manager.schemas.deploy import DeployReport
+
 
 class InstallRequest(BaseModel):
     archive_filename: str
@@ -16,6 +18,7 @@ class InstallResult(BaseModel):
     files_skipped: int
     files_overwritten: int
     installed_mod_name_safe: str = ""  # staging dir name; empty for legacy compat
+    deploy: DeployReport | None = None  # report of the deploy this install ran, if any
 
 
 class InstalledModOut(BaseModel):

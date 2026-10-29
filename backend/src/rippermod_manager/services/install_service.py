@@ -46,7 +46,7 @@ from rippermod_manager.services.archive_layout import (
 from rippermod_manager.services.nexus_helpers import match_local_to_nexus_file
 from rippermod_manager.services.paths import get_mods_dir
 from rippermod_manager.services.vfs.naming import unique_staging_name
-from rippermod_manager.services.vfs.ownership import next_win_seq
+from rippermod_manager.services.vfs.ownership import next_win_seq, path_key
 from rippermod_manager.services.vfs.primitives import VfsError, hardlink, same_volume
 
 logger = logging.getLogger(__name__)
@@ -267,10 +267,11 @@ def install_mod(
     session.commit()
     session.refresh(installed)
 
+    deploy_report = None
     if auto_deploy:
         from rippermod_manager.services.vfs import deploy_service
 
-        deploy_service.deploy(game, session)
+        deploy_report = deploy_service.deploy(game, session)
 
     # Index .archive files for resource-level conflict detection
     from rippermod_manager.services.archive_index_service import index_mod_archives
@@ -309,6 +310,7 @@ def install_mod(
         files_skipped=skipped,
         files_overwritten=overwritten,
         installed_mod_name_safe=safe_name,
+        deploy=deploy_report,
     )
 
 
@@ -594,8 +596,14 @@ def uninstall_mod(
         )
     )
 
+    released = {path_key(f.relative_path, f.link_kind) for f in installed_mod.files}
     session.delete(installed_mod)
     session.commit()
+
+    # Hand every path this mod gave up to its next owner, in the same operation (S4).
+    from rippermod_manager.services.vfs.deploy_service import relink_paths
+
+    relink_paths(game, session, released)
     write_modlist(game, session)
 
     logger.info("Uninstalled '%s' (%d files removed)", installed_mod.name, file_count)
@@ -625,11 +633,12 @@ def toggle_mod(
 ) -> ToggleResult:
     """Flip ``installed_mod.disabled`` and deploy/undeploy that mod's files.
 
-    Disable: removes game-dir hardlinks (staging untouched). The ``disabled``
-    flag is the source of truth — no ``.disabled`` rename happens on disk.
+    Disable: removes game-dir hardlinks (staging untouched), then hands each
+    path to its next enabled owner (``relink_paths``). The ``disabled`` flag is
+    the source of truth — no ``.disabled`` rename happens on disk.
 
     Enable: flips the flag, commits (so plan_deploy sees the enabled state),
-    then builds a per-mod DeployPlan and executes it to recreate hardlinks.
+    then relinks this mod's paths, taking over the ones it wins (S4).
 
     Pass ``commit=False`` to defer the DB commit (useful for batching in
     profile loads); the caller becomes responsible for commits.
@@ -683,65 +692,23 @@ def toggle_mod(
     if commit:
         session.commit()
 
-    if not should_disable:
-        # Re-enable path: build a per-mod plan and execute it.
-        # Using an inline plan (not deploy_service.deploy()) to avoid producing
-        # journal "failed" entries for already-deployed sibling mods. Same
-        # verify_link / is_dir idempotency guard as plan_deploy so a re-enable
-        # on already-linked files is a no-op instead of an AlreadyExistsError.
-        from rippermod_manager.schemas.deploy import DeployOp, DeployPlan
-        from rippermod_manager.services.vfs.deploy_service import execute_plan, pre_flight_check
-        from rippermod_manager.services.vfs.primitives import verify_link
+    from rippermod_manager.services.vfs.deploy_service import relink_paths
 
-        pre = pre_flight_check(game)
-        if pre.ok:
-            staging_root = get_mods_dir(game)
-            ops: list[DeployOp] = []
-            junction_dirs_seen_enable: set[str] = set()
-            for f in installed_mod.files:
-                src = staging_root / installed_mod.staging_dir / f.source_path.replace("\\", "/")
-                dst = game_dir / f.relative_path.replace("\\", "/")
-                if f.link_kind == "junction":
-                    parts = f.relative_path.replace("\\", "/").split("/")
-                    if len(parts) >= 2 and parts[0] == "mods":
-                        redmod_dst = game_dir / "mods" / parts[1]
-                        redmod_src = staging_root / installed_mod.staging_dir / "mods" / parts[1]
-                        key = str(redmod_dst)
-                        if key in junction_dirs_seen_enable:
-                            continue
-                        junction_dirs_seen_enable.add(key)
-                        # Idempotency: junction already in place.
-                        if redmod_dst.is_dir():
-                            continue
-                        ops.append(
-                            DeployOp(
-                                operation="junction",
-                                src=str(redmod_src),
-                                dst=str(redmod_dst),
-                                installed_mod_id=installed_mod.id,
-                            )
-                        )
-                        continue
-                # Idempotency: hardlink already points to the staged source.
-                if verify_link(src, dst):
-                    continue
-                ops.append(
-                    DeployOp(
-                        operation="link",
-                        src=str(src),
-                        dst=str(dst),
-                        installed_mod_id=installed_mod.id,
-                    )
-                )
-
-            plan = DeployPlan(game_id=game.id, ops=ops)
-            report = execute_plan(plan, session)
-            if report.is_clean:
-                installed_mod.deployed = True
-                session.add(installed_mod)
-                if commit:
-                    session.commit()
-            affected = report.done
+    keys = {path_key(f.relative_path, f.link_kind) for f in installed_mod.files}
+    if should_disable:
+        # Hand the paths this mod gave up to their next enabled owner (S4).
+        relink_paths(game, session, keys)
+    else:
+        # Re-enable: link the paths this mod now wins (taking them over from the
+        # previous owner). Scoped to this mod's keys so already-deployed sibling
+        # mods produce no journal entries; plan_deploy skips links already in place.
+        report = relink_paths(game, session, keys)
+        if report.is_clean:
+            installed_mod.deployed = True
+            session.add(installed_mod)
+            if commit:
+                session.commit()
+        affected = report.done
 
     if commit:
         session.commit()

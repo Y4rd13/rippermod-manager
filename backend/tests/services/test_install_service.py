@@ -868,3 +868,78 @@ class TestVfsHardlinks:
         toggle_mod(installed, game, session)  # disable → backup
         toggle_mod(installed, game, session)  # re-enable → no backup
         assert calls == ["pre-disable"]
+
+
+def _staged(game, mod_name_safe: str, rel: str):
+    from rippermod_manager.services.paths import get_mods_dir
+
+    return get_mods_dir(game) / mod_name_safe / rel
+
+
+class TestSharedPathWinner:
+    """S4: one linked owner per path; Overwrite makes the new mod win."""
+
+    @pytest.fixture
+    def two_mods(self, session, game, game_dir, staging_dir):
+        archive_a = staging_dir / "ModA.zip"
+        archive_b = staging_dir / "ModB.zip"
+        _make_zip(archive_a, {"shared.txt": b"from A", "only_a.txt": b"a"})
+        _make_zip(archive_b, {"shared.txt": b"from B"})
+        a = install_mod(game, archive_a, session)
+        return a, archive_b
+
+    def test_overwrite_links_the_new_mod(self, session, game, game_dir, two_mods):
+        from rippermod_manager.services.vfs.primitives import verify_link
+
+        _a, archive_b = two_mods
+        result = install_mod(game, archive_b, session, skip_conflicts=[])
+
+        assert (game_dir / "shared.txt").read_bytes() == b"from B"
+        assert verify_link(
+            _staged(game, result.installed_mod_name_safe, "shared.txt"), game_dir / "shared.txt"
+        )
+        assert result.deploy is not None and result.deploy.failed == 0
+
+    def test_skip_keeps_the_previous_mod(self, session, game, game_dir, two_mods):
+        _a, archive_b = two_mods
+        result = install_mod(game, archive_b, session, skip_conflicts=["shared.txt"])
+
+        assert (game_dir / "shared.txt").read_bytes() == b"from A"
+        assert result.deploy is not None and result.deploy.failed == 0
+
+    def test_uninstalling_the_winner_relinks_the_previous_owner(
+        self, session, game, game_dir, two_mods
+    ):
+        from rippermod_manager.services.vfs.primitives import verify_link
+
+        a, archive_b = two_mods
+        b = install_mod(game, archive_b, session, skip_conflicts=[])
+
+        uninstall_mod(session.get(InstalledMod, b.installed_mod_id), game, session)
+
+        assert (game_dir / "shared.txt").read_bytes() == b"from A"
+        assert verify_link(
+            _staged(game, a.installed_mod_name_safe, "shared.txt"), game_dir / "shared.txt"
+        )
+
+    def test_disabling_the_winner_relinks_and_enabling_takes_it_back(
+        self, session, game, game_dir, two_mods
+    ):
+        from rippermod_manager.services.vfs.primitives import verify_link
+
+        a, archive_b = two_mods
+        b = install_mod(game, archive_b, session, skip_conflicts=[])
+        mod_b = session.get(InstalledMod, b.installed_mod_id)
+
+        toggle_mod(mod_b, game, session)  # disable B
+        assert (game_dir / "shared.txt").read_bytes() == b"from A"
+        assert verify_link(
+            _staged(game, a.installed_mod_name_safe, "shared.txt"), game_dir / "shared.txt"
+        )
+
+        toggle_mod(session.get(InstalledMod, b.installed_mod_id), game, session)  # enable B
+        assert (game_dir / "shared.txt").read_bytes() == b"from B"
+        assert verify_link(
+            _staged(game, b.installed_mod_name_safe, "shared.txt"), game_dir / "shared.txt"
+        )
+        assert (game_dir / "only_a.txt").read_bytes() == b"a"
