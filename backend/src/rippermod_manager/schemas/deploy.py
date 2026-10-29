@@ -26,7 +26,8 @@ class DeployPlan(BaseModel):
 
 class DeployOpResult(BaseModel):
     op: DeployOp
-    status: Literal["done", "failed"]
+    # foreign: the destination is not this mod's link, so it was left untouched (S5)
+    status: Literal["done", "failed", "foreign"]
     error: str = ""
 
 
@@ -62,6 +63,7 @@ class DeployReport(BaseModel):
     total: int
     done: int
     failed: int
+    foreign: int = 0  # removals skipped because the destination is not our link (S5)
     skipped_existing: int = 0  # already correctly linked, skipped by plan_deploy
     results: list[DeployOpResult] = Field(default_factory=list)
     preflight: PreflightReport | None = None  # populated when pre-flight refuses

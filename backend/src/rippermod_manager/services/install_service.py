@@ -533,41 +533,24 @@ def uninstall_mod(
     """Remove a mod's game-dir links and its staging subtree."""
     # Snapshot saves before this destructive change (best-effort, deduped).
     from rippermod_manager.services.save_backup_service import maybe_backup_before
-    from rippermod_manager.services.vfs.primitives import (
-        VfsError,
-        remove_junction,
+    from rippermod_manager.services.vfs.deploy_service import (
+        execute_plan,
+        plan_remove_mod_links,
     )
-    from rippermod_manager.services.vfs.primitives import unlink as vfs_unlink
 
     maybe_backup_before(game, session, reason="pre-uninstall")
 
-    game_dir = Path(game.install_path)
     _ = installed_mod.files
     file_count = len(installed_mod.files)
     # Capture undo metadata before the row is deleted below.
     undo_mod_id = installed_mod.id
     undo_archive = installed_mod.source_archive
-    junction_dirs_seen: set[str] = set()
 
-    for f in installed_mod.files:
-        dst = game_dir / f.relative_path.replace("/", os.sep)
-        if f.link_kind == "junction":
-            parts = f.relative_path.replace("\\", "/").split("/")
-            if len(parts) >= 2 and parts[0] == "mods":
-                redmod_dst = game_dir / "mods" / parts[1]
-                key = str(redmod_dst)
-                if key in junction_dirs_seen:
-                    continue
-                junction_dirs_seen.add(key)
-                try:
-                    remove_junction(redmod_dst)
-                except VfsError:
-                    logger.warning("Could not remove junction %s", redmod_dst)
-                continue
-        try:
-            vfs_unlink(dst)
-        except VfsError:
-            logger.warning("Could not unlink %s", dst)
+    # Remove only this mod's own links (S5); anything else at those paths stays.
+    removal = execute_plan(plan_remove_mod_links(game, installed_mod, session), session)
+    for r in removal.results:
+        if r.status == "failed":
+            logger.warning("Could not remove %s: %s", r.op.dst, r.error)
 
     # Remove staging subtree
     if installed_mod.staging_dir:
@@ -620,7 +603,7 @@ def uninstall_mod(
             source_archive=undo_archive,
             undoable=True,
         )
-    return UninstallResult(files_deleted=file_count, directories_removed=0)
+    return UninstallResult(files_deleted=file_count, directories_removed=0, foreign=removal.foreign)
 
 
 def toggle_mod(
@@ -643,15 +626,15 @@ def toggle_mod(
     Pass ``commit=False`` to defer the DB commit (useful for batching in
     profile loads); the caller becomes responsible for commits.
     """
-    from rippermod_manager.services.vfs.primitives import (
-        VfsError,
-        remove_junction,
+    from rippermod_manager.services.vfs.deploy_service import (
+        execute_plan,
+        plan_remove_mod_links,
     )
-    from rippermod_manager.services.vfs.primitives import unlink as vfs_unlink
 
-    game_dir = Path(game.install_path)
     should_disable = not installed_mod.disabled
     affected = 0
+    foreign = 0
+    failed = 0
 
     _ = installed_mod.files  # touch relationship to load files
 
@@ -661,30 +644,12 @@ def toggle_mod(
 
         maybe_backup_before(game, session, reason="pre-disable")
 
-        # Disable path: remove game-dir hardlinks, leave staging intact.
-        junction_dirs_seen: set[str] = set()
-        for f in installed_mod.files:
-            dst = game_dir / f.relative_path.replace("/", os.sep)
-            if f.link_kind == "junction":
-                parts = f.relative_path.replace("\\", "/").split("/")
-                if len(parts) >= 2 and parts[0] == "mods":
-                    redmod_dst = game_dir / "mods" / parts[1]
-                    key = str(redmod_dst)
-                    if key in junction_dirs_seen:
-                        continue
-                    junction_dirs_seen.add(key)
-                    try:
-                        remove_junction(redmod_dst)
-                        affected += 1
-                    except VfsError:
-                        logger.warning("Could not remove junction %s", redmod_dst)
-                    continue
-            try:
-                if dst.exists():
-                    vfs_unlink(dst)
-                    affected += 1
-            except VfsError:
-                logger.warning("Could not unlink %s", dst)
+        # Disable path: remove only this mod's own game-dir links (S5), leave
+        # staging intact. Anything else at those paths is left and counted.
+        removal = execute_plan(plan_remove_mod_links(game, installed_mod, session), session)
+        affected = removal.done
+        foreign = removal.foreign
+        failed = removal.failed
         installed_mod.deployed = False
 
     installed_mod.disabled = should_disable
@@ -697,7 +662,7 @@ def toggle_mod(
     keys = {path_key(f.relative_path, f.link_kind) for f in installed_mod.files}
     if should_disable:
         # Hand the paths this mod gave up to their next enabled owner (S4).
-        relink_paths(game, session, keys)
+        failed += relink_paths(game, session, keys).failed
     else:
         # Re-enable: link the paths this mod now wins (taking them over from the
         # previous owner). Scoped to this mod's keys so already-deployed sibling
@@ -709,6 +674,7 @@ def toggle_mod(
             if commit:
                 session.commit()
         affected = report.done
+        failed = report.failed
 
     if commit:
         session.commit()
@@ -732,7 +698,9 @@ def toggle_mod(
             prior_disabled=not should_disable,
             undoable=True,
         )
-    return ToggleResult(disabled=should_disable, files_affected=affected)
+    return ToggleResult(
+        disabled=should_disable, files_affected=affected, foreign=foreign, failed=failed
+    )
 
 
 async def resolve_installed_file_id(

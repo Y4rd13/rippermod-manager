@@ -943,3 +943,68 @@ class TestSharedPathWinner:
             _staged(game, b.installed_mod_name_safe, "shared.txt"), game_dir / "shared.txt"
         )
         assert (game_dir / "only_a.txt").read_bytes() == b"a"
+
+
+skip_if_not_windows = pytest.mark.skipif(
+    sys.platform != "win32", reason="real NTFS junctions are Windows-only"
+)
+
+
+class TestSafeRemoval:
+    """S5: uninstall/disable only remove this mod's own links."""
+
+    @pytest.fixture
+    def vanilla_exe(self, game_dir):
+        exe = game_dir / "bin" / "x64" / "Cyberpunk2077.exe"
+        exe.parent.mkdir(parents=True)
+        exe.write_bytes(b"vanilla")
+        return exe
+
+    def test_uninstall_keeps_vanilla_exe_the_mod_also_shipped(
+        self, session, game, staging_dir, vanilla_exe
+    ):
+        archive = staging_dir / "ExeMod.zip"
+        _make_zip(archive, {"bin/x64/Cyberpunk2077.exe": b"modded", "bin/x64/extra.dll": b"x"})
+        installed = install_mod(game, archive, session)
+
+        result = uninstall_mod(session.get(InstalledMod, installed.installed_mod_id), game, session)
+
+        assert vanilla_exe.exists() and vanilla_exe.read_bytes() == b"vanilla"
+        assert result.foreign == 1
+
+    def test_disable_keeps_vanilla_exe_the_mod_also_shipped(
+        self, session, game, staging_dir, vanilla_exe
+    ):
+        archive = staging_dir / "ExeMod.zip"
+        _make_zip(archive, {"bin/x64/Cyberpunk2077.exe": b"modded", "bin/x64/extra.dll": b"x"})
+        installed = install_mod(game, archive, session)
+
+        result = toggle_mod(session.get(InstalledMod, installed.installed_mod_id), game, session)
+
+        assert result.disabled is True
+        assert vanilla_exe.exists() and vanilla_exe.read_bytes() == b"vanilla"
+        assert result.foreign == 1
+
+    def test_uninstall_keeps_foreign_redmod_dir(self, session, game, game_dir, staging_dir):
+        foreign = game_dir / "mods" / "MyMod"
+        foreign.mkdir(parents=True)  # e.g. a REDmod the user copied in by hand
+        archive = staging_dir / "RedMod.zip"
+        _make_zip(archive, {"mods/MyMod/info.json": b"{}"})
+        installed = install_mod(game, archive, session)
+
+        result = uninstall_mod(session.get(InstalledMod, installed.installed_mod_id), game, session)
+
+        assert foreign.is_dir()
+        assert result.foreign == 1
+
+    @skip_if_not_windows
+    def test_uninstall_removes_own_junction(self, session, game, game_dir, staging_dir):
+        archive = staging_dir / "OwnRedMod.zip"
+        _make_zip(archive, {"mods/OwnRedMod/info.json": b"{}"})
+        installed = install_mod(game, archive, session)
+        assert (game_dir / "mods" / "OwnRedMod").is_dir()
+
+        result = uninstall_mod(session.get(InstalledMod, installed.installed_mod_id), game, session)
+
+        assert not (game_dir / "mods" / "OwnRedMod").exists()
+        assert result.foreign == 0

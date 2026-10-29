@@ -725,3 +725,77 @@ def test_deploy_skips_redmod_when_only_legacy_archives(in_memory_session, sample
     assert report.failed == 0
     assert report.redmod is None
     redmod_run.assert_not_called()
+
+
+def _hardlinked_mod(session, game, name="Demo", rel="r6/scripts/a.reds"):
+    staged = Path(game.install_path) / "downloaded_mods" / name / rel
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    staged.write_text(f"// {name}")
+    mod = InstalledMod(game_id=game.id, name=name, staging_dir=name, deployed=True)
+    session.add(mod)
+    session.flush()
+    session.add(InstalledModFile(installed_mod_id=mod.id, relative_path=rel, source_path=rel))
+    session.commit()
+    return mod, staged
+
+
+def test_undeploy_keeps_foreign_file_and_counts_it(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    _hardlinked_mod(session, game)
+    dst = Path(game.install_path) / "r6" / "scripts" / "a.reds"
+    dst.parent.mkdir(parents=True)
+    dst.write_text("user's own file")  # not our hardlink
+
+    with patch("rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=False):
+        report = undeploy(game, session)
+
+    assert dst.read_text() == "user's own file"
+    assert report.foreign == 1
+    assert report.failed == 0
+
+
+def test_undeploy_missing_link_counts_as_done(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    _hardlinked_mod(session, game)
+
+    with patch("rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=False):
+        report = undeploy(game, session)
+
+    assert report.done == 1 and report.foreign == 0 and report.failed == 0
+
+
+def test_replay_keeps_foreign_file_for_pending_link(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    _mod, staged = _hardlinked_mod(session, game)
+    dst = Path(game.install_path) / "r6" / "scripts" / "a.reds"
+    dst.parent.mkdir(parents=True)
+    dst.write_text("vanilla")
+    session.add(
+        DeployJournalEntry(
+            game_id=game.id, operation="link", src=str(staged), dst=str(dst), status="pending"
+        )
+    )
+    session.commit()
+
+    replay_pending_journal(game, session)
+
+    assert dst.read_text() == "vanilla"
+
+
+def test_replay_removes_own_pending_link(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    _mod, staged = _hardlinked_mod(session, game)
+    dst = Path(game.install_path) / "r6" / "scripts" / "a.reds"
+    dst.parent.mkdir(parents=True)
+    os.link(staged, dst)
+    session.add(
+        DeployJournalEntry(
+            game_id=game.id, operation="link", src=str(staged), dst=str(dst), status="pending"
+        )
+    )
+    session.commit()
+
+    replay_pending_journal(game, session)
+
+    assert not dst.exists()
+    assert staged.exists()

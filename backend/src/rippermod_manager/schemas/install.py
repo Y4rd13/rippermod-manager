@@ -47,11 +47,14 @@ class InstalledModOut(BaseModel):
 class UninstallResult(BaseModel):
     files_deleted: int
     directories_removed: int
+    foreign: int = 0  # game-dir entries left in place: not this mod's own links (S5)
 
 
 class ToggleResult(BaseModel):
     disabled: bool
     files_affected: int
+    foreign: int = 0  # game-dir entries left in place: not this mod's own links (S5)
+    failed: int = 0  # link/unlink operations that failed
 
 
 class FileConflict(BaseModel):
