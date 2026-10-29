@@ -22,6 +22,7 @@ class GameCreate(BaseModel):
 
 class GameUpdate(BaseModel):
     mods_dir: str | None = None
+    install_path: str | None = None
 
 
 class ModPathOut(BaseModel):

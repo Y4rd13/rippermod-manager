@@ -15,7 +15,7 @@ from rippermod_manager.models.game import Game
 def _seed_game(client):
     client.post(
         "/api/v1/games/",
-        json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": "/cp"},
+        json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
     )
 
 
@@ -290,7 +290,7 @@ class TestUninstallCollection:
 
         client.post(
             "/api/v1/games/",
-            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": "/cp"},
+            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         return session.exec(select(Game)).one()
 

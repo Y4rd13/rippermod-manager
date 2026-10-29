@@ -11,7 +11,7 @@ from rippermod_manager.nexus.client import BASE_URL
 def _seed_game(client):
     client.post(
         "/api/v1/games/",
-        json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": "/cp"},
+        json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
     )
 
 
@@ -40,7 +40,7 @@ class TestSyncHistory:
     def test_no_key_400(self, client):
         client.post(
             "/api/v1/games/",
-            json={"name": "G", "domain_name": "g", "install_path": "/g"},
+            json={"name": "G", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         r = client.post("/api/v1/nexus/sync-history/G")
         assert r.status_code == 400
@@ -49,7 +49,7 @@ class TestSyncHistory:
     def test_sync_success(self, client):
         client.post(
             "/api/v1/games/",
-            json={"name": "G", "domain_name": "g", "install_path": "/g"},
+            json={"name": "G", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         client.put(
             "/api/v1/settings/",
@@ -70,7 +70,7 @@ class TestListDownloads:
     def test_list(self, client):
         client.post(
             "/api/v1/games/",
-            json={"name": "G", "domain_name": "g", "install_path": "/g"},
+            json={"name": "G", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         r = client.get("/api/v1/nexus/downloads/G")
         assert r.status_code == 200

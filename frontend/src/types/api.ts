@@ -29,6 +29,7 @@ export interface GameCreate {
 
 export interface GameUpdate {
   mods_dir?: string | null;
+  install_path?: string;
 }
 
 export interface ModFileOut {

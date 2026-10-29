@@ -72,12 +72,23 @@ import type {
 export function useCreateGame() {
   const qc = useQueryClient();
   return useMutation<Game, Error, GameCreate>({
-    mutationFn: (data) => api.post("/api/v1/games/", data),
+    mutationFn: async (data) => {
+      try {
+        return await api.post<Game>("/api/v1/games/", data);
+      } catch (err) {
+        // 409: the game already exists. The backend no longer overwrites it on
+        // POST, so repoint it explicitly (same validation, via PATCH).
+        if (!(err instanceof ApiError && err.status === 409)) throw err;
+        const update: GameUpdate = { install_path: data.install_path };
+        if (data.mods_dir !== undefined) update.mods_dir = data.mods_dir;
+        return api.patch<Game>(`/api/v1/games/${encodeURIComponent(data.name)}`, update);
+      }
+    },
     onSuccess: (game) => {
       qc.invalidateQueries({ queryKey: ["games"] });
       toast.success("Game added", game.name);
     },
-    onError: () => toast.error("Failed to add game"),
+    onError: (err) => toast.error("Failed to add game", apiErrorDetail(err, err.message)),
   });
 }
 

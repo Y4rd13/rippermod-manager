@@ -1,3 +1,25 @@
+from pathlib import Path
+
+import pytest
+
+CP = "cyberpunk2077"
+
+
+def _cp_dir(tmp_path: Path, name: str = "game") -> str:
+    """Create a fake Cyberpunk 2077 install (with its exe) under *tmp_path*."""
+    root = tmp_path / name
+    (root / "bin" / "x64").mkdir(parents=True, exist_ok=True)
+    (root / "bin" / "x64" / "Cyberpunk2077.exe").write_bytes(b"MZ")
+    return str(root)
+
+
+def _create(client, name: str, install_path: str, **extra):
+    return client.post(
+        "/api/v1/games/",
+        json={"name": name, "domain_name": CP, "install_path": install_path, **extra},
+    )
+
+
 class TestListGames:
     def test_empty(self, client):
         r = client.get("/api/v1/games/")
@@ -6,69 +28,63 @@ class TestListGames:
 
 
 class TestCreateGame:
-    def test_success(self, client):
-        r = client.post(
-            "/api/v1/games/",
-            json={
-                "name": "TestGame",
-                "domain_name": "testgame",
-                "install_path": "/games/test",
-            },
-        )
+    def test_success(self, client, tmp_path):
+        r = _create(client, "TestGame", _cp_dir(tmp_path))
         assert r.status_code == 201
         data = r.json()
         assert data["name"] == "TestGame"
-        assert data["domain_name"] == "testgame"
+        assert data["domain_name"] == CP
 
-    def test_auto_cyberpunk_paths(self, client):
-        r = client.post(
-            "/api/v1/games/",
-            json={
-                "name": "Cyberpunk 2077",
-                "domain_name": "cyberpunk2077",
-                "install_path": "/games/cp2077",
-            },
-        )
+    def test_auto_cyberpunk_paths(self, client, tmp_path):
+        r = _create(client, "Cyberpunk 2077", _cp_dir(tmp_path))
         assert r.status_code == 201
         paths = r.json()["mod_paths"]
         assert len(paths) == 10
         rels = {p["relative_path"] for p in paths}
         assert {"archive/pc/patch", "r6/config"} <= rels
 
-    def test_custom_paths(self, client):
-        r = client.post(
-            "/api/v1/games/",
-            json={
-                "name": "Custom",
-                "domain_name": "custom",
-                "install_path": "/games/custom",
-                "mod_paths": [{"relative_path": "mods", "description": "Main"}],
-            },
+    def test_custom_paths(self, client, tmp_path):
+        r = _create(
+            client,
+            "Custom",
+            _cp_dir(tmp_path),
+            mod_paths=[{"relative_path": "mods", "description": "Main"}],
         )
         assert r.status_code == 201
         assert len(r.json()["mod_paths"]) == 1
 
-    def test_duplicate_upserts(self, client):
-        payload = {
-            "name": "DupGame",
-            "domain_name": "dup",
-            "install_path": "/games/dup",
-        }
-        client.post("/api/v1/games/", json=payload)
+    @pytest.mark.parametrize("path", [r"\\server\share\Cyberpunk 2077", "//server/share/cp"])
+    def test_unc_install_path_is_422(self, client, path):
+        r = _create(client, "Unc", path)
+        assert r.status_code == 422
+        assert client.get("/api/v1/games/").json() == []
+
+    def test_install_path_without_exe_is_422(self, client, tmp_path):
+        (tmp_path / "System32").mkdir()
+        r = _create(client, "NoExe", str(tmp_path / "System32"))
+        assert r.status_code == 422
+        assert "Cyberpunk2077.exe" in r.json()["detail"]
+        assert client.get("/api/v1/games/").json() == []
+
+    def test_unregistered_domain_is_422(self, client, tmp_path):
         r = client.post(
             "/api/v1/games/",
-            json={**payload, "install_path": "/games/dup2"},
+            json={"name": "G1", "domain_name": "g1", "install_path": _cp_dir(tmp_path)},
         )
-        assert r.status_code == 200
-        assert r.json()["install_path"] == "/games/dup2"
+        assert r.status_code == 422
+        assert client.get("/api/v1/games/").json() == []
+
+    def test_duplicate_name_is_409(self, client, tmp_path):
+        first = _cp_dir(tmp_path, "first")
+        assert _create(client, "DupGame", first).status_code == 201
+        r = _create(client, "DupGame", _cp_dir(tmp_path, "second"))
+        assert r.status_code == 409
+        assert client.get("/api/v1/games/DupGame").json()["install_path"] == first
 
 
 class TestGetGame:
-    def test_found(self, client):
-        client.post(
-            "/api/v1/games/",
-            json={"name": "G1", "domain_name": "g1", "install_path": "/g1"},
-        )
+    def test_found(self, client, tmp_path):
+        _create(client, "G1", _cp_dir(tmp_path))
         r = client.get("/api/v1/games/G1")
         assert r.status_code == 200
         assert r.json()["name"] == "G1"
@@ -77,29 +93,19 @@ class TestGetGame:
         r = client.get("/api/v1/games/Nonexistent")
         assert r.status_code == 404
 
-    def test_resolved_mods_dir_default(self, client):
-        client.post(
-            "/api/v1/games/",
-            json={"name": "DefDir", "domain_name": "dd", "install_path": "/games/dd"},
-        )
+    def test_resolved_mods_dir_default(self, client, tmp_path):
+        install = _cp_dir(tmp_path)
+        _create(client, "DefDir", install)
         r = client.get("/api/v1/games/DefDir")
         assert r.status_code == 200
         data = r.json()
         assert data["mods_dir"] is None
-        assert data["resolved_mods_dir"].replace("\\", "/") == "/games/dd/downloaded_mods"
+        assert data["resolved_mods_dir"] == str(Path(install) / "downloaded_mods")
 
     def test_resolved_mods_dir_with_override(self, client, tmp_path):
         custom = tmp_path / "staging"
         custom.mkdir()
-        client.post(
-            "/api/v1/games/",
-            json={
-                "name": "OvrDir",
-                "domain_name": "od",
-                "install_path": str(tmp_path),
-                "mods_dir": str(custom),
-            },
-        )
+        _create(client, "OvrDir", _cp_dir(tmp_path), mods_dir=str(custom))
         r = client.get("/api/v1/games/OvrDir")
         assert r.status_code == 200
         data = r.json()
@@ -111,36 +117,16 @@ class TestGetGame:
         from rippermod_manager.routers import games as games_router
 
         monkeypatch.setattr(games_router, "same_volume", lambda a, b: False)
-        install = tmp_path / "game"
-        install.mkdir()
         bad_mods_dir = tmp_path / "bad"
         bad_mods_dir.mkdir()
-        r = client.post(
-            "/api/v1/games/",
-            json={
-                "name": "CrossVol",
-                "domain_name": "cv",
-                "install_path": str(install),
-                "mods_dir": str(bad_mods_dir),
-            },
-        )
+        r = _create(client, "CrossVol", _cp_dir(tmp_path), mods_dir=str(bad_mods_dir))
         assert r.status_code == 422, r.text
         assert "same physical volume" in r.json()["detail"]
 
     def test_post_accepts_same_volume_mods_dir(self, client, tmp_path):
-        install = tmp_path / "game"
-        install.mkdir()
         custom = tmp_path / "staging"
         custom.mkdir()
-        r = client.post(
-            "/api/v1/games/",
-            json={
-                "name": "SameVol",
-                "domain_name": "sv",
-                "install_path": str(install),
-                "mods_dir": str(custom),
-            },
-        )
+        r = _create(client, "SameVol", _cp_dir(tmp_path), mods_dir=str(custom))
         assert r.status_code == 201, r.text
         assert r.json()["mods_dir"] == str(custom)
         assert r.json()["resolved_mods_dir"] == str(custom)
@@ -148,33 +134,18 @@ class TestGetGame:
 
 class TestUpdateGame:
     def test_set_mods_dir_same_volume(self, client, tmp_path):
-        install = tmp_path / "game"
-        install.mkdir()
         custom = tmp_path / "staging"
         custom.mkdir()
-        client.post(
-            "/api/v1/games/",
-            json={"name": "U1", "domain_name": "u", "install_path": str(install)},
-        )
+        _create(client, "U1", _cp_dir(tmp_path))
         r = client.patch("/api/v1/games/U1", json={"mods_dir": str(custom)})
         assert r.status_code == 200, r.text
         assert r.json()["mods_dir"] == str(custom)
         assert r.json()["resolved_mods_dir"] == str(custom)
 
     def test_clear_mods_dir(self, client, tmp_path):
-        install = tmp_path / "game"
-        install.mkdir()
         custom = tmp_path / "staging"
         custom.mkdir()
-        client.post(
-            "/api/v1/games/",
-            json={
-                "name": "U2",
-                "domain_name": "u",
-                "install_path": str(install),
-                "mods_dir": str(custom),
-            },
-        )
+        _create(client, "U2", _cp_dir(tmp_path), mods_dir=str(custom))
         r = client.patch("/api/v1/games/U2", json={"mods_dir": ""})
         assert r.status_code == 200
         assert r.json()["mods_dir"] is None
@@ -184,6 +155,36 @@ class TestUpdateGame:
     def test_not_found(self, client):
         r = client.patch("/api/v1/games/Nonexistent", json={"mods_dir": "/x"})
         assert r.status_code == 404
+
+    def test_patch_install_path_valid(self, client, tmp_path):
+        _create(client, "U3", _cp_dir(tmp_path, "old"))
+        new = _cp_dir(tmp_path, "new")
+        r = client.patch("/api/v1/games/U3", json={"install_path": new})
+        assert r.status_code == 200, r.text
+        assert r.json()["install_path"] == new
+
+    @pytest.mark.parametrize("bad", ["//server/share/cp", "missing-exe"])
+    def test_patch_install_path_invalid_keeps_old(self, client, tmp_path, bad):
+        old = _cp_dir(tmp_path, "old")
+        _create(client, "U4", old)
+        if bad == "missing-exe":
+            (tmp_path / "empty").mkdir()
+            bad = str(tmp_path / "empty")
+        r = client.patch("/api/v1/games/U4", json={"install_path": bad})
+        assert r.status_code == 422
+        assert client.get("/api/v1/games/U4").json()["install_path"] == old
+
+    def test_patch_install_path_revalidates_mods_dir(self, client, tmp_path, monkeypatch):
+        from rippermod_manager.routers import games as games_router
+
+        custom = tmp_path / "staging"
+        custom.mkdir()
+        old = _cp_dir(tmp_path, "old")
+        _create(client, "U5", old, mods_dir=str(custom))
+        monkeypatch.setattr(games_router, "same_volume", lambda a, b: False)
+        r = client.patch("/api/v1/games/U5", json={"install_path": _cp_dir(tmp_path, "new")})
+        assert r.status_code == 422
+        assert client.get("/api/v1/games/U5").json()["install_path"] == old
 
 
 class TestValidatePath:
@@ -245,11 +246,8 @@ class TestValidatePath:
 
 
 class TestDeleteGame:
-    def test_success(self, client):
-        client.post(
-            "/api/v1/games/",
-            json={"name": "ToDelete", "domain_name": "del", "install_path": "/d"},
-        )
+    def test_success(self, client, tmp_path):
+        _create(client, "ToDelete", _cp_dir(tmp_path))
         r = client.delete("/api/v1/games/ToDelete")
         assert r.status_code == 204
 

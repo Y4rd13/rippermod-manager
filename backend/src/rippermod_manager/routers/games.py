@@ -2,7 +2,7 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete
 from sqlmodel import Session, select
 
@@ -17,6 +17,7 @@ from rippermod_manager.schemas.game import (
     PathValidation,
     PathValidationRequest,
 )
+from rippermod_manager.services.paths import is_unc_path
 from rippermod_manager.services.vfs.primitives import VfsError, same_volume
 
 router = APIRouter(prefix="/games", tags=["games"])
@@ -42,6 +43,26 @@ def _validate_mods_dir(install_path: str, mods_dir: str) -> None:
         )
 
 
+def _validate_install_path(install_path: str, domain_name: str) -> None:
+    """Raise 422 unless *install_path* is a local install of a registered game.
+
+    Every later file operation (deploy, adopt, uninstall) is rooted here, so a
+    network share or an arbitrary folder (e.g. ``C:\\Windows``) is refused.
+    """
+    game_info = GAME_REGISTRY.get(domain_name)
+    if not game_info:
+        raise HTTPException(422, f"Unsupported game domain: {domain_name}")
+    if is_unc_path(install_path):
+        raise HTTPException(422, "Network (UNC) paths are not allowed as the game install path.")
+    exe_path = Path(install_path) / game_info["exe_path"]
+    if not exe_path.is_file():
+        raise HTTPException(
+            422,
+            f"{os.path.basename(game_info['exe_path'])} not found under {install_path}. "
+            "Select the folder the game is installed in.",
+        )
+
+
 @router.get("/", response_model=list[GameOut])
 def list_games(session: Session = Depends(get_session)) -> list[Game]:
     games = session.exec(select(Game)).all()
@@ -51,26 +72,16 @@ def list_games(session: Session = Depends(get_session)) -> list[Game]:
 
 
 @router.post("/", response_model=GameOut, status_code=201)
-def create_game(
-    data: GameCreate, response: Response, session: Session = Depends(get_session)
-) -> Game:
+def create_game(data: GameCreate, session: Session = Depends(get_session)) -> Game:
+    _validate_install_path(data.install_path, data.domain_name)
     normalized_mods_dir = (data.mods_dir or "").strip() or None
     if normalized_mods_dir:
         _validate_mods_dir(data.install_path, normalized_mods_dir)
 
     existing = session.exec(select(Game).where(Game.name == data.name)).first()
     if existing:
-        existing.install_path = data.install_path
-        existing.domain_name = data.domain_name
-        existing.os = data.os
-        if data.mods_dir is not None:
-            existing.mods_dir = normalized_mods_dir
-        existing.updated_at = datetime.now(UTC)
-        session.commit()
-        session.refresh(existing)
-        _ = existing.mod_paths
-        response.status_code = 200
-        return existing
+        # Never repoint an existing game silently: the client updates it with PATCH.
+        raise HTTPException(409, f"Game '{data.name}' already exists")
 
     game = Game(
         name=data.name,
@@ -167,11 +178,20 @@ def update_game(name: str, data: GameUpdate, session: Session = Depends(get_sess
     if not game:
         raise HTTPException(404, f"Game '{name}' not found")
 
-    if "mods_dir" in data.model_fields_set:
-        new_mods_dir = (data.mods_dir or "").strip() or None
-        if new_mods_dir:
-            _validate_mods_dir(game.install_path, new_mods_dir)
-        game.mods_dir = new_mods_dir
+    fields = data.model_fields_set
+    install_path = game.install_path
+    if "install_path" in fields and data.install_path is not None:
+        install_path = data.install_path
+        _validate_install_path(install_path, game.domain_name)
+    mods_dir = game.mods_dir
+    if "mods_dir" in fields:
+        mods_dir = (data.mods_dir or "").strip() or None
+    if mods_dir and ("mods_dir" in fields or install_path != game.install_path):
+        _validate_mods_dir(install_path, mods_dir)
+
+    if fields & {"install_path", "mods_dir"}:
+        game.install_path = install_path
+        game.mods_dir = mods_dir
         game.updated_at = datetime.now(UTC)
         session.commit()
         session.refresh(game)

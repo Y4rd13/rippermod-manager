@@ -21,7 +21,7 @@ class TestOnboardingStatus:
         )
         client.post(
             "/api/v1/games/",
-            json={"name": "G", "domain_name": "g", "install_path": "/g"},
+            json={"name": "G", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         r = client.get("/api/v1/onboarding/status")
         assert r.json()["current_step"] == 2
@@ -33,7 +33,7 @@ class TestOnboardingStatus:
         )
         client.post(
             "/api/v1/games/",
-            json={"name": "G", "domain_name": "g", "install_path": "/g"},
+            json={"name": "G", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         client.post(
             "/api/v1/onboarding/complete",

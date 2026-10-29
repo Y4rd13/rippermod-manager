@@ -37,8 +37,19 @@ def session(engine, monkeypatch):
         yield sess
 
 
+def make_cp_install(root) -> str:
+    """Create a fake Cyberpunk 2077 install (just its exe) at *root* and return its path.
+
+    ``POST /api/v1/games/`` refuses an install path without the game executable.
+    """
+    exe_dir = root / "bin" / "x64"
+    exe_dir.mkdir(parents=True, exist_ok=True)
+    (exe_dir / "Cyberpunk2077.exe").write_bytes(b"MZ")
+    return str(root)
+
+
 @pytest.fixture
-def client(engine, monkeypatch):
+def client(engine, monkeypatch, tmp_path_factory):
     monkeypatch.setattr("rippermod_manager.database.engine", engine)
 
     def _override_session() -> Generator[Session, None, None]:
@@ -53,6 +64,8 @@ def client(engine, monkeypatch):
         headers={"X-RMM-Token": API_TOKEN},
         raise_server_exceptions=False,
     ) as tc:
+        # A valid install path for tests that create games through the API.
+        tc.cp_install = make_cp_install(tmp_path_factory.mktemp("cp-install"))  # type: ignore[attr-defined]
         yield tc
     app.dependency_overrides.clear()
 
