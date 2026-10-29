@@ -131,9 +131,34 @@ def plan_deploy(
         if redmod_name is not None:
             redmod_dst = install / "mods" / redmod_name
             redmod_src = staging_root / mod.staging_dir / "mods" / redmod_name
-            # Idempotency: junction already in place (any reparse-point dir).
-            # We don't read reparse-point targets; presence is treated as ours.
-            if redmod_dst.is_dir():
+            # Hand the junction over when it points into another owner's staging
+            # (Overwrite between two REDmods with the same mods/<name>).
+            previous = next(
+                (
+                    (other.id, staging_root / other.staging_dir / "mods" / redmod_name)
+                    for other, other_f in owners.get(key, [])
+                    if other.id != mod.id
+                    and other_f.link_kind == "junction"
+                    and junction_points_into(
+                        redmod_dst, staging_root / other.staging_dir / "mods" / redmod_name
+                    )
+                ),
+                None,
+            )
+            if previous is not None:
+                previous_id, previous_root = previous
+                plan.ops.append(
+                    DeployOp(
+                        operation="rm_junction",
+                        src=str(previous_root),
+                        dst=str(redmod_dst),
+                        installed_mod_id=previous_id,
+                        relative_path=f"mods/{redmod_name}",
+                    )
+                )
+            elif redmod_dst.is_dir():
+                # Idempotency: the winner's junction, or a folder no owner claims,
+                # is already there; presence is treated as ours, as before.
                 skipped_existing += 1
                 continue
             plan.ops.append(
@@ -200,6 +225,26 @@ def relink_paths(game: Game, session: Session, paths: set[str]) -> DeployReport:
     report = execute_plan(plan, session)
     report.skipped_existing = skipped
     return report
+
+
+def paths_not_relinked(
+    game: Game, session: Session, paths: set[str], report: DeployReport
+) -> list[str]:
+    """Relative paths ``relink_paths`` should have linked but did not.
+
+    When pre-flight refused (e.g. the game is running) that is every path the
+    plan would link; otherwise it is the link/junction ops that failed.
+    """
+    if report.preflight is not None and not report.preflight.ok:
+        plan, _skipped = plan_deploy(game, session, paths=paths)
+        pending = {op.relative_path for op in plan.ops if op.operation in ("link", "junction")}
+    else:
+        pending = {
+            r.op.relative_path
+            for r in report.results
+            if r.status == "failed" and r.op.operation in ("link", "junction")
+        }
+    return sorted(pending)
 
 
 def execute_plan(
@@ -596,7 +641,7 @@ def preview_displacements(game: Game, session: Session) -> list[str]:
     freed: set[str] = set()
     paths: list[str] = []
     for op in plan.ops:
-        if op.operation == "unlink":
+        if op.operation in ("unlink", "rm_junction"):
             freed.add(op.dst)
             continue
         if op.operation not in ("link", "junction") or op.dst in freed:

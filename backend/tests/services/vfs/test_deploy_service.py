@@ -974,3 +974,55 @@ def test_drift_ignores_paths_won_by_another_mod(in_memory_session, sample_game):
     assert drift.foreign == 0
     assert drift.by_mod[a.id]["foreign"] == 0
     assert drift.by_mod[b.id]["linked"] == 1
+
+
+def _redmod_mod(session, game, name, *, win_seq):
+    rel = "mods/Shared/info.json"
+    staged = Path(game.install_path) / "downloaded_mods" / name / rel
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    staged.write_text(name)
+    mod = InstalledMod(game_id=game.id, name=name, staging_dir=name, deployed=True)
+    session.add(mod)
+    session.flush()
+    session.add(
+        InstalledModFile(
+            installed_mod_id=mod.id,
+            relative_path=rel,
+            source_path=rel,
+            link_kind="junction",
+            win_seq=win_seq,
+        )
+    )
+    session.commit()
+    return mod, staged.parent
+
+
+def test_plan_hands_redmod_junction_to_the_new_winner(in_memory_session, sample_game):
+    """Overwrite between two REDmods with the same mods/<name>: the winner gets the junction."""
+    session, game = in_memory_session, sample_game
+    _a, root_a = _redmod_mod(session, game, "A", win_seq=1)
+    _b, root_b = _redmod_mod(session, game, "B", win_seq=2)
+    dst = Path(game.install_path) / "mods" / "Shared"
+    dst.parent.mkdir(parents=True)
+    os.symlink(root_a, dst, target_is_directory=True)  # stand-in for A's junction
+
+    plan, skipped = plan_deploy(game, session)
+
+    assert [(op.operation, op.src, op.dst) for op in plan.ops] == [
+        ("rm_junction", str(root_a), str(dst)),
+        ("junction", str(root_b), str(dst)),
+    ]
+    assert skipped == 0
+
+
+def test_plan_skips_redmod_junction_the_winner_already_holds(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    _a, _root_a = _redmod_mod(session, game, "A", win_seq=1)
+    _b, root_b = _redmod_mod(session, game, "B", win_seq=2)
+    dst = Path(game.install_path) / "mods" / "Shared"
+    dst.parent.mkdir(parents=True)
+    os.symlink(root_b, dst, target_is_directory=True)
+
+    plan, skipped = plan_deploy(game, session)
+
+    assert plan.ops == [] and skipped == 1

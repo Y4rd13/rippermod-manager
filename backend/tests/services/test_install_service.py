@@ -2,6 +2,7 @@ import os
 import sys
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
@@ -1047,3 +1048,36 @@ class TestDisplacedRestore:
 
         assert vanilla.read_bytes() == b"vanilla"
         assert result.displaced_not_restored == []
+
+
+class TestRelinkReported:
+    """S4: when the next owner cannot be linked, the result says so."""
+
+    @pytest.fixture
+    def b_wins(self, session, game, staging_dir):
+        _make_zip(staging_dir / "ModA.zip", {"shared.txt": b"from A"})
+        _make_zip(staging_dir / "ModB.zip", {"shared.txt": b"from B"})
+        install_mod(game, staging_dir / "ModA.zip", session)
+        b = install_mod(game, staging_dir / "ModB.zip", session, skip_conflicts=[])
+        return session.get(InstalledMod, b.installed_mod_id)
+
+    def test_uninstall_reports_paths_left_unlinked(self, session, game, b_wins):
+        with patch(
+            "rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=True
+        ):
+            result = uninstall_mod(b_wins, game, session)
+
+        assert result.not_relinked == ["shared.txt"]
+
+    def test_disable_reports_paths_left_unlinked(self, session, game, b_wins):
+        with patch(
+            "rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=True
+        ):
+            result = toggle_mod(b_wins, game, session)
+
+        assert result.not_relinked == ["shared.txt"]
+        assert result.failed >= 1
+
+    def test_clean_uninstall_reports_nothing(self, session, game, b_wins):
+        result = uninstall_mod(b_wins, game, session)
+        assert result.not_relinked == []

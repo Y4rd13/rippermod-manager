@@ -587,9 +587,12 @@ def uninstall_mod(
     session.commit()
 
     # Hand every path this mod gave up to its next owner, in the same operation (S4).
-    from rippermod_manager.services.vfs.deploy_service import relink_paths
+    from rippermod_manager.services.vfs.deploy_service import paths_not_relinked, relink_paths
 
-    relink_paths(game, session, released)
+    relink = relink_paths(game, session, released)
+    not_relinked = paths_not_relinked(game, session, released, relink)
+    if not_relinked:
+        logger.warning("Uninstall left %d path(s) unlinked: %s", len(not_relinked), not_relinked)
     write_modlist(game, session)
 
     logger.info("Uninstalled '%s' (%d files removed)", installed_mod.name, file_count)
@@ -611,6 +614,7 @@ def uninstall_mod(
         directories_removed=0,
         foreign=removal.foreign,
         displaced_not_restored=not_restored,
+        not_relinked=not_relinked,
     )
 
 
@@ -669,12 +673,15 @@ def toggle_mod(
     if commit:
         session.commit()
 
-    from rippermod_manager.services.vfs.deploy_service import relink_paths
+    from rippermod_manager.services.vfs.deploy_service import paths_not_relinked, relink_paths
 
     keys = {path_key(f.relative_path, f.link_kind) for f in installed_mod.files}
+    not_relinked: list[str] = []
     if should_disable:
         # Hand the paths this mod gave up to their next enabled owner (S4).
-        failed += relink_paths(game, session, keys).failed
+        relink = relink_paths(game, session, keys)
+        not_relinked = paths_not_relinked(game, session, keys, relink)
+        failed += len(not_relinked)
     else:
         # Re-enable: link the paths this mod now wins (taking them over from the
         # previous owner). Scoped to this mod's keys so already-deployed sibling
@@ -686,7 +693,8 @@ def toggle_mod(
             if commit:
                 session.commit()
         affected = report.done
-        failed = report.failed
+        not_relinked = paths_not_relinked(game, session, keys, report)
+        failed = max(report.failed, len(not_relinked))
 
     if commit:
         session.commit()
@@ -716,6 +724,7 @@ def toggle_mod(
         foreign=foreign,
         failed=failed,
         displaced_not_restored=not_restored,
+        not_relinked=not_relinked,
     )
 
 
