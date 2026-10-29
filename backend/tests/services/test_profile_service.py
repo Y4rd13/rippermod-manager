@@ -2,7 +2,7 @@ import zipfile
 from datetime import UTC, datetime
 
 import pytest
-from sqlmodel import select
+from sqlmodel import select, text
 
 from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.models.install import InstalledMod
@@ -226,9 +226,12 @@ class TestLoadProfile:
         out = create_profile(game, ProfileCreate(name="WithVanishing"), session)
 
         # Delete the installed mod to simulate it being uninstalled
+        # Simulate an orphan left over from before foreign keys were enforced.
+        session.exec(text("PRAGMA foreign_keys=OFF"))
         mod = session.exec(select(InstalledMod).where(InstalledMod.name == "WillVanish")).first()
         session.delete(mod)
         session.commit()
+        session.exec(text("PRAGMA foreign_keys=ON"))
 
         profile = session.get(Profile, out.id)
         result = load_profile(profile, game, session)
@@ -392,9 +395,12 @@ class TestPreviewProfile:
         out = create_profile(game, ProfileCreate(name="WithGone"), session)
 
         # Remove the installed mod
+        # Simulate an orphan left over from before foreign keys were enforced.
+        session.exec(text("PRAGMA foreign_keys=OFF"))
         mod = session.exec(select(InstalledMod).where(InstalledMod.name == "GoneMod")).first()
         session.delete(mod)
         session.commit()
+        session.exec(text("PRAGMA foreign_keys=ON"))
 
         profile = session.get(Profile, out.id)
         diff = preview_profile(profile, game, session)

@@ -2,11 +2,12 @@ from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
 import rippermod_manager.models  # noqa: F401 — register all tables
-from rippermod_manager.database import get_session
+from rippermod_manager.database import _set_sqlite_pragma, get_session
 from rippermod_manager.main import app
 from rippermod_manager.models.game import Game, GameModPath
 
@@ -18,6 +19,7 @@ def engine():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    event.listen(eng, "connect", _set_sqlite_pragma)
     SQLModel.metadata.create_all(eng)
     return eng
 

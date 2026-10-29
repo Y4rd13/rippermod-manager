@@ -22,6 +22,12 @@ def _add_entry(
     installed_mod_id: int | None = None,
     sha1_hex: str = "",
 ) -> None:
+    if installed_mod_id is not None and session.get(InstalledMod, installed_mod_id) is None:
+        # Foreign keys are enforced: the referenced mod must exist.
+        session.add(
+            InstalledMod(id=installed_mod_id, game_id=game_id, name=f"Mod {installed_mod_id}")
+        )
+        session.flush()
     session.add(
         ArchiveEntryIndex(
             game_id=game_id,

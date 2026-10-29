@@ -8,12 +8,22 @@ from rippermod_manager.config import settings
 
 logger = logging.getLogger(__name__)
 
+
+def _set_sqlite_pragma(dbapi_connection, connection_record) -> None:
+    """Apply per-connection pragmas. Registered before any connection is opened."""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
+
 settings.db_path.parent.mkdir(parents=True, exist_ok=True)
 engine = create_engine(
     f"sqlite:///{settings.db_path}",
     echo=False,
     connect_args={"timeout": 30, "check_same_thread": False},
 )
+event.listen(engine, "connect", _set_sqlite_pragma)
 
 
 def _migrate_missing_columns() -> None:
@@ -271,13 +281,6 @@ def create_db_and_tables() -> None:
     with engine.connect() as conn:
         conn.execute(text("PRAGMA journal_mode=WAL"))
         conn.commit()
-
-    @event.listens_for(engine, "connect")
-    def _set_sqlite_pragma(dbapi_connection, connection_record):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA synchronous=NORMAL")
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
 
     _migrate_missing_columns()
     _migrate_unique_indexes()
