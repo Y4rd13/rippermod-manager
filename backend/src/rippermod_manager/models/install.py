@@ -73,9 +73,28 @@ class DeployJournalEntry(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     game_id: int = Field(foreign_key="games.id", index=True)
-    operation: str  # link | unlink | junction | rm_junction | adopt
+    operation: str  # link | unlink | junction | rm_junction | adopt | displace
     src: str
     dst: str
     status: str = Field(default="pending")  # pending | done | failed
     error: str = Field(default="")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class DisplacedFile(SQLModel, table=True):
+    """A foreign game-dir entry that force deploy moved aside (S6).
+
+    ``backup_path`` is where it waits under ``<mods_dir>/_displaced/``; it goes
+    back to ``relative_path`` on undeploy, or when the occupant mod is
+    uninstalled or disabled. ``occupant_mod_id`` has no foreign key on purpose:
+    the row must outlive the occupant's ``InstalledMod`` row on uninstall.
+    """
+
+    __tablename__ = "displaced_files"
+
+    id: int | None = Field(default=None, primary_key=True)
+    game_id: int = Field(foreign_key="games.id", index=True)
+    relative_path: str
+    backup_path: str
+    occupant_mod_id: int | None = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

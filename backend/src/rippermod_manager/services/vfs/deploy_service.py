@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -12,6 +13,7 @@ from sqlmodel import Session, select
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import (  # noqa: F401 used in plan_deploy
     DeployJournalEntry,
+    DisplacedFile,
     InstalledMod,
     InstalledModFile,
 )
@@ -45,6 +47,9 @@ logger = logging.getLogger(__name__)
 
 GAME_EXE = "Cyberpunk2077.exe"
 REDMOD_REL_PATH = Path("tools") / "redmod" / "bin" / "redMod.exe"
+# Foreign files that force deploy moves aside live under <mods_dir>/_displaced/:
+# same volume as staging, so the move is an atomic rename.
+DISPLACED_DIRNAME = "_displaced"
 REDMOD_TIMEOUT_S = 600  # generous: heavy REDmod sets can take several minutes to compile
 
 
@@ -197,14 +202,23 @@ def relink_paths(game: Game, session: Session, paths: set[str]) -> DeployReport:
     return report
 
 
-def execute_plan(plan: DeployPlan, session: Session, *, force: bool = False) -> DeployReport:
+def execute_plan(
+    plan: DeployPlan,
+    session: Session,
+    *,
+    force: bool = False,
+    displaced_root: Path | None = None,
+) -> DeployReport:
     """Run each op in `plan`, persisting a write-ahead journal entry before each
     filesystem mutation so crash recovery can roll back partial state on next start.
 
     When ``force=True`` and a link/junction op hits ``AlreadyExistsError`` (a foreign
-    file is squatting on the destination), the destination is removed and the op is
-    retried once. Without ``force``, such conflicts surface as failures so the user
-    can decide whether to overwrite.
+    file is squatting on the destination), the foreign entry is moved to
+    ``displaced_root / op.relative_path`` (journaled as ``displace`` and recorded
+    in ``displaced_files``) and the op is retried once (S6). Nothing is ever
+    deleted: without ``displaced_root``, or when a backup already sits at that
+    path, the op fails and the foreign entry stays. Without ``force``, such
+    conflicts surface as failures so the user can decide whether to overwrite.
     """
     results: list[DeployOpResult] = []
 
@@ -242,12 +256,15 @@ def execute_plan(plan: DeployPlan, session: Session, *, force: bool = False) -> 
         except AlreadyExistsError as exc:
             if force and op.operation in ("link", "junction"):
                 try:
-                    if op.operation == "link":
-                        unlink(Path(op.dst))
-                        hardlink(Path(op.src), Path(op.dst))
-                    else:
-                        remove_junction(Path(op.dst))
-                        junction(Path(op.src), Path(op.dst))
+                    row = _displace(op, plan.game_id, session, displaced_root)
+                    try:
+                        if op.operation == "link":
+                            hardlink(Path(op.src), Path(op.dst))
+                        else:
+                            junction(Path(op.src), Path(op.dst))
+                    except (VfsError, OSError):
+                        _undo_displace(row, Path(op.dst), session)
+                        raise
                     entry.status = "done"
                     results.append(DeployOpResult(op=op, status="done"))
                 except (VfsError, OSError) as retry_exc:
@@ -297,6 +314,103 @@ def _remove_own_link(op: DeployOp) -> bool:
         return False
     remove_junction(dst)
     return True
+
+
+def _displace(
+    op: DeployOp, game_id: int, session: Session, displaced_root: Path | None
+) -> DisplacedFile:
+    """Move the foreign entry at ``op.dst`` to the displaced area (S6).
+
+    Write-ahead: the ``displace`` journal entry and the ``displaced_files`` row
+    are committed before the move, so a crash in between is rolled forward on
+    startup. Raises ``VfsError`` (nothing moved) when there is nowhere safe to
+    put it.
+    """
+    if displaced_root is None:
+        raise VfsError(f"destination exists and no displaced area was given: {op.dst}")
+    if not op.relative_path:
+        raise VfsError(f"cannot displace {op.dst}: the op has no relative path")
+    backup = displaced_root / op.relative_path
+    if backup.exists() or backup.is_symlink():
+        raise VfsError(f"a displaced copy already exists at {backup}")
+    entry = DeployJournalEntry(
+        game_id=game_id, operation="displace", src=op.dst, dst=str(backup), status="pending"
+    )
+    row = DisplacedFile(
+        game_id=game_id,
+        relative_path=op.relative_path,
+        backup_path=str(backup),
+        occupant_mod_id=op.installed_mod_id,
+    )
+    session.add(entry)
+    session.add(row)
+    session.commit()
+    try:
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(op.dst, backup)
+    except OSError as exc:
+        entry.status = "failed"
+        entry.error = str(exc)
+        session.add(entry)
+        session.delete(row)
+        session.commit()
+        raise VfsError(f"could not move {op.dst} aside: {exc}") from exc
+    entry.status = "done"
+    session.add(entry)
+    session.commit()
+    return row
+
+
+def _undo_displace(row: DisplacedFile, original: Path, session: Session) -> None:
+    """Put a just-displaced entry back after its replacement link failed."""
+    try:
+        if not original.exists() and not original.is_symlink():
+            os.replace(row.backup_path, original)
+            session.delete(row)
+            session.commit()
+    except OSError:
+        logger.exception("Could not put %s back after a failed link", original)
+
+
+def displaced_root_for(game: Game) -> Path:
+    return get_mods_dir(game) / DISPLACED_DIRNAME
+
+
+def restore_displaced(
+    game: Game, session: Session, *, occupant_mod_id: int | None = None
+) -> list[str]:
+    """Put displaced files back where they were (S6).
+
+    Restores every row of the game, or only those whose occupant is
+    ``occupant_mod_id``. A row whose original path is occupied again is left
+    alone (file in ``_displaced``, row kept) and its relative path returned.
+    Call it after the occupant's own links are gone.
+    """
+    query = select(DisplacedFile).where(DisplacedFile.game_id == game.id)
+    if occupant_mod_id is not None:
+        query = query.where(DisplacedFile.occupant_mod_id == occupant_mod_id)
+    install = Path(game.install_path)
+    not_restored: list[str] = []
+    for row in session.exec(query).all():
+        original = install / row.relative_path
+        backup = Path(row.backup_path)
+        if not backup.exists() and not backup.is_symlink():
+            logger.warning("Displaced backup vanished, dropping its record: %s", backup)
+            session.delete(row)
+            continue
+        if original.exists() or original.is_symlink():
+            not_restored.append(row.relative_path)
+            continue
+        try:
+            original.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(backup, original)
+        except OSError as exc:
+            logger.warning("Could not restore displaced %s: %s", row.relative_path, exc)
+            not_restored.append(row.relative_path)
+            continue
+        session.delete(row)
+    session.commit()
+    return not_restored
 
 
 def plan_remove_mod_links(game: Game, mod: InstalledMod, session: Session) -> DeployPlan:
@@ -390,6 +504,8 @@ def undeploy(game: Game, session: Session) -> DeployReport:
 
     plan = DeployPlan(game_id=game.id, ops=ops)
     report = execute_plan(plan, session)
+    # With our links gone, everything force deploy moved aside goes back (S6).
+    report.displaced_not_restored = restore_displaced(game, session)
 
     if report.is_clean:
         for m in mods:
@@ -565,7 +681,9 @@ def deploy(game: Game, session: Session, *, force: bool = False) -> DeployReport
         return DeployReport(total=0, done=0, failed=0, results=[], preflight=pre)
     maybe_backup_before(game, session, reason="pre-deploy")
     plan, skipped = plan_deploy(game, session)
-    report = execute_plan(plan, session, force=force)
+    report = execute_plan(
+        plan, session, force=force, displaced_root=displaced_root_for(game) if force else None
+    )
     report.skipped_existing = skipped
     if report.is_clean:
         mods = session.exec(
@@ -616,12 +734,23 @@ def replay_pending_journal(game: Game, session: Session) -> None:
                 continue
             # Undo only what this entry created (S5): a destination that is not
             # the link of entry.src (e.g. a vanilla file) is left alone.
+            if entry.operation == "displace":
+                # Roll FORWARD: the displaced_files row was committed with this
+                # entry, so finish the move (src = original, dst = backup).
+                src, dst = Path(entry.src), Path(entry.dst)
+                if (src.exists() or src.is_symlink()) and not dst.exists():
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    os.replace(src, dst)
+                entry.status = "done"
+                entry.error = entry.error or "rolled forward by journal replay"
+                session.add(entry)
+                continue
             src, dst = Path(entry.src), Path(entry.dst)
             if entry.operation == "link" and verify_link(src, dst):
                 unlink(dst)
             elif entry.operation == "junction" and junction_points_into(dst, src):
                 remove_junction(dst)
-        except VfsError as exc:
+        except (VfsError, OSError) as exc:
             logger.warning("journal replay rollback failed for %s: %s", entry.dst, exc)
         entry.status = "failed"
         entry.error = entry.error or "rolled back by journal replay"

@@ -276,7 +276,11 @@ def _seed_dependents(session, game_id: int) -> None:
         ProfileEntry,
     )
     from rippermod_manager.models.conflict import ConflictKind, Severity
-    from rippermod_manager.models.install import ArchiveNexusLink, DeployJournalEntry
+    from rippermod_manager.models.install import (
+        ArchiveNexusLink,
+        DeployJournalEntry,
+        DisplacedFile,
+    )
 
     coll = InstalledCollection(game_id=game_id, slug=f"coll-{game_id}")
     group = ModGroup(game_id=game_id, display_name="Group")
@@ -319,6 +323,12 @@ def _seed_dependents(session, game_id: int) -> None:
             ModGroupAlias(mod_group_id=group.id, alias="alias"),
             ModFile(mod_group_id=group.id, file_path=f"/f/{game_id}.txt", filename="f.txt"),
             ArchiveNexusLink(game_id=game_id, filename="a.zip", nexus_mod_id=1),
+            DisplacedFile(
+                game_id=game_id,
+                relative_path="r6/config/x.xml",
+                backup_path="/b/x.xml",
+                occupant_mod_id=mod_a.id,
+            ),
             DeployJournalEntry(game_id=game_id, operation="link", src="s", dst="d"),
             ActivityLog(game_id=game_id, action="install"),
         ]
@@ -347,10 +357,15 @@ class TestDeleteGameCascade:
             Profile,
             ProfileEntry,
         )
-        from rippermod_manager.models.install import ArchiveNexusLink, DeployJournalEntry
+        from rippermod_manager.models.install import (
+            ArchiveNexusLink,
+            DeployJournalEntry,
+            DisplacedFile,
+        )
 
         dependent_models = [
             ActivityLog,
+            DisplacedFile,
             ArchiveEntryIndex,
             ArchiveNexusLink,
             ConflictEvidence,
@@ -386,6 +401,7 @@ class TestDeleteGameCascade:
             assert session.exec(select(model)).all() == [], model
         assert len(session.exec(select(ActivityLog).where(ActivityLog.game_id == b_id)).all()) == 1
 
+        session.expunge_all()  # drop the deleted Game A from the identity map
         reborn = make_game(name="A")
         assert reborn.id == a_id
         for model in dependent_models:

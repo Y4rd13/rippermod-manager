@@ -536,6 +536,7 @@ def uninstall_mod(
     from rippermod_manager.services.vfs.deploy_service import (
         execute_plan,
         plan_remove_mod_links,
+        restore_displaced,
     )
 
     maybe_backup_before(game, session, reason="pre-uninstall")
@@ -551,6 +552,8 @@ def uninstall_mod(
     for r in removal.results:
         if r.status == "failed":
             logger.warning("Could not remove %s: %s", r.op.dst, r.error)
+    # Give back what force deploy moved aside for this mod (S6), before relinking.
+    not_restored = restore_displaced(game, session, occupant_mod_id=undo_mod_id)
 
     # Remove staging subtree
     if installed_mod.staging_dir:
@@ -603,7 +606,12 @@ def uninstall_mod(
             source_archive=undo_archive,
             undoable=True,
         )
-    return UninstallResult(files_deleted=file_count, directories_removed=0, foreign=removal.foreign)
+    return UninstallResult(
+        files_deleted=file_count,
+        directories_removed=0,
+        foreign=removal.foreign,
+        displaced_not_restored=not_restored,
+    )
 
 
 def toggle_mod(
@@ -629,12 +637,14 @@ def toggle_mod(
     from rippermod_manager.services.vfs.deploy_service import (
         execute_plan,
         plan_remove_mod_links,
+        restore_displaced,
     )
 
     should_disable = not installed_mod.disabled
     affected = 0
     foreign = 0
     failed = 0
+    not_restored: list[str] = []
 
     _ = installed_mod.files  # touch relationship to load files
 
@@ -650,6 +660,8 @@ def toggle_mod(
         affected = removal.done
         foreign = removal.foreign
         failed = removal.failed
+        # Give back what force deploy moved aside for this mod (S6), before relinking.
+        not_restored = restore_displaced(game, session, occupant_mod_id=installed_mod.id)
         installed_mod.deployed = False
 
     installed_mod.disabled = should_disable
@@ -699,7 +711,11 @@ def toggle_mod(
             undoable=True,
         )
     return ToggleResult(
-        disabled=should_disable, files_affected=affected, foreign=foreign, failed=failed
+        disabled=should_disable,
+        files_affected=affected,
+        foreign=foreign,
+        failed=failed,
+        displaced_not_restored=not_restored,
     )
 
 

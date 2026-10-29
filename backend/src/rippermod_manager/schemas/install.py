@@ -48,6 +48,7 @@ class UninstallResult(BaseModel):
     files_deleted: int
     directories_removed: int
     foreign: int = 0  # game-dir entries left in place: not this mod's own links (S5)
+    displaced_not_restored: list[str] = []  # S6 backups whose path is now occupied
 
 
 class ToggleResult(BaseModel):
@@ -55,6 +56,7 @@ class ToggleResult(BaseModel):
     files_affected: int
     foreign: int = 0  # game-dir entries left in place: not this mod's own links (S5)
     failed: int = 0  # link/unlink operations that failed
+    displaced_not_restored: list[str] = []  # S6 backups whose path is now occupied
 
 
 class FileConflict(BaseModel):

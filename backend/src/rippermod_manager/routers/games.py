@@ -235,6 +235,7 @@ def delete_game(name: str, session: Session = Depends(get_session)) -> None:
     from rippermod_manager.models.install import (
         ArchiveNexusLink,
         DeployJournalEntry,
+        DisplacedFile,
         InstalledMod,
         InstalledModFile,
     )
@@ -287,6 +288,7 @@ def delete_game(name: str, session: Session = Depends(get_session)) -> None:
 
     session.exec(delete(ArchiveNexusLink).where(ArchiveNexusLink.game_id == game_id))  # type: ignore[call-overload]
     session.exec(delete(DeployJournalEntry).where(DeployJournalEntry.game_id == game_id))  # type: ignore[call-overload]
+    session.exec(delete(DisplacedFile).where(DisplacedFile.game_id == game_id))  # type: ignore[call-overload]
     session.exec(delete(ActivityLog).where(ActivityLog.game_id == game_id))  # type: ignore[call-overload]
 
     session.delete(game)

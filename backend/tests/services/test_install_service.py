@@ -1008,3 +1008,42 @@ class TestSafeRemoval:
 
         assert not (game_dir / "mods" / "OwnRedMod").exists()
         assert result.foreign == 0
+
+
+class TestDisplacedRestore:
+    def test_uninstall_occupant_restores_displaced(self, session, game, game_dir, staging_dir):
+        from rippermod_manager.models.install import DisplacedFile
+        from rippermod_manager.services.vfs import deploy_service
+
+        vanilla = game_dir / "r6" / "config" / "inputUserMappings.xml"
+        vanilla.parent.mkdir(parents=True)
+        vanilla.write_bytes(b"vanilla")
+        archive = staging_dir / "InputMod.zip"
+        _make_zip(archive, {"r6/config/inputUserMappings.xml": b"modded"})
+        installed = install_mod(game, archive, session)
+        assert vanilla.read_bytes() == b"vanilla"  # plain deploy refuses the foreign file
+
+        deploy_service.deploy(game, session, force=True)
+        assert vanilla.read_bytes() == b"modded"
+
+        result = uninstall_mod(session.get(InstalledMod, installed.installed_mod_id), game, session)
+
+        assert vanilla.read_bytes() == b"vanilla"
+        assert result.displaced_not_restored == []
+        assert session.exec(select(DisplacedFile)).all() == []
+
+    def test_disable_occupant_restores_displaced(self, session, game, game_dir, staging_dir):
+        from rippermod_manager.services.vfs import deploy_service
+
+        vanilla = game_dir / "r6" / "config" / "inputUserMappings.xml"
+        vanilla.parent.mkdir(parents=True)
+        vanilla.write_bytes(b"vanilla")
+        archive = staging_dir / "InputMod.zip"
+        _make_zip(archive, {"r6/config/inputUserMappings.xml": b"modded"})
+        installed = install_mod(game, archive, session)
+        deploy_service.deploy(game, session, force=True)
+
+        result = toggle_mod(session.get(InstalledMod, installed.installed_mod_id), game, session)
+
+        assert vanilla.read_bytes() == b"vanilla"
+        assert result.displaced_not_restored == []

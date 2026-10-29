@@ -68,6 +68,8 @@ class DeployReport(BaseModel):
     results: list[DeployOpResult] = Field(default_factory=list)
     preflight: PreflightReport | None = None  # populated when pre-flight refuses
     redmod: RedmodDeployResult | None = None  # set when redmod.exe was attempted
+    # Displaced files (S6) that could not go back because their path is occupied.
+    displaced_not_restored: list[str] = Field(default_factory=list)
 
     @property
     def is_clean(self) -> bool:

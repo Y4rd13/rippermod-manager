@@ -167,7 +167,7 @@ def test_execute_plan_creates_hardlinks_and_journals(in_memory_session, sample_g
 
 
 def test_execute_plan_force_overwrites_foreign_file(in_memory_session, sample_game):
-    """A regular file squatting on the destination is overwritten when force=True."""
+    """With force, a foreign file is moved aside (S6), then the link is created."""
     session = in_memory_session
     game = sample_game
     staging = Path(game.install_path) / "downloaded_mods" / "TestMod" / "r6" / "scripts"
@@ -178,6 +178,7 @@ def test_execute_plan_force_overwrites_foreign_file(in_memory_session, sample_ga
     dst = Path(game.install_path) / "r6" / "scripts" / "foo.reds"
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text("foreign content from another mod manager")
+    displaced_root = Path(game.install_path) / "downloaded_mods" / "_displaced"
 
     plan = DeployPlan(
         game_id=game.id,
@@ -187,18 +188,48 @@ def test_execute_plan_force_overwrites_foreign_file(in_memory_session, sample_ga
                 src=str(src),
                 dst=str(dst),
                 installed_mod_id=1,
+                relative_path="r6/scripts/foo.reds",
             ),
         ],
     )
 
-    report = execute_plan(plan, session, force=True)
+    report = execute_plan(plan, session, force=True, displaced_root=displaced_root)
 
     assert report.failed == 0
     assert report.done == 1
     # Destination is now a hardlink to the staged source: identical content.
     assert dst.read_text() == "staged content"
-    # And shares an inode with src.
     assert dst.stat().st_ino == src.stat().st_ino
+    # The foreign file survives in the displaced area.
+    backup = displaced_root / "r6" / "scripts" / "foo.reds"
+    assert backup.read_text() == "foreign content from another mod manager"
+
+
+def test_force_without_displaced_root_never_deletes(in_memory_session, sample_game):
+    session = in_memory_session
+    game = sample_game
+    staging = Path(game.install_path) / "downloaded_mods" / "TestMod"
+    staging.mkdir(parents=True)
+    (staging / "foo.txt").write_text("staged")
+    dst = Path(game.install_path) / "foo.txt"
+    dst.write_text("foreign")
+    plan = DeployPlan(
+        game_id=game.id,
+        ops=[
+            DeployOp(
+                operation="link",
+                src=str(staging / "foo.txt"),
+                dst=str(dst),
+                installed_mod_id=1,
+                relative_path="foo.txt",
+            )
+        ],
+    )
+
+    report = execute_plan(plan, session, force=True)
+
+    assert report.failed == 1
+    assert dst.read_text() == "foreign"
 
 
 def test_execute_plan_without_force_keeps_foreign_and_fails(
@@ -799,3 +830,130 @@ def test_replay_removes_own_pending_link(in_memory_session, sample_game):
 
     assert not dst.exists()
     assert staged.exists()
+
+
+VANILLA_REL = "r6/config/inputUserMappings.xml"
+
+
+def _force_setup(session, game):
+    """A mod shipping VANILLA_REL over a vanilla file already in the game dir."""
+    mod, staged = _hardlinked_mod(session, game, name="InputMod", rel=VANILLA_REL)
+    mod.deployed = False
+    session.add(mod)
+    session.commit()
+    vanilla = Path(game.install_path) / VANILLA_REL
+    vanilla.parent.mkdir(parents=True, exist_ok=True)
+    vanilla.write_text("vanilla")
+    return mod, staged, vanilla
+
+
+def _no_game_running():
+    return patch(
+        "rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=False
+    )
+
+
+def test_force_deploy_displaces_foreign_file(in_memory_session, sample_game):
+    from rippermod_manager.models.install import DisplacedFile
+    from rippermod_manager.services.vfs.primitives import verify_link
+
+    session, game = in_memory_session, sample_game
+    mod, staged, vanilla = _force_setup(session, game)
+
+    with _no_game_running():
+        report = deploy(game, session, force=True)
+
+    backup = Path(game.install_path) / "downloaded_mods" / "_displaced" / VANILLA_REL
+    assert report.failed == 0
+    assert backup.read_text() == "vanilla"
+    assert verify_link(staged, vanilla)
+    rows = session.exec(select(DisplacedFile)).all()
+    assert len(rows) == 1
+    assert rows[0].relative_path == VANILLA_REL and rows[0].occupant_mod_id == mod.id
+    journal = session.exec(
+        select(DeployJournalEntry).where(DeployJournalEntry.operation == "displace")
+    ).all()
+    assert [j.status for j in journal] == ["done"]
+
+
+def test_undeploy_restores_displaced(in_memory_session, sample_game):
+    from rippermod_manager.models.install import DisplacedFile
+
+    session, game = in_memory_session, sample_game
+    _mod, staged, vanilla = _force_setup(session, game)
+    with _no_game_running():
+        deploy(game, session, force=True)
+        report = undeploy(game, session)
+
+    assert vanilla.read_text() == "vanilla"
+    assert vanilla.stat().st_ino != staged.stat().st_ino
+    assert report.displaced_not_restored == []
+    assert session.exec(select(DisplacedFile)).all() == []
+
+
+def test_restore_skipped_when_path_occupied(in_memory_session, sample_game):
+    from rippermod_manager.models.install import DisplacedFile
+    from rippermod_manager.services.vfs.deploy_service import restore_displaced
+
+    session, game = in_memory_session, sample_game
+    _mod, _staged, vanilla = _force_setup(session, game)
+    with _no_game_running():
+        deploy(game, session, force=True)
+    vanilla.unlink()
+    vanilla.write_text("user put something new here")
+
+    not_restored = restore_displaced(game, session)
+
+    backup = Path(game.install_path) / "downloaded_mods" / "_displaced" / VANILLA_REL
+    assert not_restored == [VANILLA_REL]
+    assert vanilla.read_text() == "user put something new here"
+    assert backup.read_text() == "vanilla"
+    assert len(session.exec(select(DisplacedFile)).all()) == 1
+
+
+def test_force_does_not_displace_another_owner(in_memory_session, sample_game):
+    from rippermod_manager.models.install import DisplacedFile
+    from rippermod_manager.services.vfs.primitives import verify_link
+
+    session, game = in_memory_session, sample_game
+    _a, staged_a = _hardlinked_mod(session, game, name="A", rel="shared.txt")
+    b, staged_b = _hardlinked_mod(session, game, name="B", rel="shared.txt")
+    for f in b.files:
+        f.win_seq = 5
+        session.add(f)
+    session.commit()
+    dst = Path(game.install_path) / "shared.txt"
+    os.link(staged_a, dst)  # A holds the path; B wins it
+
+    with _no_game_running():
+        report = deploy(game, session, force=True)
+
+    assert report.failed == 0
+    assert verify_link(staged_b, dst)
+    assert session.exec(select(DisplacedFile)).all() == []
+    assert not (Path(game.install_path) / "downloaded_mods" / "_displaced").exists()
+
+
+def test_replay_rolls_forward_pending_displace(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    original = Path(game.install_path) / VANILLA_REL
+    original.parent.mkdir(parents=True)
+    original.write_text("vanilla")
+    backup = Path(game.install_path) / "downloaded_mods" / "_displaced" / VANILLA_REL
+    session.add(
+        DeployJournalEntry(
+            game_id=game.id,
+            operation="displace",
+            src=str(original),
+            dst=str(backup),
+            status="pending",
+        )
+    )
+    session.commit()
+
+    replay_pending_journal(game, session)
+
+    assert backup.read_text() == "vanilla"
+    assert not original.exists()
+    entry = session.exec(select(DeployJournalEntry)).one()
+    assert entry.status == "done"
