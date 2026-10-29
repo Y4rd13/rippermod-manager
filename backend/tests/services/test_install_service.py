@@ -1,4 +1,5 @@
 import os
+import sys
 import zipfile
 from pathlib import Path
 
@@ -22,6 +23,33 @@ def _make_zip(path, files: dict[str, bytes]) -> None:
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_STORED) as zf:
         for name, content in files.items():
             zf.writestr(name, content)
+
+
+def _make_7z(path, files: dict[str, bytes]) -> None:
+    """Create a .7z archive with the given filename -> content mapping."""
+    import py7zr
+
+    with py7zr.SevenZipFile(path, "w") as z:
+        for name, content in files.items():
+            z.writestr(content, name)
+
+
+def _make_symlink_chain_7z(path, build_dir) -> None:
+    """Build a .7z whose symlinks chain (``a -> b -> ../../escape_dir``) out of the target.
+
+    py7zr follows the chain while writing, so ``escape_dir`` must exist then.
+    """
+    import py7zr
+
+    src = build_dir / "work" / "src"
+    src.mkdir(parents=True)
+    (build_dir / "escape_dir").mkdir()  # what src/../../escape_dir points at
+    os.symlink("../../escape_dir", src / "b")
+    os.symlink("b", src / "a")
+    with py7zr.SevenZipFile(path, "w") as z:
+        z.write(src / "b", "b")
+        z.write(src / "a", "a")
+        z.writestr(b"pwned", "a/pwned.txt")
 
 
 @pytest.fixture
@@ -270,6 +298,29 @@ class TestInstallMod:
         ownership = get_file_ownership_map(session, game.id)
         assert ownership.get("shared.txt") is not None
         assert ownership["shared.txt"].name == "ModA"
+
+
+class TestSevenZipInstall:
+    def test_installs_plain_7z(self, session, game, game_dir, staging_dir):
+        archive = staging_dir / "Plain7z.7z"
+        _make_7z(archive, {"mods/plain.txt": b"plain", "archive/pc/mod/x.archive": b"arc"})
+
+        result = install_mod(game, archive, session)
+
+        assert result.files_extracted == 2
+        assert (game_dir / "mods" / "plain.txt").read_bytes() == b"plain"
+        assert (game_dir / "archive" / "pc" / "mod" / "x.archive").read_bytes() == b"arc"
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="needs POSIX symlinks to build")
+    def test_rejects_symlink_chain_7z(self, session, game, game_dir, staging_dir, tmp_path):
+        archive = staging_dir / "Evil.7z"
+        _make_symlink_chain_7z(archive, tmp_path / "build")
+
+        with pytest.raises(ValueError, match="symbolic link"):
+            install_mod(game, archive, session)
+
+        assert list(game_dir.rglob("pwned.txt")) == [] and list(game_dir.rglob("escape_dir")) == []
+        assert session.exec(select(InstalledMod)).all() == []
 
 
 class TestUninstallMod:

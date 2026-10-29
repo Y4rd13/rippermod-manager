@@ -102,12 +102,32 @@ class SevenZipHandler(ArchiveHandler):
             )
         return entries
 
+    def _reject_unsafe_entries(self) -> None:
+        """Raise ``ValueError`` if any entry is a symbolic link.
+
+        Symlinks in a .7z can chain out of the extraction directory
+        (CVE-2026-23879). Mods do not ship symlinks, so any one is rejected
+        before a single byte is written.
+        """
+        for info in self._archive.list():
+            if getattr(info, "is_symlink", False):
+                raise ValueError(
+                    f"Refusing to extract .7z archive: entry '{info.filename}' is a "
+                    "symbolic link, which mod archives never need."
+                )
+
     def _extract_to_bytes(self, targets: list[str]) -> dict[str, bytes]:
         """Extract *targets* to a temp dir and return their contents as bytes."""
+        import py7zr
+
+        self._reject_unsafe_entries()
         self._archive.reset()
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir).resolve()
-            self._archive.extract(path=tmpdir, targets=targets)
+            try:
+                self._archive.extract(path=tmpdir, targets=targets)
+            except py7zr.exceptions.Bad7zFile as exc:
+                raise ValueError(f"Could not extract .7z archive: {exc}") from exc
             result: dict[str, bytes] = {}
             for name in targets:
                 extracted = (tmpdir_path / name).resolve()
