@@ -957,3 +957,20 @@ def test_replay_rolls_forward_pending_displace(in_memory_session, sample_game):
     assert not original.exists()
     entry = session.exec(select(DeployJournalEntry)).one()
     assert entry.status == "done"
+
+
+def test_drift_ignores_paths_won_by_another_mod(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    a, _staged_a = _hardlinked_mod(session, game, name="A", rel="shared.txt")
+    b, staged_b = _hardlinked_mod(session, game, name="B", rel="shared.txt")
+    for f in b.files:
+        f.win_seq = 5
+        session.add(f)
+    session.commit()
+    os.link(staged_b, Path(game.install_path) / "shared.txt")
+
+    drift = detect_drift(game, session)
+
+    assert drift.foreign == 0
+    assert drift.by_mod[a.id]["foreign"] == 0
+    assert drift.by_mod[b.id]["linked"] == 1

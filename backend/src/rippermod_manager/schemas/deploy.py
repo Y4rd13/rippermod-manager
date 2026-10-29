@@ -88,6 +88,12 @@ class DriftReport(BaseModel):
         return self.missing == 0 and self.foreign == 0
 
 
+class ForcePreview(BaseModel):
+    """Paths a force deploy would move aside to ``<mods_dir>/_displaced/`` (S6)."""
+
+    paths: list[str] = Field(default_factory=list)
+
+
 class UntrackedFilesResponse(BaseModel):
     """Response model for the untracked-files endpoint."""
 

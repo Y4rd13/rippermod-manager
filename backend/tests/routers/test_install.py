@@ -353,3 +353,28 @@ class TestUntrackedFilesEndpoint:
         body = resp.json()
         assert "files" in body
         assert isinstance(body["files"], list)
+
+
+class TestForcePreview:
+    def test_force_preview_lists_foreign_paths(self, client, game_setup):
+        game_name, game_dir, staging = game_setup
+        vanilla = game_dir / "r6" / "config" / "inputUserMappings.xml"
+        vanilla.parent.mkdir(parents=True)
+        vanilla.write_bytes(b"vanilla")
+        _make_zip(staging / "ModA.zip", {"shared.txt": b"A"})
+        _make_zip(
+            staging / "ModB.zip",
+            {"shared.txt": b"B", "r6/config/inputUserMappings.xml": b"modded"},
+        )
+        for name in ("ModA.zip", "ModB.zip"):
+            r = client.post(
+                f"/api/v1/games/{game_name}/install/",
+                json={"archive_filename": name, "skip_conflicts": []},
+            )
+            assert r.status_code == 201, r.text
+
+        r = client.get(f"/api/v1/games/{game_name}/install/deploy/force-preview")
+
+        assert r.status_code == 200
+        assert r.json() == {"paths": ["r6/config/inputUserMappings.xml"]}
+        assert vanilla.read_bytes() == b"vanilla"  # preview never touches disk

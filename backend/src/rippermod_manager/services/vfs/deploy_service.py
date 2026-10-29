@@ -528,6 +528,8 @@ def detect_drift(game: Game, session: Session) -> DriftReport:
 
     total = linked = missing = foreign = 0
     by_mod: dict[int, dict[str, int]] = {}
+    # A path another mod wins is that mod's to link (S4): not drift for this one (S6).
+    winners = winner_map(session, game.id)  # type: ignore[arg-type]
 
     for mod in mods:
         _ = mod.files
@@ -536,6 +538,9 @@ def detect_drift(game: Game, session: Session) -> DriftReport:
         # for an N-file REDmod and so all files under the same root agree on linked/missing.
         junction_root_state: dict[Path, bool] = {}
         for f in mod.files:
+            winner = winners.get(path_key(f.relative_path, f.link_kind))
+            if winner is not None and winner[0].id != mod.id:
+                continue
             total += 1
             src = staging_root / mod.staging_dir / f.source_path.replace("\\", "/")
             rel = f.relative_path.replace("\\", "/")
@@ -578,6 +583,28 @@ def detect_drift(game: Game, session: Session) -> DriftReport:
             by_mod[mod.id] = {"linked": m_linked, "missing": m_missing, "foreign": m_foreign}
 
     return DriftReport(total=total, linked=linked, missing=missing, foreign=foreign, by_mod=by_mod)
+
+
+def preview_displacements(game: Game, session: Session) -> list[str]:
+    """Relative paths a force deploy would move aside, without touching disk (S6).
+
+    These are the ``link``/``junction`` ops of the current plan whose
+    destination exists and is not freed by an ``unlink`` earlier in the plan
+    (a path handed over between owners is not foreign).
+    """
+    plan, _skipped = plan_deploy(game, session)
+    freed: set[str] = set()
+    paths: list[str] = []
+    for op in plan.ops:
+        if op.operation == "unlink":
+            freed.add(op.dst)
+            continue
+        if op.operation not in ("link", "junction") or op.dst in freed:
+            continue
+        dst = Path(op.dst)
+        if dst.exists() or dst.is_symlink():
+            paths.append(op.relative_path)
+    return paths
 
 
 def _redmod_exe(game: Game) -> Path | None:
