@@ -1,3 +1,5 @@
+import os
+import secrets
 from collections.abc import Generator
 
 import pytest
@@ -6,10 +8,14 @@ from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
-import rippermod_manager.models  # noqa: F401 — register all tables
-from rippermod_manager.database import _set_sqlite_pragma, get_session
-from rippermod_manager.main import app
-from rippermod_manager.models.game import Game, GameModPath
+# The API token must be in place before the app (and its cached token) loads.
+API_TOKEN = secrets.token_hex(32)
+os.environ["RMM_API_TOKEN"] = API_TOKEN
+
+import rippermod_manager.models  # noqa: E402, F401 — register all tables
+from rippermod_manager.database import _set_sqlite_pragma, get_session  # noqa: E402
+from rippermod_manager.main import app  # noqa: E402
+from rippermod_manager.models.game import Game, GameModPath  # noqa: E402
 
 
 @pytest.fixture
@@ -40,7 +46,13 @@ def client(engine, monkeypatch):
             yield sess
 
     app.dependency_overrides[get_session] = _override_session
-    with TestClient(app, raise_server_exceptions=False) as tc:
+    # TestClient sends ``Host: testserver`` by default, which the Host allowlist refuses.
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1:8425",
+        headers={"X-RMM-Token": API_TOKEN},
+        raise_server_exceptions=False,
+    ) as tc:
         yield tc
     app.dependency_overrides.clear()
 

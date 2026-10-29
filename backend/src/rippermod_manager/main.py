@@ -6,12 +6,12 @@ from logging.handlers import RotatingFileHandler
 from typing import Any
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 import rippermod_manager.models  # noqa: F401 — register all models with SQLModel
 from rippermod_manager.config import settings
 from rippermod_manager.database import create_db_and_tables
 from rippermod_manager.routers import api_router
+from rippermod_manager.security import get_api_token, install_security
 from rippermod_manager.services.pid_file import remove_pid_file, write_pid_file
 
 
@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     _configure_logging()
+    get_api_token()  # resolve (and in dev, write) the token before serving
     create_db_and_tables()
     try:
         from sqlmodel import Session
@@ -119,12 +120,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+install_security(app)
 
 
 app.include_router(api_router)
