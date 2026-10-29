@@ -256,3 +256,139 @@ class TestDeleteGame:
     def test_not_found(self, client):
         r = client.delete("/api/v1/games/NoGame")
         assert r.status_code == 404
+
+
+def _seed_dependents(session, game_id: int) -> None:
+    """Create one row in every table that references ``game_id`` directly or indirectly."""
+    from rippermod_manager.models import (
+        ActivityLog,
+        ArchiveEntryIndex,
+        ConflictEvidence,
+        DownloadJob,
+        InstalledCollection,
+        InstalledMod,
+        InstalledModFile,
+        LoadOrderPreference,
+        ModFile,
+        ModGroup,
+        ModGroupAlias,
+        ModNexusCorrelation,
+        NexusDownload,
+        Profile,
+        ProfileEntry,
+    )
+    from rippermod_manager.models.conflict import ConflictKind, Severity
+    from rippermod_manager.models.install import ArchiveNexusLink, DeployJournalEntry
+
+    coll = InstalledCollection(game_id=game_id, slug=f"coll-{game_id}")
+    group = ModGroup(game_id=game_id, display_name="Group")
+    nd = NexusDownload(game_id=game_id, nexus_mod_id=1)
+    session.add_all([coll, group, nd])
+    session.flush()
+    mod_a = InstalledMod(
+        game_id=game_id, name="A", mod_group_id=group.id, installed_collection_id=coll.id
+    )
+    mod_b = InstalledMod(game_id=game_id, name="B")
+    session.add_all([mod_a, mod_b])
+    session.flush()
+    profile = Profile(game_id=game_id, name="P")
+    session.add(profile)
+    session.flush()
+    session.add_all(
+        [
+            ProfileEntry(profile_id=profile.id, installed_mod_id=mod_a.id),
+            InstalledModFile(installed_mod_id=mod_a.id, relative_path="a.txt"),
+            LoadOrderPreference(game_id=game_id, winner_mod_id=mod_a.id, loser_mod_id=mod_b.id),
+            ArchiveEntryIndex(
+                game_id=game_id,
+                installed_mod_id=mod_a.id,
+                archive_filename="a.archive",
+                resource_hash=1,
+            ),
+            ConflictEvidence(
+                game_id=game_id,
+                kind=ConflictKind.archive_resource,
+                severity=Severity.high,
+                key="k",
+            ),
+            DownloadJob(
+                game_id=game_id,
+                nexus_mod_id=1,
+                nexus_file_id=2,
+                installed_collection_id=coll.id,
+            ),
+            ModNexusCorrelation(mod_group_id=group.id, nexus_download_id=nd.id),
+            ModGroupAlias(mod_group_id=group.id, alias="alias"),
+            ModFile(mod_group_id=group.id, file_path=f"/f/{game_id}.txt", filename="f.txt"),
+            ArchiveNexusLink(game_id=game_id, filename="a.zip", nexus_mod_id=1),
+            DeployJournalEntry(game_id=game_id, operation="link", src="s", dst="d"),
+            ActivityLog(game_id=game_id, action="install"),
+        ]
+    )
+    session.commit()
+
+
+class TestDeleteGameCascade:
+    def test_delete_removes_every_dependent_row(self, client, session, make_game):
+        from sqlmodel import select
+
+        from rippermod_manager.models import (
+            ActivityLog,
+            ArchiveEntryIndex,
+            ConflictEvidence,
+            DownloadJob,
+            InstalledCollection,
+            InstalledMod,
+            InstalledModFile,
+            LoadOrderPreference,
+            ModFile,
+            ModGroup,
+            ModGroupAlias,
+            ModNexusCorrelation,
+            NexusDownload,
+            Profile,
+            ProfileEntry,
+        )
+        from rippermod_manager.models.install import ArchiveNexusLink, DeployJournalEntry
+
+        dependent_models = [
+            ActivityLog,
+            ArchiveEntryIndex,
+            ArchiveNexusLink,
+            ConflictEvidence,
+            DeployJournalEntry,
+            DownloadJob,
+            InstalledCollection,
+            InstalledMod,
+            LoadOrderPreference,
+            ModGroup,
+            NexusDownload,
+            Profile,
+        ]
+        # B first so A holds the highest id and a re-created A reuses it.
+        game_b = make_game(name="B")
+        game_a = make_game(name="A")
+        a_id, b_id = game_a.id, game_b.id
+        _seed_dependents(session, a_id)
+        session.add(ActivityLog(game_id=b_id, action="install"))
+        session.commit()
+
+        assert client.delete("/api/v1/games/A").status_code == 204
+
+        session.expire_all()
+        for model in dependent_models:
+            assert session.exec(select(model).where(model.game_id == a_id)).all() == [], model
+        for model in (
+            ModNexusCorrelation,
+            ModGroupAlias,
+            ModFile,
+            InstalledModFile,
+            ProfileEntry,
+        ):
+            assert session.exec(select(model)).all() == [], model
+        assert len(session.exec(select(ActivityLog).where(ActivityLog.game_id == b_id)).all()) == 1
+
+        reborn = make_game(name="A")
+        assert reborn.id == a_id
+        for model in dependent_models:
+            assert session.exec(select(model).where(model.game_id == reborn.id)).all() == []

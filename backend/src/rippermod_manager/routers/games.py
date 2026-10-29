@@ -206,8 +206,19 @@ def delete_game(name: str, session: Session = Depends(get_session)) -> None:
 
     game_id = game.id
 
+    from rippermod_manager.models.activity import ActivityLog
+    from rippermod_manager.models.archive_index import ArchiveEntryIndex
+    from rippermod_manager.models.collection import InstalledCollection
+    from rippermod_manager.models.conflict import ConflictEvidence
+    from rippermod_manager.models.correlation import ModNexusCorrelation
     from rippermod_manager.models.download import DownloadJob
-    from rippermod_manager.models.install import InstalledMod, InstalledModFile
+    from rippermod_manager.models.install import (
+        ArchiveNexusLink,
+        DeployJournalEntry,
+        InstalledMod,
+        InstalledModFile,
+    )
+    from rippermod_manager.models.load_order import LoadOrderPreference
     from rippermod_manager.models.mod import ModFile, ModGroup, ModGroupAlias
     from rippermod_manager.models.nexus import NexusDownload
     from rippermod_manager.models.profile import Profile, ProfileEntry
@@ -218,6 +229,11 @@ def delete_game(name: str, session: Session = Depends(get_session)) -> None:
         session.exec(delete(ProfileEntry).where(ProfileEntry.profile_id.in_(profile_ids)))  # type: ignore[union-attr]
     session.exec(delete(Profile).where(Profile.game_id == game_id))  # type: ignore[call-overload]
 
+    # Rows that reference installed_mods
+    session.exec(delete(LoadOrderPreference).where(LoadOrderPreference.game_id == game_id))  # type: ignore[call-overload]
+    session.exec(delete(ArchiveEntryIndex).where(ArchiveEntryIndex.game_id == game_id))  # type: ignore[call-overload]
+    session.exec(delete(ConflictEvidence).where(ConflictEvidence.game_id == game_id))  # type: ignore[call-overload]
+
     installed_ids = [
         m.id for m in session.exec(select(InstalledMod).where(InstalledMod.game_id == game_id))
     ]
@@ -227,14 +243,31 @@ def delete_game(name: str, session: Session = Depends(get_session)) -> None:
         )  # type: ignore[union-attr]
     session.exec(delete(InstalledMod).where(InstalledMod.game_id == game_id))  # type: ignore[call-overload]
 
+    # download_jobs and installed_mods reference installed_collections
+    session.exec(delete(DownloadJob).where(DownloadJob.game_id == game_id))  # type: ignore[call-overload]
+    session.exec(delete(InstalledCollection).where(InstalledCollection.game_id == game_id))  # type: ignore[call-overload]
+
     group_ids = [g.id for g in session.exec(select(ModGroup).where(ModGroup.game_id == game_id))]
+    download_ids = [
+        d.id for d in session.exec(select(NexusDownload).where(NexusDownload.game_id == game_id))
+    ]
+    if group_ids or download_ids:
+        session.exec(
+            delete(ModNexusCorrelation).where(
+                ModNexusCorrelation.mod_group_id.in_(group_ids)  # type: ignore[attr-defined]
+                | ModNexusCorrelation.nexus_download_id.in_(download_ids)  # type: ignore[attr-defined]
+            )
+        )
     if group_ids:
         session.exec(delete(ModGroupAlias).where(ModGroupAlias.mod_group_id.in_(group_ids)))  # type: ignore[union-attr]
         session.exec(delete(ModFile).where(ModFile.mod_group_id.in_(group_ids)))  # type: ignore[union-attr]
     session.exec(delete(ModGroup).where(ModGroup.game_id == game_id))  # type: ignore[call-overload]
 
     session.exec(delete(NexusDownload).where(NexusDownload.game_id == game_id))  # type: ignore[call-overload]
-    session.exec(delete(DownloadJob).where(DownloadJob.game_id == game_id))  # type: ignore[call-overload]
+
+    session.exec(delete(ArchiveNexusLink).where(ArchiveNexusLink.game_id == game_id))  # type: ignore[call-overload]
+    session.exec(delete(DeployJournalEntry).where(DeployJournalEntry.game_id == game_id))  # type: ignore[call-overload]
+    session.exec(delete(ActivityLog).where(ActivityLog.game_id == game_id))  # type: ignore[call-overload]
 
     session.delete(game)
     session.commit()
