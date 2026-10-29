@@ -6,6 +6,7 @@ mod archives regardless of format.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 import tempfile
@@ -16,6 +17,45 @@ from pathlib import Path
 from typing import BinaryIO
 
 SUPPORTED_EXTENSIONS = {".zip", ".7z", ".rar"}
+
+# Default install locations of the RAR-capable tools. Their installers do not
+# add themselves to PATH, so rarfile alone would not find them.
+SEVENZIP_CANDIDATES: tuple[str, ...] = (
+    r"C:\Program Files\7-Zip\7z.exe",
+    r"C:\Program Files (x86)\7-Zip\7z.exe",
+)
+UNRAR_CANDIDATES: tuple[str, ...] = (r"C:\Program Files\WinRAR\UnRAR.exe",)
+
+RAR_TOOL_MISSING_MESSAGE = (
+    "Could not open .rar archive: RipperMod needs a RAR extractor (7-Zip or WinRAR) "
+    "and found none in C:\\Program Files\\7-Zip, C:\\Program Files (x86)\\7-Zip, "
+    "C:\\Program Files\\WinRAR or on your PATH. Install 7-Zip (https://www.7-zip.org/) "
+    "with its default options and try again, or extract the .rar manually and drop "
+    "the contents into your game's downloaded_mods/ folder."
+)
+
+
+def configure_rar_tools() -> None:
+    """Point rarfile at 7-Zip or WinRAR in their default folders, if present.
+
+    rarfile 4.2 caches the tool it picked, so the cache is reset whenever a
+    tool path changes. A tool that does not run is not an error here: the
+    read paths translate it into ``RAR_TOOL_MISSING_MESSAGE``.
+    """
+    import rarfile
+
+    changed = False
+    for attr, candidates in (
+        ("SEVENZIP_TOOL", SEVENZIP_CANDIDATES),
+        ("UNRAR_TOOL", UNRAR_CANDIDATES),
+    ):
+        found = next((c for c in candidates if Path(c).is_file()), None)
+        if found and getattr(rarfile, attr) != found:
+            setattr(rarfile, attr, found)
+            changed = True
+    if changed:
+        with contextlib.suppress(rarfile.RarExecError):
+            rarfile.tool_setup(force=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,9 +309,11 @@ class RarHandler(ArchiveHandler):
     or WinRAR installed system-wide; only users with a clean install hit
     this error.
 
-    We translate the cryptic ``RarCannotExec`` into an actionable
-    ``ValueError`` so the install endpoint surfaces a useful message to
-    the user instead of a silent 500.
+    Before opening, :func:`configure_rar_tools` points rarfile at 7-Zip or
+    WinRAR in their default install folders, which are not on PATH by
+    default. Any ``RarExecError`` (``RarCannotExec`` included) on open, read
+    or extract becomes the actionable ``RAR_TOOL_MISSING_MESSAGE`` so the
+    install endpoint surfaces a useful message instead of a silent 500.
     """
 
     def __init__(self, path: str | Path) -> None:
@@ -279,22 +321,11 @@ class RarHandler(ArchiveHandler):
             import rarfile
         except ImportError as exc:
             raise ImportError("rarfile is required for .rar support: pip install rarfile") from exc
+        configure_rar_tools()
         try:
             self._rf = rarfile.RarFile(str(path), "r")
-        except rarfile.RarCannotExec as exc:
-            raise ValueError(
-                "Could not open .rar archive: RipperMod needs a RAR extractor "
-                "on your system PATH and none was found. Easiest fix: install "
-                "7-Zip (https://www.7-zip.org/) AND make sure its install "
-                "folder (typically C:\\Program Files\\7-Zip) is on your PATH. "
-                "The 7-Zip installer does NOT add itself to PATH by default: "
-                "either tick that option during install, or add it manually "
-                "(Windows: Settings → Environment Variables → Path → New). "
-                "Alternatives that work the same way: WinRAR, UnRAR, or "
-                "libarchive's bsdtar. If you'd rather not install anything "
-                "extra, extract the .rar manually and drop the contents into "
-                "your game's downloaded_mods/ folder."
-            ) from exc
+        except rarfile.RarExecError as exc:
+            raise ValueError(RAR_TOOL_MISSING_MESSAGE) from exc
 
     def list_entries(self) -> list[ArchiveEntry]:
         entries: list[ArchiveEntry] = []
@@ -310,10 +341,39 @@ class RarHandler(ArchiveHandler):
         return entries
 
     def read_file(self, entry: ArchiveEntry) -> bytes:
-        return self._rf.read(entry.filename)
+        import rarfile
+
+        try:
+            return self._rf.read(entry.filename)
+        except rarfile.RarExecError as exc:
+            raise ValueError(RAR_TOOL_MISSING_MESSAGE) from exc
+
+    def read_all_files(self, entries: list[ArchiveEntry]) -> dict[str, bytes]:
+        import rarfile
+
+        try:
+            return super().read_all_files(entries)
+        except rarfile.RarExecError as exc:
+            raise ValueError(RAR_TOOL_MISSING_MESSAGE) from exc
 
     def open_entry(self, entry: ArchiveEntry) -> BinaryIO:
-        return self._rf.open(entry.filename)  # type: ignore[return-value]
+        import rarfile
+
+        try:
+            return self._rf.open(entry.filename)  # type: ignore[return-value]
+        except rarfile.RarExecError as exc:
+            raise ValueError(RAR_TOOL_MISSING_MESSAGE) from exc
+
+    def extract_entries(
+        self, targets: list[tuple[ArchiveEntry, Path]], scratch_dir: Path
+    ) -> set[str]:
+        import rarfile
+
+        # The external tool may only fail once the stream is read.
+        try:
+            return super().extract_entries(targets, scratch_dir)
+        except rarfile.RarExecError as exc:
+            raise ValueError(RAR_TOOL_MISSING_MESSAGE) from exc
 
     def close(self) -> None:
         self._rf.close()

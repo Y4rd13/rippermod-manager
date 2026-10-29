@@ -322,3 +322,106 @@ class TestRarHandler:
             RarHandler(rar_path)
         assert "RAR" in str(exc_info.value)
         assert "bundle" in str(exc_info.value).lower() or "extract" in str(exc_info.value).lower()
+
+
+class _FailingRarFile:
+    def __init__(self, exc):
+        self._exc = exc
+
+    def read(self, *_args, **_kwargs):
+        raise self._exc
+
+    def open(self, *_args, **_kwargs):
+        raise self._exc
+
+    def close(self):
+        pass
+
+
+class TestRarToolErrors:
+    def test_read_file_translates_cannot_exec(self):
+        import rarfile
+
+        from rippermod_manager.archive.handler import RarHandler
+
+        h = object.__new__(RarHandler)
+        h._rf = _FailingRarFile(rarfile.RarCannotExec("Cannot find working tool"))
+        with pytest.raises(ValueError, match="7-Zip"):
+            h.read_file(ArchiveEntry("a.txt", False, 1))
+
+    def test_read_all_files_translates_exec_error(self):
+        import rarfile
+
+        from rippermod_manager.archive.handler import RarHandler
+
+        h = object.__new__(RarHandler)
+        h._rf = _FailingRarFile(rarfile.RarExecError("tool failed"))
+        with pytest.raises(ValueError, match="7-Zip"):
+            h.read_all_files([ArchiveEntry("a.txt", False, 1)])
+
+    def test_open_entry_translates_cannot_exec(self):
+        import rarfile
+
+        from rippermod_manager.archive.handler import RarHandler
+
+        h = object.__new__(RarHandler)
+        h._rf = _FailingRarFile(rarfile.RarCannotExec("Cannot find working tool"))
+        with pytest.raises(ValueError, match="7-Zip"):
+            h.open_entry(ArchiveEntry("a.txt", False, 1))
+
+
+class TestRarToolDiscovery:
+    @pytest.fixture
+    def captured(self, monkeypatch):
+        """Fake RarFile that records which tools rarfile was configured with."""
+        import rarfile
+
+        monkeypatch.setattr(rarfile, "SEVENZIP_TOOL", rarfile.SEVENZIP_TOOL)
+        monkeypatch.setattr(rarfile, "UNRAR_TOOL", rarfile.UNRAR_TOOL)
+        seen: dict[str, str] = {}
+
+        class _FakeRarFile:
+            def __init__(self, *_args, **_kwargs):
+                seen["sevenzip"] = rarfile.SEVENZIP_TOOL
+                seen["unrar"] = rarfile.UNRAR_TOOL
+
+            def close(self):
+                pass
+
+        monkeypatch.setattr(rarfile, "RarFile", _FakeRarFile)
+        return seen
+
+    def test_handler_uses_7zip_outside_path(self, tmp_path, monkeypatch, captured):
+        from rippermod_manager.archive import handler as handler_mod
+
+        fake = tmp_path / "7-Zip" / "7z.exe"
+        fake.parent.mkdir()
+        fake.write_bytes(b"")
+        monkeypatch.setattr(handler_mod, "SEVENZIP_CANDIDATES", (str(fake),), raising=False)
+        monkeypatch.setattr(handler_mod, "UNRAR_CANDIDATES", (), raising=False)
+
+        handler_mod.RarHandler(tmp_path / "x.rar")
+
+        assert captured["sevenzip"] == str(fake)
+
+    def test_handler_uses_winrar_outside_path(self, tmp_path, monkeypatch, captured):
+        from rippermod_manager.archive import handler as handler_mod
+
+        fake = tmp_path / "WinRAR" / "UnRAR.exe"
+        fake.parent.mkdir()
+        fake.write_bytes(b"")
+        monkeypatch.setattr(handler_mod, "SEVENZIP_CANDIDATES", (), raising=False)
+        monkeypatch.setattr(handler_mod, "UNRAR_CANDIDATES", (str(fake),), raising=False)
+
+        handler_mod.RarHandler(tmp_path / "x.rar")
+
+        assert captured["unrar"] == str(fake)
+
+    def test_candidates_match_spec(self):
+        from rippermod_manager.archive import handler as handler_mod
+
+        assert handler_mod.SEVENZIP_CANDIDATES == (
+            r"C:\Program Files\7-Zip\7z.exe",
+            r"C:\Program Files (x86)\7-Zip\7z.exe",
+        )
+        assert handler_mod.UNRAR_CANDIDATES == (r"C:\Program Files\WinRAR\UnRAR.exe",)
