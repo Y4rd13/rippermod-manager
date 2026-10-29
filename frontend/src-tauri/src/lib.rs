@@ -17,6 +17,54 @@ struct BackendProcess {
     child: Option<tauri_plugin_shell::process::CommandChild>,
 }
 
+/// Per-launch secret the backend requires in the `X-RMM-Token` header.
+/// Release builds generate it before spawning the sidecar; it never touches disk.
+struct ApiToken(String);
+
+const API_TOKEN_ENV: &str = "RMM_API_TOKEN";
+const API_TOKEN_FILE: &str = "api-token";
+
+/// 32 random bytes from the OS CSPRNG, hex-encoded (64 chars).
+fn generate_api_token() -> Result<String, getrandom::Error> {
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes)?;
+    Ok(bytes.iter().map(|b| format!("{:02x}", b)).collect())
+}
+
+/// Hands the API token to the webview.
+///
+/// Release: the token generated at startup. Debug (backend started by hand):
+/// `RMM_API_TOKEN` from this process's environment when set (backend in WSL),
+/// otherwise the `api-token` file the backend wrote in the app data dir.
+#[tauri::command]
+fn get_api_token(app: tauri::AppHandle) -> Result<String, String> {
+    if !cfg!(debug_assertions) {
+        return app
+            .try_state::<ApiToken>()
+            .map(|t| t.0.clone())
+            .ok_or_else(|| "API token is not initialised".to_string());
+    }
+    if let Ok(value) = std::env::var(API_TOKEN_ENV) {
+        let value = value.trim();
+        if !value.is_empty() {
+            return Ok(value.to_string());
+        }
+    }
+    let path = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| format!("Cannot resolve app data dir: {e}"))?
+        .join(API_TOKEN_FILE);
+    match std::fs::read_to_string(&path) {
+        Ok(contents) if !contents.trim().is_empty() => Ok(contents.trim().to_string()),
+        Ok(_) => Err(format!("API token file is empty: {}", path.display())),
+        Err(e) => Err(format!(
+            "No API token: set {API_TOKEN_ENV} or start the backend so it writes {} ({e})",
+            path.display()
+        )),
+    }
+}
+
 #[tauri::command]
 fn detect_game_paths() -> Vec<DetectedGame> {
     let mut results = Vec::new();
@@ -287,7 +335,10 @@ fn launch_game(
     Ok(())
 }
 
-fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+fn spawn_sidecar(
+    app: &tauri::AppHandle,
+    api_token: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     use tauri_plugin_shell::ShellExt;
 
     log::info!("Spawning backend sidecar...");
@@ -302,7 +353,8 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error
         .shell()
         .sidecar("rmm-backend")
         .map_err(|e| format!("Failed to create sidecar command: {e}"))?
-        .env("RMM_DATA_DIR", data_dir.to_string_lossy().to_string());
+        .env("RMM_DATA_DIR", data_dir.to_string_lossy().to_string())
+        .env(API_TOKEN_ENV, api_token);
 
     let (mut rx, child) = sidecar_command
         .spawn()
@@ -532,7 +584,11 @@ pub fn run() {
 
     builder
         .manage(Mutex::new(BackendProcess { child: None }))
-        .invoke_handler(tauri::generate_handler![detect_game_paths, launch_game])
+        .invoke_handler(tauri::generate_handler![
+            detect_game_paths,
+            launch_game,
+            get_api_token
+        ])
         .setup(|app| {
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
@@ -548,13 +604,26 @@ pub fn run() {
                     cleanup_orphan_backend(&data_dir);
                 }
                 let handle = app.handle().clone();
-                if let Err(e) = spawn_sidecar(app.handle()) {
-                    log::error!("Failed to spawn backend sidecar: {}", e);
+                let notify_startup_failed = move || {
                     // Delay emission so frontend listeners have time to register
                     std::thread::spawn(move || {
                         std::thread::sleep(std::time::Duration::from_secs(2));
                         let _ = handle.emit("backend-startup-failed", ());
                     });
+                };
+                match generate_api_token() {
+                    Ok(token) => {
+                        app.manage(ApiToken(token.clone()));
+                        if let Err(e) = spawn_sidecar(app.handle(), &token) {
+                            log::error!("Failed to spawn backend sidecar: {}", e);
+                            notify_startup_failed();
+                        }
+                    }
+                    Err(e) => {
+                        // Without a token the backend would refuse every call: do not launch it.
+                        log::error!("Failed to generate the API token: {}", e);
+                        notify_startup_failed();
+                    }
                 }
             }
 
@@ -569,4 +638,18 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::generate_api_token;
+
+    #[test]
+    fn generate_api_token_is_64_hex_and_unique() {
+        let a = generate_api_token().expect("token");
+        let b = generate_api_token().expect("token");
+        assert_eq!(a.len(), 64);
+        assert!(a.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)));
+        assert_ne!(a, b);
+    }
 }
