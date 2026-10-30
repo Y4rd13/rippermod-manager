@@ -2,11 +2,11 @@ import zipfile
 from datetime import UTC, datetime
 
 import pytest
-from sqlmodel import select
+from sqlmodel import select, text
 
 from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.models.install import InstalledMod
-from rippermod_manager.models.profile import Profile
+from rippermod_manager.models.profile import Profile, ProfileEntry
 from rippermod_manager.schemas.profile import (
     ProfileCreate,
     ProfileExport,
@@ -226,9 +226,12 @@ class TestLoadProfile:
         out = create_profile(game, ProfileCreate(name="WithVanishing"), session)
 
         # Delete the installed mod to simulate it being uninstalled
+        # Simulate an orphan left over from before foreign keys were enforced.
+        session.exec(text("PRAGMA foreign_keys=OFF"))
         mod = session.exec(select(InstalledMod).where(InstalledMod.name == "WillVanish")).first()
         session.delete(mod)
         session.commit()
+        session.exec(text("PRAGMA foreign_keys=ON"))
 
         profile = session.get(Profile, out.id)
         result = load_profile(profile, game, session)
@@ -392,9 +395,12 @@ class TestPreviewProfile:
         out = create_profile(game, ProfileCreate(name="WithGone"), session)
 
         # Remove the installed mod
+        # Simulate an orphan left over from before foreign keys were enforced.
+        session.exec(text("PRAGMA foreign_keys=OFF"))
         mod = session.exec(select(InstalledMod).where(InstalledMod.name == "GoneMod")).first()
         session.delete(mod)
         session.commit()
+        session.exec(text("PRAGMA foreign_keys=ON"))
 
         profile = session.get(Profile, out.id)
         diff = preview_profile(profile, game, session)
@@ -576,3 +582,75 @@ class TestActiveProfileAndDrift:
         active = [p for p in profiles if p.is_active]
         assert len(active) == 1
         assert active[0].is_drifted is False
+
+
+class TestLoadProfileOrdering:
+    """S7: every disable runs before any enable, and failures are reported per mod."""
+
+    @pytest.fixture
+    def four_mods_and_profile(self, session, game_and_dirs):
+        game, _game_dir, staging = game_and_dirs
+        mods = []
+        for i in range(1, 5):
+            archive = staging / f"Mod{i}.zip"
+            _make_zip(archive, {f"mods/m{i}.txt": b"x"})
+            install_mod(game, archive, session)
+            mods.append(
+                session.exec(select(InstalledMod).where(InstalledMod.name == f"Mod{i}")).one()
+            )
+        # Today: 1 and 3 off, 2 and 4 on. The profile wants the opposite.
+        for m in (mods[0], mods[2]):
+            m.disabled = True
+            session.add(m)
+        profile = Profile(game_id=game.id, name="Swap")
+        session.add(profile)
+        session.flush()
+        for m, enabled in zip(mods, (True, False, True, False), strict=True):
+            session.add(ProfileEntry(profile_id=profile.id, installed_mod_id=m.id, enabled=enabled))
+        session.commit()
+        return game, mods, profile
+
+    def _spy(self, monkeypatch, fail_name: str | None = None):
+        from rippermod_manager.services import profile_service
+        from rippermod_manager.services.vfs.primitives import VfsError
+
+        real = profile_service.toggle_mod
+        calls: list[tuple[str, bool]] = []
+
+        def spy(mod, game, session, **kwargs):
+            calls.append((mod.name, mod.disabled))
+            if mod.name == fail_name:
+                raise VfsError("boom")
+            return real(mod, game, session, **kwargs)
+
+        monkeypatch.setattr(profile_service, "toggle_mod", spy)
+        return calls
+
+    def test_load_profile_applies_disables_before_enables(
+        self, session, four_mods_and_profile, monkeypatch
+    ):
+        game, mods, profile = four_mods_and_profile
+        calls = self._spy(monkeypatch)
+
+        load_profile(profile, game, session)
+
+        assert [d for _, d in calls] == [False, False, True, True]
+        for m, enabled in zip(mods, (True, False, True, False), strict=True):
+            session.refresh(m)
+            assert m.disabled is not enabled
+
+    def test_load_profile_reports_failed_mods(self, session, four_mods_and_profile, monkeypatch):
+        game, mods, profile = four_mods_and_profile
+        self._spy(monkeypatch, fail_name="Mod3")
+
+        result = load_profile(profile, game, session)
+
+        assert result.failed_count == 1
+        assert result.failed_mods[0].name == "Mod3"
+        assert result.failed_mods[0].installed_mod_id == mods[2].id
+        assert result.failed_mods[0].error == "boom"
+        for m, enabled in zip(mods, (True, False, True, False), strict=True):
+            if m.name == "Mod3":
+                continue
+            session.refresh(m)
+            assert m.disabled is not enabled

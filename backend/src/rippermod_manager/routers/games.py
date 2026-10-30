@@ -2,7 +2,7 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete
 from sqlmodel import Session, select
 
@@ -17,6 +17,7 @@ from rippermod_manager.schemas.game import (
     PathValidation,
     PathValidationRequest,
 )
+from rippermod_manager.services.paths import is_unc_path
 from rippermod_manager.services.vfs.primitives import VfsError, same_volume
 
 router = APIRouter(prefix="/games", tags=["games"])
@@ -42,6 +43,26 @@ def _validate_mods_dir(install_path: str, mods_dir: str) -> None:
         )
 
 
+def _validate_install_path(install_path: str, domain_name: str) -> None:
+    """Raise 422 unless *install_path* is a local install of a registered game.
+
+    Every later file operation (deploy, adopt, uninstall) is rooted here, so a
+    network share or an arbitrary folder (e.g. ``C:\\Windows``) is refused.
+    """
+    game_info = GAME_REGISTRY.get(domain_name)
+    if not game_info:
+        raise HTTPException(422, f"Unsupported game domain: {domain_name}")
+    if is_unc_path(install_path):
+        raise HTTPException(422, "Network (UNC) paths are not allowed as the game install path.")
+    exe_path = Path(install_path) / game_info["exe_path"]
+    if not exe_path.is_file():
+        raise HTTPException(
+            422,
+            f"{os.path.basename(game_info['exe_path'])} not found under {install_path}. "
+            "Select the folder the game is installed in.",
+        )
+
+
 @router.get("/", response_model=list[GameOut])
 def list_games(session: Session = Depends(get_session)) -> list[Game]:
     games = session.exec(select(Game)).all()
@@ -51,26 +72,16 @@ def list_games(session: Session = Depends(get_session)) -> list[Game]:
 
 
 @router.post("/", response_model=GameOut, status_code=201)
-def create_game(
-    data: GameCreate, response: Response, session: Session = Depends(get_session)
-) -> Game:
+def create_game(data: GameCreate, session: Session = Depends(get_session)) -> Game:
+    _validate_install_path(data.install_path, data.domain_name)
     normalized_mods_dir = (data.mods_dir or "").strip() or None
     if normalized_mods_dir:
         _validate_mods_dir(data.install_path, normalized_mods_dir)
 
     existing = session.exec(select(Game).where(Game.name == data.name)).first()
     if existing:
-        existing.install_path = data.install_path
-        existing.domain_name = data.domain_name
-        existing.os = data.os
-        if data.mods_dir is not None:
-            existing.mods_dir = normalized_mods_dir
-        existing.updated_at = datetime.now(UTC)
-        session.commit()
-        session.refresh(existing)
-        _ = existing.mod_paths
-        response.status_code = 200
-        return existing
+        # Never repoint an existing game silently: the client updates it with PATCH.
+        raise HTTPException(409, f"Game '{data.name}' already exists")
 
     game = Game(
         name=data.name,
@@ -167,11 +178,20 @@ def update_game(name: str, data: GameUpdate, session: Session = Depends(get_sess
     if not game:
         raise HTTPException(404, f"Game '{name}' not found")
 
-    if "mods_dir" in data.model_fields_set:
-        new_mods_dir = (data.mods_dir or "").strip() or None
-        if new_mods_dir:
-            _validate_mods_dir(game.install_path, new_mods_dir)
-        game.mods_dir = new_mods_dir
+    fields = data.model_fields_set
+    install_path = game.install_path
+    if "install_path" in fields and data.install_path is not None:
+        install_path = data.install_path
+        _validate_install_path(install_path, game.domain_name)
+    mods_dir = game.mods_dir
+    if "mods_dir" in fields:
+        mods_dir = (data.mods_dir or "").strip() or None
+    if mods_dir and ("mods_dir" in fields or install_path != game.install_path):
+        _validate_mods_dir(install_path, mods_dir)
+
+    if fields & {"install_path", "mods_dir"}:
+        game.install_path = install_path
+        game.mods_dir = mods_dir
         game.updated_at = datetime.now(UTC)
         session.commit()
         session.refresh(game)
@@ -206,8 +226,20 @@ def delete_game(name: str, session: Session = Depends(get_session)) -> None:
 
     game_id = game.id
 
+    from rippermod_manager.models.activity import ActivityLog
+    from rippermod_manager.models.archive_index import ArchiveEntryIndex
+    from rippermod_manager.models.collection import InstalledCollection
+    from rippermod_manager.models.conflict import ConflictEvidence
+    from rippermod_manager.models.correlation import ModNexusCorrelation
     from rippermod_manager.models.download import DownloadJob
-    from rippermod_manager.models.install import InstalledMod, InstalledModFile
+    from rippermod_manager.models.install import (
+        ArchiveNexusLink,
+        DeployJournalEntry,
+        DisplacedFile,
+        InstalledMod,
+        InstalledModFile,
+    )
+    from rippermod_manager.models.load_order import LoadOrderPreference
     from rippermod_manager.models.mod import ModFile, ModGroup, ModGroupAlias
     from rippermod_manager.models.nexus import NexusDownload
     from rippermod_manager.models.profile import Profile, ProfileEntry
@@ -218,6 +250,11 @@ def delete_game(name: str, session: Session = Depends(get_session)) -> None:
         session.exec(delete(ProfileEntry).where(ProfileEntry.profile_id.in_(profile_ids)))  # type: ignore[union-attr]
     session.exec(delete(Profile).where(Profile.game_id == game_id))  # type: ignore[call-overload]
 
+    # Rows that reference installed_mods
+    session.exec(delete(LoadOrderPreference).where(LoadOrderPreference.game_id == game_id))  # type: ignore[call-overload]
+    session.exec(delete(ArchiveEntryIndex).where(ArchiveEntryIndex.game_id == game_id))  # type: ignore[call-overload]
+    session.exec(delete(ConflictEvidence).where(ConflictEvidence.game_id == game_id))  # type: ignore[call-overload]
+
     installed_ids = [
         m.id for m in session.exec(select(InstalledMod).where(InstalledMod.game_id == game_id))
     ]
@@ -227,14 +264,32 @@ def delete_game(name: str, session: Session = Depends(get_session)) -> None:
         )  # type: ignore[union-attr]
     session.exec(delete(InstalledMod).where(InstalledMod.game_id == game_id))  # type: ignore[call-overload]
 
+    # download_jobs and installed_mods reference installed_collections
+    session.exec(delete(DownloadJob).where(DownloadJob.game_id == game_id))  # type: ignore[call-overload]
+    session.exec(delete(InstalledCollection).where(InstalledCollection.game_id == game_id))  # type: ignore[call-overload]
+
     group_ids = [g.id for g in session.exec(select(ModGroup).where(ModGroup.game_id == game_id))]
+    download_ids = [
+        d.id for d in session.exec(select(NexusDownload).where(NexusDownload.game_id == game_id))
+    ]
+    if group_ids or download_ids:
+        session.exec(
+            delete(ModNexusCorrelation).where(
+                ModNexusCorrelation.mod_group_id.in_(group_ids)  # type: ignore[attr-defined]
+                | ModNexusCorrelation.nexus_download_id.in_(download_ids)  # type: ignore[attr-defined]
+            )
+        )
     if group_ids:
         session.exec(delete(ModGroupAlias).where(ModGroupAlias.mod_group_id.in_(group_ids)))  # type: ignore[union-attr]
         session.exec(delete(ModFile).where(ModFile.mod_group_id.in_(group_ids)))  # type: ignore[union-attr]
     session.exec(delete(ModGroup).where(ModGroup.game_id == game_id))  # type: ignore[call-overload]
 
     session.exec(delete(NexusDownload).where(NexusDownload.game_id == game_id))  # type: ignore[call-overload]
-    session.exec(delete(DownloadJob).where(DownloadJob.game_id == game_id))  # type: ignore[call-overload]
+
+    session.exec(delete(ArchiveNexusLink).where(ArchiveNexusLink.game_id == game_id))  # type: ignore[call-overload]
+    session.exec(delete(DeployJournalEntry).where(DeployJournalEntry.game_id == game_id))  # type: ignore[call-overload]
+    session.exec(delete(DisplacedFile).where(DisplacedFile.game_id == game_id))  # type: ignore[call-overload]
+    session.exec(delete(ActivityLog).where(ActivityLog.game_id == game_id))  # type: ignore[call-overload]
 
     session.delete(game)
     session.commit()

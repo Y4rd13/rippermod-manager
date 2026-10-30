@@ -1,14 +1,21 @@
+import os
+import secrets
 from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
-import rippermod_manager.models  # noqa: F401 — register all tables
-from rippermod_manager.database import get_session
-from rippermod_manager.main import app
-from rippermod_manager.models.game import Game, GameModPath
+# The API token must be in place before the app (and its cached token) loads.
+API_TOKEN = secrets.token_hex(32)
+os.environ["RMM_API_TOKEN"] = API_TOKEN
+
+import rippermod_manager.models  # noqa: E402, F401 — register all tables
+from rippermod_manager.database import _set_sqlite_pragma, get_session  # noqa: E402
+from rippermod_manager.main import app  # noqa: E402
+from rippermod_manager.models.game import Game, GameModPath  # noqa: E402
 
 
 @pytest.fixture
@@ -18,6 +25,7 @@ def engine():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    event.listen(eng, "connect", _set_sqlite_pragma)
     SQLModel.metadata.create_all(eng)
     return eng
 
@@ -29,8 +37,19 @@ def session(engine, monkeypatch):
         yield sess
 
 
+def make_cp_install(root) -> str:
+    """Create a fake Cyberpunk 2077 install (just its exe) at *root* and return its path.
+
+    ``POST /api/v1/games/`` refuses an install path without the game executable.
+    """
+    exe_dir = root / "bin" / "x64"
+    exe_dir.mkdir(parents=True, exist_ok=True)
+    (exe_dir / "Cyberpunk2077.exe").write_bytes(b"MZ")
+    return str(root)
+
+
 @pytest.fixture
-def client(engine, monkeypatch):
+def client(engine, monkeypatch, tmp_path_factory):
     monkeypatch.setattr("rippermod_manager.database.engine", engine)
 
     def _override_session() -> Generator[Session, None, None]:
@@ -38,7 +57,15 @@ def client(engine, monkeypatch):
             yield sess
 
     app.dependency_overrides[get_session] = _override_session
-    with TestClient(app, raise_server_exceptions=False) as tc:
+    # TestClient sends ``Host: testserver`` by default, which the Host allowlist refuses.
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1:8425",
+        headers={"X-RMM-Token": API_TOKEN},
+        raise_server_exceptions=False,
+    ) as tc:
+        # A valid install path for tests that create games through the API.
+        tc.cp_install = make_cp_install(tmp_path_factory.mktemp("cp-install"))  # type: ignore[attr-defined]
         yield tc
     app.dependency_overrides.clear()
 

@@ -126,6 +126,39 @@ def verify_link(src: Path, dst: Path) -> bool:
         return False
 
 
+_EXTENDED_PREFIXES = ("\\\\?\\UNC\\", "\\\\?\\", "\\??\\")
+
+
+def junction_points_into(link: Path, root: Path) -> bool:
+    """True iff *link* is a junction or symlink whose target is *root* or inside it.
+
+    A plain directory, a missing path, or a link to anywhere else returns False,
+    so callers only remove reparse points that really are this mod's own.
+    """
+    is_junction = getattr(os.path, "isjunction", None)
+    try:
+        if not (os.path.islink(link) or (is_junction is not None and is_junction(link))):
+            return False
+        target = os.readlink(link)
+    except OSError:
+        return False
+    for prefix in _EXTENDED_PREFIXES:
+        if target.startswith(prefix):
+            target = target[len(prefix) :]
+            if prefix.endswith("UNC\\"):
+                target = "\\\\" + target
+            break
+    target_path = Path(target)
+    if not target_path.is_absolute():
+        target_path = link.parent / target_path
+    try:
+        resolved_target = target_path.resolve(strict=False)
+        resolved_root = root.resolve(strict=False)
+    except OSError:
+        return False
+    return resolved_target == resolved_root or resolved_root in resolved_target.parents
+
+
 def _existing_ancestor(p: Path) -> Path:
     """Walk up until we find a path that exists. Used by same_volume for non-existent paths."""
     p = p.resolve(strict=False)

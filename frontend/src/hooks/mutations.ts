@@ -73,12 +73,23 @@ import type {
 export function useCreateGame() {
   const qc = useQueryClient();
   return useMutation<Game, Error, GameCreate>({
-    mutationFn: (data) => api.post("/api/v1/games/", data),
+    mutationFn: async (data) => {
+      try {
+        return await api.post<Game>("/api/v1/games/", data);
+      } catch (err) {
+        // 409: the game already exists. The backend no longer overwrites it on
+        // POST, so repoint it explicitly (same validation, via PATCH).
+        if (!(err instanceof ApiError && err.status === 409)) throw err;
+        const update: GameUpdate = { install_path: data.install_path };
+        if (data.mods_dir !== undefined) update.mods_dir = data.mods_dir;
+        return api.patch<Game>(`/api/v1/games/${encodeURIComponent(data.name)}`, update);
+      }
+    },
     onSuccess: (game) => {
       qc.invalidateQueries({ queryKey: ["games"] });
       toast.success("Game added", game.name);
     },
-    onError: () => toast.error("Failed to add game"),
+    onError: (err) => toast.error("Failed to add game", apiErrorDetail(err, err.message)),
   });
 }
 
@@ -193,7 +204,7 @@ export function useUninstallMod() {
   return useMutation<UninstallResult, Error, { gameName: string; modId: number }>({
     mutationFn: ({ gameName, modId }) =>
       api.delete(`/api/v1/games/${gameName}/install/installed/${modId}`),
-    onSuccess: (_, { gameName }) => {
+    onSuccess: (result, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
       qc.invalidateQueries({ queryKey: ["updates", gameName] });
@@ -201,7 +212,16 @@ export function useUninstallMod() {
       qc.invalidateQueries({ queryKey: ["archive-resource-details", gameName] });
       qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
       qc.invalidateQueries({ queryKey: ["health", gameName] });
-      toast.success("Mod uninstalled");
+      qc.invalidateQueries({ queryKey: ["deploy-status", gameName] });
+      const unlinked = result?.not_relinked ?? [];
+      if (unlinked.length > 0) {
+        toast.warning(
+          "Mod uninstalled, but some files were not handed to another mod",
+          `${unlinked.length} file${unlinked.length === 1 ? "" : "s"} left unlinked. Close the game and run Deploy.`,
+        );
+      } else {
+        toast.success("Mod uninstalled");
+      }
     },
     onError: () => toast.error("Failed to uninstall mod"),
   });
@@ -276,6 +296,15 @@ export function useToggleMod() {
         qc.setQueryData(["installed-mods", gameName], context.previous);
       }
       toast.error("Failed to toggle mod");
+    },
+    onSuccess: (result) => {
+      const unlinked = result?.not_relinked ?? [];
+      if (unlinked.length > 0) {
+        toast.warning(
+          result.disabled ? "Mod disabled, but some files were not relinked" : "Some files were not linked",
+          `${unlinked.length} file${unlinked.length === 1 ? "" : "s"} left unlinked. Close the game and run Deploy.`,
+        );
+      }
     },
     onSettled: (_data, _err, { gameName }) => {
       // Always refetch server truth after the mutation resolves, win or lose.

@@ -24,12 +24,14 @@ from rippermod_manager.schemas.profile import (
     ProfileExportMod,
     ProfileImportResult,
     ProfileLoadResult,
+    ProfileModFailure,
     ProfileModOut,
     ProfileOut,
     ProfileUpdate,
     SkippedMod,
 )
 from rippermod_manager.services.install_service import toggle_mod
+from rippermod_manager.services.vfs.primitives import VfsError
 
 
 def _check_drift(profile: Profile, game: Game, session: Session) -> bool:
@@ -265,11 +267,29 @@ def load_profile(profile: Profile, game: Game, session: Session) -> ProfileLoadR
                 )
             )
 
-    for mod in installed:
-        should_be_enabled = mod_state.get(mod.id, False)  # type: ignore[arg-type]
-        is_currently_enabled = not mod.disabled
-        if should_be_enabled != is_currently_enabled:
-            toggle_mod(mod, game, session, commit=False)
+    # Every disable runs before any enable (S7): a mod being turned on must find
+    # the paths it shares with a mod being turned off already released, whatever
+    # their ids. One mod failing does not stop the others; it is reported.
+    to_disable = [m for m in installed if not m.disabled and not mod_state.get(m.id, False)]  # type: ignore[arg-type]
+    to_enable = [m for m in installed if m.disabled and mod_state.get(m.id, False)]  # type: ignore[arg-type]
+    failed: list[ProfileModFailure] = []
+    for mod in [*to_disable, *to_enable]:
+        try:
+            result = toggle_mod(mod, game, session, commit=False)
+        except (VfsError, OSError) as exc:
+            session.refresh(mod)
+            failed.append(
+                ProfileModFailure(name=mod.name, installed_mod_id=mod.id, error=str(exc))  # type: ignore[arg-type]
+            )
+            continue
+        if result.failed > 0:
+            failed.append(
+                ProfileModFailure(
+                    name=mod.name,
+                    installed_mod_id=mod.id,  # type: ignore[arg-type]
+                    error=f"{result.failed} file operation(s) failed",
+                )
+            )
 
     profile.last_loaded_at = datetime.now(UTC)
     game.active_profile_id = profile.id
@@ -283,6 +303,8 @@ def load_profile(profile: Profile, game: Game, session: Session) -> ProfileLoadR
         profile=profile_to_out(profile, game, session),
         skipped_mods=skipped,
         skipped_count=len(skipped),
+        failed_mods=failed,
+        failed_count=len(failed),
     )
 
 

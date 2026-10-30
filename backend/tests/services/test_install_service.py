@@ -1,6 +1,8 @@
 import os
+import sys
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
@@ -22,6 +24,33 @@ def _make_zip(path, files: dict[str, bytes]) -> None:
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_STORED) as zf:
         for name, content in files.items():
             zf.writestr(name, content)
+
+
+def _make_7z(path, files: dict[str, bytes]) -> None:
+    """Create a .7z archive with the given filename -> content mapping."""
+    import py7zr
+
+    with py7zr.SevenZipFile(path, "w") as z:
+        for name, content in files.items():
+            z.writestr(content, name)
+
+
+def _make_symlink_chain_7z(path, build_dir) -> None:
+    """Build a .7z whose symlinks chain (``a -> b -> ../../escape_dir``) out of the target.
+
+    py7zr follows the chain while writing, so ``escape_dir`` must exist then.
+    """
+    import py7zr
+
+    src = build_dir / "work" / "src"
+    src.mkdir(parents=True)
+    (build_dir / "escape_dir").mkdir()  # what src/../../escape_dir points at
+    os.symlink("../../escape_dir", src / "b")
+    os.symlink("b", src / "a")
+    with py7zr.SevenZipFile(path, "w") as z:
+        z.write(src / "b", "b")
+        z.write(src / "a", "a")
+        z.writestr(b"pwned", "a/pwned.txt")
 
 
 @pytest.fixture
@@ -270,6 +299,65 @@ class TestInstallMod:
         ownership = get_file_ownership_map(session, game.id)
         assert ownership.get("shared.txt") is not None
         assert ownership["shared.txt"].name == "ModA"
+
+
+class TestSevenZipInstall:
+    def test_installs_plain_7z(self, session, game, game_dir, staging_dir):
+        archive = staging_dir / "Plain7z.7z"
+        _make_7z(archive, {"mods/plain.txt": b"plain", "archive/pc/mod/x.archive": b"arc"})
+
+        result = install_mod(game, archive, session)
+
+        assert result.files_extracted == 2
+        assert (game_dir / "mods" / "plain.txt").read_bytes() == b"plain"
+        assert (game_dir / "archive" / "pc" / "mod" / "x.archive").read_bytes() == b"arc"
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="needs POSIX symlinks to build")
+    def test_rejects_symlink_chain_7z(self, session, game, game_dir, staging_dir, tmp_path):
+        archive = staging_dir / "Evil.7z"
+        _make_symlink_chain_7z(archive, tmp_path / "build")
+
+        with pytest.raises(ValueError, match="symbolic link"):
+            install_mod(game, archive, session)
+
+        assert list(game_dir.rglob("pwned.txt")) == [] and list(game_dir.rglob("escape_dir")) == []
+        assert session.exec(select(InstalledMod)).all() == []
+
+
+class TestStreamingInstall:
+    def test_install_streams_without_loading_the_whole_file(
+        self, session, game, game_dir, staging_dir
+    ):
+        import tracemalloc
+
+        archive = staging_dir / "BigMod.zip"
+        _make_zip(archive, {"mods/big.bin": os.urandom(16 * 1024**2)})
+
+        tracemalloc.start()
+        try:
+            install_mod(game, archive, session)
+            peak = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+
+        assert (game_dir / "mods" / "big.bin").stat().st_size == 16 * 1024**2
+        assert peak < 8 * 1024**2
+
+    def test_install_rejects_high_compression_7z(
+        self, session, game, game_dir, staging_dir, monkeypatch
+    ):
+        from rippermod_manager.archive import guards
+
+        archive = staging_dir / "Bomb.7z"
+        _make_7z(archive, {"mods/zeros.bin": bytes(4 * 1024**2)})
+        monkeypatch.setattr(guards, "RATIO_MIN_BYTES", 1024**2)
+
+        with pytest.raises(ValueError, match="compression ratio"):
+            install_mod(game, archive, session)
+
+        assert not (staging_dir / "Bomb").exists()
+        assert not (game_dir / "mods" / "zeros.bin").exists()
+        assert session.exec(select(InstalledMod)).all() == []
 
 
 class TestUninstallMod:
@@ -781,3 +869,215 @@ class TestVfsHardlinks:
         toggle_mod(installed, game, session)  # disable → backup
         toggle_mod(installed, game, session)  # re-enable → no backup
         assert calls == ["pre-disable"]
+
+
+def _staged(game, mod_name_safe: str, rel: str):
+    from rippermod_manager.services.paths import get_mods_dir
+
+    return get_mods_dir(game) / mod_name_safe / rel
+
+
+class TestSharedPathWinner:
+    """S4: one linked owner per path; Overwrite makes the new mod win."""
+
+    @pytest.fixture
+    def two_mods(self, session, game, game_dir, staging_dir):
+        archive_a = staging_dir / "ModA.zip"
+        archive_b = staging_dir / "ModB.zip"
+        _make_zip(archive_a, {"shared.txt": b"from A", "only_a.txt": b"a"})
+        _make_zip(archive_b, {"shared.txt": b"from B"})
+        a = install_mod(game, archive_a, session)
+        return a, archive_b
+
+    def test_overwrite_links_the_new_mod(self, session, game, game_dir, two_mods):
+        from rippermod_manager.services.vfs.primitives import verify_link
+
+        _a, archive_b = two_mods
+        result = install_mod(game, archive_b, session, skip_conflicts=[])
+
+        assert (game_dir / "shared.txt").read_bytes() == b"from B"
+        assert verify_link(
+            _staged(game, result.installed_mod_name_safe, "shared.txt"), game_dir / "shared.txt"
+        )
+        assert result.deploy is not None and result.deploy.failed == 0
+
+    def test_skip_keeps_the_previous_mod(self, session, game, game_dir, two_mods):
+        _a, archive_b = two_mods
+        result = install_mod(game, archive_b, session, skip_conflicts=["shared.txt"])
+
+        assert (game_dir / "shared.txt").read_bytes() == b"from A"
+        assert result.deploy is not None and result.deploy.failed == 0
+
+    def test_uninstalling_the_winner_relinks_the_previous_owner(
+        self, session, game, game_dir, two_mods
+    ):
+        from rippermod_manager.services.vfs.primitives import verify_link
+
+        a, archive_b = two_mods
+        b = install_mod(game, archive_b, session, skip_conflicts=[])
+
+        uninstall_mod(session.get(InstalledMod, b.installed_mod_id), game, session)
+
+        assert (game_dir / "shared.txt").read_bytes() == b"from A"
+        assert verify_link(
+            _staged(game, a.installed_mod_name_safe, "shared.txt"), game_dir / "shared.txt"
+        )
+
+    def test_disabling_the_winner_relinks_and_enabling_takes_it_back(
+        self, session, game, game_dir, two_mods
+    ):
+        from rippermod_manager.services.vfs.primitives import verify_link
+
+        a, archive_b = two_mods
+        b = install_mod(game, archive_b, session, skip_conflicts=[])
+        mod_b = session.get(InstalledMod, b.installed_mod_id)
+
+        toggle_mod(mod_b, game, session)  # disable B
+        assert (game_dir / "shared.txt").read_bytes() == b"from A"
+        assert verify_link(
+            _staged(game, a.installed_mod_name_safe, "shared.txt"), game_dir / "shared.txt"
+        )
+
+        toggle_mod(session.get(InstalledMod, b.installed_mod_id), game, session)  # enable B
+        assert (game_dir / "shared.txt").read_bytes() == b"from B"
+        assert verify_link(
+            _staged(game, b.installed_mod_name_safe, "shared.txt"), game_dir / "shared.txt"
+        )
+        assert (game_dir / "only_a.txt").read_bytes() == b"a"
+
+
+skip_if_not_windows = pytest.mark.skipif(
+    sys.platform != "win32", reason="real NTFS junctions are Windows-only"
+)
+
+
+class TestSafeRemoval:
+    """S5: uninstall/disable only remove this mod's own links."""
+
+    @pytest.fixture
+    def vanilla_exe(self, game_dir):
+        exe = game_dir / "bin" / "x64" / "Cyberpunk2077.exe"
+        exe.parent.mkdir(parents=True)
+        exe.write_bytes(b"vanilla")
+        return exe
+
+    def test_uninstall_keeps_vanilla_exe_the_mod_also_shipped(
+        self, session, game, staging_dir, vanilla_exe
+    ):
+        archive = staging_dir / "ExeMod.zip"
+        _make_zip(archive, {"bin/x64/Cyberpunk2077.exe": b"modded", "bin/x64/extra.dll": b"x"})
+        installed = install_mod(game, archive, session)
+
+        result = uninstall_mod(session.get(InstalledMod, installed.installed_mod_id), game, session)
+
+        assert vanilla_exe.exists() and vanilla_exe.read_bytes() == b"vanilla"
+        assert result.foreign == 1
+
+    def test_disable_keeps_vanilla_exe_the_mod_also_shipped(
+        self, session, game, staging_dir, vanilla_exe
+    ):
+        archive = staging_dir / "ExeMod.zip"
+        _make_zip(archive, {"bin/x64/Cyberpunk2077.exe": b"modded", "bin/x64/extra.dll": b"x"})
+        installed = install_mod(game, archive, session)
+
+        result = toggle_mod(session.get(InstalledMod, installed.installed_mod_id), game, session)
+
+        assert result.disabled is True
+        assert vanilla_exe.exists() and vanilla_exe.read_bytes() == b"vanilla"
+        assert result.foreign == 1
+
+    def test_uninstall_keeps_foreign_redmod_dir(self, session, game, game_dir, staging_dir):
+        foreign = game_dir / "mods" / "MyMod"
+        foreign.mkdir(parents=True)  # e.g. a REDmod the user copied in by hand
+        archive = staging_dir / "RedMod.zip"
+        _make_zip(archive, {"mods/MyMod/info.json": b"{}"})
+        installed = install_mod(game, archive, session)
+
+        result = uninstall_mod(session.get(InstalledMod, installed.installed_mod_id), game, session)
+
+        assert foreign.is_dir()
+        assert result.foreign == 1
+
+    @skip_if_not_windows
+    def test_uninstall_removes_own_junction(self, session, game, game_dir, staging_dir):
+        archive = staging_dir / "OwnRedMod.zip"
+        _make_zip(archive, {"mods/OwnRedMod/info.json": b"{}"})
+        installed = install_mod(game, archive, session)
+        assert (game_dir / "mods" / "OwnRedMod").is_dir()
+
+        result = uninstall_mod(session.get(InstalledMod, installed.installed_mod_id), game, session)
+
+        assert not (game_dir / "mods" / "OwnRedMod").exists()
+        assert result.foreign == 0
+
+
+class TestDisplacedRestore:
+    def test_uninstall_occupant_restores_displaced(self, session, game, game_dir, staging_dir):
+        from rippermod_manager.models.install import DisplacedFile
+        from rippermod_manager.services.vfs import deploy_service
+
+        vanilla = game_dir / "r6" / "config" / "inputUserMappings.xml"
+        vanilla.parent.mkdir(parents=True)
+        vanilla.write_bytes(b"vanilla")
+        archive = staging_dir / "InputMod.zip"
+        _make_zip(archive, {"r6/config/inputUserMappings.xml": b"modded"})
+        installed = install_mod(game, archive, session)
+        assert vanilla.read_bytes() == b"vanilla"  # plain deploy refuses the foreign file
+
+        deploy_service.deploy(game, session, force=True)
+        assert vanilla.read_bytes() == b"modded"
+
+        result = uninstall_mod(session.get(InstalledMod, installed.installed_mod_id), game, session)
+
+        assert vanilla.read_bytes() == b"vanilla"
+        assert result.displaced_not_restored == []
+        assert session.exec(select(DisplacedFile)).all() == []
+
+    def test_disable_occupant_restores_displaced(self, session, game, game_dir, staging_dir):
+        from rippermod_manager.services.vfs import deploy_service
+
+        vanilla = game_dir / "r6" / "config" / "inputUserMappings.xml"
+        vanilla.parent.mkdir(parents=True)
+        vanilla.write_bytes(b"vanilla")
+        archive = staging_dir / "InputMod.zip"
+        _make_zip(archive, {"r6/config/inputUserMappings.xml": b"modded"})
+        installed = install_mod(game, archive, session)
+        deploy_service.deploy(game, session, force=True)
+
+        result = toggle_mod(session.get(InstalledMod, installed.installed_mod_id), game, session)
+
+        assert vanilla.read_bytes() == b"vanilla"
+        assert result.displaced_not_restored == []
+
+
+class TestRelinkReported:
+    """S4: when the next owner cannot be linked, the result says so."""
+
+    @pytest.fixture
+    def b_wins(self, session, game, staging_dir):
+        _make_zip(staging_dir / "ModA.zip", {"shared.txt": b"from A"})
+        _make_zip(staging_dir / "ModB.zip", {"shared.txt": b"from B"})
+        install_mod(game, staging_dir / "ModA.zip", session)
+        b = install_mod(game, staging_dir / "ModB.zip", session, skip_conflicts=[])
+        return session.get(InstalledMod, b.installed_mod_id)
+
+    def test_uninstall_reports_paths_left_unlinked(self, session, game, b_wins):
+        with patch(
+            "rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=True
+        ):
+            result = uninstall_mod(b_wins, game, session)
+
+        assert result.not_relinked == ["shared.txt"]
+
+    def test_disable_reports_paths_left_unlinked(self, session, game, b_wins):
+        with patch(
+            "rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=True
+        ):
+            result = toggle_mod(b_wins, game, session)
+
+        assert result.not_relinked == ["shared.txt"]
+        assert result.failed >= 1
+
+    def test_clean_uninstall_reports_nothing(self, session, game, b_wins):
+        result = uninstall_mod(b_wins, game, session)
+        assert result.not_relinked == []

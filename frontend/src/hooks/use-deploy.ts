@@ -11,8 +11,15 @@ export interface DriftReport {
 }
 
 export interface DeployOpResult {
-  op: { operation: string; src: string; dst: string; installed_mod_id: number | null };
-  status: "done" | "failed";
+  op: {
+    operation: string;
+    src: string;
+    dst: string;
+    installed_mod_id: number | null;
+    relative_path: string;
+  };
+  /** foreign: the destination was not this mod's link, so it was left in place. */
+  status: "done" | "failed" | "foreign";
   error: string;
 }
 
@@ -39,10 +46,18 @@ export interface DeployReport {
   total: number;
   done: number;
   failed: number;
+  foreign: number;
   skipped_existing: number;
   results: DeployOpResult[];
   preflight: PreflightReport | null;
   redmod: RedmodDeployResult | null;
+  /** Files a force deploy moved aside that could not go back: their path is occupied. */
+  displaced_not_restored: string[];
+}
+
+/** Game-dir paths a force deploy would move aside to `<mods_dir>/_displaced/`. */
+export interface ForcePreview {
+  paths: string[];
 }
 
 const deployPath = (gameName: string) =>
@@ -51,6 +66,8 @@ const undeployPath = (gameName: string) =>
   `/api/v1/games/${encodeURIComponent(gameName)}/install/undeploy`;
 const statusPath = (gameName: string) =>
   `/api/v1/games/${encodeURIComponent(gameName)}/install/deploy/status`;
+const forcePreviewPath = (gameName: string) =>
+  `/api/v1/games/${encodeURIComponent(gameName)}/install/deploy/force-preview`;
 const untrackedPath = (gameName: string) =>
   `/api/v1/games/${encodeURIComponent(gameName)}/install/untracked-files`;
 
@@ -65,9 +82,24 @@ export function useDeployStatus(gameName: string | null) {
 }
 
 /**
- * Trigger a deploy. Pass ``{ force: true }`` to overwrite foreign files
- * (copy-installed leftovers from other mod managers) that would otherwise
- * make the link op fail with "destination exists". Default: ``{ force: false }``.
+ * What a force deploy would move aside. Only fetched while ``enabled`` (the
+ * confirmation dialog is open) and never cached, so it reflects the disk now.
+ */
+export function useForcePreview(gameName: string | null, enabled: boolean) {
+  return useQuery<ForcePreview, Error>({
+    queryKey: ["force-preview", gameName],
+    queryFn: () => api.get<ForcePreview>(forcePreviewPath(gameName!)),
+    enabled: !!gameName && enabled,
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
+/**
+ * Trigger a deploy. Pass ``{ force: true }`` to move foreign files
+ * (copy-installed leftovers from other mod managers) aside to
+ * ``<mods_dir>/_displaced/`` instead of failing with "destination exists";
+ * undeploy puts them back. Default: ``{ force: false }``.
  */
 export function useDeploy(gameName: string | null) {
   const qc = useQueryClient();

@@ -419,3 +419,18 @@ class TestInstalledCollectionsTableCreation:
                 r[1] for r in conn.execute(text("PRAGMA index_list(installed_collections)")).all()
             }
         assert "uq_installed_collections_game_slug" in indexes
+
+
+class TestWinSeqMigration:
+    def test_migration_adds_win_seq(self):
+        from rippermod_manager.database import _migrate_missing_columns
+
+        eng = _make_old_engine_with_mod_files()
+        with patch("rippermod_manager.database.engine", eng):
+            _migrate_missing_columns()
+
+        with eng.connect() as conn:
+            rows = conn.execute(text("PRAGMA table_info(installed_mod_files)")).all()
+        col = next((r for r in rows if r[1] == "win_seq"), None)
+        assert col is not None, "win_seq column not created by migration"
+        assert col[4] == "0"
