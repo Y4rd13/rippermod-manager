@@ -6,12 +6,12 @@ from logging.handlers import RotatingFileHandler
 from typing import Any
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 import rippermod_manager.models  # noqa: F401 — register all models with SQLModel
 from rippermod_manager.config import settings
 from rippermod_manager.database import create_db_and_tables
 from rippermod_manager.routers import api_router
+from rippermod_manager.security import get_api_token, install_security
 from rippermod_manager.services.pid_file import remove_pid_file, write_pid_file
 
 
@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     _configure_logging()
+    get_api_token()  # resolve (and in dev, write) the token before serving
     create_db_and_tables()
     try:
         from sqlmodel import Session
@@ -54,6 +55,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         from rippermod_manager.database import engine
         from rippermod_manager.models.game import Game
         from rippermod_manager.services.vfs.deploy_service import replay_pending_journal
+        from rippermod_manager.services.vfs.ownership import backfill_win_seq
 
         with Session(engine) as _session:
             for _game in _session.exec(sql_select(Game)).all():
@@ -61,6 +63,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                     replay_pending_journal(_game, _session)
                 except Exception as exc:
                     logger.warning("Journal replay failed for game %s: %s", _game.id, exc)
+                try:
+                    # Rows from before per-path win order get the order the user sees today.
+                    backfilled = backfill_win_seq(_game, _session)
+                    if backfilled:
+                        logger.info("Backfilled win order for %d file(s)", backfilled)
+                except Exception as exc:
+                    logger.warning("win_seq backfill failed for game %s: %s", _game.id, exc)
     except Exception:
         logger.exception("Journal replay startup hook failed, continuing anyway")
     # Surface non-terminal Collections installs from a prior process as
@@ -111,12 +120,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+install_security(app)
 
 
 app.include_router(api_router)

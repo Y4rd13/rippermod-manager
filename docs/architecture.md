@@ -156,9 +156,10 @@ Served by `routers/install.py` under `/api/v1/games/{game_name}/install/`:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `.../deploy` | Deploy all enabled mods via NTFS hardlinks/junctions |
-| POST | `.../undeploy` | Remove all VFS links from the game dir |
-| GET | `.../deploy/status` | Drift report — missing/foreign links per mod |
+| POST | `.../deploy` | Deploy all enabled mods via NTFS hardlinks/junctions; one winner per path. `?force=true` moves foreign files aside to `<mods_dir>/_displaced/` |
+| POST | `.../undeploy` | Remove this app's own VFS links from the game dir and restore displaced files |
+| GET | `.../deploy/status` | Drift report — missing/foreign links per mod (paths another mod wins are not drift) |
+| GET | `.../deploy/force-preview` | Paths a force deploy would move aside (shown in the confirmation dialog) |
 | GET | `.../untracked-files` | Files in game dir not owned by any installed mod |
 
 ## Removed from both editions

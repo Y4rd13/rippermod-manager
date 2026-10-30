@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
 from rippermod_manager.database import get_session
@@ -10,6 +10,23 @@ from rippermod_manager.services.settings_helpers import set_setting
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 HIDDEN_KEYS = {"nexus_api_key"}
+
+# Only these keys may be written through PUT /settings. Anything that points the
+# backend at a filesystem path (e.g. ``save_backup_path``) has its own validated
+# endpoint instead.
+ALLOWED_SETTING_KEYS = frozenset({"nexus_api_key", "save_backup_enabled"})
+_ALLOWED_VALUES: dict[str, frozenset[str]] = {"save_backup_enabled": frozenset({"true", "false"})}
+
+
+def _validate_update(settings: dict[str, str]) -> None:
+    unknown = sorted(k for k in settings if k not in ALLOWED_SETTING_KEYS)
+    if unknown:
+        raise HTTPException(422, f"Unknown or read-only setting(s): {', '.join(unknown)}")
+    for key, allowed in _ALLOWED_VALUES.items():
+        if key in settings and settings[key] not in allowed:
+            raise HTTPException(
+                422, f"Invalid value for {key}: expected one of {', '.join(sorted(allowed))}"
+            )
 
 
 def _mask_secret(value: str) -> str:
@@ -49,6 +66,7 @@ def list_settings(session: Session = Depends(get_session)) -> list[SettingOut]:
 def update_settings(
     data: SettingsUpdate, session: Session = Depends(get_session)
 ) -> list[SettingOut]:
+    _validate_update(data.settings)
     results: list[SettingOut] = []
     for key, value in data.settings.items():
         if key in SECRET_KEYS:

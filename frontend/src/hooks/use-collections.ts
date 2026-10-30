@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useReducer } from "react";
 
 import { api } from "@/lib/api-client";
+import { parseSSE } from "@/lib/sse-parser";
 import type {
   CollectionActionResult,
   CollectionInstallRequest,
@@ -136,49 +137,65 @@ export function useCollectionStream(collectionId: number | null) {
     dispatch({ type: "reset", collectionId });
     if (collectionId == null) return;
 
-    // ``EventSource`` doesn't go through the api-client wrapper (no auth
-    // needed since backend listens on localhost), but we reuse the same
-    // base URL so VITE_API_URL overrides apply uniformly.
-    const url = `${api.baseUrl}${streamPath(collectionId)}`;
-    const es = new EventSource(url);
-
-    es.onmessage = (e) => {
-      try {
-        const payload = JSON.parse(e.data) as Partial<CollectionProgressEvent>;
-        if (payload && typeof payload.phase === "string") {
-          dispatch({
-            type: "event",
-            collectionId,
-            event: payload as CollectionProgressEvent,
-          });
-          if (payload.phase === "done" || payload.phase === "error") {
-            dispatch({ type: "close", collectionId });
-            es.close();
-          }
-        }
-        // Non-progress payloads (e.g. the initial status snapshot) are
-        // ignored here; the parallel ``useCollectionStatus`` query owns that.
-      } catch {
-        // Malformed event -- drop it; the polling fallback will eventually
-        // catch us up to the right state.
-      }
-    };
-
-    es.addEventListener("close", () => {
+    // ``EventSource`` cannot send headers and the API token must never go
+    // in a query string, so the stream goes through ``api.stream`` (fetch)
+    // and is parsed with ``parseSSE``.
+    const controller = new AbortController();
+    let finished = false;
+    const close = () => {
+      if (finished) return;
+      finished = true;
       dispatch({ type: "close", collectionId });
-      es.close();
-    });
-
-    es.onerror = () => {
-      // Browser auto-retries on network error; we only flip ``closed`` once
-      // the install hits a terminal phase to avoid showing a stuck UI.
-      if (es.readyState === EventSource.CLOSED) {
-        dispatch({ type: "close", collectionId });
-      }
+      controller.abort();
     };
+
+    (async () => {
+      try {
+        const response = await api.stream(
+          streamPath(collectionId),
+          undefined,
+          controller.signal,
+          "GET",
+        );
+        for await (const sse of parseSSE(response)) {
+          if (sse.event === "close") {
+            close();
+            return;
+          }
+          let payload: Partial<CollectionProgressEvent> | null = null;
+          try {
+            payload = JSON.parse(sse.data) as Partial<CollectionProgressEvent>;
+          } catch {
+            // Malformed event -- drop it; the status query catches us up.
+            continue;
+          }
+          if (payload && typeof payload.phase === "string") {
+            dispatch({
+              type: "event",
+              collectionId,
+              event: payload as CollectionProgressEvent,
+            });
+            if (payload.phase === "done" || payload.phase === "error") {
+              close();
+              return;
+            }
+          }
+          // Non-progress payloads (e.g. the initial status snapshot) are
+          // ignored here; the parallel ``useCollectionStatus`` query owns that.
+        }
+        // The backend ends the stream once the install settles.
+        close();
+      } catch (err) {
+        // Unmount or close() aborted the request: nothing to report.
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        // Any other failure ends the stream; ``useCollectionStatus`` is the fallback.
+        close();
+      }
+    })();
 
     return () => {
-      es.close();
+      finished = true;
+      controller.abort();
     };
   }, [collectionId]);
 

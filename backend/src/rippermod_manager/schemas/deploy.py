@@ -12,6 +12,7 @@ class DeployOp(BaseModel):
     src: str  # staging-relative for link/junction; ignored for unlink/rm_junction
     dst: str  # game-relative
     installed_mod_id: int | None = None
+    relative_path: str = ""  # game-relative path ("/"), filled by plan_deploy
 
 
 class DeployPlan(BaseModel):
@@ -25,7 +26,8 @@ class DeployPlan(BaseModel):
 
 class DeployOpResult(BaseModel):
     op: DeployOp
-    status: Literal["done", "failed"]
+    # foreign: the destination is not this mod's link, so it was left untouched (S5)
+    status: Literal["done", "failed", "foreign"]
     error: str = ""
 
 
@@ -61,10 +63,13 @@ class DeployReport(BaseModel):
     total: int
     done: int
     failed: int
+    foreign: int = 0  # removals skipped because the destination is not our link (S5)
     skipped_existing: int = 0  # already correctly linked, skipped by plan_deploy
     results: list[DeployOpResult] = Field(default_factory=list)
     preflight: PreflightReport | None = None  # populated when pre-flight refuses
     redmod: RedmodDeployResult | None = None  # set when redmod.exe was attempted
+    # Displaced files (S6) that could not go back because their path is occupied.
+    displaced_not_restored: list[str] = Field(default_factory=list)
 
     @property
     def is_clean(self) -> bool:
@@ -81,6 +86,12 @@ class DriftReport(BaseModel):
     @property
     def is_clean(self) -> bool:
         return self.missing == 0 and self.foreign == 0
+
+
+class ForcePreview(BaseModel):
+    """Paths a force deploy would move aside to ``<mods_dir>/_displaced/`` (S6)."""
+
+    paths: list[str] = Field(default_factory=list)
 
 
 class UntrackedFilesResponse(BaseModel):

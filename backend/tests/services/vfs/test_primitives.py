@@ -202,3 +202,52 @@ def test_junction_rejects_cmd_metacharacters(tmp_volume):
     evil_link = target / "evil&deploy"
     with pytest.raises(VfsError, match=r"cmd\.exe"):
         junction(inner, evil_link)
+
+
+class TestJunctionPointsInto:
+    def test_symlink_into_root_is_ours(self, tmp_path):
+        from rippermod_manager.services.vfs.primitives import junction_points_into
+
+        root = tmp_path / "staging" / "ModA" / "mods" / "MyMod"
+        root.mkdir(parents=True)
+        link = tmp_path / "game" / "mods" / "MyMod"
+        link.parent.mkdir(parents=True)
+        os.symlink(root, link, target_is_directory=True)
+
+        assert junction_points_into(link, root)
+        assert junction_points_into(link, tmp_path / "staging" / "ModA")
+
+    def test_symlink_elsewhere_is_foreign(self, tmp_path):
+        from rippermod_manager.services.vfs.primitives import junction_points_into
+
+        mine = tmp_path / "staging" / "ModA" / "mods" / "MyMod"
+        theirs = tmp_path / "staging" / "ModB" / "mods" / "MyMod"
+        mine.mkdir(parents=True)
+        theirs.mkdir(parents=True)
+        link = tmp_path / "game" / "MyMod"
+        link.parent.mkdir(parents=True)
+        os.symlink(theirs, link, target_is_directory=True)
+
+        assert not junction_points_into(link, mine)
+
+    def test_plain_directory_or_absent_path_is_not_ours(self, tmp_path):
+        from rippermod_manager.services.vfs.primitives import junction_points_into
+
+        root = tmp_path / "staging"
+        root.mkdir()
+        real_dir = tmp_path / "game" / "MyMod"
+        real_dir.mkdir(parents=True)
+
+        assert not junction_points_into(real_dir, root)
+        assert not junction_points_into(tmp_path / "missing", root)
+
+    def test_extended_length_prefix_is_stripped(self, tmp_path, monkeypatch):
+        from rippermod_manager.services.vfs import primitives
+
+        root = tmp_path / "staging"
+        root.mkdir()
+        link = tmp_path / "link"
+        os.symlink(root, link, target_is_directory=True)
+        monkeypatch.setattr(primitives.os, "readlink", lambda _p: "\\\\?\\" + str(root))
+
+        assert primitives.junction_points_into(link, root)

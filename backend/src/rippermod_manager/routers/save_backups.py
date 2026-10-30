@@ -8,9 +8,11 @@ from rippermod_manager.schemas.save_backup import (
     RestoreRequest,
     SaveBackupActionResult,
     SaveBackupOut,
+    SaveBackupPathUpdate,
     SaveBackupStatus,
 )
 from rippermod_manager.services import save_backup_service as svc
+from rippermod_manager.services.settings_helpers import set_setting
 from rippermod_manager.services.vfs.primitives import GameRunningError
 
 logger = logging.getLogger(__name__)
@@ -21,9 +23,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/save-backups", tags=["save-backups"])
 
 
-@router.get("/", response_model=SaveBackupStatus)
-def get_status(session: Session = Depends(get_session)) -> SaveBackupStatus:
-    """Toggle state, resolved save folder, and existing backups (most recent first)."""
+def _status(session: Session) -> SaveBackupStatus:
     save_dir = svc.resolve_save_dir(session)
     return SaveBackupStatus(
         enabled=svc.is_enabled(session),
@@ -31,6 +31,28 @@ def get_status(session: Session = Depends(get_session)) -> SaveBackupStatus:
         save_dir_exists=save_dir.is_dir(),
         backups=[SaveBackupOut(**b) for b in svc.list_backups(session)],
     )
+
+
+@router.get("/", response_model=SaveBackupStatus)
+def get_status(session: Session = Depends(get_session)) -> SaveBackupStatus:
+    """Toggle state, resolved save folder, and existing backups (most recent first)."""
+    return _status(session)
+
+
+@router.put("/path", response_model=SaveBackupStatus)
+def set_save_dir(
+    body: SaveBackupPathUpdate, session: Session = Depends(get_session)
+) -> SaveBackupStatus:
+    """Change the save folder override. ``""`` clears it (back to the default)."""
+    value = body.path.strip()
+    if value:
+        try:
+            value = str(svc.validate_save_dir(value))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    set_setting(session, svc.PATH_KEY, value)
+    session.commit()
+    return _status(session)
 
 
 @router.post("/backup-now", response_model=SaveBackupActionResult)

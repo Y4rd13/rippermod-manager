@@ -374,6 +374,29 @@ class TestInstallFomod:
         # staging_dir is reported in result
         assert result.installed_mod_name_safe == "TestFomod"
 
+    def test_fomod_install_does_not_read_whole_archive(self, setup, engine, monkeypatch):
+        from rippermod_manager.archive.handler import ArchiveHandler
+
+        game, game_dir, staging = setup
+        archive = staging / "StreamFomod.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("fomod/ModuleConfig.xml", "<config />")
+            zf.writestr("data.txt", "streamed")
+
+        def _no_bulk_read(self, entries):
+            raise AssertionError("read_all_files must not be used by install_fomod")
+
+        monkeypatch.setattr(ArchiveHandler, "read_all_files", _no_bulk_read)
+        resolved = [
+            ResolvedFile(archive_path="data.txt", game_relative_path="mods/data.txt", priority=0),
+        ]
+
+        with Session(engine) as s:
+            result = install_fomod(game, archive, s, resolved, "StreamFomod")
+
+        assert result.files_extracted == 1
+        assert (game_dir / "mods" / "data.txt").read_text() == "streamed"
+
     def test_staging_and_hardlink(self, setup, engine):
         """FOMOD-installed files live in staging; game-dir file is a hardlink to staging copy."""
         game, game_dir, staging = setup
