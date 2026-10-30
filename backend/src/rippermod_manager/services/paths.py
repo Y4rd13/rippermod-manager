@@ -10,6 +10,11 @@ from pathlib import Path
 from rippermod_manager.models.game import Game
 
 
+def is_unc_path(path: str) -> bool:
+    """True for a UNC / network path (``\\\\server\\share`` or ``//server/share``)."""
+    return path.startswith(("\\\\", "//"))
+
+
 def resolve_mods_dir(install_path: str | Path, mods_dir: str | None = None) -> Path:
     """Return the staging dir path, honoring an optional override.
 

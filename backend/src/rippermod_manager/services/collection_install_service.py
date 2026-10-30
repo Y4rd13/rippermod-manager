@@ -305,6 +305,16 @@ def uninstall_collection(collection_id: int, session: Session) -> dict[str, int]
             .values(installed_collection_id=None)
         )
 
+    # Download jobs keep the collection id after they finish (cleared only when
+    # the user clears the queue), so they would block the parent delete too.
+    from sqlalchemy import update as sa_update
+
+    session.exec(  # type: ignore[call-overload]
+        sa_update(DownloadJob)
+        .where(DownloadJob.installed_collection_id == collection_id)
+        .values(installed_collection_id=None)
+    )
+
     # Drop the parent row last so child rows have their FK pointing at a
     # live row while uninstall_mod runs.
     session.delete(collection)

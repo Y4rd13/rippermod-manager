@@ -16,9 +16,10 @@ import { type ComponentType, useState } from "react";
 
 import { useToggleMod } from "@/hooks/mutations";
 import { useHealth } from "@/hooks/queries";
-import { useDeploy } from "@/hooks/use-deploy";
+import { useDeploy, useForcePreview } from "@/hooks/use-deploy";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/utils";
 import type { HealthIssueOut } from "@/types/api";
 
@@ -33,6 +34,8 @@ type ActionCtx = {
   gameName: string;
   toggle: ReturnType<typeof useToggleMod>;
   deploy: ReturnType<typeof useDeploy>;
+  /** Opens the confirmation that lists what a force deploy would move aside. */
+  askForceDeploy: () => void;
 };
 
 const isRequirement = (i: HealthIssueOut) =>
@@ -53,7 +56,7 @@ function resolveAction(issue: HealthIssueOut, ctx: ActionCtx): RowAction | null 
         label: "Re-deploy",
         Icon: RefreshCw,
         loading: ctx.deploy.isPending,
-        run: () => ctx.deploy.mutate({ force: true }),
+        run: ctx.askForceDeploy,
       };
     default:
       return null; // misplaced_files, untracked_files: show the suggested-fix text
@@ -170,6 +173,48 @@ function RequirementGroup({
   );
 }
 
+/** Confirms a force deploy, listing the files it will move to `_displaced/`. */
+function ForceDeployDialog({
+  gameName,
+  deploy,
+  onClose,
+}: {
+  gameName: string;
+  deploy: ReturnType<typeof useDeploy>;
+  onClose: () => void;
+}) {
+  const preview = useForcePreview(gameName, true);
+  const paths = preview.data?.paths ?? [];
+  const message = preview.isLoading
+    ? "Checking which files would be moved aside..."
+    : preview.isError
+      ? "Couldn't list the files that would be moved aside."
+      : paths.length === 0
+        ? "No files will be moved aside."
+        : `${paths.length} file${paths.length === 1 ? "" : "s"} in the game folder will be moved aside to downloaded_mods/_displaced/ and restored on undeploy:`;
+  return (
+    <ConfirmDialog
+      title="Re-deploy over foreign files?"
+      message={message}
+      confirmLabel="Move aside and deploy"
+      variant="warning"
+      loading={deploy.isPending || preview.isLoading}
+      onConfirm={() => deploy.mutate({ force: true }, { onSettled: onClose })}
+      onCancel={onClose}
+    >
+      {paths.length > 0 && (
+        <ul className="mb-4 max-h-40 overflow-y-auto rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-[11px] text-text-secondary">
+          {paths.map((p) => (
+            <li key={p} className="truncate" title={p}>
+              {p}
+            </li>
+          ))}
+        </ul>
+      )}
+    </ConfirmDialog>
+  );
+}
+
 /**
  * Pre-launch check: requirement, install-integrity, misplaced-file and
  * foreign-file problems, each with a one-click fix where possible. Missing/
@@ -190,6 +235,7 @@ export function HealthWidget({
   const toggle = useToggleMod();
   const deploy = useDeploy(gameName);
   const [showMinor, setShowMinor] = useState(false);
+  const [confirmForce, setConfirmForce] = useState(false);
 
   if (isLoading) {
     return (
@@ -255,7 +301,7 @@ export function HealthWidget({
         Number(a.issues.some((i) => i.kind === "missing_requirement")),
     );
 
-  const ctx: ActionCtx = { gameName, toggle, deploy };
+  const ctx: ActionCtx = { gameName, toggle, deploy, askForceDeploy: () => setConfirmForce(true) };
   const hasAttention = reqGroups.length > 0 || otherAttention.length > 0;
 
   return (
@@ -318,6 +364,14 @@ export function HealthWidget({
             </div>
           )}
         </div>
+      )}
+
+      {confirmForce && (
+        <ForceDeployDialog
+          gameName={gameName}
+          deploy={deploy}
+          onClose={() => setConfirmForce(false)}
+        />
       )}
     </div>
   );

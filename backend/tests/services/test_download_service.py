@@ -94,9 +94,10 @@ class TestRunDownload:
         return str(tmp_path / "game")
 
     @pytest.fixture
-    def job_in_db(self, session):
+    def job_in_db(self, session, make_game):
+        game = make_game()
         job = DownloadJob(
-            game_id=1,
+            game_id=game.id,
             nexus_mod_id=100,
             nexus_file_id=200,
             file_name="test.zip",

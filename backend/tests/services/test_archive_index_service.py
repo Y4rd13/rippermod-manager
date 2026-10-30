@@ -197,6 +197,9 @@ class TestRemoveIndexForMod:
 
     def test_removes_only_target_mod(self, session, make_game):
         game = make_game()
+        session.add(InstalledMod(id=1, game_id=game.id, name="Mod 1"))
+        session.add(InstalledMod(id=2, game_id=game.id, name="Mod 2"))
+        session.flush()
 
         session.add(
             ArchiveEntryIndex(

@@ -15,6 +15,7 @@ from rippermod_manager.routers.deps import get_game_or_404
 from rippermod_manager.schemas.deploy import (
     DeployReport,
     DriftReport,
+    ForcePreview,
     UntrackedFilesResponse,
 )
 from rippermod_manager.schemas.install import (
@@ -609,6 +610,16 @@ def deploy_status(
     """Report deployment drift: linked, missing, and foreign files per mod."""
     game = get_game_or_404(game_name, session)
     return deploy_service.detect_drift(game, session)
+
+
+@router.get("/deploy/force-preview", response_model=ForcePreview)
+def force_preview(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> ForcePreview:
+    """List the game-dir paths a force deploy would move aside, so the UI can confirm."""
+    game = get_game_or_404(game_name, session)
+    return ForcePreview(paths=deploy_service.preview_displacements(game, session))
 
 
 @router.get("/untracked-files", response_model=UntrackedFilesResponse)

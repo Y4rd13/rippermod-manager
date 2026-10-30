@@ -223,7 +223,7 @@ class TestStartInstallFiltering:
 
         client.post(
             "/api/v1/games/",
-            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": "/cp"},
+            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         return session.exec(select(Game)).one()
 
@@ -329,7 +329,7 @@ class TestStartInstallGuard:
 
         client.post(
             "/api/v1/games/",
-            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": "/cp"},
+            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         return session.exec(select(Game)).one()
 
@@ -403,7 +403,7 @@ class TestRunInstallHappyPath:
 
         client.post(
             "/api/v1/games/",
-            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": "/cp"},
+            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         return session.exec(select(Game)).one()
 
@@ -576,7 +576,7 @@ class TestInstallArchiveRouting:
 
         client.post(
             "/api/v1/games/",
-            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": "/cp"},
+            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         return session.exec(select(Game)).one()
 
@@ -777,7 +777,7 @@ class TestFreeTierOrchestratorFlow:
 
         client.post(
             "/api/v1/games/",
-            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": "/cp"},
+            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         return session.exec(select(Game)).one()
 
@@ -1071,7 +1071,7 @@ class TestRecoverStaleInstalls:
 
         client.post(
             "/api/v1/games/",
-            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": "/cp"},
+            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         return session.exec(select(Game)).one()
 
@@ -1152,7 +1152,7 @@ class TestCheckUpdates:
 
         client.post(
             "/api/v1/games/",
-            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": "/cp"},
+            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         return session.exec(select(Game)).one()
 
@@ -1299,7 +1299,7 @@ class TestForceReinstall:
 
         client.post(
             "/api/v1/games/",
-            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": "/cp"},
+            json={"name": "CP", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         return session.exec(select(Game)).one()
 

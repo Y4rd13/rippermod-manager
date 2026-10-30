@@ -11,7 +11,7 @@ class TestListModGroups:
     def test_empty(self, client):
         client.post(
             "/api/v1/games/",
-            json={"name": "G", "domain_name": "g", "install_path": "/g"},
+            json={"name": "G", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         r = client.get("/api/v1/games/G/mods/")
         assert r.status_code == 200
@@ -52,7 +52,7 @@ class TestScanMods:
     def test_scan_mock(self, client):
         client.post(
             "/api/v1/games/",
-            json={"name": "G", "domain_name": "g", "install_path": "/g"},
+            json={"name": "G", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         with patch(
             "rippermod_manager.scanner.service.scan_game_mods",
@@ -71,7 +71,7 @@ class TestCorrelateMods:
     def test_correlate_mock(self, client):
         client.post(
             "/api/v1/games/",
-            json={"name": "G", "domain_name": "g", "install_path": "/g"},
+            json={"name": "G", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         with patch(
             "rippermod_manager.matching.correlator.correlate_game_mods",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -12,6 +13,7 @@ from sqlmodel import Session, select
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import (  # noqa: F401 used in plan_deploy
     DeployJournalEntry,
+    DisplacedFile,
     InstalledMod,
     InstalledModFile,
 )
@@ -26,12 +28,14 @@ from rippermod_manager.schemas.deploy import (
 )
 from rippermod_manager.services.paths import get_mods_dir
 from rippermod_manager.services.save_backup_service import maybe_backup_before
+from rippermod_manager.services.vfs.ownership import Owner, owners_by_key, path_key, winner_map
 from rippermod_manager.services.vfs.primitives import (
     AlreadyExistsError,
     VfsError,
     hardlink,
     is_game_running,
     junction,
+    junction_points_into,
     probe_hardlink_support,
     remove_junction,
     same_volume,
@@ -43,6 +47,9 @@ logger = logging.getLogger(__name__)
 
 GAME_EXE = "Cyberpunk2077.exe"
 REDMOD_REL_PATH = Path("tools") / "redmod" / "bin" / "redMod.exe"
+# Foreign files that force deploy moves aside live under <mods_dir>/_displaced/:
+# same volume as staging, so the move is an atomic rename.
+DISPLACED_DIRNAME = "_displaced"
 REDMOD_TIMEOUT_S = 600  # generous: heavy REDmod sets can take several minutes to compile
 
 
@@ -86,83 +93,177 @@ def pre_flight_check(game: Game) -> PreflightReport:
     return report
 
 
-def plan_deploy(game: Game, session: Session) -> tuple[DeployPlan, int]:
-    """Build a DeployPlan from the installed-mod manifest for a game.
+def _redmod_root(relative_path: str) -> str | None:
+    """``<name>`` for a file under ``mods/<name>/...``, else None."""
+    parts = relative_path.replace("\\", "/").split("/")
+    if len(parts) >= 2 and parts[0] == "mods":
+        return parts[1]
+    return None
 
-    Enumerates all enabled InstalledMod rows and their InstalledModFile rows,
-    producing one DeployOp per file (link) or per REDmod subtree root (junction).
-    Junction ops are deduplicated: only one junction per mods/<name> directory.
 
-    Hardlink and junction ops are skipped when the destination already matches
-    the staged source (idempotent re-deploy). Returns the plan plus the count of
-    skipped ops so callers can surface "already up to date" without false drift.
+def plan_deploy(
+    game: Game, session: Session, *, paths: set[str] | None = None
+) -> tuple[DeployPlan, int]:
+    """Build a DeployPlan that links the winner of every destination path (S4).
+
+    For each ownership key (``ownership.path_key``) only the enabled owner with
+    the highest ``win_seq`` is linked: one ``link`` per hardlinked file, one
+    ``junction`` per REDmod ``mods/<name>`` root. When the destination is
+    currently the hardlink of another owner of the same key, an ``unlink``
+    (carrying that owner's staged source, so execution can verify it) runs
+    before the ``link``. ``paths`` restricts the plan to those keys.
+
+    Ops whose destination already matches the winner's staged source are
+    skipped (idempotent re-deploy); the count of skipped ops is returned
+    alongside the plan so callers can surface "already up to date".
     """
     install = Path(game.install_path)
     staging_root = get_mods_dir(game)
 
-    mods = session.exec(
-        select(InstalledMod).where(
-            InstalledMod.game_id == game.id,
-            InstalledMod.disabled.is_(False),  # type: ignore[union-attr]
-        )
-    ).all()
-
     plan = DeployPlan(game_id=game.id)
-    junction_dirs_seen: set[str] = set()
     skipped_existing = 0
+    owners = owners_by_key(session, game.id)  # type: ignore[arg-type]
 
-    for mod in mods:
-        _ = mod.files  # touch relationship to load files
-        for f in mod.files:
-            src = staging_root / mod.staging_dir / f.source_path.replace("\\", "/")
-            dst = install / f.relative_path.replace("\\", "/")
-            if f.link_kind == "junction":
-                parts = f.relative_path.replace("\\", "/").split("/")
-                if len(parts) >= 2 and parts[0] == "mods":
-                    redmod_dst = install / "mods" / parts[1]
-                    redmod_src = staging_root / mod.staging_dir / "mods" / parts[1]
-                    key = str(redmod_dst)
-                    if key in junction_dirs_seen:
-                        continue
-                    junction_dirs_seen.add(key)
-                    # Idempotency: junction already in place (any reparse-point dir).
-                    # We don't read reparse-point targets; presence is treated as ours.
-                    if redmod_dst.is_dir():
-                        skipped_existing += 1
-                        continue
-                    plan.ops.append(
-                        DeployOp(
-                            operation="junction",
-                            src=str(redmod_src),
-                            dst=str(redmod_dst),
-                            installed_mod_id=mod.id,
-                        )
+    for key, (mod, f) in winner_map(session, game.id).items():  # type: ignore[arg-type]
+        if paths is not None and key not in paths:
+            continue
+        redmod_name = _redmod_root(f.relative_path) if f.link_kind == "junction" else None
+        if redmod_name is not None:
+            redmod_dst = install / "mods" / redmod_name
+            redmod_src = staging_root / mod.staging_dir / "mods" / redmod_name
+            # Hand the junction over when it points into another owner's staging
+            # (Overwrite between two REDmods with the same mods/<name>).
+            previous = next(
+                (
+                    (other.id, staging_root / other.staging_dir / "mods" / redmod_name)
+                    for other, other_f in owners.get(key, [])
+                    if other.id != mod.id
+                    and other_f.link_kind == "junction"
+                    and junction_points_into(
+                        redmod_dst, staging_root / other.staging_dir / "mods" / redmod_name
                     )
-                    continue
-            # Idempotency: hardlink already points to the staged source.
-            if verify_link(src, dst):
+                ),
+                None,
+            )
+            if previous is not None:
+                previous_id, previous_root = previous
+                plan.ops.append(
+                    DeployOp(
+                        operation="rm_junction",
+                        src=str(previous_root),
+                        dst=str(redmod_dst),
+                        installed_mod_id=previous_id,
+                        relative_path=f"mods/{redmod_name}",
+                    )
+                )
+            elif redmod_dst.is_dir():
+                # Idempotency: the winner's junction, or a folder no owner claims,
+                # is already there; presence is treated as ours, as before.
                 skipped_existing += 1
                 continue
             plan.ops.append(
                 DeployOp(
-                    operation="link",
-                    src=str(src),
-                    dst=str(dst),
+                    operation="junction",
+                    src=str(redmod_src),
+                    dst=str(redmod_dst),
                     installed_mod_id=mod.id,
+                    relative_path=f"mods/{redmod_name}",
                 )
             )
+            continue
+
+        rel = f.relative_path.replace("\\", "/")
+        src = staging_root / mod.staging_dir / f.source_path.replace("\\", "/")
+        dst = install / rel
+        # Idempotency: hardlink already points to the winner's staged source.
+        if verify_link(src, dst):
+            skipped_existing += 1
+            continue
+        # Hand the path over: drop the link of the owner that held it before.
+        for other_mod, other_f in owners.get(key, []):
+            if other_mod.id == mod.id or other_f.link_kind == "junction":
+                continue
+            other_src = (
+                staging_root / other_mod.staging_dir / other_f.source_path.replace("\\", "/")
+            )
+            if verify_link(other_src, dst):
+                plan.ops.append(
+                    DeployOp(
+                        operation="unlink",
+                        src=str(other_src),
+                        dst=str(dst),
+                        installed_mod_id=other_mod.id,
+                        relative_path=rel,
+                    )
+                )
+                break
+        plan.ops.append(
+            DeployOp(
+                operation="link",
+                src=str(src),
+                dst=str(dst),
+                installed_mod_id=mod.id,
+                relative_path=rel,
+            )
+        )
 
     return plan, skipped_existing
 
 
-def execute_plan(plan: DeployPlan, session: Session, *, force: bool = False) -> DeployReport:
+def relink_paths(game: Game, session: Session, paths: set[str]) -> DeployReport:
+    """Link the current winner of each key in *paths* (no redMod compile).
+
+    Used right after a mod gives paths up (uninstall, disable) so the next
+    owner takes them over in the same operation, and on enable.
+    """
+    if not paths:
+        return DeployReport(total=0, done=0, failed=0)
+    pre = pre_flight_check(game)
+    if not pre.ok:
+        return DeployReport(total=0, done=0, failed=0, results=[], preflight=pre)
+    plan, skipped = plan_deploy(game, session, paths=paths)
+    report = execute_plan(plan, session)
+    report.skipped_existing = skipped
+    return report
+
+
+def paths_not_relinked(
+    game: Game, session: Session, paths: set[str], report: DeployReport
+) -> list[str]:
+    """Relative paths ``relink_paths`` should have linked but did not.
+
+    When pre-flight refused (e.g. the game is running) that is every path the
+    plan would link; otherwise it is the link/junction ops that failed.
+    """
+    if report.preflight is not None and not report.preflight.ok:
+        plan, _skipped = plan_deploy(game, session, paths=paths)
+        pending = {op.relative_path for op in plan.ops if op.operation in ("link", "junction")}
+    else:
+        pending = {
+            r.op.relative_path
+            for r in report.results
+            if r.status == "failed" and r.op.operation in ("link", "junction")
+        }
+    return sorted(pending)
+
+
+def execute_plan(
+    plan: DeployPlan,
+    session: Session,
+    *,
+    force: bool = False,
+    displaced_root: Path | None = None,
+) -> DeployReport:
     """Run each op in `plan`, persisting a write-ahead journal entry before each
     filesystem mutation so crash recovery can roll back partial state on next start.
 
     When ``force=True`` and a link/junction op hits ``AlreadyExistsError`` (a foreign
-    file is squatting on the destination), the destination is removed and the op is
-    retried once. Without ``force``, such conflicts surface as failures so the user
-    can decide whether to overwrite.
+    file is squatting on the destination), the foreign entry is moved to
+    ``displaced_root / op.relative_path`` (journaled as ``displace`` and recorded
+    in ``displaced_files``) and the op is retried once (S6). Nothing is ever
+    deleted: without ``displaced_root``, or when a backup already sits at that
+    path, the op fails and the foreign entry stays. Without ``force``, such
+    conflicts surface as failures so the user can decide whether to overwrite.
     """
     results: list[DeployOpResult] = []
 
@@ -182,12 +283,17 @@ def execute_plan(plan: DeployPlan, session: Session, *, force: bool = False) -> 
         try:
             if op.operation == "link":
                 hardlink(Path(op.src), Path(op.dst))
-            elif op.operation == "unlink":
-                unlink(Path(op.dst))
+            elif op.operation in ("unlink", "rm_junction"):
+                if not _remove_own_link(op):
+                    # S5: not this mod's link (vanilla file, another tool's copy,
+                    # another mod's junction). Leave it and keep going.
+                    entry.status = "done"
+                    entry.error = "left in place: destination is not this mod's link"
+                    session.add(entry)
+                    results.append(DeployOpResult(op=op, status="foreign"))
+                    continue
             elif op.operation == "junction":
                 junction(Path(op.src), Path(op.dst))
-            elif op.operation == "rm_junction":
-                remove_junction(Path(op.dst))
             else:
                 raise VfsError(f"unknown op: {op.operation}")
             entry.status = "done"
@@ -195,12 +301,15 @@ def execute_plan(plan: DeployPlan, session: Session, *, force: bool = False) -> 
         except AlreadyExistsError as exc:
             if force and op.operation in ("link", "junction"):
                 try:
-                    if op.operation == "link":
-                        unlink(Path(op.dst))
-                        hardlink(Path(op.src), Path(op.dst))
-                    else:
-                        remove_junction(Path(op.dst))
-                        junction(Path(op.src), Path(op.dst))
+                    row = _displace(op, plan.game_id, session, displaced_root)
+                    try:
+                        if op.operation == "link":
+                            hardlink(Path(op.src), Path(op.dst))
+                        else:
+                            junction(Path(op.src), Path(op.dst))
+                    except (VfsError, OSError):
+                        _undo_displace(row, Path(op.dst), session)
+                        raise
                     entry.status = "done"
                     results.append(DeployOpResult(op=op, status="done"))
                 except (VfsError, OSError) as retry_exc:
@@ -222,7 +331,205 @@ def execute_plan(plan: DeployPlan, session: Session, *, force: bool = False) -> 
     session.commit()
     done = sum(1 for r in results if r.status == "done")
     failed = sum(1 for r in results if r.status == "failed")
-    return DeployReport(total=len(results), done=done, failed=failed, results=results)
+    foreign = sum(1 for r in results if r.status == "foreign")
+    return DeployReport(
+        total=len(results), done=done, failed=failed, foreign=foreign, results=results
+    )
+
+
+def _remove_own_link(op: DeployOp) -> bool:
+    """Remove ``op.dst`` only if it is the link of ``op.src`` (S5).
+
+    Returns True when the destination is gone afterwards (removed, or already
+    absent), False when it is someone else's and was left untouched. An
+    ``unlink`` needs ``op.dst`` to be a hardlink of ``op.src``; an
+    ``rm_junction`` needs it to be a junction pointing inside ``op.src``.
+    """
+    dst = Path(op.dst)
+    if not dst.exists() and not dst.is_symlink():
+        return True
+    if not op.src:
+        return False
+    if op.operation == "unlink":
+        if not verify_link(Path(op.src), dst):
+            return False
+        unlink(dst)
+        return True
+    if not junction_points_into(dst, Path(op.src)):
+        return False
+    remove_junction(dst)
+    return True
+
+
+def _displace(
+    op: DeployOp, game_id: int, session: Session, displaced_root: Path | None
+) -> DisplacedFile:
+    """Move the foreign entry at ``op.dst`` to the displaced area (S6).
+
+    Write-ahead: the ``displace`` journal entry and the ``displaced_files`` row
+    are committed before the move, so a crash in between is rolled forward on
+    startup. Raises ``VfsError`` (nothing moved) when there is nowhere safe to
+    put it.
+    """
+    if displaced_root is None:
+        raise VfsError(f"destination exists and no displaced area was given: {op.dst}")
+    if not op.relative_path:
+        raise VfsError(f"cannot displace {op.dst}: the op has no relative path")
+    backup = displaced_root / op.relative_path
+    if backup.exists() or backup.is_symlink():
+        raise VfsError(f"a displaced copy already exists at {backup}")
+    entry = DeployJournalEntry(
+        game_id=game_id, operation="displace", src=op.dst, dst=str(backup), status="pending"
+    )
+    row = DisplacedFile(
+        game_id=game_id,
+        relative_path=op.relative_path,
+        backup_path=str(backup),
+        occupant_mod_id=op.installed_mod_id,
+    )
+    session.add(entry)
+    session.add(row)
+    session.commit()
+    try:
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(op.dst, backup)
+    except OSError as exc:
+        entry.status = "failed"
+        entry.error = str(exc)
+        session.add(entry)
+        session.delete(row)
+        session.commit()
+        raise VfsError(f"could not move {op.dst} aside: {exc}") from exc
+    entry.status = "done"
+    session.add(entry)
+    session.commit()
+    return row
+
+
+def _undo_displace(row: DisplacedFile, original: Path, session: Session) -> None:
+    """Put a just-displaced entry back after its replacement link failed."""
+    try:
+        if not original.exists() and not original.is_symlink():
+            os.replace(row.backup_path, original)
+            session.delete(row)
+            session.commit()
+    except OSError:
+        logger.exception("Could not put %s back after a failed link", original)
+
+
+def displaced_root_for(game: Game) -> Path:
+    return get_mods_dir(game) / DISPLACED_DIRNAME
+
+
+def restore_displaced(
+    game: Game, session: Session, *, occupant_mod_id: int | None = None
+) -> list[str]:
+    """Put displaced files back where they were (S6).
+
+    Restores every row of the game, or only those whose occupant is
+    ``occupant_mod_id``. A row whose original path is occupied again is left
+    alone (file in ``_displaced``, row kept) and its relative path returned.
+    Call it after the occupant's own links are gone.
+    """
+    query = select(DisplacedFile).where(DisplacedFile.game_id == game.id)
+    if occupant_mod_id is not None:
+        query = query.where(DisplacedFile.occupant_mod_id == occupant_mod_id)
+    install = Path(game.install_path)
+    not_restored: list[str] = []
+    for row in session.exec(query).all():
+        original = install / row.relative_path
+        backup = Path(row.backup_path)
+        if not backup.exists() and not backup.is_symlink():
+            logger.warning("Displaced backup vanished, dropping its record: %s", backup)
+            session.delete(row)
+            continue
+        if original.exists() or original.is_symlink():
+            not_restored.append(row.relative_path)
+            continue
+        try:
+            original.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(backup, original)
+        except OSError as exc:
+            logger.warning("Could not restore displaced %s: %s", row.relative_path, exc)
+            not_restored.append(row.relative_path)
+            continue
+        session.delete(row)
+    session.commit()
+    return not_restored
+
+
+def plan_remove_mod_links(
+    game: Game,
+    mod: InstalledMod,
+    session: Session,
+    owners: dict[str, list[Owner]] | None = None,
+) -> DeployPlan:
+    """Plan the removal of *mod*'s own game-dir links.
+
+    One ``unlink`` per hardlinked file and one ``rm_junction`` per REDmod
+    root, each carrying the mod's staged source so ``execute_plan`` can check
+    the destination really is this mod's link. Paths currently linked to
+    another owner of the same key are left out: they are that owner's.
+    Pass *owners* when planning several mods against one unchanged DB state.
+    """
+    install = Path(game.install_path)
+    staging_root = get_mods_dir(game)
+    if owners is None:
+        owners = owners_by_key(session, game.id)  # type: ignore[arg-type]
+    plan = DeployPlan(game_id=game.id)  # type: ignore[arg-type]
+    seen_roots: set[str] = set()
+    _ = mod.files
+    for f in mod.files:
+        key = path_key(f.relative_path, f.link_kind)
+        others = [(m, of) for m, of in owners.get(key, []) if m.id != mod.id]
+        redmod_name = _redmod_root(f.relative_path) if f.link_kind == "junction" else None
+        if redmod_name is not None:
+            if key in seen_roots:
+                continue
+            seen_roots.add(key)
+            dst = install / "mods" / redmod_name
+            src = staging_root / mod.staging_dir / "mods" / redmod_name
+            if any(
+                junction_points_into(dst, staging_root / m.staging_dir / "mods" / redmod_name)
+                for m, _of in others
+            ):
+                continue
+            plan.ops.append(
+                DeployOp(
+                    operation="rm_junction",
+                    src=str(src),
+                    dst=str(dst),
+                    installed_mod_id=mod.id,
+                    relative_path=f"mods/{redmod_name}",
+                )
+            )
+            continue
+        rel = f.relative_path.replace("\\", "/")
+        dst = install / rel
+        src = staging_root / mod.staging_dir / f.source_path.replace("\\", "/")
+        if any(
+            verify_link(staging_root / m.staging_dir / of.source_path.replace("\\", "/"), dst)
+            for m, of in others
+            if of.link_kind != "junction"
+        ):
+            continue
+        plan.ops.append(
+            DeployOp(
+                operation="unlink",
+                src=str(src),
+                dst=str(dst),
+                installed_mod_id=mod.id,
+                relative_path=rel,
+            )
+        )
+    return plan
+
+
+def _is_own_link(op: DeployOp) -> bool:
+    """True iff the destination of a removal op is currently the mod's own link."""
+    if op.operation == "rm_junction":
+        return junction_points_into(Path(op.dst), Path(op.src))
+    return verify_link(Path(op.src), Path(op.dst))
 
 
 def undeploy(game: Game, session: Session) -> DeployReport:
@@ -243,48 +550,23 @@ def undeploy(game: Game, session: Session) -> DeployReport:
 
     maybe_backup_before(game, session, reason="pre-undeploy")
 
-    install = Path(game.install_path)
-    mods = session.exec(
-        select(InstalledMod).where(
-            InstalledMod.game_id == game.id,
-            InstalledMod.deployed.is_(True),  # type: ignore[union-attr]
-        )
-    ).all()
+    # Every mod, not only deployed=True: a deploy with one failed op never sets
+    # the flag, yet the mods it did link have live links in the game dir. For an
+    # unflagged mod only the destinations that really are its links are removed.
+    mods = session.exec(select(InstalledMod).where(InstalledMod.game_id == game.id)).all()
 
+    owners = owners_by_key(session, game.id)  # type: ignore[arg-type]
     ops: list[DeployOp] = []
-    junction_dirs_seen: set[str] = set()
     for mod in mods:
-        _ = mod.files  # touch relationship to load files
-        for f in mod.files:
-            dst = install / f.relative_path.replace("\\", "/")
-            if f.link_kind == "junction":
-                parts = f.relative_path.replace("\\", "/").split("/")
-                if len(parts) >= 2 and parts[0] == "mods":
-                    redmod_dst = install / "mods" / parts[1]
-                    key = str(redmod_dst)
-                    if key in junction_dirs_seen:
-                        continue
-                    junction_dirs_seen.add(key)
-                    ops.append(
-                        DeployOp(
-                            operation="rm_junction",
-                            src="",
-                            dst=str(redmod_dst),
-                            installed_mod_id=mod.id,
-                        )
-                    )
-                    continue
-            ops.append(
-                DeployOp(
-                    operation="unlink",
-                    src="",
-                    dst=str(dst),
-                    installed_mod_id=mod.id,
-                )
-            )
+        mod_ops = plan_remove_mod_links(game, mod, session, owners).ops
+        if not mod.deployed:
+            mod_ops = [op for op in mod_ops if _is_own_link(op)]
+        ops.extend(mod_ops)
 
     plan = DeployPlan(game_id=game.id, ops=ops)
     report = execute_plan(plan, session)
+    # With our links gone, everything force deploy moved aside goes back (S6).
+    report.displaced_not_restored = restore_displaced(game, session)
 
     if report.is_clean:
         for m in mods:
@@ -307,6 +589,8 @@ def detect_drift(game: Game, session: Session) -> DriftReport:
 
     total = linked = missing = foreign = 0
     by_mod: dict[int, dict[str, int]] = {}
+    # A path another mod wins is that mod's to link (S4): not drift for this one (S6).
+    winners = winner_map(session, game.id)  # type: ignore[arg-type]
 
     for mod in mods:
         _ = mod.files
@@ -315,6 +599,9 @@ def detect_drift(game: Game, session: Session) -> DriftReport:
         # for an N-file REDmod and so all files under the same root agree on linked/missing.
         junction_root_state: dict[Path, bool] = {}
         for f in mod.files:
+            winner = winners.get(path_key(f.relative_path, f.link_kind))
+            if winner is not None and winner[0].id != mod.id:
+                continue
             total += 1
             src = staging_root / mod.staging_dir / f.source_path.replace("\\", "/")
             rel = f.relative_path.replace("\\", "/")
@@ -357,6 +644,28 @@ def detect_drift(game: Game, session: Session) -> DriftReport:
             by_mod[mod.id] = {"linked": m_linked, "missing": m_missing, "foreign": m_foreign}
 
     return DriftReport(total=total, linked=linked, missing=missing, foreign=foreign, by_mod=by_mod)
+
+
+def preview_displacements(game: Game, session: Session) -> list[str]:
+    """Relative paths a force deploy would move aside, without touching disk (S6).
+
+    These are the ``link``/``junction`` ops of the current plan whose
+    destination exists and is not freed by an ``unlink`` earlier in the plan
+    (a path handed over between owners is not foreign).
+    """
+    plan, _skipped = plan_deploy(game, session)
+    freed: set[str] = set()
+    paths: list[str] = []
+    for op in plan.ops:
+        if op.operation in ("unlink", "rm_junction"):
+            freed.add(op.dst)
+            continue
+        if op.operation not in ("link", "junction") or op.dst in freed:
+            continue
+        dst = Path(op.dst)
+        if dst.exists() or dst.is_symlink():
+            paths.append(op.relative_path)
+    return paths
 
 
 def _redmod_exe(game: Game) -> Path | None:
@@ -460,7 +769,9 @@ def deploy(game: Game, session: Session, *, force: bool = False) -> DeployReport
         return DeployReport(total=0, done=0, failed=0, results=[], preflight=pre)
     maybe_backup_before(game, session, reason="pre-deploy")
     plan, skipped = plan_deploy(game, session)
-    report = execute_plan(plan, session, force=force)
+    report = execute_plan(
+        plan, session, force=force, displaced_root=displaced_root_for(game) if force else None
+    )
     report.skipped_existing = skipped
     if report.is_clean:
         mods = session.exec(
@@ -483,8 +794,10 @@ def replay_pending_journal(game: Game, session: Session) -> None:
     """Roll back any journal entries left in 'pending' state from a prior interrupted deploy.
 
     For each pending entry, attempts to undo the operation (unlink for 'link', remove_junction
-    for 'junction') so the filesystem is left consistent.  The entry is then marked 'failed'
-    regardless of whether the undo succeeded, because the original operation never completed.
+    for 'junction') so the filesystem is left consistent, but only when the destination is
+    that entry's own link (S5): anything else at the path is left untouched. The entry is
+    then marked 'failed' regardless of whether the undo succeeded, because the original
+    operation never completed.
     Errors during rollback are logged as warnings — they do not raise so that startup continues.
     """
     pending = session.exec(
@@ -507,11 +820,25 @@ def replay_pending_journal(game: Game, session: Session) -> None:
                 entry.error = entry.error or "rolled forward by journal replay"
                 session.add(entry)
                 continue
-            if entry.operation == "link":
-                unlink(Path(entry.dst))
-            elif entry.operation == "junction":
-                remove_junction(Path(entry.dst))
-        except VfsError as exc:
+            # Undo only what this entry created (S5): a destination that is not
+            # the link of entry.src (e.g. a vanilla file) is left alone.
+            if entry.operation == "displace":
+                # Roll FORWARD: the displaced_files row was committed with this
+                # entry, so finish the move (src = original, dst = backup).
+                src, dst = Path(entry.src), Path(entry.dst)
+                if (src.exists() or src.is_symlink()) and not dst.exists():
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    os.replace(src, dst)
+                entry.status = "done"
+                entry.error = entry.error or "rolled forward by journal replay"
+                session.add(entry)
+                continue
+            src, dst = Path(entry.src), Path(entry.dst)
+            if entry.operation == "link" and verify_link(src, dst):
+                unlink(dst)
+            elif entry.operation == "junction" and junction_points_into(dst, src):
+                remove_junction(dst)
+        except (VfsError, OSError) as exc:
             logger.warning("journal replay rollback failed for %s: %s", entry.dst, exc)
         entry.status = "failed"
         entry.error = entry.error or "rolled back by journal replay"

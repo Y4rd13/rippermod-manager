@@ -13,7 +13,7 @@ class TestListUpdates:
     def test_no_correlations_empty(self, client):
         client.post(
             "/api/v1/games/",
-            json={"name": "G", "domain_name": "g", "install_path": "/g"},
+            json={"name": "G", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         r = client.get("/api/v1/games/G/updates/")
         assert r.status_code == 200
@@ -181,7 +181,7 @@ class TestCheckUpdates:
     def test_no_key(self, client):
         client.post(
             "/api/v1/games/",
-            json={"name": "G", "domain_name": "g", "install_path": "/g"},
+            json={"name": "G", "domain_name": "cyberpunk2077", "install_path": client.cp_install},
         )
         r = client.post("/api/v1/games/G/updates/check")
         assert r.status_code == 200

@@ -59,10 +59,20 @@ class SkippedMod(BaseModel):
     installed_mod_id: int | None = None
 
 
+class ProfileModFailure(BaseModel):
+    """A mod whose enable/disable failed while loading a profile."""
+
+    name: str
+    installed_mod_id: int
+    error: str
+
+
 class ProfileLoadResult(BaseModel):
     profile: ProfileOut
     skipped_mods: list[SkippedMod] = []
     skipped_count: int = 0
+    failed_mods: list[ProfileModFailure] = []
+    failed_count: int = 0
 
 
 class ProfileImportResult(BaseModel):

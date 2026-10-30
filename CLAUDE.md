@@ -26,6 +26,11 @@ cd frontend && npm run lint      # ESLint
 cd frontend && npx tauri dev     # Tauri desktop (backend must be running)
 ```
 
+**API token in dev.** Every `/api/` call and `/health/deep` need the `X-RMM-Token` header (only `/health` is open). In release, Tauri generates the token per launch and passes it to the sidecar. In dev:
+- Backend: uses `RMM_API_TOKEN` when set; otherwise it writes (and reuses) `<data_dir>/api-token`.
+- `npx tauri dev`: `get_api_token` reads `RMM_API_TOKEN` from its environment, else that same `api-token` file (works when backend and Tauri share the Windows data dir).
+- Vite alone, a browser or Playwright: set `VITE_API_TOKEN` to the same value, e.g. `RMM_API_TOKEN=$(openssl rand -hex 32)` for the backend and `VITE_API_TOKEN=$RMM_API_TOKEN npm run dev`. A backend in WSL needs the env-var pair, since its data dir is not the Windows one.
+
 ## Code style
 
 ### Python

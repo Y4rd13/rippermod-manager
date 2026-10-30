@@ -29,6 +29,7 @@ export interface GameCreate {
 
 export interface GameUpdate {
   mods_dir?: string | null;
+  install_path?: string;
 }
 
 export interface ModFileOut {
@@ -278,6 +279,12 @@ export interface InstallResult {
 export interface UninstallResult {
   files_deleted: number;
   directories_removed: number;
+  /** Game-dir entries left in place because they were not this mod's own links. */
+  foreign: number;
+  /** Files force deploy had moved aside that could not go back (path occupied). */
+  displaced_not_restored: string[];
+  /** Paths another installed mod should now provide but could not be linked. */
+  not_relinked: string[];
 }
 
 export interface AdoptGroup {
@@ -297,6 +304,10 @@ export interface AdoptResult {
 export interface ToggleResult {
   disabled: boolean;
   files_affected: number;
+  foreign: number;
+  failed: number;
+  displaced_not_restored: string[];
+  not_relinked: string[];
 }
 
 export interface DependentMod {

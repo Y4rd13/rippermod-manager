@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from rippermod_manager.schemas.deploy import DeployReport
+
 
 class InstallRequest(BaseModel):
     archive_filename: str
@@ -16,6 +18,7 @@ class InstallResult(BaseModel):
     files_skipped: int
     files_overwritten: int
     installed_mod_name_safe: str = ""  # staging dir name; empty for legacy compat
+    deploy: DeployReport | None = None  # report of the deploy this install ran, if any
 
 
 class InstalledModOut(BaseModel):
@@ -44,11 +47,18 @@ class InstalledModOut(BaseModel):
 class UninstallResult(BaseModel):
     files_deleted: int
     directories_removed: int
+    foreign: int = 0  # game-dir entries left in place: not this mod's own links (S5)
+    displaced_not_restored: list[str] = []  # S6 backups whose path is now occupied
+    not_relinked: list[str] = []  # paths the next owner should now hold but does not (S4)
 
 
 class ToggleResult(BaseModel):
     disabled: bool
     files_affected: int
+    foreign: int = 0  # game-dir entries left in place: not this mod's own links (S5)
+    failed: int = 0  # link/unlink operations that failed, plus paths left unlinked
+    displaced_not_restored: list[str] = []  # S6 backups whose path is now occupied
+    not_relinked: list[str] = []  # paths that should be linked after this toggle but are not
 
 
 class FileConflict(BaseModel):

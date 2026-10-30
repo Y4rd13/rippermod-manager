@@ -1,8 +1,10 @@
 import sys
 
 import pytest
+from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
 
+from rippermod_manager.database import _set_sqlite_pragma
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import (  # noqa: F401 — needed for SQLModel.metadata registration
     DeployJournalEntry,
@@ -30,6 +32,7 @@ skip_if_not_windows = pytest.mark.skipif(
 @pytest.fixture
 def in_memory_engine():
     engine = create_engine("sqlite:///:memory:")
+    event.listen(engine, "connect", _set_sqlite_pragma)
     SQLModel.metadata.create_all(engine)
     return engine
 

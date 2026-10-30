@@ -66,3 +66,45 @@ class TestSaveBackupRouter:
         assert resp.status_code == 200
         assert resp.json()["restored"] is True
         assert (save_api.save_dir / "SavedGame0" / "sav.dat").read_bytes() == b"x"
+
+
+class TestSetSaveBackupPath:
+    def _put(self, save_api, path):
+        return save_api.client.put("/api/v1/save-backups/path", json={"path": path})
+
+    def test_folder_with_save_subfolder_is_accepted(self, save_api):
+        resp = self._put(save_api, str(save_api.save_dir))
+        assert resp.status_code == 200
+        assert resp.json()["save_dir"] == str(save_api.save_dir)
+        assert resp.json()["save_dir_exists"] is True
+
+    @pytest.mark.parametrize("path", [r"\\server\share\saves", "//server/share"])
+    def test_unc_is_rejected(self, save_api, path):
+        assert self._put(save_api, path).status_code == 422
+
+    def test_missing_folder_is_rejected(self, save_api):
+        assert self._put(save_api, str(save_api.save_dir / "missing")).status_code == 422
+
+    def test_relative_folder_is_rejected(self, save_api):
+        assert self._put(save_api, "saves").status_code == 422
+
+    def test_folder_without_sav_dat_is_rejected(self, save_api, tmp_path):
+        other = tmp_path / "Windows" / "System32"
+        (other / "drivers").mkdir(parents=True)
+        resp = self._put(save_api, str(other))
+        assert resp.status_code == 422
+        status = save_api.client.get("/api/v1/save-backups/").json()
+        assert status["save_dir"] == str(save_api.save_dir)
+
+    def test_default_folder_without_saves_is_accepted(self, save_api, tmp_path, monkeypatch):
+        default = tmp_path / "home" / "Saved Games" / "CD Projekt Red" / "Cyberpunk 2077"
+        default.mkdir(parents=True)
+        monkeypatch.setattr(svc, "default_save_dir", lambda: default)
+        assert self._put(save_api, str(default)).status_code == 200
+
+    def test_empty_path_resets_to_default(self, save_api, tmp_path, monkeypatch):
+        default = tmp_path / "default-saves"
+        monkeypatch.setattr(svc, "default_save_dir", lambda: default)
+        resp = self._put(save_api, "")
+        assert resp.status_code == 200
+        assert resp.json()["save_dir"] == str(default)
