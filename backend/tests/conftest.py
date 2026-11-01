@@ -18,6 +18,17 @@ from rippermod_manager.main import app  # noqa: E402
 from rippermod_manager.models.game import Game, GameModPath  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _no_adopt_backfill_thread(monkeypatch):
+    """Entering the app lifespan must not start the real adopt-archive backfill thread.
+
+    It would share the StaticPool test engine's single connection (or, in tests that do not
+    patch the engine, write to the real database). Tests that mean it call
+    ``run_adopt_backfill_all_games`` directly or patch it themselves.
+    """
+    monkeypatch.setattr("rippermod_manager.main.run_adopt_backfill_all_games", lambda: None)
+
+
 @pytest.fixture
 def engine():
     eng = create_engine(
