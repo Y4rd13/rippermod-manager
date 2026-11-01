@@ -28,6 +28,7 @@ class CorrelationBrief(BaseModel):
     score: float
     method: str
     confirmed: bool
+    on_disk: bool = False
     author: str = ""
     summary: str = ""
     version: str = ""
