@@ -10,7 +10,7 @@ from rippermod_manager.matching.correlator import (
 )
 from rippermod_manager.models.correlation import ModNexusCorrelation
 from rippermod_manager.models.mod import ModFile, ModGroup
-from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
+from rippermod_manager.models.nexus import NexusDownload, NexusModMeta, NexusModRequirement
 
 
 class TestTokenJaccard:
@@ -373,7 +373,16 @@ class TestCategoryClassification:
 class TestRevalidateBoosted:
     """Stored boosted matches are re-scored on the name alone at every correlate run."""
 
-    def _store(self, session, make_game, group_name, dl_name, score, confirmed=False):
+    def _store(
+        self,
+        session,
+        make_game,
+        group_name,
+        dl_name,
+        score,
+        confirmed=False,
+        method="endorsed_name",
+    ):
         game = make_game()
         group = ModGroup(game_id=game.id, display_name=group_name)
         dl = NexusDownload(game_id=game.id, nexus_mod_id=700, mod_name=dl_name)
@@ -383,7 +392,7 @@ class TestRevalidateBoosted:
             mod_group_id=group.id,
             nexus_download_id=dl.id,
             score=score,
-            method="endorsed_name",
+            method=method,
             confirmed_by_user=confirmed,
         )
         session.add(corr)
@@ -418,10 +427,56 @@ class TestRevalidateBoosted:
         correlate_game_mods(game, session)
         assert session.get(ModNexusCorrelation, corr_id).score == 0.85
 
-    def test_revalidate_keeps_boost_for_strong_name(self, session, make_game):
-        game, corr_id = self._store(session, make_game, "Weather Mod", "Weather Overhaul Mod", 0.85)
+    def test_revalidate_lifts_stale_score_of_strong_name_to_the_boost(self, session, make_game):
+        """Name 0.779 is on disk: a stale 0.6 becomes the 0.85 floor (fails if nothing runs)."""
+        game, corr_id = self._store(session, make_game, "Weather Mod", "Weather Overhaul Mod", 0.6)
         correlate_game_mods(game, session)
         assert session.get(ModNexusCorrelation, corr_id).score == 0.85
+
+    def test_revalidate_keeps_endorsed_match_found_through_the_meta_name(self, session, make_game):
+        """The endorsed matcher scores max(dl name, meta name): revalidation must too."""
+        game, corr_id = self._store(
+            session, make_game, "Weather Mod", "Immersive Bartenders - Dogtown", 0.85
+        )
+        session.add(NexusModMeta(nexus_mod_id=700, name="Weather Overhaul Mod"))
+        session.commit()
+        correlate_game_mods(game, session)
+        assert session.get(ModNexusCorrelation, corr_id).score == 0.85
+
+    def test_revalidate_keeps_requirement_match_found_through_the_requirement_name(
+        self, session, make_game
+    ):
+        """The requirement matcher scores the requirement row's name, not the download's."""
+        game, corr_id = self._store(
+            session,
+            make_game,
+            "Weather Mod",
+            "Immersive Bartenders - Dogtown",
+            0.92,
+            method="requirement",
+        )
+        session.add(
+            NexusModRequirement(
+                nexus_mod_id=100, required_mod_id=700, mod_name="Weather Overhaul Mod"
+            )
+        )
+        session.commit()
+        correlate_game_mods(game, session)
+        assert session.get(ModNexusCorrelation, corr_id).score == 0.92
+
+    def test_requirement_name_does_not_rescue_other_methods(self, session, make_game):
+        """Only the requirement method may use a requirement row's name."""
+        game, corr_id = self._store(
+            session, make_game, "Weather Mod", "Immersive Bartenders - Dogtown", 0.85
+        )
+        session.add(
+            NexusModRequirement(
+                nexus_mod_id=100, required_mod_id=700, mod_name="Weather Overhaul Mod"
+            )
+        )
+        session.commit()
+        correlate_game_mods(game, session)
+        assert session.get(ModNexusCorrelation, corr_id) is None
 
     def test_deleted_boosted_match_frees_the_group_for_rematch(self, session, make_game):
         """A deleted stale match must leave `existing`, so the group is matched again."""
