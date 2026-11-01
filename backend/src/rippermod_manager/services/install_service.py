@@ -58,7 +58,7 @@ logger = logging.getLogger(__name__)
 
 # Share of an adopted mod's files an archive must hold to count as its source.
 LINK_MIN_COVERAGE: float = 0.90
-_BACKFILL_SETTING = "adopt_archive_backfill_done"
+_BACKFILL_SETTING = "adopt_archive_backfill_done"  # suffixed with ":<game id>"
 
 
 def list_available_archives(game: Game) -> list[Path]:
@@ -375,12 +375,13 @@ def find_source_archive(
 def backfill_adopted_archives(game: Game, session: Session) -> int:
     """Link mods adopted before archives were linked to the archive that holds their files.
 
-    Runs once per database (guarded by the ``adopt_archive_backfill_done`` setting).
+    Runs once per game (guarded by the ``adopt_archive_backfill_done:<game id>`` setting).
     Returns the number of mods linked. Commits.
     """
     from rippermod_manager.services.settings_helpers import get_setting, set_setting
 
-    if get_setting(session, _BACKFILL_SETTING) == "1":
+    flag = f"{_BACKFILL_SETTING}:{game.id}"
+    if get_setting(session, flag) == "1":
         return 0
     mods = session.exec(
         select(InstalledMod).where(
@@ -397,7 +398,7 @@ def backfill_adopted_archives(game: Game, session: Session) -> int:
             mod.source_archive = archive
             session.add(mod)
             linked += 1
-    set_setting(session, _BACKFILL_SETTING, "1")
+    set_setting(session, flag, "1")
     session.commit()
     return linked
 

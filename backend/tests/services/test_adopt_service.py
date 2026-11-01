@@ -277,7 +277,7 @@ def test_backfill_links_previously_adopted_mod(session, game):
     _link(session, game, "X-4198-1-0.zip")
 
     assert backfill_adopted_archives(game, session) == 1
-    assert get_setting(session, "adopt_archive_backfill_done") == "1"
+    assert get_setting(session, f"adopt_archive_backfill_done:{game.id}") == "1"
     session.refresh(mod)
     assert mod.source_archive == "X-4198-1-0.zip"
     assert backfill_adopted_archives(game, session) == 0
@@ -288,7 +288,7 @@ def test_backfill_leaves_mod_without_covering_archive_and_still_marks_done(sessi
     assert backfill_adopted_archives(game, session) == 0
     session.refresh(mod)
     assert mod.source_archive == ""
-    assert get_setting(session, "adopt_archive_backfill_done") == "1"
+    assert get_setting(session, f"adopt_archive_backfill_done:{game.id}") == "1"
 
 
 def test_backfill_ignores_mods_that_already_have_an_archive(session, game):
@@ -309,3 +309,21 @@ def test_adopt_ignores_covering_archive_of_another_nexus_mod(session, game):
     _link(session, game, "Other-9999-1-0.zip", mod_id=9999)
     result = adopt_mod(game, "X", ["archive/pc/mod/x.archive"], session, nexus_mod_id=4198)
     assert session.get(InstalledMod, result.installed_mod_id).source_archive == ""
+
+
+def test_backfill_flag_is_per_game_so_every_game_gets_backfilled(session, game, tmp_path):
+    other_dir = tmp_path / "game2"
+    other_dir.mkdir()
+    other = Game(name="CP2", domain_name="cyberpunk2077", install_path=str(other_dir))
+    session.add(other)
+    session.commit()
+    session.refresh(other)
+    for g in (game, other):
+        _previously_adopted(session, g)
+        _zip(g, "X-4198-1-0.zip", ["archive/pc/mod/x.archive"])
+        _link(session, g, "X-4198-1-0.zip")
+
+    assert backfill_adopted_archives(game, session) == 1
+    assert backfill_adopted_archives(other, session) == 1
+    assert backfill_adopted_archives(other, session) == 0
+    assert get_setting(session, f"adopt_archive_backfill_done:{other.id}") == "1"
