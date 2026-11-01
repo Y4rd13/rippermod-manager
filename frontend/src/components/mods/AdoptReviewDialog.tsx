@@ -183,8 +183,17 @@ export function AdoptReviewDialog({ gameName, mods, onClose }: Props) {
                   {m.files.length} file{m.files.length === 1 ? "" : "s"}
                 </span>
                 {m.nexus_match ? (
-                  <Badge variant="success" title={`Matched to ${m.nexus_match.mod_name}`}>
-                    ✓ {Math.round(m.nexus_match.score * 100)}%
+                  <Badge
+                    variant={
+                      m.nexus_match.score >= 0.9
+                        ? "success"
+                        : m.nexus_match.score >= 0.75
+                          ? "warning"
+                          : "danger"
+                    }
+                    title={`Matched to ${m.nexus_match.mod_name}`}
+                  >
+                    {Math.round(m.nexus_match.score * 100)}%
                   </Badge>
                 ) : (
                   <Badge variant="neutral" title="No Nexus match, adopted as a local mod">

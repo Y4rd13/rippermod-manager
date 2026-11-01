@@ -126,12 +126,12 @@ export function DashboardPage() {
         />
         <StatCard
           icon={Package}
-          label="Total Mods"
+          label="Managed"
           value={games.length > 0 ? totals.totalInstalled : "--"}
           color="bg-success/10 text-success"
           hoverBorder="hover:border-success/40"
           onClick={firstGame ? () => navigate(`/games/${firstGame}`) : undefined}
-          title="View installed mods"
+          title="Mods managed by RipperMod"
         />
         <StatCard
           icon={Link2}

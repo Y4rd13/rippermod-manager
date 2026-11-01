@@ -397,6 +397,11 @@ export function GameDetailPage() {
     );
   }, [nexusMatched, installedMods]);
   const recognizedNotInstalled = adoptableMods.length;
+  // "Detected on disk" is the high-confidence subset (backend `on_disk`); the rest are possible matches.
+  const onDiskMods = useMemo(
+    () => adoptableMods.filter((m) => m.nexus_match?.on_disk),
+    [adoptableMods],
+  );
 
   /** Opens the adopt dialog on the given groups, or on every adoptable one when none are given. */
   const openAdopt = (groupIds?: number[]) => {
@@ -407,7 +412,7 @@ export function GameDetailPage() {
   };
 
   const tabCounts = useMemo<Partial<Record<Tab, number>>>(() => ({
-    installed: installedLoading ? undefined : installedMods.length + recognizedNotInstalled,
+    installed: installedLoading ? undefined : installedMods.length + onDiskMods.length,
     matched: modsLoading ? undefined : nexusMatched.length,
     archives: archivesLoading ? undefined : archives.length,
     updates: updatesLoading ? undefined : updates?.updates_available,
@@ -416,7 +421,7 @@ export function GameDetailPage() {
     endorsed: endorsedLoading ? undefined : endorsedMods.length,
     tracked: trackedLoading ? undefined : trackedMods.length,
   }), [
-    installedMods.length, installedLoading, recognizedNotInstalled,
+    installedMods.length, installedLoading, onDiskMods.length,
     nexusMatched.length, modsLoading,
     archives.length, archivesLoading,
     updates?.updates_available, updatesLoading,
@@ -609,14 +614,14 @@ export function GameDetailPage() {
         <HealthStatCard gameName={name} onOpen={goToHealth} />
       </div>
 
-      {recognizedNotInstalled > 0 && !adoptBannerDismissed && (
+      {onDiskMods.length > 0 && !adoptBannerDismissed && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent/5 p-4">
           <div className="flex items-center gap-3">
             <Package size={20} className="shrink-0 text-accent" />
             <div>
               <p className="text-sm font-medium text-text-primary">
-                {recognizedNotInstalled} mod{recognizedNotInstalled === 1 ? "" : "s"} detected on disk{" "}
-                {recognizedNotInstalled === 1 ? "isn't" : "aren't"} managed yet
+                {onDiskMods.length} mod{onDiskMods.length === 1 ? "" : "s"} detected on disk{" "}
+                {onDiskMods.length === 1 ? "isn't" : "aren't"} managed yet
               </p>
               <p className="text-xs text-text-muted">
                 Adopt them to unlock profiles, updates, and clean uninstall, without re-downloading.
@@ -786,7 +791,7 @@ export function GameDetailPage() {
           <InstalledModsTable
             mods={installedMods}
             gameName={name}
-            recognizedMods={nexusMatched}
+            recognizedMods={adoptableMods}
             archives={archives}
             downloadJobs={downloadJobs}
             updates={updates?.updates ?? []}
