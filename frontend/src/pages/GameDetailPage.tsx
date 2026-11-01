@@ -43,6 +43,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ScanProgress, type ScanLog } from "@/components/ui/ScanProgress";
+import { invalidateGameState } from "@/hooks/invalidate";
 import { useDeploy } from "@/hooks/use-deploy";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import {
@@ -366,6 +367,7 @@ export function GameDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["installed-mods", name] });
       queryClient.invalidateQueries({ queryKey: ["nexus-downloads", name] });
       queryClient.invalidateQueries({ queryKey: ["available-archives", name] });
+      invalidateGameState(queryClient, name);
       toast.success("Scan complete");
     } catch (e) {
       stopFlushing();

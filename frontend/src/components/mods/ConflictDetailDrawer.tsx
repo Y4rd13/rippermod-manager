@@ -259,15 +259,7 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, dismi
           icon={Trash2}
           loading={uninstallMod.isPending}
           onConfirm={() =>
-            uninstallMod.mutate(
-              { gameName, modId },
-              {
-                onSuccess: () => {
-                  qc.invalidateQueries({ queryKey: ["conflicts", gameName] });
-                  qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
-                },
-              },
-            )
+            uninstallMod.mutate({ gameName, modId })
           }
           onCancel={() => setShowRemoveConfirm(false)}
         />

@@ -12,6 +12,7 @@ function apiErrorDetail(err: unknown, fallback: string): string {
   }
   return fallback;
 }
+import { invalidateGameState } from "@/hooks/invalidate";
 import { formatBytes } from "@/lib/format";
 import { useDownloadStore } from "@/stores/download-store";
 import { toast } from "@/stores/toast-store";
@@ -136,6 +137,7 @@ export function useScanMods() {
       api.post(`/api/v1/games/${gameName}/mods/scan`),
     onSuccess: (_, gameName) => {
       qc.invalidateQueries({ queryKey: ["mods", gameName] });
+      invalidateGameState(qc, gameName);
     },
   });
 }
@@ -147,6 +149,7 @@ export function useCorrelate() {
       api.post(`/api/v1/games/${gameName}/mods/correlate`),
     onSuccess: (_, gameName) => {
       qc.invalidateQueries({ queryKey: ["mods", gameName] });
+      invalidateGameState(qc, gameName);
     },
   });
 }
@@ -181,7 +184,7 @@ export function useInstallMod() {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
       qc.invalidateQueries({ queryKey: ["updates", gameName] });
-      qc.invalidateQueries({ queryKey: ["health", gameName] });
+      invalidateGameState(qc, gameName);
       toast.success("Mod installed", `${result.files_extracted} files extracted`);
       if (result.files_overwritten > 0) {
         toast.warning(
@@ -207,10 +210,7 @@ export function useUninstallMod() {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
       qc.invalidateQueries({ queryKey: ["updates", gameName] });
-      qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
-      qc.invalidateQueries({ queryKey: ["archive-resource-details", gameName] });
-      qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
-      qc.invalidateQueries({ queryKey: ["health", gameName] });
+      invalidateGameState(qc, gameName);
       qc.invalidateQueries({ queryKey: ["deploy-status", gameName] });
       const unlinked = result?.not_relinked ?? [];
       if (unlinked.length > 0) {
@@ -238,18 +238,10 @@ export function useAdoptMods() {
       }
       // Adopt converts detected -> managed and moves files: refresh the same
       // keys install/uninstall touch, plus "mods" (the detected list shrinks).
-      for (const key of [
-        "installed-mods",
-        "mods",
-        "available-archives",
-        "updates",
-        "conflict-summary",
-        "archive-conflict-summaries",
-        "archive-resource-details",
-        "health",
-      ]) {
+      for (const key of ["installed-mods", "mods", "available-archives", "updates"]) {
         qc.invalidateQueries({ queryKey: [key, gameName] });
       }
+      invalidateGameState(qc, gameName);
       if (result.adopted_mods > 0) {
         toast.success(
           `Adopted ${result.adopted_mods} mod${result.adopted_mods === 1 ? "" : "s"}`,
@@ -308,10 +300,7 @@ export function useToggleMod() {
     onSettled: (_data, _err, { gameName }) => {
       // Always refetch server truth after the mutation resolves, win or lose.
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
-      qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
-      qc.invalidateQueries({ queryKey: ["archive-resource-details", gameName] });
-      qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
-      qc.invalidateQueries({ queryKey: ["health", gameName] });
+      invalidateGameState(qc, gameName);
     },
   });
 }
@@ -327,10 +316,7 @@ export function useUndoActivity() {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
       qc.invalidateQueries({ queryKey: ["updates", gameName] });
-      qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
-      qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
-      qc.invalidateQueries({ queryKey: ["archive-resource-details", gameName] });
-      qc.invalidateQueries({ queryKey: ["health", gameName] });
+      invalidateGameState(qc, gameName);
       toast.success("Action undone");
     },
     onError: (err) => {
@@ -450,6 +436,7 @@ export function useLoadProfile() {
     onSuccess: (result, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["profiles", gameName] });
+      invalidateGameState(qc, gameName);
       if (result.skipped_count > 0) {
         toast.warning(
           "Some mods were skipped",
@@ -635,6 +622,7 @@ export function useConfirmCorrelation() {
       api.patch(`/api/v1/games/${gameName}/mods/${modGroupId}/correlation/confirm`),
     onSuccess: (_, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["mods", gameName] });
+      invalidateGameState(qc, gameName);
       toast.success("Match confirmed");
     },
     onError: () => toast.error("Failed to confirm match"),
@@ -648,6 +636,7 @@ export function useRejectCorrelation() {
       api.delete(`/api/v1/games/${gameName}/mods/${modGroupId}/correlation`),
     onSuccess: (_, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["mods", gameName] });
+      invalidateGameState(qc, gameName);
       toast.success("Match rejected");
     },
     onError: () => toast.error("Failed to reject match"),
@@ -667,6 +656,7 @@ export function useReassignCorrelation() {
       }),
     onSuccess: (_, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["mods", gameName] });
+      invalidateGameState(qc, gameName);
       toast.success("Match reassigned");
     },
     onError: () => toast.error("Failed to reassign match"),
@@ -679,8 +669,8 @@ export function useResolveConflict() {
     mutationFn: ({ gameName, modId }) =>
       api.post(`/api/v1/games/${gameName}/conflicts/inbox/${modId}/resolve`, { action: "reinstall" }),
     onSuccess: (_, { gameName }) => {
-      qc.invalidateQueries({ queryKey: ["conflicts", gameName] });
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      invalidateGameState(qc, gameName);
       toast.success("Conflict resolved", "Mod reinstalled to reclaim files");
     },
     onError: () => toast.error("Failed to resolve conflict"),
@@ -777,6 +767,7 @@ export function useFomodInstall() {
     onSuccess: (result, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
+      invalidateGameState(qc, gameName);
       toast.success("Mod installed", `${result.files_extracted} files extracted`);
       if (result.files_overwritten > 0) {
         toast.warning(
