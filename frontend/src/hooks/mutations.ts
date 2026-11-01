@@ -223,7 +223,7 @@ export function useUninstallMod() {
         toast.success("Mod uninstalled");
       }
     },
-    onError: () => toast.error("Failed to uninstall mod"),
+    onError: (err) => toast.error("Failed to uninstall mod", apiErrorDetail(err, "")),
   });
 }
 
@@ -282,12 +282,12 @@ export function useToggleMod() {
       );
       return { previous };
     },
-    onError: (_err, { gameName }, context) => {
+    onError: (err, { gameName }, context) => {
       // Roll back to the pre-mutation snapshot so the UI doesn't lie.
       if (context?.previous !== undefined) {
         qc.setQueryData(["installed-mods", gameName], context.previous);
       }
-      toast.error("Failed to toggle mod");
+      toast.error("Failed to toggle mod", apiErrorDetail(err, ""));
     },
     onSuccess: (result) => {
       const unlinked = result?.not_relinked ?? [];
@@ -438,7 +438,16 @@ export function useLoadProfile() {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["profiles", gameName] });
       invalidateGameState(qc, gameName);
-      if (result.skipped_count > 0) {
+      if (result.failed_count > 0) {
+        const skipped =
+          result.skipped_count > 0
+            ? `, ${result.skipped_count} no longer installed`
+            : "";
+        toast.warning(
+          "Profile partly loaded",
+          `${result.failed_count} mod${result.failed_count === 1 ? "" : "s"} could not be switched${skipped}`,
+        );
+      } else if (result.skipped_count > 0) {
         toast.warning(
           "Some mods were skipped",
           `${result.skipped_count} mod${result.skipped_count === 1 ? " is" : "s are"} no longer installed`,
@@ -447,7 +456,7 @@ export function useLoadProfile() {
         toast.success("Profile loaded");
       }
     },
-    onError: () => toast.error("Failed to load profile"),
+    onError: (err) => toast.error("Failed to load profile", apiErrorDetail(err, "")),
   });
 }
 

@@ -6,7 +6,8 @@ from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 import rippermod_manager.models  # noqa: F401 — register all models with SQLModel
 from rippermod_manager.config import settings
@@ -14,6 +15,7 @@ from rippermod_manager.database import create_db_and_tables
 from rippermod_manager.routers import api_router
 from rippermod_manager.security import get_api_token, install_security
 from rippermod_manager.services.pid_file import remove_pid_file, write_pid_file
+from rippermod_manager.services.vfs.primitives import GameRunningError
 
 
 def _configure_logging() -> None:
@@ -155,6 +157,12 @@ app = FastAPI(
 )
 
 install_security(app)
+
+
+@app.exception_handler(GameRunningError)
+async def game_running_handler(_request: Request, exc: GameRunningError) -> JSONResponse:
+    """Any operation refused because Cyberpunk is running answers 409 with the reason."""
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
 app.include_router(api_router)

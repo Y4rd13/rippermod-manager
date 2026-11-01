@@ -52,7 +52,13 @@ from rippermod_manager.services.presence_service import (
 )
 from rippermod_manager.services.vfs.naming import unique_staging_name
 from rippermod_manager.services.vfs.ownership import next_win_seq, path_key
-from rippermod_manager.services.vfs.primitives import VfsError, hardlink, same_volume
+from rippermod_manager.services.vfs.primitives import (
+    GameRunningError,
+    VfsError,
+    hardlink,
+    is_game_running,
+    same_volume,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -626,6 +632,12 @@ def adopt_mod(
     )
 
 
+def ensure_game_closed() -> None:
+    """Raise ``GameRunningError`` while Cyberpunk runs: its files are locked then."""
+    if is_game_running():
+        raise GameRunningError("Cyberpunk 2077 is running, close it before deploying.")
+
+
 def uninstall_mod(
     installed_mod: InstalledMod,
     game: Game,
@@ -634,6 +646,7 @@ def uninstall_mod(
     record_history: bool = True,
 ) -> UninstallResult:
     """Remove a mod's game-dir links and its staging subtree."""
+    ensure_game_closed()
     # Snapshot saves before this destructive change (best-effort, deduped).
     from rippermod_manager.services.save_backup_service import maybe_backup_before
     from rippermod_manager.services.vfs.deploy_service import (
@@ -741,6 +754,7 @@ def toggle_mod(
     Pass ``commit=False`` to defer the DB commit (useful for batching in
     profile loads); the caller becomes responsible for commits.
     """
+    ensure_game_closed()
     from rippermod_manager.services.vfs.deploy_service import (
         execute_plan,
         plan_remove_mod_links,
