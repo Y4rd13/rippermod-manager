@@ -1,6 +1,7 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from sqlmodel import Session, select
 
 from rippermod_manager.archive.handler import ArchiveEntry
@@ -8,7 +9,10 @@ from rippermod_manager.models.correlation import ModNexusCorrelation
 from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.models.mod import ModFile, ModGroup
 from rippermod_manager.models.nexus import NexusDownload, NexusModFile
-from rippermod_manager.services.file_list_matcher import match_endorsed_to_local
+from rippermod_manager.services.file_list_matcher import (
+    match_endorsed_by_name,
+    match_endorsed_to_local,
+)
 
 
 def _make_game(session: Session) -> Game:
@@ -423,3 +427,29 @@ class TestFileListMatcher:
 
             s.refresh(dl)
             assert dl.version == "1.0"
+
+
+class TestEndorsedByNameBoost:
+    @pytest.mark.parametrize(
+        ("group_name", "dl_name", "expected"),
+        [
+            # weak name: stored as a possible match, not lifted
+            ("Immersive Rippers", "Immersive Bartenders - Dogtown", 0.557),
+            # close name (0.779): lifted to the floor
+            ("Weather Mod", "Weather Overhaul Mod", 0.85),
+        ],
+    )
+    def test_boost_only_for_close_names(self, session, make_game, group_name, dl_name, expected):
+        game = make_game()
+        session.add(ModGroup(game_id=game.id, display_name=group_name))
+        session.add(
+            NexusDownload(game_id=game.id, nexus_mod_id=300, mod_name=dl_name, is_endorsed=True)
+        )
+        session.commit()
+
+        result = match_endorsed_by_name(game, session)
+
+        assert result.matched == 1
+        corr = session.exec(select(ModNexusCorrelation)).one()
+        assert corr.method == "endorsed_name"
+        assert corr.score == pytest.approx(expected, abs=0.01)

@@ -17,6 +17,7 @@ from rippermod_manager.models.nexus import NexusDownload
 from rippermod_manager.nexus.client import NexusRateLimitError
 from rippermod_manager.nexus.graphql_client import NexusGraphQLClient, NexusGraphQLError
 from rippermod_manager.schemas.mod import RequirementMatchResult
+from rippermod_manager.services.name_boost import boosted_score
 from rippermod_manager.services.nexus_helpers import upsert_nexus_mod
 from rippermod_manager.services.progress import ProgressCallback, noop_progress
 
@@ -24,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 _MIN_COLLECTION_OVERLAP = 3
 _NAME_THRESHOLD = 0.55
-_CORRELATION_SCORE = 0.85
 
 
 async def match_by_collections(
@@ -184,7 +184,7 @@ async def match_by_collections(
                     corr = ModNexusCorrelation(
                         mod_group_id=group.id,  # type: ignore[arg-type]
                         nexus_download_id=dl.id,  # type: ignore[arg-type]
-                        score=_CORRELATION_SCORE,
+                        score=boosted_score(best_score, "collection"),
                         method="collection",
                         reasoning=(
                             f"Matched via collection '{coll.get('name', slug)}': "

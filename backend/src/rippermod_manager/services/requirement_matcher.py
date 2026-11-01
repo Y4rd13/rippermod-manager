@@ -15,13 +15,13 @@ from rippermod_manager.models.game import Game
 from rippermod_manager.models.mod import ModGroup
 from rippermod_manager.models.nexus import NexusDownload, NexusModRequirement
 from rippermod_manager.schemas.mod import RequirementMatchResult
+from rippermod_manager.services.name_boost import boosted_score
 from rippermod_manager.services.nexus_helpers import upsert_nexus_mod
 from rippermod_manager.services.progress import ProgressCallback, noop_progress
 
 logger = logging.getLogger(__name__)
 
 _NAME_THRESHOLD = 0.55
-_CORRELATION_SCORE = 0.92
 
 
 async def match_by_requirements(
@@ -137,7 +137,7 @@ async def match_by_requirements(
         corr = ModNexusCorrelation(
             mod_group_id=group.id,  # type: ignore[arg-type]
             nexus_download_id=dl.id,  # type: ignore[arg-type]
-            score=_CORRELATION_SCORE,
+            score=boosted_score(best_score, "requirement"),
             method="requirement",
             reasoning=(
                 f"Matched '{group.display_name}' to requirement "
