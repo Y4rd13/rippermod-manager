@@ -368,3 +368,74 @@ class TestCategoryClassification:
     def test_incompatible_categories(self):
         assert _categories_compatible("scripts", "models and textures") is False
         assert _categories_compatible("assets", "scripts") is False
+
+
+class TestRevalidateBoosted:
+    """Stored boosted matches are re-scored on the name alone at every correlate run."""
+
+    def _store(self, session, make_game, group_name, dl_name, score, confirmed=False):
+        game = make_game()
+        group = ModGroup(game_id=game.id, display_name=group_name)
+        dl = NexusDownload(game_id=game.id, nexus_mod_id=700, mod_name=dl_name)
+        session.add_all([group, dl])
+        session.flush()
+        corr = ModNexusCorrelation(
+            mod_group_id=group.id,
+            nexus_download_id=dl.id,
+            score=score,
+            method="endorsed_name",
+            confirmed_by_user=confirmed,
+        )
+        session.add(corr)
+        session.commit()
+        return game, corr.id
+
+    def test_revalidate_lowers_boosted_endorsed_match_below_on_disk(self, session, make_game):
+        game, corr_id = self._store(
+            session, make_game, "Immersive Rippers", "Immersive Bartenders - Dogtown", 0.85
+        )
+        correlate_game_mods(game, session)
+        corr = session.get(ModNexusCorrelation, corr_id)
+        assert corr.score == pytest.approx(0.557, abs=0.01)
+        assert corr.reasoning.startswith("re-scored: name similarity 0.5")
+
+    def test_revalidate_deletes_boosted_match_below_entry_threshold(self, session, make_game):
+        game, corr_id = self._store(
+            session, make_game, "Ash", "Load Begone (Skip Intro Splash Videos and More)", 0.9
+        )
+        correlate_game_mods(game, session)
+        assert session.get(ModNexusCorrelation, corr_id) is None
+
+    def test_revalidate_keeps_confirmed_boosted_match(self, session, make_game):
+        game, corr_id = self._store(
+            session,
+            make_game,
+            "Immersive Rippers",
+            "Immersive Bartenders - Dogtown",
+            0.85,
+            confirmed=True,
+        )
+        correlate_game_mods(game, session)
+        assert session.get(ModNexusCorrelation, corr_id).score == 0.85
+
+    def test_revalidate_keeps_boost_for_strong_name(self, session, make_game):
+        game, corr_id = self._store(session, make_game, "Weather Mod", "Weather Overhaul Mod", 0.85)
+        correlate_game_mods(game, session)
+        assert session.get(ModNexusCorrelation, corr_id).score == 0.85
+
+    def test_deleted_boosted_match_frees_the_group_for_rematch(self, session, make_game):
+        """A deleted stale match must leave `existing`, so the group is matched again."""
+        from sqlmodel import select
+
+        game, _ = self._store(
+            session, make_game, "Ash", "Load Begone (Skip Intro Splash Videos and More)", 0.9
+        )
+        better = NexusDownload(game_id=game.id, nexus_mod_id=701, mod_name="Ash")
+        session.add(better)
+        session.commit()
+        result = correlate_game_mods(game, session)
+        assert result.matched == 1
+        corrs = session.exec(select(ModNexusCorrelation)).all()
+        assert [(c.nexus_download_id, c.method, c.score) for c in corrs] == [
+            (better.id, "exact", 1.0)
+        ]

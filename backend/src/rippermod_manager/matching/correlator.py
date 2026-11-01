@@ -232,6 +232,12 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
     if purged:
         logger.info("Purged %d stale name-based correlations", purged)
 
+    # The endorsed/collection/requirement boost applies only from the on-disk line:
+    # re-score those that were stored with the old fixed score.
+    from rippermod_manager.services.name_boost import revalidate_boosted
+
+    revalidate_boosted(session, existing, group_map, dl_map)
+
     already_matched: set[int] = set()
     already_matched_nexus_ids: set[int] = set()
     for corr in existing:
