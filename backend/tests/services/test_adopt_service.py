@@ -221,6 +221,36 @@ def test_adopt_does_not_link_archive_below_coverage(session, game):
     assert session.get(InstalledMod, result.installed_mod_id).source_archive == ""
 
 
+def test_adopt_links_archive_when_the_mod_created_an_extra_file(session, game):
+    # Mod Settings case: the mod writes user.ini at runtime (5 of 6 adopted files are in the
+    # archive, 83 %), and the archive ships readme/license that never reach the game folder.
+    shipped = [
+        f"red4ext/plugins/ms/{n}" for n in ("a.dll", "b.reds", "c.reds", "d.archive", "e.xl")
+    ]
+    adopted = [*shipped, "red4ext/plugins/ms/user.ini"]
+    for rel in adopted:
+        _put(game, rel)
+    _zip(
+        game,
+        "MS-4198-1-0.zip",
+        [*shipped, "red4ext/plugins/ms/readme.md", "red4ext/plugins/ms/license.md"],
+    )
+    _link(session, game, "MS-4198-1-0.zip")
+    result = adopt_mod(game, "MS", adopted, session, nexus_mod_id=4198)
+    assert session.get(InstalledMod, result.installed_mod_id).source_archive == "MS-4198-1-0.zip"
+
+
+def test_adopt_does_not_link_a_small_archive_inside_a_larger_group(session, game):
+    # The whole archive is on disk, but it covers only 1 of the 4 adopted files.
+    adopted = [f"archive/pc/mod/{n}.archive" for n in ("a", "b", "c", "d")]
+    for rel in adopted:
+        _put(game, rel)
+    _zip(game, "A-4198-1-0.zip", ["archive/pc/mod/a.archive"])
+    _link(session, game, "A-4198-1-0.zip")
+    result = adopt_mod(game, "A", adopted, session, nexus_mod_id=4198)
+    assert session.get(InstalledMod, result.installed_mod_id).source_archive == ""
+
+
 def test_adopt_does_not_link_fomod_archive(session, game):
     _put(game, "archive/pc/mod/x.archive")
     _zip(game, "X-4198-1-0.zip", ["fomod/ModuleConfig.xml", "archive/pc/mod/x.archive"])
