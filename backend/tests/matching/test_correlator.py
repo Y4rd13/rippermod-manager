@@ -1,3 +1,5 @@
+import pytest
+
 from rippermod_manager.matching.correlator import (
     _categories_compatible,
     classify_group_category,
@@ -87,6 +89,43 @@ class TestComputeNameScore:
     def test_z_prefix_local_vs_clean_nexus(self):
         score, _method = compute_name_score("zVendorsXL", "Vendors XL")
         assert score >= 0.8
+
+    @pytest.mark.parametrize(
+        "local,nexus",
+        [
+            ("Ash", "Load Begone (Skip Intro Splash Videos and More)"),
+            ("ENC", "Echoes of Joy - Small Immersive Encounters"),
+            ("Iac", "Pontiac Firebird Trans AM GTA"),
+            ("Config", "Mes Configs CP77 - DELETED"),
+        ],
+    )
+    def test_substring_inside_a_word_is_not_substring(self, local, nexus):
+        score, method = compute_name_score(local, nexus)
+        assert method != "substring"
+        assert score < 0.75
+
+    def test_multiword_prefix_substring_still_counts(self):
+        assert compute_name_score("Visual Holster", "Visual Holsters (Edgerunners 2 Update)") == (
+            0.9,
+            "substring",
+        )
+
+    def test_single_whole_word_substring_counts(self):
+        assert compute_name_score("Config", "WTNC Config")[1] == "substring"
+
+    def test_later_whole_word_occurrence_counts(self):
+        """An in-word occurrence earlier in the name must not hide a whole-word one."""
+        assert compute_name_score("Ash", "Splash Ash") == (0.9, "substring")
+
+    @pytest.mark.parametrize("local,nexus", [("", "Mod & Co"), ("Mod & Co", "")])
+    def test_empty_normalized_name_is_not_substring(self, local, nexus):
+        assert compute_name_score(local, nexus)[1] != "substring"
+
+    def test_longer_local_name_counts_in_either_direction(self):
+        assert compute_name_score("Visual Holsters (Edgerunners 2 Update)", "Visual Holster") == (
+            0.9,
+            "substring",
+        )
 
 
 class TestCorrelateGameMods:
