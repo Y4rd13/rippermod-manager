@@ -47,6 +47,13 @@ _GENERIC_NAMES = frozenset(
 
 _MIN_FILENAME_LEN = 8
 _CORRELATION_SCORE = 0.88
+_SEARCH_PAGE = 20
+
+
+def _result_stem(node: dict) -> str:
+    """The lowercase stem of a search result's file name, without a leading ``#``."""
+    name = PurePosixPath(str(node.get("fileName") or "")).name.lower().lstrip("#")
+    return PurePosixPath(name).stem
 
 
 def _pick_distinctive_file(files: list[ModFile]) -> str | None:
@@ -134,7 +141,7 @@ async def match_by_file_contents(
                     results = await gql.search_file_contents(
                         game.domain_name,
                         file_path_wildcard=stem,
-                        count=5,
+                        count=_SEARCH_PAGE,
                     )
                 except NexusRateLimitError:
                     on_progress("file-content", "Rate limited, stopping", 90)
@@ -146,8 +153,13 @@ async def match_by_file_contents(
 
                 searches_done += 1
 
-                if not results:
+                # A full page may hide other mods that ship the same file.
+                if not results or len(results) >= _SEARCH_PAGE:
                     continue
+
+                # WILDCARD matches substrings, so keep only files with our exact stem
+                # ("language" otherwise hits "shading_language_packing.py").
+                results = [n for n in results if _result_stem(n) == stem]
 
                 # Check if all results point to the same mod
                 mod_ids = set()
