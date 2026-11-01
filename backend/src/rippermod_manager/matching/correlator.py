@@ -90,6 +90,27 @@ def token_jaccard(a: str, b: str) -> float:
     return len(intersection) / len(union)
 
 
+def _is_word_substring(a: str, b: str) -> bool:
+    """Check whether the shorter of two normalized names sits on word boundaries in the longer.
+
+    The shorter name must start at a word start. Unless it has two or more tokens, it must
+    also end at a word end, so "ash" does not match inside "splash".
+    """
+    short, long = (a, b) if len(a) <= len(b) else (b, a)
+    if not short:
+        return False
+    multi_token = len(short.split()) >= 2
+    start = long.find(short)
+    while start != -1:
+        end = start + len(short)
+        starts_word = start == 0 or not long[start - 1].isalnum()
+        ends_word = end == len(long) or not long[end].isalnum()
+        if starts_word and (multi_token or ends_word):
+            return True
+        start = long.find(short, start + 1)
+    return False
+
+
 def compute_name_score(local_name: str, nexus_name: str) -> tuple[float, str]:
     ln = normalize(local_name)
     nn = normalize(nexus_name)
@@ -97,7 +118,7 @@ def compute_name_score(local_name: str, nexus_name: str) -> tuple[float, str]:
     if ln == nn:
         return 1.0, "exact"
 
-    if ln in nn or nn in ln:
+    if _is_word_substring(ln, nn):
         return 0.9, "substring"
 
     jaccard = token_jaccard(local_name, nexus_name)
