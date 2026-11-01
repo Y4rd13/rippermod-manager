@@ -292,3 +292,149 @@ def test_cache_invalidates_when_an_installed_file_is_renamed(session, game):
     session.commit()
 
     assert conflict_count(game, session).mods_with_conflicts == 2
+
+
+def _resource_edge(session, game: Game, winner: str, loser: str) -> None:
+    session.add(
+        ConflictEvidence(
+            game_id=game.id,
+            kind=ConflictKind.archive_resource,
+            severity=Severity.low,
+            key="1",
+            detail=json.dumps({"winner_archive": winner, "loser_archives": [loser]}),
+        )
+    )
+    session.commit()
+
+
+def _index(session, game: Game, mod: InstalledMod, filename: str) -> None:
+    session.add(
+        ArchiveEntryIndex(
+            game_id=game.id, installed_mod_id=mod.id, archive_filename=filename, resource_hash=1
+        )
+    )
+    session.commit()
+
+
+def test_cache_invalidates_when_the_newest_confirmed_correlation_is_reassigned(session, game):
+    _on_disk(session, game, 202)
+    _archive(game, "ModA-101-1-0-1700000000.zip", [SHARED])
+    _archive(game, "ModB-202-1-0-1700000000.zip", [SHARED])
+    group = ModGroup(game_id=game.id, display_name="Reassigned", confidence=0.9)
+    nd_101 = NexusDownload(game_id=game.id, nexus_mod_id=101, mod_name="A")
+    nd_303 = NexusDownload(game_id=game.id, nexus_mod_id=303, mod_name="C")
+    session.add_all([group, nd_101, nd_303])
+    session.flush()
+    newest = ModNexusCorrelation(
+        mod_group_id=group.id,
+        nexus_download_id=nd_101.id,
+        score=1.0,
+        method="manual",
+        confirmed_by_user=True,
+    )
+    session.add(newest)
+    session.commit()
+    old_id = newest.id
+    assert conflict_count(game, session).mods_with_conflicts == 2
+
+    # As routers/mods.py reassign_correlation: delete the group's rows, insert a confirmed one.
+    session.delete(newest)
+    session.flush()
+    reassigned = ModNexusCorrelation(
+        mod_group_id=group.id,
+        nexus_download_id=nd_303.id,
+        score=1.0,
+        method="manual",
+        confirmed_by_user=True,
+    )
+    session.add(reassigned)
+    session.commit()
+    assert reassigned.id == old_id  # SQLite reuses the freed highest id
+
+    assert conflict_count(game, session).mods_with_conflicts == 0
+
+
+def test_cache_invalidates_when_evidence_is_rewritten_under_the_same_id(session, game):
+    main = _installed(session, game, "Main", 101, ["archive/pc/mod/main.archive"])
+    other = _installed(session, game, "Other", 202, ["archive/pc/mod/other.archive"])
+    _index(session, game, main, "main.archive")
+    _index(session, game, other, "other.archive")
+    _resource_edge(session, game, "main.archive", "other.archive")
+    old = session.exec(select(ConflictEvidence)).one()
+    old_id = old.id
+    assert conflict_count(game, session).mods_with_conflicts == 2
+
+    # As the conflict engine's reindex: delete the kind's rows, write the new ones.
+    session.delete(old)
+    session.flush()
+    _resource_edge(session, game, "main.archive", "unindexed.archive")
+    assert session.exec(select(ConflictEvidence)).one().id == old_id
+
+    assert conflict_count(game, session).mods_with_conflicts == 0
+
+
+def test_cache_invalidates_when_archives_are_indexed_after_install(session, game):
+    main = _installed(session, game, "Main", 101, ["archive/pc/mod/main.archive"])
+    other = _installed(session, game, "Other", 202, ["archive/pc/mod/other.archive"])
+    _resource_edge(session, game, "main.archive", "other.archive")
+    assert conflict_count(game, session).mods_with_conflicts == 0
+
+    _index(session, game, main, "main.archive")
+    _index(session, game, other, "other.archive")
+
+    assert conflict_count(game, session).mods_with_conflicts == 2
+
+
+def test_cache_invalidates_when_an_installed_file_row_is_replaced_under_the_same_id(session, game):
+    _on_disk(session, game, 101)
+    mod = _installed(session, game, "Manual", None, ["archive/pc/mod/a.archive"])
+    _archive(game, "ModA-101-1-0-1700000000.zip", ["archive/pc/mod/b.archive"])
+    assert conflict_count(game, session).mods_with_conflicts == 0
+
+    old = mod.files[0]
+    old_id = old.id
+    session.delete(old)
+    session.flush()
+    new = InstalledModFile(installed_mod_id=mod.id, relative_path="archive/pc/mod/b.archive")
+    session.add(new)
+    session.commit()
+    assert new.id == old_id  # same id, same count, same path length
+
+    assert conflict_count(game, session).mods_with_conflicts == 2
+
+
+def test_cache_invalidates_when_a_managed_mod_is_renamed(session, game):
+    _on_disk(session, game, 101)
+    mod = _installed(session, game, "Old name", None, [SHARED])
+    _archive(game, "ModA-101-1-0-1700000000.zip", [SHARED])
+    build_conflict_graph(game, session)
+
+    mod.name = "New name"
+    session.add(mod)
+    session.commit()
+
+    labels = {n.label for n in build_conflict_graph(game, session).nodes}
+    assert "New name" in labels
+
+
+def test_cache_invalidates_when_a_download_job_completes(session, game):
+    _on_disk(session, game, 101)
+    _on_disk(session, game, 202)
+    _archive(game, "ModA-101-1-0-1700000000.zip", [SHARED])
+    _archive(game, "Downloaded.zip", [SHARED])
+    job = DownloadJob(
+        game_id=game.id,
+        nexus_mod_id=202,
+        nexus_file_id=1,
+        file_name="Downloaded.zip",
+        status="downloading",
+    )
+    session.add(job)
+    session.commit()
+    assert conflict_count(game, session).mods_with_conflicts == 0
+
+    job.status = "completed"
+    session.add(job)
+    session.commit()
+
+    assert conflict_count(game, session).mods_with_conflicts == 2
