@@ -158,7 +158,26 @@ class TestSearchMods:
             assert "$sort" in query
             assert "ModsSort" in query
             sort_var = variables.get("sort", [])
-            assert sort_var == [{"field": "endorsements", "direction": "DESC"}]
+            assert sort_var == [{"endorsements": {"direction": "DESC"}}]
+
+    @pytest.mark.asyncio
+    async def test_search_mods_sends_current_schema_shape(self):
+        async with NexusGraphQLClient("key") as gql:
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.json.return_value = {"data": {"mods": {"nodes": []}}}
+            resp.raise_for_status = MagicMock()
+
+            with patch.object(
+                gql.client, "post", new_callable=AsyncMock, return_value=resp
+            ) as mock_post:
+                await gql.search_mods("cyberpunk2077", "Cyber", sort_by="endorsements")
+
+            sent = mock_post.call_args.kwargs["json"]
+            f = sent["variables"]["filter"]
+            assert f["gameId"] == [{"value": "3333", "op": "EQUALS"}]
+            assert f["name"] == [{"value": "Cyber", "op": "WILDCARD"}]
+            assert sent["variables"]["sort"] == [{"endorsements": {"direction": "DESC"}}]
 
 
 class TestSearchCollections:

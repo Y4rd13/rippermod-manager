@@ -343,7 +343,7 @@ class NexusGraphQLClient:
         sort_by: str | None = None,
         sort_direction: str = "DESC",
     ) -> list[dict[str, Any]]:
-        """Search mods by name using wildcard filter.
+        """Search mods by name using the WILDCARD operator (matches substrings).
 
         Optional ``sort_by`` accepts ``"endorsements"``, ``"downloads"``,
         or ``"updatedAt"``.
@@ -351,15 +351,15 @@ class NexusGraphQLClient:
         gid = self._game_id(game_domain)
         variables: dict[str, Any] = {
             "filter": {
-                "gameId": [{"value": gid, "op": "EQUALS"}],
-                "name": [{"value": f"*{name}*", "op": "WILDCARD"}],
+                "gameId": [{"value": str(gid), "op": "EQUALS"}],
+                "name": [{"value": name, "op": "WILDCARD"}],
             },
             "count": count,
         }
         sort_decl = ""
         if sort_by:
             sort_decl = ", $sort: [ModsSort!]"
-            variables["sort"] = [{"field": sort_by, "direction": sort_direction}]
+            variables["sort"] = [{sort_by: {"direction": sort_direction}}]
         sort_arg = ", sort: $sort" if sort_by else ""
         query = (
             f"query SearchMods($filter: ModsFilter!, $count: Int!{sort_decl}) {{"
