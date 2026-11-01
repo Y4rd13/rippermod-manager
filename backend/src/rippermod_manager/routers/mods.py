@@ -20,6 +20,10 @@ from rippermod_manager.schemas.mod import (
     ModGroupOut,
     ScanResult,
 )
+from rippermod_manager.services.presence_service import (
+    ON_DISK_MIN_SCORE,
+    winning_correlations,
+)
 from rippermod_manager.services.update_service import batch_group_file_mtimes
 
 logger = logging.getLogger(__name__)
@@ -40,30 +44,14 @@ def list_mod_groups(game_name: str, session: Session = Depends(get_session)) -> 
     groups = session.exec(select(ModGroup).where(ModGroup.game_id == game.id)).all()
 
     group_ids = [g.id for g in groups]
-    corr_rows = session.exec(
-        select(ModNexusCorrelation, NexusDownload, NexusModMeta)
-        .join(NexusDownload, ModNexusCorrelation.nexus_download_id == NexusDownload.id)
-        .outerjoin(NexusModMeta, NexusDownload.nexus_mod_id == NexusModMeta.nexus_mod_id)
-        .where(ModNexusCorrelation.mod_group_id.in_(group_ids))  # type: ignore[union-attr]
-    ).all()
-    corr_map: dict[int, tuple[ModNexusCorrelation, NexusDownload, NexusModMeta | None]] = {}
-    for corr, nd, meta in corr_rows:
-        existing = corr_map.get(corr.mod_group_id)
-        if existing is None or corr.score > existing[0].score:
-            corr_map[corr.mod_group_id] = (corr, nd, meta)
-
-    # Deduplicate across groups: if multiple groups match the same nexus_mod_id,
-    # only the group with the highest score keeps the match.
-    nexus_id_best: dict[int, tuple[int, float]] = {}  # nexus_mod_id -> (group_id, score)
-    for group_id, (corr, nd, _meta) in corr_map.items():
-        nid = nd.nexus_mod_id
-        prev = nexus_id_best.get(nid)
-        if prev is None or corr.score > prev[1]:
-            nexus_id_best[nid] = (group_id, corr.score)
-
-    nexus_id_winner: set[int] = set()  # group_ids that won dedup
-    for _nid, (group_id, _score) in nexus_id_best.items():
-        nexus_id_winner.add(group_id)
+    winners = winning_correlations(session, game.id)  # type: ignore[arg-type]
+    nexus_ids = {nd.nexus_mod_id for _corr, nd in winners.values()}
+    meta_map: dict[int, NexusModMeta] = {}
+    if nexus_ids:
+        metas = session.exec(
+            select(NexusModMeta).where(NexusModMeta.nexus_mod_id.in_(nexus_ids))  # type: ignore[attr-defined]
+        ).all()
+        meta_map = {m.nexus_mod_id: m for m in metas}
 
     mtime_map = batch_group_file_mtimes(group_ids, game.install_path, session)
 
@@ -71,15 +59,17 @@ def list_mod_groups(game_name: str, session: Session = Depends(get_session)) -> 
     for g in groups:
         _ = g.files
         nexus_match = None
-        match = corr_map.get(g.id)  # type: ignore[arg-type]
-        if match and g.id in nexus_id_winner:
-            corr, nd, meta = match
+        match = winners.get(g.id)  # type: ignore[arg-type]
+        if match:
+            corr, nd = match
+            meta = meta_map.get(nd.nexus_mod_id)
             nexus_match = CorrelationBrief(
                 nexus_mod_id=nd.nexus_mod_id,
                 mod_name=nd.mod_name,
                 score=corr.score,
                 method=corr.method,
                 confirmed=corr.confirmed_by_user,
+                on_disk=corr.confirmed_by_user or corr.score >= ON_DISK_MIN_SCORE,
                 author=meta.author if meta else "",
                 summary=meta.summary if meta else "",
                 version=meta.version if meta else nd.version,

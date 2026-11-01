@@ -47,6 +47,41 @@ class TestListModGroups:
         assert data[0]["display_name"] == "TestMod"
         assert len(data[0]["files"]) == 1
 
+    def test_list_mods_exposes_on_disk_flag(self, client, engine):
+        from sqlmodel import Session
+
+        from rippermod_manager.models.correlation import ModNexusCorrelation
+        from rippermod_manager.models.game import Game, GameModPath
+        from rippermod_manager.models.mod import ModGroup
+        from rippermod_manager.models.nexus import NexusDownload
+
+        with Session(engine) as s:
+            game = Game(name="G", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+            for display, nexus_id, score in (("Sure", 4885, 0.75), ("Maybe", 28966, 0.47)):
+                group = ModGroup(game_id=game.id, display_name=display, confidence=0.9)
+                nd = NexusDownload(game_id=game.id, nexus_mod_id=nexus_id, mod_name=display)
+                s.add(group)
+                s.add(nd)
+                s.flush()
+                s.add(
+                    ModNexusCorrelation(
+                        mod_group_id=group.id,
+                        nexus_download_id=nd.id,
+                        score=score,
+                        method="filename_id",
+                    )
+                )
+            s.commit()
+
+        r = client.get("/api/v1/games/G/mods/")
+        assert r.status_code == 200
+        by_name = {g["display_name"]: g["nexus_match"] for g in r.json()}
+        assert by_name["Sure"]["on_disk"] is True
+        assert by_name["Maybe"]["on_disk"] is False
+
 
 class TestScanMods:
     def test_scan_mock(self, client):
