@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from rippermod_manager.schemas.deploy import DeployReport
+from rippermod_manager.services.presence_service import ArchiveStatus
 
 
 class InstallRequest(BaseModel):
@@ -84,6 +85,9 @@ class AvailableArchive(BaseModel):
     installed_mod_id: int | None = None
     last_downloaded_at: datetime | None = None
     is_empty: bool = False
+    status: ArchiveStatus = "orphan"
+    mod_group_id: int | None = None  # group to adopt, for not_managed / possible_match
+    match_score: float | None = None  # correlation score of that group
 
 
 class ArchiveDeleteResult(BaseModel):

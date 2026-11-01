@@ -3,8 +3,12 @@ from pathlib import Path
 
 import pytest
 
+from rippermod_manager.models.correlation import ModNexusCorrelation
+from rippermod_manager.models.download import DownloadJob
 from rippermod_manager.models.game import Game, GameModPath
-from rippermod_manager.models.install import InstalledMod
+from rippermod_manager.models.install import ArchiveNexusLink, InstalledMod
+from rippermod_manager.models.mod import ModGroup
+from rippermod_manager.models.nexus import NexusDownload
 
 
 def _make_zip(path: Path, files: dict[str, bytes]) -> None:
@@ -75,6 +79,126 @@ class TestListAvailableArchives:
         data = r.json()
         assert len(data) == 1
         assert data[0]["nexus_mod_id"] == 107
+
+
+def _correlate(session, game_id: int, nexus_mod_id: int, score: float) -> int:
+    """A scanned group correlated to *nexus_mod_id* with *score*; returns the group id."""
+    group = ModGroup(game_id=game_id, display_name=f"Group {nexus_mod_id}", confidence=0.9)
+    nd = NexusDownload(game_id=game_id, nexus_mod_id=nexus_mod_id, mod_name=f"Mod {nexus_mod_id}")
+    session.add(group)
+    session.add(nd)
+    session.flush()
+    session.add(
+        ModNexusCorrelation(
+            mod_group_id=group.id, nexus_download_id=nd.id, score=score, method="filename_id"
+        )
+    )
+    session.commit()
+    return group.id
+
+
+@pytest.fixture
+def archive_states_setup(game_setup, engine):
+    """Staging with one archive per state; returns (game_name, staging, game_id, group_id)."""
+    from sqlmodel import Session, select
+
+    game_name, _, staging = game_setup
+    for name in (
+        "Managed-20-1-0-1700000000.zip",
+        "Managed-20-2-0-1700000001.zip",
+        "Mod-10-1-0-1700000000.zip",
+        "Mod-11-1-0-1700000000.zip",
+        "Mod-12-1-0-1700000000.zip",
+        "random.zip",
+    ):
+        (staging / name).write_bytes(b"fake")
+
+    with Session(engine) as s:
+        game = s.exec(select(Game).where(Game.name == game_name)).first()
+        s.add(
+            InstalledMod(
+                game_id=game.id,
+                name="Managed",
+                source_archive="Managed-20-1-0-1700000000.zip",
+                nexus_mod_id=20,
+            )
+        )
+        group_id = _correlate(s, game.id, 10, 1.0)
+        _correlate(s, game.id, 11, 0.47)
+        s.commit()
+        game_id = game.id
+    return game_name, staging, game_id, group_id
+
+
+class TestArchiveStates:
+    def test_archive_states(self, client, archive_states_setup):
+        game_name, _, _, group_id = archive_states_setup
+
+        r = client.get(f"/api/v1/games/{game_name}/install/available")
+
+        assert r.status_code == 200
+        by_name = {a["filename"]: a for a in r.json()}
+        assert by_name["Managed-20-1-0-1700000000.zip"]["status"] == "managed"
+        assert by_name["Managed-20-2-0-1700000001.zip"]["status"] == "other_version"
+        assert by_name["Mod-10-1-0-1700000000.zip"]["status"] == "not_managed"
+        assert by_name["Mod-10-1-0-1700000000.zip"]["mod_group_id"] == group_id
+        assert by_name["Mod-10-1-0-1700000000.zip"]["match_score"] == 1.0
+        assert by_name["Mod-11-1-0-1700000000.zip"]["status"] == "possible_match"
+        assert by_name["Mod-11-1-0-1700000000.zip"]["match_score"] == 0.47
+        assert by_name["Mod-11-1-0-1700000000.zip"]["mod_group_id"] is not None
+        assert by_name["Mod-12-1-0-1700000000.zip"]["status"] == "not_installed"
+        assert by_name["Mod-12-1-0-1700000000.zip"]["mod_group_id"] is None
+        assert by_name["Mod-12-1-0-1700000000.zip"]["match_score"] is None
+        assert by_name["random.zip"]["status"] == "orphan"
+        assert by_name["random.zip"]["mod_group_id"] is None
+
+    def test_archive_with_only_link_row_is_not_orphan(self, client, game_setup, engine):
+        from sqlmodel import Session, select
+
+        game_name, _, staging = game_setup
+        (staging / "weird name.zip").write_bytes(b"fake")
+        with Session(engine) as s:
+            game = s.exec(select(Game).where(Game.name == game_name)).first()
+            s.add(ArchiveNexusLink(game_id=game.id, filename="weird name.zip", nexus_mod_id=12))
+            s.commit()
+
+        r = client.get(f"/api/v1/games/{game_name}/install/available")
+
+        by_name = {a["filename"]: a for a in r.json()}
+        assert by_name["weird name.zip"]["status"] == "not_installed"
+        assert by_name["weird name.zip"]["nexus_mod_id"] == 12
+
+    def test_cleanup_orphans_deletes_only_orphans(self, client, archive_states_setup, engine):
+        from sqlmodel import Session
+
+        game_name, staging, game_id, _ = archive_states_setup
+        (staging / "downloading.zip").write_bytes(b"fake")
+        with Session(engine) as s:
+            s.add(
+                DownloadJob(
+                    game_id=game_id,
+                    nexus_mod_id=99,
+                    nexus_file_id=1,
+                    file_name="downloading.zip",
+                    status="downloading",
+                )
+            )
+            s.commit()
+
+        r = client.post(f"/api/v1/games/{game_name}/install/archives/cleanup-orphans")
+
+        assert r.status_code == 200
+        assert r.json()["deleted_files"] == ["random.zip"]
+        assert not (staging / "random.zip").exists()
+        remaining = {p.name for p in staging.iterdir()}
+        assert remaining == {
+            "Managed-20-1-0-1700000000.zip",
+            "Managed-20-2-0-1700000001.zip",
+            "Mod-10-1-0-1700000000.zip",
+            "Mod-11-1-0-1700000000.zip",
+            "Mod-12-1-0-1700000000.zip",
+            "downloading.zip",
+        }
 
 
 class TestListInstalledMods:

@@ -45,6 +45,11 @@ from rippermod_manager.services.archive_layout import (
 )
 from rippermod_manager.services.nexus_helpers import match_local_to_nexus_file
 from rippermod_manager.services.paths import get_mods_dir
+from rippermod_manager.services.presence_service import (
+    archive_nexus_ids,
+    archive_status,
+    nexus_presence,
+)
 from rippermod_manager.services.vfs.naming import unique_staging_name
 from rippermod_manager.services.vfs.ownership import next_win_seq, path_key
 from rippermod_manager.services.vfs.primitives import VfsError, hardlink, same_volume
@@ -810,7 +815,11 @@ def find_orphaned_archives(
     game: Game,
     session: Session,
 ) -> list[str]:
-    """Return archive filenames not referenced by any installed mod or active download."""
+    """Return archives with no managed mod, no Nexus id and no active download.
+
+    An archive whose Nexus id resolves (filename, ``ArchiveNexusLink`` or completed job) is
+    never an orphan, even when no installed mod uses it.
+    """
     staging = get_mods_dir(game)
     if not staging.is_dir():
         return []
@@ -823,29 +832,31 @@ def find_orphaned_archives(
     if not all_files:
         return []
 
-    installed_archives: set[str] = set()
-    installed_mods = session.exec(
-        select(InstalledMod.source_archive).where(
-            InstalledMod.game_id == game.id,
-            InstalledMod.source_archive != "",
-        )
-    ).all()
-    for sa in installed_mods:
-        installed_archives.add(sa)
+    managed_archives = set(
+        session.exec(
+            select(InstalledMod.source_archive).where(
+                InstalledMod.game_id == game.id,
+                InstalledMod.source_archive != "",
+            )
+        ).all()
+    )
+    active_downloads = set(
+        session.exec(
+            select(DownloadJob.file_name).where(
+                DownloadJob.game_id == game.id,
+                DownloadJob.status.in_(["pending", "downloading", "completed"]),
+                DownloadJob.file_name != "",
+            )
+        ).all()
+    )
 
-    active_downloads: set[str] = set()
-    active_jobs = session.exec(
-        select(DownloadJob.file_name).where(
-            DownloadJob.game_id == game.id,
-            DownloadJob.status.in_(["pending", "downloading", "completed"]),
-            DownloadJob.file_name != "",
-        )
-    ).all()
-    for fn in active_jobs:
-        active_downloads.add(fn)
-
-    referenced = installed_archives | active_downloads
-    return sorted(all_files - referenced)
+    nexus_ids = archive_nexus_ids(game, session, all_files)
+    presence = nexus_presence(game, session)
+    return sorted(
+        name
+        for name in all_files - active_downloads
+        if archive_status(name, nexus_ids.get(name), managed_archives, presence) == "orphan"
+    )
 
 
 def delete_orphaned_archives(
