@@ -3,12 +3,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import delete
+from sqlalchemy import delete, func
 from sqlmodel import Session, select
 
 from rippermod_manager.constants import CYBERPUNK_DEFAULT_PATHS, GAME_REGISTRY
 from rippermod_manager.database import get_session
 from rippermod_manager.models.game import Game, GameModPath
+from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.schemas.game import (
     GameCreate,
     GameOut,
@@ -17,7 +18,7 @@ from rippermod_manager.schemas.game import (
     PathValidation,
     PathValidationRequest,
 )
-from rippermod_manager.services.paths import is_unc_path
+from rippermod_manager.services.paths import is_unc_path, resolve_mods_dir
 from rippermod_manager.services.vfs.primitives import VfsError, same_volume
 
 router = APIRouter(prefix="/games", tags=["games"])
@@ -188,6 +189,21 @@ def update_game(name: str, data: GameUpdate, session: Session = Depends(get_sess
         mods_dir = (data.mods_dir or "").strip() or None
     if mods_dir and ("mods_dir" in fields or install_path != game.install_path):
         _validate_mods_dir(install_path, mods_dir)
+
+    # Installed mods live in the staging folder; moving it would orphan them.
+    if (
+        fields & {"install_path", "mods_dir"}
+        and Path(resolve_mods_dir(install_path, mods_dir)).resolve()
+        != Path(resolve_mods_dir(game.install_path, game.mods_dir)).resolve()
+    ):
+        installed = session.exec(
+            select(func.count()).select_from(InstalledMod).where(InstalledMod.game_id == game.id)
+        ).one()
+        if installed:
+            raise HTTPException(
+                409,
+                f"Uninstall your mods before changing the staging folder ({installed} installed).",
+            )
 
     if fields & {"install_path", "mods_dir"}:
         game.install_path = install_path

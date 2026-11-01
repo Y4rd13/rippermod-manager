@@ -115,7 +115,8 @@ export function useUpdateGame() {
       qc.invalidateQueries({ queryKey: ["games"] });
       toast.success("Game updated", game.name);
     },
-    onError: (err) => toast.error("Failed to update game", err.message),
+    onError: (err) =>
+      toast.error("Failed to update game", apiErrorDetail(err, err.message)),
   });
 }
 

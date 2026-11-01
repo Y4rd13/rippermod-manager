@@ -187,6 +187,58 @@ class TestUpdateGame:
         assert client.get("/api/v1/games/U5").json()["install_path"] == old
 
 
+def _install_mod(session, game_name: str) -> None:
+    from sqlmodel import select
+
+    from rippermod_manager.models.game import Game
+    from rippermod_manager.models.install import InstalledMod
+
+    game = session.exec(select(Game).where(Game.name == game_name)).one()
+    session.add(InstalledMod(game_id=game.id, name="Mod A"))
+    session.commit()
+
+
+class TestStagingChangeWithInstalledMods:
+    MSG = "Uninstall your mods before changing the staging folder (1 installed)."
+
+    def test_patch_staging_with_installed_mods_returns_409(self, client, session, tmp_path):
+        other = tmp_path / "other"
+        other.mkdir()
+        _create(client, "S1", _cp_dir(tmp_path))
+        _install_mod(session, "S1")
+        r = client.patch("/api/v1/games/S1", json={"mods_dir": str(other)})
+        assert r.status_code == 409, r.text
+        assert r.json()["detail"] == self.MSG
+        assert client.get("/api/v1/games/S1").json()["mods_dir"] is None
+
+    def test_patch_reset_staging_with_installed_mods_returns_409(self, client, session, tmp_path):
+        custom = tmp_path / "staging"
+        custom.mkdir()
+        _create(client, "S2", _cp_dir(tmp_path), mods_dir=str(custom))
+        _install_mod(session, "S2")
+        r = client.patch("/api/v1/games/S2", json={"mods_dir": None})
+        assert r.status_code == 409, r.text
+        assert r.json()["detail"] == self.MSG
+        assert client.get("/api/v1/games/S2").json()["mods_dir"] == str(custom)
+
+    def test_patch_same_resolved_staging_with_mods_is_allowed(self, client, session, tmp_path):
+        install = _cp_dir(tmp_path)
+        _create(client, "S3", install)
+        _install_mod(session, "S3")
+        default = str(Path(install) / "downloaded_mods")
+        r = client.patch("/api/v1/games/S3", json={"mods_dir": default})
+        assert r.status_code == 200, r.text
+        assert r.json()["resolved_mods_dir"] == default
+
+    def test_patch_staging_without_mods_still_works(self, client, tmp_path):
+        other = tmp_path / "other"
+        other.mkdir()
+        _create(client, "S4", _cp_dir(tmp_path))
+        r = client.patch("/api/v1/games/S4", json={"mods_dir": str(other)})
+        assert r.status_code == 200, r.text
+        assert r.json()["resolved_mods_dir"] == str(other)
+
+
 class TestValidatePath:
     def test_nonexistent_path(self, client):
         r = client.post(
