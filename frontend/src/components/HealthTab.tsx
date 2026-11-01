@@ -17,10 +17,12 @@ export function HealthTab({
   gameName,
   focusFrameworks,
   onGoToUpdates,
+  onAdopt,
 }: {
   gameName: string;
   focusFrameworks: boolean;
   onGoToUpdates: () => void;
+  onAdopt?: (modGroupId: number) => void;
 }) {
   const { data: health } = useHealth(gameName);
   const { data: updates } = useUpdates(gameName);
@@ -67,6 +69,7 @@ export function HealthTab({
         gameName={gameName}
         updatesCount={updates?.updates_available ?? 0}
         onGoToUpdates={onGoToUpdates}
+        onAdopt={onAdopt}
       />
 
       <div

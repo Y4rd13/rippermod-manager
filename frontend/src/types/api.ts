@@ -55,6 +55,8 @@ export interface CorrelationBrief {
   picture_url: string;
   nexus_url: string;
   updated_at: string | null;
+  /** True when the match is strong enough (or user-confirmed) to treat the mod as on disk. */
+  on_disk: boolean;
 }
 
 export interface ModGroup {
@@ -197,6 +199,14 @@ export interface UpdateCheckResult {
 
 // Install feature types
 
+export type ArchiveStatus =
+  | "managed"
+  | "not_managed"
+  | "possible_match"
+  | "other_version"
+  | "not_installed"
+  | "orphan";
+
 export interface AvailableArchive {
   filename: string;
   size: number;
@@ -207,6 +217,9 @@ export interface AvailableArchive {
   installed_mod_id: number | null;
   last_downloaded_at: string | null;
   is_empty: boolean;
+  status: ArchiveStatus;
+  mod_group_id: number | null;
+  match_score: number | null;
 }
 
 export interface ArchiveDeleteResult {
@@ -343,6 +356,8 @@ export interface HealthIssueOut {
   nexus_url: string | null;
   action_mod_id: number | null;
   required_name: string;
+  /** Set for `unmanaged_requirement`: the on-disk mod group the user can adopt. */
+  mod_group_id: number | null;
 }
 
 export interface HealthReport {

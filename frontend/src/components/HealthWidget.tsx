@@ -36,10 +36,14 @@ type ActionCtx = {
   deploy: ReturnType<typeof useDeploy>;
   /** Opens the confirmation that lists what a force deploy would move aside. */
   askForceDeploy: () => void;
+  /** Opens the adopt dialog for one mod group; absent when the page cannot adopt. */
+  onAdopt?: (modGroupId: number) => void;
 };
 
 const isRequirement = (i: HealthIssueOut) =>
-  i.kind === "missing_requirement" || i.kind === "disabled_requirement";
+  i.kind === "missing_requirement" ||
+  i.kind === "disabled_requirement" ||
+  i.kind === "unmanaged_requirement";
 
 /** Action for a non-requirement issue (requirements get their own grouped UI). */
 function resolveAction(issue: HealthIssueOut, ctx: ActionCtx): RowAction | null {
@@ -106,7 +110,10 @@ function HealthRow({ issue, action }: { issue: HealthIssueOut; action: RowAction
   );
 }
 
-/** One card per requiring mod, listing each missing/disabled dependency with its fix. */
+/**
+ * One card per requiring mod, listing each missing/disabled/unmanaged dependency with its fix.
+ * An unmanaged requirement is on disk but not tracked, so it reads as info, not as a problem.
+ */
 function RequirementGroup({
   modName,
   issues,
@@ -117,16 +124,23 @@ function RequirementGroup({
   ctx: ActionCtx;
 }) {
   const danger = issues.some((i) => i.kind === "missing_requirement");
-  const Icon = danger ? CircleAlert : AlertTriangle;
+  const infoOnly = issues.every((i) => i.kind === "unmanaged_requirement");
+  const Icon = danger ? CircleAlert : infoOnly ? Info : AlertTriangle;
   return (
     <div
       className={cn(
         "rounded-lg border border-l-2 border-border bg-surface-2 px-3 py-2",
-        danger ? "border-l-danger/70" : "border-l-warning/70",
+        danger ? "border-l-danger/70" : infoOnly ? "border-l-border" : "border-l-warning/70",
       )}
     >
       <div className="flex items-center gap-2">
-        <Icon size={14} className={cn("shrink-0", danger ? "text-danger" : "text-warning")} />
+        <Icon
+          size={14}
+          className={cn(
+            "shrink-0",
+            danger ? "text-danger" : infoOnly ? "text-text-muted" : "text-warning",
+          )}
+        />
         <span className="text-sm font-medium text-text-primary">{modName}</span>
         <span className="text-xs text-text-muted">
           needs {issues.length} requirement{issues.length === 1 ? "" : "s"}
@@ -135,13 +149,14 @@ function RequirementGroup({
       <ul className="mt-1.5 space-y-1 pl-6">
         {issues.map((i, idx) => {
           const missing = i.kind === "missing_requirement";
+          const unmanaged = i.kind === "unmanaged_requirement";
           return (
             <li key={idx} className="flex items-center gap-2 text-xs">
               <span className="min-w-0 truncate text-text-secondary">
                 {i.required_name || "A required mod"}
               </span>
-              <Badge variant={missing ? "danger" : "warning"}>
-                {missing ? "missing" : "disabled"}
+              <Badge variant={missing ? "danger" : unmanaged ? "neutral" : "warning"}>
+                {missing ? "missing" : unmanaged ? "on disk" : "disabled"}
               </Badge>
               <span className="ml-auto shrink-0">
                 {missing && i.nexus_url && (
@@ -154,7 +169,17 @@ function RequirementGroup({
                     <ExternalLink size={12} /> Get on Nexus
                   </Button>
                 )}
-                {!missing && i.action_mod_id != null && (
+                {unmanaged && i.mod_group_id != null && ctx.onAdopt && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => ctx.onAdopt?.(i.mod_group_id!)}
+                    title="Bring this mod under RipperMod's management"
+                  >
+                    Review &amp; adopt
+                  </Button>
+                )}
+                {i.kind === "disabled_requirement" && i.action_mod_id != null && (
                   <Button
                     size="sm"
                     variant="secondary"
@@ -226,10 +251,12 @@ export function HealthWidget({
   gameName,
   updatesCount = 0,
   onGoToUpdates,
+  onAdopt,
 }: {
   gameName: string;
   updatesCount?: number;
   onGoToUpdates?: () => void;
+  onAdopt?: (modGroupId: number) => void;
 }) {
   const { data, isLoading, isError, refetch, isFetching } = useHealth(gameName);
   const toggle = useToggleMod();
@@ -285,7 +312,7 @@ export function HealthWidget({
 
   const reqIssues = data.issues.filter(isRequirement);
   const otherAttention = data.issues.filter((i) => i.severity !== "info" && !isRequirement(i));
-  const minor = data.issues.filter((i) => i.severity === "info");
+  const minor = data.issues.filter((i) => i.severity === "info" && !isRequirement(i));
 
   // Group requirement issues under the mod that needs them; critical (missing) first.
   const groups = new Map<string, HealthIssueOut[]>();
@@ -301,7 +328,13 @@ export function HealthWidget({
         Number(a.issues.some((i) => i.kind === "missing_requirement")),
     );
 
-  const ctx: ActionCtx = { gameName, toggle, deploy, askForceDeploy: () => setConfirmForce(true) };
+  const ctx: ActionCtx = {
+    gameName,
+    toggle,
+    deploy,
+    askForceDeploy: () => setConfirmForce(true),
+    onAdopt,
+  };
   const hasAttention = reqGroups.length > 0 || otherAttention.length > 0;
 
   return (

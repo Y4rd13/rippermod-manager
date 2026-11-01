@@ -65,7 +65,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import { useUIStore } from "@/stores/ui-store";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
-import type { HealthReport, ModUpdate } from "@/types/api";
+import type { HealthReport, ModGroup, ModUpdate } from "@/types/api";
 
 const ArchiveResourceConflicts = lazy(() =>
   import("@/components/conflicts/ArchiveResourceConflicts").then((m) => ({
@@ -153,7 +153,7 @@ export function GameDetailPage() {
   const warnBeforeLaunch = useUIStore((s) => s.warnBeforeLaunch);
   const adoptBannerDismissed = useUIStore((s) => s.adoptBannerDismissedByGame[name] ?? false);
   const dismissAdoptBanner = useUIStore((s) => s.dismissAdoptBanner);
-  const [adoptOpen, setAdoptOpen] = useState(false);
+  const [adoptSelection, setAdoptSelection] = useState<ModGroup[] | null>(null);
   useEffect(() => {
     setActiveGame(name || null);
     return () => setActiveGame(null);
@@ -393,6 +393,14 @@ export function GameDetailPage() {
   }, [nexusMatched, installedMods]);
   const recognizedNotInstalled = adoptableMods.length;
 
+  /** Opens the adopt dialog on the given groups, or on every adoptable one when none are given. */
+  const openAdopt = (groupIds?: number[]) => {
+    const picked = groupIds
+      ? adoptableMods.filter((m) => groupIds.includes(m.id))
+      : adoptableMods;
+    if (picked.length > 0) setAdoptSelection(picked);
+  };
+
   const tabCounts = useMemo<Partial<Record<Tab, number>>>(() => ({
     installed: installedLoading ? undefined : installedMods.length + recognizedNotInstalled,
     matched: modsLoading ? undefined : nexusMatched.length,
@@ -615,7 +623,7 @@ export function GameDetailPage() {
               size="sm"
               onClick={() => {
                 setTab("installed");
-                setAdoptOpen(true);
+                openAdopt();
               }}
             >
               Review &amp; adopt
@@ -764,6 +772,7 @@ export function GameDetailPage() {
           gameName={name}
           focusFrameworks={focusFrameworks}
           onGoToUpdates={() => setTab("updates")}
+          onAdopt={(id) => openAdopt([id])}
         />
       )}
       {tab === "installed" && (
@@ -779,7 +788,7 @@ export function GameDetailPage() {
             isLoading={installedLoading}
             onModClick={setSelectedModId}
             onTabChange={(t) => setTab(t as Tab)}
-            onReviewAdopt={recognizedNotInstalled > 0 ? () => setAdoptOpen(true) : undefined}
+            onReviewAdopt={recognizedNotInstalled > 0 ? () => openAdopt() : undefined}
           />
         </>
       )}
@@ -938,11 +947,11 @@ export function GameDetailPage() {
           onOverwrite={modalFlow.handleInstallOverwrite}
         />
       )}
-      {adoptOpen && (
+      {adoptSelection && (
         <AdoptReviewDialog
           gameName={name}
-          mods={adoptableMods}
-          onClose={() => setAdoptOpen(false)}
+          mods={adoptSelection}
+          onClose={() => setAdoptSelection(null)}
         />
       )}
     </div>
