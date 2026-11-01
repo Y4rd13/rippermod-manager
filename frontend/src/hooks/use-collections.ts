@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useReducer } from "react";
 
+import { invalidateGameState } from "@/hooks/invalidate";
 import { api } from "@/lib/api-client";
 import { parseSSE } from "@/lib/sse-parser";
 import type {
@@ -216,6 +217,7 @@ export function useUninstallCollection(gameName: string | null) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["collections-list", gameName] });
       void qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      invalidateGameState(qc, gameName);
     },
   });
 }
