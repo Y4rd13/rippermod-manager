@@ -68,7 +68,8 @@ def graphql_file_to_rest_file(gql_file: dict[str, Any]) -> dict[str, Any]:
         "category_id": gql_file.get("categoryId"),
         "category_name": gql_file.get("category", ""),
         "uploaded_timestamp": _iso_to_epoch(gql_file.get("date")),
-        "size_in_bytes": gql_file.get("size") or 0,
+        # GraphQL ``size`` is kilobytes; only ``sizeInBytes`` is bytes.
+        "size_in_bytes": gql_file.get("sizeInBytes") or 0,
         "description": gql_file.get("description"),
         "content_preview_link": gql_file.get("contentPreviewLink"),
     }

@@ -26,7 +26,7 @@ def _gql_revision_payload(slug: str = "starter", rev: int = 1) -> dict:
         "revisionStatus": "published",
         "createdAt": "2026-05-01T00:00:00Z",
         "updatedAt": "2026-05-10T00:00:00Z",
-        "fileSize": 1024,
+        "totalSize": 1024,
         "collection": {
             "id": "coll_uuid",
             "slug": slug,
@@ -47,7 +47,8 @@ def _gql_revision_payload(slug: str = "starter", rev: int = 1) -> dict:
                     "fileId": 1001,
                     "name": "Cool Mod.zip",
                     "version": "1.0",
-                    "size": 5000,
+                    "size": 5,
+                    "sizeInBytes": 5000,
                     "uri": "Cool_Mod-1001.zip",
                     "mod": {
                         "modId": 100,
@@ -65,7 +66,8 @@ def _gql_revision_payload(slug: str = "starter", rev: int = 1) -> dict:
                     "fileId": 2002,
                     "name": "Optional Mod.zip",
                     "version": "0.5",
-                    "size": 1500,
+                    "size": 2,
+                    "sizeInBytes": 1500,
                     "uri": "Optional_Mod-2002.zip",
                     "mod": {
                         "modId": 200,
@@ -105,6 +107,35 @@ class TestShapePreview:
         assert out.mods[0].nexus_file_id == 1001
         assert out.mods[0].optional is False
         assert out.mods[1].optional is True
+
+    def test_collection_preview_sums_bytes(self):
+        """``size`` is kilobytes; only ``sizeInBytes`` may feed the byte total."""
+        rev = _gql_revision_payload()
+        rev["modFiles"] = [
+            {
+                "optional": False,
+                "file": {
+                    "fileId": 1,
+                    "size": 1024,
+                    "sizeInBytes": 1048576,
+                    "mod": {"modId": 100, "name": "M"},
+                },
+            }
+        ]
+        out = svc._shape_preview("starter", rev)
+        assert out.total_size_bytes == 1048576
+        assert out.mods[0].size_bytes == 1048576
+
+    def test_collection_preview_ignores_kilobyte_size_without_bytes(self):
+        rev = _gql_revision_payload()
+        rev["modFiles"] = [
+            {
+                "optional": False,
+                "file": {"fileId": 1, "size": 1024, "mod": {"modId": 100, "name": "M"}},
+            }
+        ]
+        out = svc._shape_preview("starter", rev)
+        assert out.total_size_bytes == 0
 
     def test_skips_malformed_entries_missing_ids(self):
         rev = _gql_revision_payload()

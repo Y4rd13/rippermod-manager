@@ -5,7 +5,7 @@ import pytest
 import respx
 from sqlmodel import select
 
-from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
+from rippermod_manager.models.nexus import NexusDownload, NexusModFile, NexusModMeta
 from rippermod_manager.nexus.client import BASE_URL
 from rippermod_manager.services.nexus_sync import sync_nexus_history
 
@@ -192,3 +192,55 @@ class TestSyncNexusHistory:
             )
             result = await sync_nexus_history(game, "key", session)
         assert result.total_stored == 0
+
+
+_FILE_SYNC_BATCH = {
+    10: {
+        "name": "CoolMod",
+        "version": "1.0",
+        "summary": "A mod",
+        "author": "Auth",
+        "category": "5",
+        "endorsements": 100,
+    }
+}
+
+
+async def _sync_file_sizes(session, game, gql_files, stored_size=34051):
+    """Run a sync for mod 10 holding a stored file 1, with ``gql_files`` from Nexus."""
+    session.add(NexusModFile(nexus_mod_id=10, file_id=1, file_name="a.zip", file_size=stored_size))
+    session.commit()
+    _setup_respx(tracked=[{"domain_name": "cyberpunk2077", "mod_id": 10}], endorsed=[])
+    with patch("rippermod_manager.services.nexus_sync.NexusGraphQLClient") as mock_gql_cls:
+        mock = _make_gql_mock(batch_mods_return=_FILE_SYNC_BATCH)
+        mock.get_mod_files.return_value = gql_files
+        mock_gql_cls.return_value = mock
+        await sync_nexus_history(game, "key", session)
+    session.expire_all()
+    return session.exec(select(NexusModFile).where(NexusModFile.file_id == 1)).one()
+
+
+class TestSyncFileSizes:
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_sync_updates_size_of_existing_file(self, session, make_game):
+        row = await _sync_file_sizes(
+            session,
+            make_game(),
+            [{"fileId": 1, "name": "a.zip", "size": 34051, "sizeInBytes": 35227011}],
+        )
+        assert row.file_size == 35227011
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_sync_does_not_zero_existing_size(self, session, make_game):
+        row = await _sync_file_sizes(session, make_game(), [{"fileId": 1, "name": "a.zip"}])
+        assert row.file_size == 34051
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_sync_does_not_zero_existing_size_when_null(self, session, make_game):
+        row = await _sync_file_sizes(
+            session, make_game(), [{"fileId": 1, "name": "a.zip", "sizeInBytes": None}]
+        )
+        assert row.file_size == 34051

@@ -101,6 +101,7 @@ _MOD_FILE_FIELDS = """
     categoryId
     category
     size
+    sizeInBytes
     date
     description
 """
@@ -218,6 +219,7 @@ class NexusGraphQLClient:
                         categoryId
                         category
                         size
+                        sizeInBytes
                         date
                         mod {
                             uid
@@ -449,7 +451,7 @@ class NexusGraphQLClient:
         Returned fields are everything the install orchestrator + preview
         dialog need: collection identity (name, summary, description, tile,
         author), per-revision metadata (id, status, timestamps, total size),
-        and per-mod-file rows with ``fileId``/``size``/``version`` so that
+        and per-mod-file rows with ``fileId``/``sizeInBytes``/``version`` so that
         downloads can be planned and progress can be reported.
 
         The shape mirrors Vortex's ``FULL_REVISION_INFO`` field selector
@@ -471,7 +473,7 @@ class NexusGraphQLClient:
                 revisionStatus
                 createdAt
                 updatedAt
-                fileSize
+                totalSize
                 collection {
                     id
                     slug
@@ -493,6 +495,7 @@ class NexusGraphQLClient:
                         name
                         version
                         size
+                        sizeInBytes
                         uri
                         mod {
                             modId
