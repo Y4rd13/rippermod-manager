@@ -133,7 +133,7 @@ async def match_by_file_contents(
                 try:
                     results = await gql.search_file_contents(
                         game.domain_name,
-                        file_path_wildcard=f"*{stem}*",
+                        file_path_wildcard=stem,
                         count=5,
                     )
                 except NexusRateLimitError:

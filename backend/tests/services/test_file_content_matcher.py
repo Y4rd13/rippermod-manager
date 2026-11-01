@@ -101,6 +101,33 @@ class TestMatchByFileContents:
         assert corrs[0].method == "file_content"
 
     @pytest.mark.asyncio
+    async def test_search_uses_plain_stem_without_asterisks(self, session, make_game):
+        game = make_game()
+        group = ModGroup(game_id=game.id, display_name="CustomTextures")
+        session.add(group)
+        session.flush()
+        session.add(
+            ModFile(
+                mod_group_id=group.id,
+                filename="my_custom_textures.archive",
+                file_path="mods/my_custom_textures.archive",
+                file_hash="abc",
+                file_size=100,
+            )
+        )
+        session.commit()
+
+        with patch(
+            "rippermod_manager.services.file_content_matcher.NexusGraphQLClient"
+        ) as mock_cls:
+            gql_mock = self._make_gql_mock()
+            mock_cls.return_value = gql_mock
+            await match_by_file_contents(game, "key", session)
+
+        kwargs = gql_mock.search_file_contents.call_args.kwargs
+        assert kwargs["file_path_wildcard"] == "my_custom_textures"
+
+    @pytest.mark.asyncio
     async def test_ambiguous_results_no_match(self, session, make_game):
         game = make_game()
         group = ModGroup(game_id=game.id, display_name="AmbiguousMod")
