@@ -22,6 +22,7 @@ from rippermod_manager.schemas.conflict import (
     ReindexResult,
 )
 from rippermod_manager.schemas.conflicts import (
+    ConflictCount,
     ConflictGraphResult,
     ConflictSeverity,
     ConflictsOverview,
@@ -32,7 +33,10 @@ from rippermod_manager.schemas.conflicts import (
     ResolveRequest,
     ResolveResult,
 )
-from rippermod_manager.services.conflict_graph_service import build_conflict_graph
+from rippermod_manager.services.conflict_graph_service import (
+    build_conflict_graph,
+    conflict_count,
+)
 from rippermod_manager.services.conflict_service import (
     check_installed_conflicts,
     check_pairwise_conflict,
@@ -359,6 +363,16 @@ def conflict_graph(
     """Build a conflict graph across all installed mods and uninstalled archives."""
     game = get_game_or_404(game_name, session)
     return build_conflict_graph(game, session, resource_hash=resource_hash)
+
+
+@_engine_router.get("/count", response_model=ConflictCount)
+def conflicts_count(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> ConflictCount:
+    """The one conflict number: mods on disk that share files, and how many files."""
+    game = get_game_or_404(game_name, session)
+    return conflict_count(game, session)
 
 
 router.include_router(_engine_router)

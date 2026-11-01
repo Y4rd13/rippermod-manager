@@ -2,15 +2,22 @@ import json
 import logging
 from collections import defaultdict
 from itertools import combinations
+from pathlib import Path
 
+from sqlalchemy import Integer, cast, func
 from sqlmodel import Session, select
 
 from rippermod_manager.archive.handler import open_archive
 from rippermod_manager.matching.filename_parser import parse_mod_filename
 from rippermod_manager.models.archive_index import ArchiveEntryIndex
 from rippermod_manager.models.conflict import ConflictEvidence, ConflictKind
+from rippermod_manager.models.correlation import ModNexusCorrelation
+from rippermod_manager.models.download import DownloadJob
 from rippermod_manager.models.game import Game
+from rippermod_manager.models.install import ArchiveNexusLink, InstalledMod, InstalledModFile
+from rippermod_manager.models.mod import ModGroup
 from rippermod_manager.schemas.conflicts import (
+    ConflictCount,
     ConflictGraphEdge,
     ConflictGraphNode,
     ConflictGraphResult,
@@ -25,8 +32,109 @@ from rippermod_manager.services.install_service import (
     get_file_ownership_map,
     list_available_archives,
 )
+from rippermod_manager.services.paths import get_mods_dir
+from rippermod_manager.services.presence_service import nexus_presence
 
 logger = logging.getLogger(__name__)
+
+
+# Last graph per game id, with the fingerprint it was built from. Every change that can
+# alter the graph (install, uninstall, enable, disable, adopt, scan, link, confirm, a new
+# archive in staging, a reindex) changes the fingerprint, so no caller has to invalidate.
+_GRAPH_CACHE: dict[int, tuple[tuple, ConflictGraphResult]] = {}
+
+
+def _fingerprint(game: Game, session: Session) -> tuple:
+    """What the conflict graph of *game* depends on, cheap to compute and compare."""
+    staged: list[tuple[str, int, int]] = []
+    for path in list_available_archives(game):
+        try:
+            st = path.stat()
+        except OSError:
+            continue
+        staged.append((path.name, st.st_size, st.st_mtime_ns))
+
+    # Small tables go in whole: their rows are also updated in place (a relinked Nexus id,
+    # a reinstall from another archive), which a count or a max(id) would miss.
+    mods = session.exec(
+        select(
+            InstalledMod.id,
+            InstalledMod.disabled,
+            InstalledMod.nexus_mod_id,
+            InstalledMod.source_archive,
+        )
+        .where(InstalledMod.game_id == game.id)
+        .order_by(InstalledMod.id)  # type: ignore[arg-type]
+    ).all()
+    files = session.exec(
+        select(
+            func.count(InstalledModFile.id),  # type: ignore[arg-type]
+            func.max(InstalledModFile.id),
+            func.sum(func.length(InstalledModFile.relative_path)),
+        )
+        .join(InstalledMod, InstalledModFile.installed_mod_id == InstalledMod.id)  # type: ignore[arg-type]
+        .where(InstalledMod.game_id == game.id)
+    ).one()
+    correlations = session.exec(
+        select(
+            func.count(ModNexusCorrelation.id),  # type: ignore[arg-type]
+            func.max(ModNexusCorrelation.id),
+            func.sum(cast(ModNexusCorrelation.confirmed_by_user, Integer)),
+        )
+        .join(ModGroup, ModNexusCorrelation.mod_group_id == ModGroup.id)  # type: ignore[arg-type]
+        .where(ModGroup.game_id == game.id)
+    ).one()
+    links = session.exec(
+        select(ArchiveNexusLink.filename, ArchiveNexusLink.nexus_mod_id)
+        .where(ArchiveNexusLink.game_id == game.id)
+        .order_by(ArchiveNexusLink.id)  # type: ignore[arg-type]
+    ).all()
+    completed_jobs = session.exec(
+        select(func.count(DownloadJob.id)).where(  # type: ignore[arg-type]
+            DownloadJob.game_id == game.id, DownloadJob.status == "completed"
+        )
+    ).one()
+    evidence = session.exec(
+        select(func.count(ConflictEvidence.id), func.max(ConflictEvidence.id)).where(  # type: ignore[arg-type]
+            ConflictEvidence.game_id == game.id
+        )
+    ).one()
+    return (
+        str(get_mods_dir(game)),
+        tuple(sorted(staged)),
+        tuple(tuple(row) for row in mods),
+        tuple(files),
+        tuple(correlations),
+        tuple(tuple(row) for row in links),
+        completed_jobs,
+        tuple(evidence),
+    )
+
+
+def _archive_nexus_ids(game: Game, session: Session, archives: list[Path]) -> dict[str, int]:
+    """Nexus mod id per archive filename: from the name, else ArchiveNexusLink, else a job."""
+    names = [p.name for p in archives]
+    ids: dict[str, int] = {}
+    for fn, mid in session.exec(
+        select(ArchiveNexusLink.filename, ArchiveNexusLink.nexus_mod_id).where(
+            ArchiveNexusLink.game_id == game.id,
+            ArchiveNexusLink.filename.in_(names),  # type: ignore[attr-defined]
+        )
+    ).all():
+        ids[fn] = mid
+    for fn, mid in session.exec(
+        select(DownloadJob.file_name, DownloadJob.nexus_mod_id).where(
+            DownloadJob.game_id == game.id,
+            DownloadJob.status == "completed",
+            DownloadJob.file_name.in_(names),  # type: ignore[attr-defined]
+        )
+    ).all():
+        ids.setdefault(fn, mid)
+    for name in names:
+        parsed_id = parse_mod_filename(name).nexus_mod_id
+        if parsed_id is not None:
+            ids[name] = parsed_id
+    return ids
 
 
 def build_conflict_graph(
@@ -35,7 +143,43 @@ def build_conflict_graph(
     *,
     resource_hash: str | None = None,
 ) -> ConflictGraphResult:
-    """Build a conflict graph across all installed mods and uninstalled archives."""
+    """Conflict graph of the mods on disk: managed mods plus one archive per unmanaged mod.
+
+    Served from cache while the game's fingerprint is unchanged, except when filtered by
+    ``resource_hash``.
+    """
+    if resource_hash is not None:
+        return _build_graph(game, session, resource_hash)
+
+    fingerprint = _fingerprint(game, session)
+    cached = _GRAPH_CACHE.get(game.id)  # type: ignore[arg-type]
+    if cached is not None and cached[0] == fingerprint:
+        return cached[1]
+    result = _build_graph(game, session, None)
+    _GRAPH_CACHE[game.id] = (fingerprint, result)  # type: ignore[index]
+    return result
+
+
+def conflict_count(game: Game, session: Session) -> ConflictCount:
+    """Mods in some conflict edge (a dismissed managed mod excluded) and the files they share."""
+    graph = build_conflict_graph(game, session)
+    dismissed = {
+        f"installed:{mod_id}"
+        for mod_id in session.exec(
+            select(InstalledMod.id).where(
+                InstalledMod.game_id == game.id,
+                InstalledMod.conflict_dismissed == True,  # noqa: E712
+            )
+        ).all()
+    }
+    involved = {e.source for e in graph.edges} | {e.target for e in graph.edges}
+    return ConflictCount(
+        mods_with_conflicts=len(involved - dismissed),
+        file_conflicts=sum(e.weight for e in graph.edges),
+    )
+
+
+def _build_graph(game: Game, session: Session, resource_hash: str | None) -> ConflictGraphResult:
     ownership = get_file_ownership_map(session, game.id)  # type: ignore[arg-type]
 
     # Collect node metadata: {node_id: {label, source_type, file_count, ...}}
@@ -65,9 +209,11 @@ def build_conflict_graph(
             "picture_url": None,
         }
 
-    # --- Uninstalled archives ---
+    # --- Uninstalled archives: one per unmanaged Nexus mod on disk, the newest ---
     archives = list_available_archives(game)
     known_roots = known_roots_for_game(game.domain_name)
+    presence = nexus_presence(game, session)
+    archive_ids = _archive_nexus_ids(game, session, archives)
 
     # Pre-compute installed archive names for O(1) lookup
     installed_archive_names: set[str] = set()
@@ -78,11 +224,26 @@ def build_conflict_graph(
             if mod.source_archive:
                 installed_archive_names.add(mod.source_archive.lower())
 
+    newest: dict[int, tuple[int, Path]] = {}
     for archive_path in archives:
-        parsed = parse_mod_filename(archive_path.name)
         if archive_path.name.lower() in installed_archive_names:
             continue
+        nexus_id = archive_ids.get(archive_path.name)
+        if (
+            nexus_id is None
+            or nexus_id in presence.managed_ids
+            or not presence.is_on_disk(nexus_id)
+        ):
+            continue
+        try:
+            mtime = archive_path.stat().st_mtime_ns
+        except OSError:
+            continue
+        if nexus_id not in newest or mtime > newest[nexus_id][0]:
+            newest[nexus_id] = (mtime, archive_path)
 
+    for nexus_id, (_mtime, archive_path) in sorted(newest.items()):
+        parsed = parse_mod_filename(archive_path.name)
         try:
             with open_archive(archive_path) as archive:
                 entries = archive.list_entries()
@@ -113,7 +274,7 @@ def build_conflict_graph(
                 "source_type": "archive",
                 "file_count": len(file_paths),
                 "disabled": False,
-                "nexus_mod_id": parsed.nexus_mod_id,
+                "nexus_mod_id": nexus_id,
                 "picture_url": None,
             }
 
@@ -196,6 +357,9 @@ def build_conflict_graph(
     all_edge_keys = set(edge_map.keys()) | set(resource_edge_data.keys())
     for key in all_edge_keys:
         src, tgt = key
+        src_nexus = node_info.get(src, {}).get("nexus_mod_id")
+        if src_nexus is not None and src_nexus == node_info.get(tgt, {}).get("nexus_mod_id"):
+            continue  # two files of the same Nexus mod do not conflict with each other
         files = edge_map.get(key, [])
         rd = resource_edge_data.get(key, {})
         conflict_node_ids.add(src)

@@ -136,3 +136,10 @@ class ConflictGraphResult(BaseModel):
     nodes: list[ConflictGraphNode]
     edges: list[ConflictGraphEdge]
     total_conflicts: int
+
+
+class ConflictCount(BaseModel):
+    """The one conflict number: mods on disk that share files, and how many files they share."""
+
+    mods_with_conflicts: int
+    file_conflicts: int
