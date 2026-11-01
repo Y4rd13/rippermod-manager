@@ -58,6 +58,19 @@ logger = logging.getLogger(__name__)
 
 # Share of an adopted mod's files an archive must hold to count as its source.
 LINK_MIN_COVERAGE: float = 0.90
+# When the archive's payload is on disk but the mod added files of its own, the archive must
+# still hold this share of the adopted files, so a small archive never claims a larger group.
+LINK_MIN_ADOPTED_SHARE: float = 0.75
+_DOC_SUFFIXES = (".md", ".txt", ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".url", ".html")
+_DOC_PREFIXES = ("readme", "license", "changelog")
+
+
+def _is_doc_file(path: str) -> bool:
+    """Whether an archive entry is documentation that installers do not place in the game."""
+    name = path.rsplit("/", 1)[-1].lower()
+    return name.endswith(_DOC_SUFFIXES) or name.startswith(_DOC_PREFIXES)
+
+
 _BACKFILL_SETTING = "adopt_archive_backfill_done"  # suffixed with ":<game id>"
 
 
@@ -340,9 +353,12 @@ def find_source_archive(
 ) -> str | None:
     """The staging archive of ``nexus_mod_id`` that holds the adopted files, if any.
 
-    Coverage is the share of ``relative_paths`` present in the archive. The
-    archive with the highest coverage at or above ``LINK_MIN_COVERAGE`` wins,
-    ties going to the most recently modified. FOMOD and unreadable archives
+    Coverage is the share of ``relative_paths`` present in the archive. An
+    archive qualifies at ``LINK_MIN_COVERAGE``, or when at least that share of
+    its non-documentation files is among the adopted ones and its coverage
+    still reaches ``LINK_MIN_ADOPTED_SHARE`` (the mod wrote extra files such as
+    a user.ini at runtime). The qualifying archive with the highest coverage
+    wins, ties going to the most recently modified. FOMOD and unreadable archives
     never qualify (their file set is unknown).
     """
     # Local import: conflict_service imports this module at load time.
@@ -360,9 +376,15 @@ def find_source_archive(
         file_set = _get_archive_file_set(game, name)
         if file_set is None:
             continue
-        coverage = len(adopted & file_set) / len(adopted)
+        shared = len(adopted & file_set)
+        coverage = shared / len(adopted)
         if coverage < LINK_MIN_COVERAGE:
-            continue
+            # The other direction: the archive's payload is on disk, and the mod only added
+            # files of its own at runtime (a user.ini, a config). Docs never reach the game.
+            payload = {p for p in file_set if not _is_doc_file(p)}
+            payload_on_disk = len(adopted & payload) / len(payload) if payload else 0.0
+            if payload_on_disk < LINK_MIN_COVERAGE or coverage < LINK_MIN_ADOPTED_SHARE:
+                continue
         try:
             mtime = path.stat().st_mtime
         except OSError:
