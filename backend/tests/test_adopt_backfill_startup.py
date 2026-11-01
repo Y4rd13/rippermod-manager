@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from rippermod_manager import main
+from rippermod_manager.main import run_adopt_backfill_all_games as real_backfill
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import (
     ArchiveNexusLink,
@@ -42,7 +43,7 @@ def test_startup_backfill_links_every_game(session, tmp_path):
     _, mod1 = _game_with_unlinked_mod(session, tmp_path, "g1")
     _, mod2 = _game_with_unlinked_mod(session, tmp_path, "g2")
 
-    main.run_adopt_backfill_all_games()
+    real_backfill()
 
     session.expire_all()
     assert session.get(InstalledMod, mod1.id).source_archive == "X-4198-1-0.zip"
@@ -65,7 +66,7 @@ def test_startup_backfill_failure_in_one_game_does_not_stop_the_next(
 
     monkeypatch.setattr(install_service, "backfill_adopted_archives", flaky)
 
-    main.run_adopt_backfill_all_games()
+    real_backfill()
 
     session.expire_all()
     assert session.get(InstalledMod, mod1.id).source_archive == ""
@@ -94,3 +95,9 @@ def test_lifespan_does_not_wait_for_the_backfill(engine, monkeypatch):
     finally:
         release.set()
         guard.cancel()
+
+
+def test_tests_do_not_run_the_real_backfill_thread_unless_they_opt_in(client):
+    # conftest stubs it for every test: on the shared StaticPool test engine a real
+    # thread would share the test's one connection (commit/rollback on its transaction).
+    assert main.run_adopt_backfill_all_games is not real_backfill
