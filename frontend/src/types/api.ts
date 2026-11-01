@@ -443,6 +443,12 @@ export interface ConflictSummaryResult {
   evidence: ConflictEvidenceOut[];
 }
 
+/** The one conflict number: mods on disk that share files, and how many files they share. */
+export interface ConflictCount {
+  mods_with_conflicts: number;
+  file_conflicts: number;
+}
+
 export interface ReindexResult {
   conflicts_found: number;
   by_kind: Partial<Record<ConflictKind, number>>;

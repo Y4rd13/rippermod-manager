@@ -9,6 +9,7 @@ import type {
   ArchiveResourceDetailsResult,
   AvailableArchive,
   ConflictGraphResult,
+  ConflictCount,
   ConflictKind,
   ConflictsOverview,
   ConflictSummaryResult,
@@ -236,6 +237,15 @@ export function useConflictsOverview(gameName: string) {
   return useQuery<ConflictsOverview>({
     queryKey: ["conflicts", gameName],
     queryFn: () => api.get(`/api/v1/games/${gameName}/conflicts/inbox`),
+    enabled: !!gameName,
+    staleTime: 60_000,
+  });
+}
+
+export function useConflictCount(gameName: string) {
+  return useQuery<ConflictCount>({
+    queryKey: ["conflicts", gameName, "count"],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/conflicts/count`),
     enabled: !!gameName,
     staleTime: 60_000,
   });
