@@ -2,7 +2,7 @@ from pydantic import BaseModel
 
 
 class HealthIssueOut(BaseModel):
-    # kind: missing_requirement | disabled_requirement |
+    # kind: missing_requirement | disabled_requirement | unmanaged_requirement |
     #       failed_install | misplaced_files | foreign_files | untracked_files
     kind: str
     severity: str  # critical | warning | info
@@ -13,7 +13,8 @@ class HealthIssueOut(BaseModel):
     # Optional action targets so the UI can offer a one-click fix:
     nexus_url: str | None = None  # missing_requirement -> the required mod's Nexus page
     action_mod_id: int | None = None  # disabled_requirement -> the mod to enable
-    required_name: str = ""  # missing/disabled_requirement -> the required mod's name
+    required_name: str = ""  # missing/disabled/unmanaged_requirement -> the required mod's name
+    mod_group_id: int | None = None  # unmanaged_requirement -> the scanned group to adopt
 
 
 class HealthReport(BaseModel):
