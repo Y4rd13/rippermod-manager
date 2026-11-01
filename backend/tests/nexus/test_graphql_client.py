@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from rippermod_manager.app_info import app_version
 from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
 
 
@@ -453,3 +454,12 @@ class TestGetCollectionLatestRevision:
                 result = await gql.get_collection_latest_revision("gone", 1, "cyberpunk2077")
 
         assert result is None
+
+
+class TestIdentityHeaders:
+    @pytest.mark.asyncio
+    async def test_graphql_identity_headers_present(self):
+        async with NexusGraphQLClient("key") as gql:
+            assert gql.client.headers["Application-Name"] == "RipperMod Manager"
+            assert gql.client.headers["Application-Version"] == app_version()
+            assert gql.client.headers["User-Agent"] == f"RipperModManager/{app_version()}"
