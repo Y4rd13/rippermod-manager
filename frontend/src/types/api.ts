@@ -552,6 +552,7 @@ export interface ProfileLoadResult {
   profile: ProfileOut;
   skipped_mods: SkippedMod[];
   skipped_count: number;
+  failed_count: number;
 }
 
 export interface ProfileImportResult {

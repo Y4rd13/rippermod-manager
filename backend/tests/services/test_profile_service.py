@@ -13,6 +13,7 @@ from rippermod_manager.schemas.profile import (
     ProfileExportMod,
     ProfileUpdate,
 )
+from rippermod_manager.services import install_service
 from rippermod_manager.services.install_service import install_mod
 from rippermod_manager.services.profile_service import (
     compare_profiles,
@@ -26,6 +27,7 @@ from rippermod_manager.services.profile_service import (
     preview_profile,
     update_profile,
 )
+from rippermod_manager.services.vfs.primitives import GameRunningError
 
 
 def _make_zip(path, files: dict[str, bytes]) -> None:
@@ -188,6 +190,27 @@ class TestLoadProfile:
 
         mod = session.exec(select(InstalledMod).where(InstalledMod.name == "ReEnable")).first()
         assert mod.disabled is False
+
+    def test_load_profile_refuses_while_game_running(self, monkeypatch, session, game_and_dirs):
+        game, _game_dir, staging = game_and_dirs
+        archive = staging / "Held.zip"
+        _make_zip(archive, {"mods/held.txt": b"data"})
+        install_mod(game, archive, session)
+        profile_out = create_profile(game, ProfileCreate(name="Held"), session)
+        mod = session.exec(select(InstalledMod).where(InstalledMod.name == "Held")).first()
+        mod.disabled = True  # the profile says enabled, so loading would flip it
+        session.add(mod)
+        session.commit()
+        profile = session.get(Profile, profile_out.id)
+        monkeypatch.setattr(install_service, "is_game_running", lambda *a, **k: True)
+
+        with pytest.raises(GameRunningError, match="Cyberpunk 2077 is running"):
+            load_profile(profile, game, session)
+
+        session.refresh(mod)
+        session.refresh(game)
+        assert mod.disabled is True
+        assert game.active_profile_id is None
 
     def test_load_returns_profile_load_result(self, session, game_and_dirs):
         game, _, _ = game_and_dirs

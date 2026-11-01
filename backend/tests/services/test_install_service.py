@@ -9,6 +9,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 
 from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
+from rippermod_manager.services import install_service
 from rippermod_manager.services.install_service import (
     get_file_ownership_map,
     install_mod,
@@ -17,6 +18,7 @@ from rippermod_manager.services.install_service import (
     toggle_mod,
     uninstall_mod,
 )
+from rippermod_manager.services.vfs.primitives import GameRunningError
 
 
 def _make_zip(path, files: dict[str, bytes]) -> None:
@@ -1081,3 +1083,60 @@ class TestRelinkReported:
     def test_clean_uninstall_reports_nothing(self, session, game, b_wins):
         result = uninstall_mod(b_wins, game, session)
         assert result.not_relinked == []
+
+
+class TestGameRunningGuard:
+    """uninstall and toggle refuse before touching the DB or the disk while the game runs."""
+
+    @pytest.fixture
+    def installed(self, session, game, game_dir, staging_dir):
+        archive = staging_dir / "Guarded.zip"
+        _make_zip(archive, {"mods/guarded.txt": b"data"})
+        result = install_mod(game, archive, session)
+        mod = session.get(InstalledMod, result.installed_mod_id)
+        session.refresh(mod)
+        _ = mod.files
+        return mod
+
+    def test_uninstall_refuses_while_game_running(
+        self, monkeypatch, session, game, game_dir, installed
+    ):
+        monkeypatch.setattr(install_service, "is_game_running", lambda *a, **k: True)
+        mod_id = installed.id
+
+        with pytest.raises(GameRunningError, match="Cyberpunk 2077 is running"):
+            uninstall_mod(installed, game, session)
+
+        assert session.get(InstalledMod, mod_id) is not None
+        assert (game_dir / "mods" / "guarded.txt").exists()
+
+    def test_disable_refuses_while_game_running(
+        self, monkeypatch, session, game, game_dir, installed
+    ):
+        monkeypatch.setattr(install_service, "is_game_running", lambda *a, **k: True)
+
+        with pytest.raises(GameRunningError):
+            toggle_mod(installed, game, session)
+
+        session.refresh(installed)
+        assert installed.disabled is False
+        assert (game_dir / "mods" / "guarded.txt").exists()
+
+    def test_enable_refuses_while_game_running(
+        self, monkeypatch, session, game, game_dir, installed
+    ):
+        toggle_mod(installed, game, session)  # disable while the game is closed
+        session.refresh(installed)
+        assert installed.disabled is True
+        monkeypatch.setattr(install_service, "is_game_running", lambda *a, **k: True)
+
+        with pytest.raises(GameRunningError):
+            toggle_mod(installed, game, session)
+
+        session.refresh(installed)
+        assert installed.disabled is True
+        assert not (game_dir / "mods" / "guarded.txt").exists()
+
+    def test_ensure_game_closed_passes_when_game_closed(self, monkeypatch):
+        monkeypatch.setattr(install_service, "is_game_running", lambda *a, **k: False)
+        assert install_service.ensure_game_closed() is None
