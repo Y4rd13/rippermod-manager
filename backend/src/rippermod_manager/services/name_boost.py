@@ -8,12 +8,12 @@ score is kept, so the match shows as a possible one, never as installed.
 
 import logging
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from rippermod_manager.matching.correlator import compute_name_score
 from rippermod_manager.models.correlation import ModNexusCorrelation
 from rippermod_manager.models.mod import ModGroup
-from rippermod_manager.models.nexus import NexusDownload
+from rippermod_manager.models.nexus import NexusDownload, NexusModMeta, NexusModRequirement
 from rippermod_manager.services.presence_service import ON_DISK_MIN_SCORE
 
 logger = logging.getLogger(__name__)
@@ -35,6 +35,48 @@ def boosted_score(name_score: float, method: str) -> float:
     return name_score
 
 
+def _candidate_names(
+    session: Session,
+    candidates: list[ModNexusCorrelation],
+    dl_map: dict[int, NexusDownload],
+) -> tuple[dict[int, str], dict[int, list[str]]]:
+    """Load, with one query each, the other names the matchers may have scored.
+
+    Returns the ``NexusModMeta.name`` and the ``NexusModRequirement.mod_name`` values by
+    Nexus mod id. The requirement names are only needed for the ``requirement`` method.
+    """
+    nexus_ids = {
+        dl.nexus_mod_id
+        for c in candidates
+        if (dl := dl_map.get(c.nexus_download_id)) is not None and dl.nexus_mod_id
+    }
+    if not nexus_ids:
+        return {}, {}
+    meta_rows = session.exec(
+        select(NexusModMeta).where(NexusModMeta.nexus_mod_id.in_(nexus_ids))  # type: ignore[attr-defined]
+    ).all()
+    meta_names = {m.nexus_mod_id: m.name for m in meta_rows if m.name}
+
+    req_names: dict[int, list[str]] = {}
+    req_ids = {
+        dl.nexus_mod_id
+        for c in candidates
+        if c.method == "requirement"
+        and (dl := dl_map.get(c.nexus_download_id)) is not None
+        and dl.nexus_mod_id
+    }
+    if req_ids:
+        req_rows = session.exec(
+            select(NexusModRequirement).where(
+                NexusModRequirement.required_mod_id.in_(req_ids)  # type: ignore[union-attr]
+            )
+        ).all()
+        for r in req_rows:
+            if r.required_mod_id is not None and r.mod_name:
+                req_names.setdefault(r.required_mod_id, []).append(r.mod_name)
+    return meta_names, req_names
+
+
 def revalidate_boosted(
     session: Session,
     existing: list[ModNexusCorrelation],
@@ -47,11 +89,16 @@ def revalidate_boosted(
     until this runs. Those whose name is under the entry threshold are deleted (and removed
     from ``existing``); the rest get the score ``boosted_score`` gives today. Returns the
     number deleted.
+
+    A match is scored against the best of the names a matcher could have used for that Nexus
+    mod: the download's name, the ``NexusModMeta`` name and, for ``requirement``, the name on
+    the requirement row. Scoring only the download's name would drop matches that the matchers
+    themselves found through another name.
     """
+    candidates = [c for c in existing if not c.confirmed_by_user and c.method in BOOSTED_METHODS]
+    meta_names, req_names = _candidate_names(session, candidates, dl_map)
     deleted = 0
-    for corr in list(existing):
-        if corr.confirmed_by_user or corr.method not in BOOSTED_METHODS:
-            continue
+    for corr in candidates:
         grp = group_map.get(corr.mod_group_id)
         dl = dl_map.get(corr.nexus_download_id)
         if not grp or not dl:
@@ -59,7 +106,12 @@ def revalidate_boosted(
             existing.remove(corr)
             deleted += 1
             continue
-        name_score, _ = compute_name_score(grp.display_name, dl.mod_name)
+        names = [dl.mod_name]
+        if dl.nexus_mod_id in meta_names:
+            names.append(meta_names[dl.nexus_mod_id])
+        if corr.method == "requirement":
+            names.extend(req_names.get(dl.nexus_mod_id, []))
+        name_score = max(compute_name_score(grp.display_name, n)[0] for n in names)
         if name_score < _ENTRY_MIN_SCORE:
             logger.info(
                 "Dropping boosted correlation: '%s' -> '%s' (was %s/%.2f, name now %.2f)",
