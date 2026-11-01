@@ -8,8 +8,11 @@ import pytest
 from sqlmodel import Session, select
 
 from rippermod_manager.models.archive_index import ArchiveEntryIndex
+from rippermod_manager.models.correlation import ModNexusCorrelation
 from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
+from rippermod_manager.models.mod import ModGroup
+from rippermod_manager.models.nexus import NexusDownload
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -462,3 +465,38 @@ class TestBetweenConflicts:
         )
         assert r.status_code == 422
         assert "unreadable" in r.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Conflict count (mods on disk) — GET /games/{game}/conflicts/count
+# ---------------------------------------------------------------------------
+
+
+class TestConflictCount:
+    def test_count_endpoint_returns_counts(self, client, archive_game_setup, engine, monkeypatch):
+        monkeypatch.setattr("rippermod_manager.services.conflict_graph_service._GRAPH_CACHE", {})
+        game_name, _, staging, game_id = archive_game_setup
+        # Two Nexus mods on disk (correlation score 1.0) whose archives share one file.
+        with Session(engine) as s:
+            for nexus_id in (101, 202):
+                group = ModGroup(game_id=game_id, display_name=f"Mod {nexus_id}", confidence=0.9)
+                nd = NexusDownload(game_id=game_id, nexus_mod_id=nexus_id, mod_name="m")
+                s.add_all([group, nd])
+                s.flush()
+                s.add(
+                    ModNexusCorrelation(
+                        mod_group_id=group.id, nexus_download_id=nd.id, score=1.0, method="x"
+                    )
+                )
+            s.commit()
+        _make_zip(staging / "ModA-101-1-0-1700000000.zip", {"mods/shared.txt": b"a"})
+        _make_zip(staging / "ModB-202-1-0-1700000000.zip", {"mods/shared.txt": b"b"})
+
+        r = client.get(f"/api/v1/games/{game_name}/conflicts/count")
+
+        assert r.status_code == 200
+        assert r.json() == {"mods_with_conflicts": 2, "file_conflicts": 1}
+
+    def test_count_game_not_found(self, client):
+        r = client.get("/api/v1/games/NoSuchGame/conflicts/count")
+        assert r.status_code == 404
