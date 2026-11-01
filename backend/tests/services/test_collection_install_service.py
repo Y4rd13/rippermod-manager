@@ -48,7 +48,7 @@ def _gql_revision_payload(slug: str = "starter", rev: int = 1) -> dict:
                     "name": "Cool Mod.zip",
                     "version": "1.0",
                     "size": 5,
-                    "sizeInBytes": 5000,
+                    "sizeInBytes": "5000",
                     "uri": "Cool_Mod-1001.zip",
                     "mod": {
                         "modId": 100,
@@ -67,7 +67,7 @@ def _gql_revision_payload(slug: str = "starter", rev: int = 1) -> dict:
                     "name": "Optional Mod.zip",
                     "version": "0.5",
                     "size": 2,
-                    "sizeInBytes": 1500,
+                    "sizeInBytes": "1500",
                     "uri": "Optional_Mod-2002.zip",
                     "mod": {
                         "modId": 200,
@@ -117,7 +117,7 @@ class TestShapePreview:
                 "file": {
                     "fileId": 1,
                     "size": 1024,
-                    "sizeInBytes": 1048576,
+                    "sizeInBytes": "1048576",
                     "mod": {"modId": 100, "name": "M"},
                 },
             }
@@ -125,6 +125,23 @@ class TestShapePreview:
         out = svc._shape_preview("starter", rev)
         assert out.total_size_bytes == 1048576
         assert out.mods[0].size_bytes == 1048576
+
+    @pytest.mark.parametrize("raw", [None, "", "n/a", "-3", True])
+    def test_collection_preview_unparsable_size_in_bytes_counts_zero(self, raw):
+        rev = _gql_revision_payload()
+        rev["modFiles"] = [
+            {
+                "optional": False,
+                "file": {
+                    "fileId": 1,
+                    "sizeInBytes": raw,
+                    "mod": {"modId": 100, "name": "M"},
+                },
+            }
+        ]
+        out = svc._shape_preview("starter", rev)
+        assert out.total_size_bytes == 0
+        assert len(out.mods) == 1
 
     def test_collection_preview_ignores_kilobyte_size_without_bytes(self):
         rev = _gql_revision_payload()

@@ -61,6 +61,7 @@ from rippermod_manager.schemas.collection import (
     CollectionProgressEvent,
     CollectionUpdateOut,
 )
+from rippermod_manager.services.nexus_helpers import parse_size_in_bytes
 from rippermod_manager.services.paths import resolve_mods_dir
 
 logger = logging.getLogger(__name__)
@@ -517,8 +518,8 @@ def _shape_preview(slug: str, rev: dict[str, Any]) -> CollectionPreviewOut:
         if not file_id or not mod_id:
             # Malformed entry -- skip rather than fail the whole preview.
             continue
-        # ``size`` is kilobytes in the Nexus schema; ``sizeInBytes`` is bytes.
-        size = int(file.get("sizeInBytes") or 0)
+        # ``size`` is kilobytes in the Nexus schema; ``sizeInBytes`` is bytes (as a string).
+        size = parse_size_in_bytes(file.get("sizeInBytes"))
         total_size += size
         mods.append(
             CollectionModEntry(

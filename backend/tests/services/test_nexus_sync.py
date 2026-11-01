@@ -227,7 +227,7 @@ class TestSyncFileSizes:
         row = await _sync_file_sizes(
             session,
             make_game(),
-            [{"fileId": 1, "name": "a.zip", "size": 34051, "sizeInBytes": 35227011}],
+            [{"fileId": 1, "name": "a.zip", "size": 34051, "sizeInBytes": "35227011"}],
         )
         assert row.file_size == 35227011
 
@@ -244,3 +244,27 @@ class TestSyncFileSizes:
             session, make_game(), [{"fileId": 1, "name": "a.zip", "sizeInBytes": None}]
         )
         assert row.file_size == 34051
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_sync_survives_unparsable_size_in_bytes(self, session, make_game):
+        """A malformed size must not abort the sync, nor overwrite a stored size."""
+        row = await _sync_file_sizes(
+            session, make_game(), [{"fileId": 1, "name": "a.zip", "sizeInBytes": "n/a"}]
+        )
+        assert row.file_size == 34051
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_sync_stores_string_size_for_new_file(self, session, make_game):
+        game = make_game()
+        _setup_respx(tracked=[{"domain_name": "cyberpunk2077", "mod_id": 10}], endorsed=[])
+        with patch("rippermod_manager.services.nexus_sync.NexusGraphQLClient") as mock_gql_cls:
+            mock = _make_gql_mock(batch_mods_return=_FILE_SYNC_BATCH)
+            mock.get_mod_files.return_value = [
+                {"fileId": 7, "name": "b.zip", "sizeInBytes": "129213"}
+            ]
+            mock_gql_cls.return_value = mock
+            await sync_nexus_history(game, "key", session)
+        row = session.exec(select(NexusModFile).where(NexusModFile.file_id == 7)).one()
+        assert row.file_size == 129213
