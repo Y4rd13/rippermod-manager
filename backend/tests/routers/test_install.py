@@ -168,6 +168,23 @@ class TestArchiveStates:
         assert by_name["weird name.zip"]["status"] == "not_installed"
         assert by_name["weird name.zip"]["nexus_mod_id"] == 12
 
+    def test_cleanup_keeps_archive_with_only_link_row(self, client, game_setup, engine):
+        from sqlmodel import Session, select
+
+        game_name, _, staging = game_setup
+        (staging / "weird name.zip").write_bytes(b"fake")
+        (staging / "random.zip").write_bytes(b"fake")
+        with Session(engine) as s:
+            game = s.exec(select(Game).where(Game.name == game_name)).first()
+            s.add(ArchiveNexusLink(game_id=game.id, filename="weird name.zip", nexus_mod_id=12))
+            s.commit()
+
+        r = client.post(f"/api/v1/games/{game_name}/install/archives/cleanup-orphans")
+
+        assert r.status_code == 200
+        assert r.json()["deleted_files"] == ["random.zip"]
+        assert (staging / "weird name.zip").exists()
+
     def test_cleanup_orphans_deletes_only_orphans(self, client, archive_states_setup, engine):
         from sqlmodel import Session
 
