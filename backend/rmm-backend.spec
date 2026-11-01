@@ -1,11 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec for rmm-backend (--onefile mode)."""
 
+from PyInstaller.utils.hooks import copy_metadata
+
 a = Analysis(
     ["src/rippermod_manager/__main__.py"],
     pathex=["src"],
     binaries=[],
-    datas=[],
+    # app_info.app_version() reads importlib.metadata, which needs the dist-info inside the bundle
+    datas=copy_metadata("rippermod-manager"),
     hiddenimports=[
         # uvicorn internals
         "uvicorn.logging",

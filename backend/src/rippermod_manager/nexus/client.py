@@ -8,6 +8,7 @@ from typing import Any, Self
 import httpx
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
+from rippermod_manager.app_info import log_identity_once, nexus_identity_headers
 from rippermod_manager.schemas.nexus import NexusKeyResult
 
 logger = logging.getLogger(__name__)
@@ -58,9 +59,14 @@ class NexusClient:
         return self._api_key
 
     async def __aenter__(self) -> Self:
+        log_identity_once()
         self._client = httpx.AsyncClient(
             base_url=BASE_URL,
-            headers={"APIKEY": self._api_key, "Accept": "application/json"},
+            headers={
+                "APIKEY": self._api_key,
+                "Accept": "application/json",
+                **nexus_identity_headers(),
+            },
             timeout=90.0,
         )
         return self
