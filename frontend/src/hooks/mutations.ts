@@ -673,7 +673,8 @@ export function useResolveConflict() {
       invalidateGameState(qc, gameName);
       toast.success("Conflict resolved", "Mod reinstalled to reclaim files");
     },
-    onError: () => toast.error("Failed to resolve conflict"),
+    onError: (err) =>
+      toast.error("Failed to resolve conflict", apiErrorDetail(err, "Check the backend log for details.")),
   });
 }
 

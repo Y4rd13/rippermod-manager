@@ -24,6 +24,7 @@ from rippermod_manager.schemas.conflicts import (
     ResolveResult,
 )
 from rippermod_manager.services.archive_layout import (
+    ArchiveLayout,
     apply_layout_transform,
     detect_layout,
     known_roots_for_game,
@@ -36,6 +37,10 @@ from rippermod_manager.services.install_service import (
 from rippermod_manager.services.paths import get_mods_dir
 
 logger = logging.getLogger(__name__)
+
+
+class ResolveRefusedError(Exception):
+    """The reinstall cannot be done safely; nothing was uninstalled."""
 
 
 def _compute_severity(conflict_count: int, total_files: int) -> InboxSeverity:
@@ -181,6 +186,17 @@ def resolve_conflict(
     archive_path = staging / mod.source_archive
     if not archive_path.is_file():
         raise FileNotFoundError(f"Source archive not found: {mod.source_archive}")
+
+    # install_mod refuses FOMOD archives; refuse before uninstalling so the mod stays installed.
+    with open_archive(archive_path) as archive:
+        layout_result = detect_layout(
+            archive.list_entries(), known_roots_for_game(game.domain_name)
+        )
+    if layout_result.layout == ArchiveLayout.FOMOD:
+        raise ResolveRefusedError(
+            "This mod was installed with a FOMOD installer. "
+            "Reinstall it from Archives to choose its options again."
+        )
 
     # Count current conflicts before reinstall
     ownership = get_file_ownership_map(session, game.id)  # type: ignore[arg-type]

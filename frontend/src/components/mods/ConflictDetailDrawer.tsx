@@ -72,6 +72,7 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, dismi
   const dismiss = useDismissConflict();
   const restore = useRestoreConflict();
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const [confirmReinstall, setConfirmReinstall] = useState(false);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -221,7 +222,7 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, dismi
           )}
           <Button
             variant={isSuperseded ? "secondary" : undefined}
-            onClick={() => resolve.mutate({ gameName, modId })}
+            onClick={() => setConfirmReinstall(true)}
             loading={resolve.isPending}
             disabled={!detail || detail.evidence.length === 0}
           >
@@ -250,6 +251,20 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, dismi
           </Button>
         </div>
       </div>
+      {confirmReinstall && (
+        <ConfirmDialog
+          title="Reinstall this mod?"
+          message="The mod is uninstalled and installed again from its archive. Afterwards it wins the files it shares with other mods."
+          confirmLabel="Reinstall"
+          variant="warning"
+          icon={RefreshCw}
+          onConfirm={() => {
+            setConfirmReinstall(false);
+            resolve.mutate({ gameName, modId });
+          }}
+          onCancel={() => setConfirmReinstall(false)}
+        />
+      )}
       {showRemoveConfirm && (
         <ConfirmDialog
           title="Remove old version?"

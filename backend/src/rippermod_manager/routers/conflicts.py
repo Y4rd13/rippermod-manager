@@ -43,6 +43,7 @@ from rippermod_manager.services.conflict_service import (
 )
 from rippermod_manager.services.conflicts.engine import ConflictEngine
 from rippermod_manager.services.conflicts_inbox_service import (
+    ResolveRefusedError,
     dismiss_conflict,
     get_conflicts_overview,
     get_mod_conflict_detail,
@@ -317,6 +318,8 @@ def inbox_resolve(
         raise HTTPException(404, "Installed mod not found")
     try:
         return resolve_conflict(game, mod, session, action=data.action)
+    except ResolveRefusedError as exc:
+        raise HTTPException(409, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except FileNotFoundError as exc:
