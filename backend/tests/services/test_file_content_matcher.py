@@ -127,6 +127,65 @@ class TestMatchByFileContents:
         kwargs = gql_mock.search_file_contents.call_args.kwargs
         assert kwargs["file_path_wildcard"] == "my_custom_textures"
 
+    def _group_with_file(self, session, make_game):
+        game = make_game()
+        group = ModGroup(game_id=game.id, display_name="CustomTextures")
+        session.add(group)
+        session.flush()
+        session.add(
+            ModFile(
+                mod_group_id=group.id,
+                filename="my_custom_textures.archive",
+                file_path="mods/my_custom_textures.archive",
+                file_hash="abc",
+                file_size=100,
+            )
+        )
+        session.commit()
+        return game
+
+    async def _run(self, game, session, results):
+        with patch(
+            "rippermod_manager.services.file_content_matcher.NexusGraphQLClient"
+        ) as mock_cls:
+            mock_cls.return_value = self._make_gql_mock(search_results=results)
+            return await match_by_file_contents(game, "key", session)
+
+    @pytest.mark.asyncio
+    async def test_substring_hits_are_not_matches(self, session, make_game):
+        # The WILDCARD operator matches substrings: "language" hit PyTerm's
+        # "shading_language_packing.py" on the real API. Only the same file name counts.
+        game = self._group_with_file(session, make_game)
+        results = [
+            {
+                "filePath": "x/old_my_custom_textures_v2.archive",
+                "fileName": "old_my_custom_textures_v2.archive",
+                "modId": 42,
+            }
+        ]
+        assert (await self._run(game, session, results)).matched == 0
+
+    @pytest.mark.asyncio
+    async def test_full_result_page_is_ambiguous(self, session, make_game):
+        # A full page may hide other mods that ship the same file.
+        game = self._group_with_file(session, make_game)
+        node = {
+            "filePath": "archive/pc/mod/my_custom_textures.archive",
+            "fileName": "my_custom_textures.archive",
+            "modId": 42,
+        }
+        assert (await self._run(game, session, [node] * 20)).matched == 0
+
+    @pytest.mark.asyncio
+    async def test_hash_prefixed_name_still_matches(self, session, make_game):
+        game = self._group_with_file(session, make_game)
+        node = {
+            "filePath": "archive/pc/mod/#my_custom_textures.archive",
+            "fileName": "#my_custom_textures.archive",
+            "modId": 42,
+        }
+        assert (await self._run(game, session, [node])).matched == 1
+
     @pytest.mark.asyncio
     async def test_ambiguous_results_no_match(self, session, make_game):
         game = make_game()
