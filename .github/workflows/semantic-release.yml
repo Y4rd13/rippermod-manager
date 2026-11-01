@@ -75,6 +75,12 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Must run before the backend build: PyInstaller bundles the package metadata, so
+      # app_info.app_version() reports whatever backend/pyproject.toml says at build time.
+      - name: Bump version in manifests
+        shell: bash
+        run: bash scripts/bump-version.sh "$VERSION"
+
       - name: Build backend (PyInstaller)
         working-directory: backend
         run: |
@@ -90,10 +96,6 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
-
-      - name: Bump version in manifests
-        shell: bash
-        run: bash scripts/bump-version.sh "$VERSION"
 
       - name: Build Tauri installer
         working-directory: frontend
