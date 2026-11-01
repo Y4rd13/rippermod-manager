@@ -9,8 +9,32 @@ Which endpoints we consume, split by protocol.
 
 ## Authentication
 
-All requests carry an `APIKEY` header. Rate limits: 2 500/day, 100/hour, 30/sec.
+All requests carry an `APIKEY` header.
+
+## Rate limits
+
+Nexus limits user requests to 20,000 per 24-hour period. Once that limit is reached, the limit is
+500 requests per hour ([help article 105](https://help.nexusmods.com/article/105-i-have-reached-a-daily-or-hourly-limit-api-requests-have-been-consumed-rate-limit-exceeded-what-does-this-mean)).
+The per-second limit of 30/sec (nginx) is not in that article and is not re-verified here.
+
 Headers read: `X-RL-Hourly-Remaining`, `X-RL-Daily-Remaining`, `X-RL-Hourly-Reset`.
+
+## Request identification
+
+`NexusClient` (REST v1) and `NexusGraphQLClient` (GraphQL v2) send the three headers that the code
+comment in `backend/src/rippermod_manager/app_info.py` says Nexus asks every third-party app to send.
+The usage rules are in the [API Acceptable Use Policy](https://help.nexusmods.com/article/114-api-acceptable-use-policy).
+
+| Header | Value |
+|--------|-------|
+| `Application-Name` | `RipperMod Manager` |
+| `Application-Version` | the app version |
+| `User-Agent` | `RipperModManager/<app version>` |
+
+The app version is read from the installed `rippermod-manager` package metadata (`backend/pyproject.toml`).
+`scripts/bump-version.sh` writes that version before the release build. It is `dev` when the metadata
+is missing. Each client logs `Nexus client identifies as RipperMod Manager <version>` once per process.
+The CDN client in `stream_download()` sends neither these headers nor `APIKEY`.
 
 ## Base URLs
 
@@ -96,15 +120,22 @@ Every call is `POST https://api.nexusmods.com/v2/graphql`.
 
 | Method | Operation | Variables | Description |
 |--------|-----------|-----------|-------------|
-| `search_mods()` | `query SearchMods` | `filter` (gameId, name wildcard), `count`, `sort` | Text search mods by name (optional sort by endorsements/downloads/updatedAt) |
-| `search_file_contents()` | `query SearchFileContents` | `filter` (gameId, filePathWildcard, fileExtensionExact), `count` | Search inside mod archives by file path or extension |
+| `search_mods()` | `query SearchMods` | `filter` (`gameId` as a string, `name` with op `WILDCARD`), `count`, `sort` | Text search mods by name. Optional `sort` is `[{<field>: {direction: DESC}}]` with field `endorsements`, `downloads` or `updatedAt` |
+| `search_file_contents()` | `query SearchFileContents` | `filter` (`gameId` as an integer, `filePathWildcard` with op `WILDCARD`, `fileExtensionExact` with op `EQUALS`), `count` | Search inside mod archives by file path or extension |
+
+`WILDCARD` already matches a substring. Send the plain text (`foo`), not `*foo*`: `search_mods` and
+`search_file_contents` no longer send literal asterisks.
 
 ### Collections
 
 | Method | Operation | Variables | Description |
 |--------|-----------|-----------|-------------|
 | `search_collections()` | `query SearchCollections` | `filter` (gameDomain), `count` | Search collections for a game via `collectionsV2` |
-| `get_collection_revision()` | `query GetCollectionRevision` | `slug`, `revision`, `gameDomain` | Fetch a collection revision with its full mod list |
+| `get_collection_revision()` | `query GetCollectionRevision` | `slug`, `revision`, `domainName` | Fetch a collection revision with its full mod list |
+| `get_collection_latest_revision()` | `query GetCollectionLatestRevision` | `slug`, `revision`, `domainName` | Update check. Returns only `collection.latestPublishedRevision.revisionNumber` (an `int`, or `None`) |
+
+`domainName` is the game domain string (for example `cyberpunk2077`). `gameDomain` is a filter key in
+`search_collections()` and a key of `ids` in `batch_mods_by_domain()`, not a query variable.
 
 ### GraphQL field fragments
 
@@ -116,20 +147,22 @@ category, modCategory { name }, status
 
 # _MOD_REQUIREMENT_FIELDS -- reused by get_mod, batch_mods
 modRequirements {
-  nexusRequirements(count: 50) {
+  nexusRequirements(offset: 0, count: 50) {
     nodes { id, modId, modName, url, notes, externalRequirement, gameId }
   }
-  modsRequiringThisMod(count: 50) {
-    nodes { modId, modName }
+  modsRequiringThisMod(offset: 0, count: 50) {
+    nodes { id, modId, modName, url, notes, externalRequirement, gameId }
   }
-  dlcRequirements {
-    dlcName, expansionId
-  }
+  dlcRequirements { gameExpansion { id, name }, notes }
 }
 
 # _MOD_FILE_FIELDS -- reused by get_mod_files
-fileId, name, version, categoryId, category, size, date, description
+fileId, name, version, categoryId, category, size, sizeInBytes, date, description
 ```
+
+`ModFile.size` is kilobytes. The app reads `sizeInBytes` instead: a `BigInt` that GraphQL encodes as a
+string, coerced to bytes by `parse_size_in_bytes` in `backend/src/rippermod_manager/services/nexus_helpers.py`.
+The collection revision asks `totalSize`, not `fileSize`.
 
 ---
 

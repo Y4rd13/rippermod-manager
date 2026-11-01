@@ -80,7 +80,7 @@ See @docs/architecture.md for a full inventory of routers, services, models.
 
 See @docs/nexus-api-usage.md for endpoint reference.
 
-- Rate limits: 2,500/day, 100/hour. Track via `X-RL-Hourly-Remaining` / `X-RL-Daily-Remaining`
+- Rate limits: 20,000 requests per 24 hours, then 500/hour (help article 105). Track via `X-RL-Hourly-Remaining` / `X-RL-Daily-Remaining`
 - REST v1 for mutations (endorse, track, download links); GraphQL v2 for batch reads (file hashes, mod info, search)
 - Retry on 429 and 5xx only — NEVER retry 401/403/404
 - `NexusRateLimitError` and `NexusPremiumRequiredError` are custom exceptions — catch them explicitly before generic `httpx.HTTPError`
