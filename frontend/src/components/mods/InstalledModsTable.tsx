@@ -1274,6 +1274,18 @@ export function InstalledModsTable({
     return items;
   }, [recognized, q, recognizedSort]);
 
+  // High-confidence matches (backend `on_disk`) are "detected on disk"; the rest are only possible matches.
+  const detectedRecognized = useMemo(
+    () => filteredRecognized.filter((m) => m.nexus_match?.on_disk),
+    [filteredRecognized],
+  );
+  const possibleRecognized = useMemo(
+    () => filteredRecognized.filter((m) => !m.nexus_match?.on_disk),
+    [filteredRecognized],
+  );
+  const detectedCount = recognized.filter((m) => m.nexus_match?.on_disk).length;
+  const possibleCount = recognized.length - detectedCount;
+
   const groupedFilteredMods = useMemo(() => groupByNexusId(filteredMods), [filteredMods]);
 
   const totalCount =
@@ -1313,7 +1325,8 @@ export function InstalledModsTable({
           />
         )}
         <span className="text-xs text-text-muted">
-          {totalCount} mod{totalCount !== 1 ? "s" : ""}
+          Managed ({mods.length}) · Detected on disk ({detectedCount})
+          {possibleCount > 0 && <> · Possible matches ({possibleCount})</>}
         </span>
         <ViewModeToggle
           className="ml-auto"
@@ -1326,7 +1339,7 @@ export function InstalledModsTable({
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-text-primary" title="Mods installed and managed through this app. You can enable, disable, or uninstall them">
-              Installed Mods ({groupedFilteredMods.length})
+              Managed ({filteredMods.length})
             </h3>
             <FilterChips
               chips={CHIP_OPTIONS}
@@ -1354,11 +1367,11 @@ export function InstalledModsTable({
         </div>
       )}
 
-      {filteredRecognized.length > 0 && scope !== "installed" && (
+      {detectedRecognized.length > 0 && scope !== "installed" && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-text-primary" title="Mods found on disk and matched to Nexus. Adopt them to bring them under management.">
-              Detected on Disk ({filteredRecognized.length})
+            <h3 className="text-sm font-semibold text-text-primary" title="Mods found on disk and matched to Nexus with high confidence. Adopt them to bring them under management.">
+              Detected on disk ({detectedRecognized.length})
             </h3>
             <div className="flex items-center gap-2">
               {onReviewAdopt && (
@@ -1381,7 +1394,36 @@ export function InstalledModsTable({
             through the manager to unlock profiles, updates, and clean uninstall.
           </p>
           <RecognizedModsGrid
-            mods={filteredRecognized}
+            mods={detectedRecognized}
+            archives={archives}
+            installedModIds={installedNexusIds}
+            gameName={gameName}
+            downloadJobs={downloadJobs}
+            updateByNexusId={updateByNexusId}
+            onModClick={onModClick}
+            viewMode={viewMode}
+          />
+        </div>
+      )}
+
+      {possibleRecognized.length > 0 && scope !== "installed" && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-text-primary" title="Low-confidence matches. Review them in the adopt dialog before bringing them under management.">
+              Possible matches ({possibleRecognized.length})
+            </h3>
+            {detectedRecognized.length === 0 && onReviewAdopt && (
+              <Button size="sm" onClick={onReviewAdopt}>
+                Review &amp; adopt
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-text-muted mb-3">
+            These mods only loosely resemble a Nexus entry. They are not counted as
+            detected, so check the match before adopting them.
+          </p>
+          <RecognizedModsGrid
+            mods={possibleRecognized}
             archives={archives}
             installedModIds={installedNexusIds}
             gameName={gameName}
