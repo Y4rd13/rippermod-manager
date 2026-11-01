@@ -47,7 +47,7 @@ import { useDeploy } from "@/hooks/use-deploy";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import {
   useAvailableArchives,
-  useConflictsOverview,
+  useConflictCount,
   useDownloadJobs,
   useEndorsedMods,
   useGame,
@@ -90,6 +90,7 @@ type ConflictSubTab = "file-conflicts" | "archive-resources" | "cluster-details"
 
 function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomain: string }) {
   const [subTab, setSubTab] = useState<ConflictSubTab>("file-conflicts");
+  const { data: conflictCount } = useConflictCount(gameName);
   const subTabs: { key: ConflictSubTab; label: string }[] = [
     { key: "file-conflicts", label: "File Conflicts" },
     { key: "archive-resources", label: "Archive Resources" },
@@ -115,7 +116,11 @@ function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomai
           </button>
         ))}
       </div>
-      {subTab === "file-conflicts" && <ConflictsInbox gameName={gameName} />}
+      {subTab === "file-conflicts" && <ConflictsInbox
+          gameName={gameName}
+          modsOnDiskWithConflicts={conflictCount?.mods_with_conflicts ?? 0}
+          onOpenClusterDetails={() => setSubTab("cluster-details")}
+        />}
       {subTab === "archive-resources" && (
         <Suspense fallback={<SkeletonCardGrid count={3} />}>
           <ArchiveResourceConflicts gameName={gameName} gameDomain={gameDomain} />
@@ -167,7 +172,7 @@ export function GameDetailPage() {
   const { data: endorsedMods = [], isLoading: endorsedLoading, dataUpdatedAt: endorsedUpdatedAt } = useEndorsedMods(name);
   const { data: trackedMods = [], isLoading: trackedLoading, dataUpdatedAt: trackedUpdatedAt } = useTrackedMods(name);
   const { data: updates, isLoading: updatesLoading } = useUpdates(name);
-  const { data: conflictsOverview, isLoading: conflictsLoading } = useConflictsOverview(name);
+  const { data: conflictCount, isLoading: conflictsLoading } = useConflictCount(name);
   const { data: healthReport } = useHealth(name);
   const { data: downloadJobs = [] } = useDownloadJobs(name);
   const queryClient = useQueryClient();
@@ -406,7 +411,7 @@ export function GameDetailPage() {
     matched: modsLoading ? undefined : nexusMatched.length,
     archives: archivesLoading ? undefined : archives.length,
     updates: updatesLoading ? undefined : updates?.updates_available,
-    conflicts: conflictsLoading ? undefined : conflictsOverview?.mods_affected,
+    conflicts: conflictsLoading ? undefined : conflictCount?.mods_with_conflicts,
     profiles: profilesLoading ? undefined : profiles.length,
     endorsed: endorsedLoading ? undefined : endorsedMods.length,
     tracked: trackedLoading ? undefined : trackedMods.length,
@@ -415,7 +420,7 @@ export function GameDetailPage() {
     nexusMatched.length, modsLoading,
     archives.length, archivesLoading,
     updates?.updates_available, updatesLoading,
-    conflictsOverview?.mods_affected, conflictsLoading,
+    conflictCount?.mods_with_conflicts, conflictsLoading,
     profiles.length, profilesLoading,
     endorsedMods.length, endorsedLoading,
     trackedMods.length, trackedLoading,
@@ -580,22 +585,22 @@ export function GameDetailPage() {
         <Card
           className={cn(
             "transition-colors",
-            (conflictsOverview?.mods_affected ?? 0) > 0
+            (conflictCount?.mods_with_conflicts ?? 0) > 0
               ? "hover:border-warning/40"
               : "hover:border-success/40",
           )}
           onClick={() => setTab("conflicts")}
-          title="Installed mods with file or resource conflicts"
+          title="Mods on disk with file or resource conflicts"
         >
           <div className="flex items-center gap-3">
             <AlertTriangle
               size={18}
-              className={(conflictsOverview?.mods_affected ?? 0) > 0 ? "text-warning" : "text-success"}
+              className={(conflictCount?.mods_with_conflicts ?? 0) > 0 ? "text-warning" : "text-success"}
             />
             <div>
               <p className="text-xs text-text-muted">Conflicts</p>
               <p className="text-lg font-bold text-text-primary">
-                {conflictsLoading ? "--" : (conflictsOverview?.mods_affected ?? 0)}
+                {conflictsLoading ? "--" : (conflictCount?.mods_with_conflicts ?? 0)}
               </p>
             </div>
           </div>
@@ -667,7 +672,7 @@ export function GameDetailPage() {
                   {tabCounts[key]}
                 </span>
               )}
-              {key === "conflicts" && (conflictsOverview?.mods_affected ?? 0) > 0 && (
+              {key === "conflicts" && (conflictCount?.mods_with_conflicts ?? 0) > 0 && (
                 <span className="h-1.5 w-1.5 rounded-full bg-danger inline-block" />
               )}
               {key === "updates" && (updates?.updates_available ?? 0) > 0 && (

@@ -2,7 +2,7 @@ import { ChevronDown, ChevronRight, FileWarning, Layers, Network, Package } from
 import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
-import { useConflictGraph } from "@/hooks/queries";
+import { useConflictCount, useConflictGraph } from "@/hooks/queries";
 import type { ConflictGraphEdge, ConflictGraphNode } from "@/types/api";
 
 type ClusterSeverity = "critical" | "warning" | "info";
@@ -163,19 +163,20 @@ function useClusters(gameName: string) {
 }
 
 export function ConflictSummaryWidget({ gameName }: Props) {
-  const { graph, clusters, isLoading } = useClusters(gameName);
+  const { graph, clusters, isLoading: graphLoading } = useClusters(gameName);
+  const { data: count, isLoading: countLoading } = useConflictCount(gameName);
+  const isLoading = graphLoading || countLoading;
 
   const stats = useMemo(() => {
-    if (!graph) return null;
-    const totalFileConflicts = graph.edges.reduce((s, e) => s + e.weight, 0);
+    if (!graph || !count) return null;
     const totalResourceConflicts = graph.edges.reduce((s, e) => s + e.resource_conflicts, 0);
     return {
-      fileConflicts: totalFileConflicts,
+      fileConflicts: count.file_conflicts,
       resourceConflicts: totalResourceConflicts,
       clusters: clusters.length,
-      mods: graph.nodes.length,
+      mods: count.mods_with_conflicts,
     };
-  }, [graph, clusters]);
+  }, [graph, count, clusters]);
 
   if (isLoading) {
     return (

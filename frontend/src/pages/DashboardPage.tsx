@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router";
 
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
-import { useConflictsOverview, useGames, useInstalledMods, useMods, useUpdates } from "@/hooks/queries";
+import { useConflictCount, useGames, useInstalledMods, useMods, useUpdates } from "@/hooks/queries";
 
 interface GameStatsData {
   totalInstalled: number;
@@ -53,14 +53,14 @@ function GameStatsReporter({ gameName, onReport }: { gameName: string; onReport:
   const { data: mods = [] } = useMods(gameName);
   const { data: installed = [] } = useInstalledMods(gameName);
   const { data: updates } = useUpdates(gameName);
-  const { data: conflicts } = useConflictsOverview(gameName);
+  const { data: conflicts } = useConflictCount(gameName);
 
   const stats = useMemo(() => ({
     totalInstalled: installed.length,
     nexusMatched: mods.filter((m) => m.nexus_match).length,
     updatesAvailable: updates?.updates_available ?? 0,
-    conflictsAffected: conflicts?.mods_affected ?? 0,
-  }), [installed.length, mods, updates?.updates_available, conflicts?.mods_affected]);
+    conflictsAffected: conflicts?.mods_with_conflicts ?? 0,
+  }), [installed.length, mods, updates?.updates_available, conflicts?.mods_with_conflicts]);
 
   const serialized = `${stats.totalInstalled}-${stats.nexusMatched}-${stats.updatesAvailable}-${stats.conflictsAffected}`;
   const lastRef = useRef("");
@@ -158,7 +158,7 @@ export function DashboardPage() {
           color={totals.conflictsAffected > 0 ? "bg-warning/10 text-warning" : "bg-success/10 text-success"}
           hoverBorder={totals.conflictsAffected > 0 ? "hover:border-warning/40" : "hover:border-success/40"}
           onClick={firstGame ? () => navigate(`/games/${firstGame}`) : undefined}
-          title="Mods with file or resource conflicts"
+          title="Mods on disk with file or resource conflicts"
         />
       </div>
 
