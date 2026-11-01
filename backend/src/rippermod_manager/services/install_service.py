@@ -56,6 +56,10 @@ from rippermod_manager.services.vfs.primitives import VfsError, hardlink, same_v
 
 logger = logging.getLogger(__name__)
 
+# Share of an adopted mod's files an archive must hold to count as its source.
+LINK_MIN_COVERAGE: float = 0.90
+_BACKFILL_SETTING = "adopt_archive_backfill_done"
+
 
 def list_available_archives(game: Game) -> list[Path]:
     """Return archive files found in a ``staging`` folder next to the game install."""
@@ -331,6 +335,73 @@ def _rollback_adopt(moved: list[tuple[Path, Path]]) -> None:
             logger.exception("adopt rollback failed for %s", game_path)
 
 
+def find_source_archive(
+    game: Game, nexus_mod_id: int, relative_paths: list[str], session: Session
+) -> str | None:
+    """The staging archive of ``nexus_mod_id`` that holds the adopted files, if any.
+
+    Coverage is the share of ``relative_paths`` present in the archive. The
+    archive with the highest coverage at or above ``LINK_MIN_COVERAGE`` wins,
+    ties going to the most recently modified. FOMOD and unreadable archives
+    never qualify (their file set is unknown).
+    """
+    # Local import: conflict_service imports this module at load time.
+    from rippermod_manager.services.conflict_service import _get_archive_file_set
+
+    adopted = {p.replace("\\", "/").lower() for p in relative_paths}
+    if not adopted:
+        return None
+    archives = {p.name: p for p in list_available_archives(game)}
+    ids = archive_nexus_ids(game, session, set(archives))
+    best: tuple[float, float, str] | None = None
+    for name, path in archives.items():
+        if ids.get(name) != nexus_mod_id:
+            continue
+        file_set = _get_archive_file_set(game, name)
+        if file_set is None:
+            continue
+        coverage = len(adopted & file_set) / len(adopted)
+        if coverage < LINK_MIN_COVERAGE:
+            continue
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            continue
+        if best is None or (coverage, mtime) > best[:2]:
+            best = (coverage, mtime, name)
+    return best[2] if best else None
+
+
+def backfill_adopted_archives(game: Game, session: Session) -> int:
+    """Link mods adopted before archives were linked to the archive that holds their files.
+
+    Runs once per database (guarded by the ``adopt_archive_backfill_done`` setting).
+    Returns the number of mods linked. Commits.
+    """
+    from rippermod_manager.services.settings_helpers import get_setting, set_setting
+
+    if get_setting(session, _BACKFILL_SETTING) == "1":
+        return 0
+    mods = session.exec(
+        select(InstalledMod).where(
+            InstalledMod.game_id == game.id,
+            InstalledMod.source_archive == "",
+            InstalledMod.nexus_mod_id.is_not(None),  # type: ignore[union-attr]
+        )
+    ).all()
+    linked = 0
+    for mod in mods:
+        paths = [f.relative_path for f in mod.files]
+        archive = find_source_archive(game, mod.nexus_mod_id, paths, session)  # type: ignore[arg-type]
+        if archive:
+            mod.source_archive = archive
+            session.add(mod)
+            linked += 1
+    set_setting(session, _BACKFILL_SETTING, "1")
+    session.commit()
+    return linked
+
+
 def adopt_mod(
     game: Game,
     name: str,
@@ -457,11 +528,15 @@ def adopt_mod(
         shutil.rmtree(staging_root, ignore_errors=True)
         raise ValueError(f"No adoptable files for '{name}' (all paths missing or skipped).")
 
+    # Empty string stays the first-class "no archive" state when none covers the files.
+    source_archive = (
+        find_source_archive(game, nexus_mod_id, adopted, session) if nexus_mod_id else None
+    )
     installed = InstalledMod(
         game_id=game.id,  # type: ignore[arg-type]
         name=name,
         staging_dir=safe_name,
-        source_archive="",  # first-class "no archive" state
+        source_archive=source_archive or "",
         nexus_mod_id=nexus_mod_id,
         deployed=True,  # files are already hardlinked into the game dir
     )

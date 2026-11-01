@@ -54,6 +54,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
         from rippermod_manager.database import engine
         from rippermod_manager.models.game import Game
+        from rippermod_manager.services.install_service import backfill_adopted_archives
         from rippermod_manager.services.vfs.deploy_service import replay_pending_journal
         from rippermod_manager.services.vfs.ownership import backfill_win_seq
 
@@ -70,6 +71,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                         logger.info("Backfilled win order for %d file(s)", backfilled)
                 except Exception as exc:
                     logger.warning("win_seq backfill failed for game %s: %s", _game.id, exc)
+                try:
+                    # Mods adopted before archives were linked get the archive that holds them.
+                    linked = backfill_adopted_archives(_game, _session)
+                    if linked:
+                        logger.info("Linked %d adopted mod(s) to their archive", linked)
+                except Exception as exc:
+                    logger.warning("adopt archive backfill failed for game %s: %s", _game.id, exc)
     except Exception:
         logger.exception("Journal replay startup hook failed, continuing anyway")
     # Surface non-terminal Collections installs from a prior process as
