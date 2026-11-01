@@ -1,5 +1,6 @@
 import logging
 import sys
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
@@ -43,6 +44,35 @@ def _configure_logging() -> None:
 logger = logging.getLogger(__name__)
 
 
+def run_adopt_backfill_all_games() -> None:
+    """Link mods adopted before archives were linked, game by game, with its own session.
+
+    Meant for a background thread: opening and listing archives is slow with many
+    adopted mods, and nothing the app serves depends on the result. A failure in
+    one game is logged and the next game still runs.
+    """
+    try:
+        from sqlmodel import Session
+        from sqlmodel import select as sql_select
+
+        from rippermod_manager.database import engine
+        from rippermod_manager.models.game import Game
+        from rippermod_manager.services import install_service
+
+        with Session(engine) as session:
+            for game in session.exec(sql_select(Game)).all():
+                game_id = game.id
+                try:
+                    linked = install_service.backfill_adopted_archives(game, session)
+                    if linked:
+                        logger.info("Linked %d adopted mod(s) to their archive", linked)
+                except Exception as exc:
+                    session.rollback()
+                    logger.warning("adopt archive backfill failed for game %s: %s", game_id, exc)
+    except Exception:
+        logger.exception("Adopt archive backfill failed, continuing anyway")
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     _configure_logging()
@@ -54,7 +84,6 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
         from rippermod_manager.database import engine
         from rippermod_manager.models.game import Game
-        from rippermod_manager.services.install_service import backfill_adopted_archives
         from rippermod_manager.services.vfs.deploy_service import replay_pending_journal
         from rippermod_manager.services.vfs.ownership import backfill_win_seq
 
@@ -71,13 +100,6 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                         logger.info("Backfilled win order for %d file(s)", backfilled)
                 except Exception as exc:
                     logger.warning("win_seq backfill failed for game %s: %s", _game.id, exc)
-                try:
-                    # Mods adopted before archives were linked get the archive that holds them.
-                    linked = backfill_adopted_archives(_game, _session)
-                    if linked:
-                        logger.info("Linked %d adopted mod(s) to their archive", linked)
-                except Exception as exc:
-                    logger.warning("adopt archive backfill failed for game %s: %s", _game.id, exc)
     except Exception:
         logger.exception("Journal replay startup hook failed, continuing anyway")
     # Surface non-terminal Collections installs from a prior process as
@@ -99,6 +121,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 )
     except Exception:
         logger.exception("Stale collection-install recovery failed, continuing anyway")
+    # Daemon thread: the backfill never delays serving or holds shutdown.
+    threading.Thread(
+        target=run_adopt_backfill_all_games, name="adopt-archive-backfill", daemon=True
+    ).start()
     write_pid_file(settings.data_dir)
     logger.info("Application started")
     yield
