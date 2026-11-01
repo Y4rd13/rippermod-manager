@@ -7,17 +7,24 @@ correlation is only a *possible* match: it is shown as such, never counted as in
 """
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 from sqlmodel import Session, select
 
+from rippermod_manager.matching.filename_parser import parse_mod_filename
 from rippermod_manager.models.correlation import ModNexusCorrelation
+from rippermod_manager.models.download import DownloadJob
 from rippermod_manager.models.game import Game
-from rippermod_manager.models.install import InstalledMod
+from rippermod_manager.models.install import ArchiveNexusLink, InstalledMod
 from rippermod_manager.models.mod import ModGroup
 from rippermod_manager.models.nexus import NexusDownload
 
 # Correlation score from which an unconfirmed match counts as "on disk".
 ON_DISK_MIN_SCORE: float = 0.75
+
+ArchiveStatus = Literal[
+    "managed", "not_managed", "possible_match", "other_version", "not_installed", "orphan"
+]
 
 
 @dataclass(frozen=True)
@@ -101,3 +108,53 @@ def nexus_presence(game: Game, session: Session) -> Presence:
             on_disk=corr.confirmed_by_user or corr.score >= ON_DISK_MIN_SCORE,
         )
     return Presence(managed_ids=managed_ids, matches=matches)
+
+
+def archive_nexus_ids(game: Game, session: Session, names: set[str]) -> dict[str, int]:
+    """Nexus mod id per archive filename: from the name, else ArchiveNexusLink, else a job.
+
+    Archives with no id from any of the three are left out.
+    """
+    if not names:
+        return {}
+    ids: dict[str, int] = {}
+    for fn, mid in session.exec(
+        select(ArchiveNexusLink.filename, ArchiveNexusLink.nexus_mod_id).where(
+            ArchiveNexusLink.game_id == game.id,
+            ArchiveNexusLink.filename.in_(names),  # type: ignore[attr-defined]
+        )
+    ).all():
+        ids[fn] = mid
+    for fn, mid in session.exec(
+        select(DownloadJob.file_name, DownloadJob.nexus_mod_id).where(
+            DownloadJob.game_id == game.id,
+            DownloadJob.status == "completed",
+            DownloadJob.file_name.in_(names),  # type: ignore[attr-defined]
+        )
+    ).all():
+        ids.setdefault(fn, mid)
+    for name in names:
+        parsed_id = parse_mod_filename(name).nexus_mod_id
+        if parsed_id is not None:
+            ids[name] = parsed_id
+    return ids
+
+
+def archive_status(
+    filename: str,
+    nexus_mod_id: int | None,
+    managed_archives: set[str],
+    presence: Presence,
+) -> ArchiveStatus:
+    """The real state of one archive in the staging folder."""
+    if filename in managed_archives:
+        return "managed"
+    if nexus_mod_id is None:
+        return "orphan"
+    if nexus_mod_id in presence.managed_ids:
+        return "other_version"
+    if presence.is_on_disk(nexus_mod_id):
+        return "not_managed"
+    if presence.possible(nexus_mod_id) is not None:
+        return "possible_match"
+    return "not_installed"

@@ -33,7 +33,7 @@ from rippermod_manager.services.install_service import (
     list_available_archives,
 )
 from rippermod_manager.services.paths import get_mods_dir
-from rippermod_manager.services.presence_service import nexus_presence
+from rippermod_manager.services.presence_service import archive_nexus_ids, nexus_presence
 
 logger = logging.getLogger(__name__)
 
@@ -139,32 +139,6 @@ def _fingerprint(game: Game, session: Session) -> tuple:
     )
 
 
-def _archive_nexus_ids(game: Game, session: Session, archives: list[Path]) -> dict[str, int]:
-    """Nexus mod id per archive filename: from the name, else ArchiveNexusLink, else a job."""
-    names = [p.name for p in archives]
-    ids: dict[str, int] = {}
-    for fn, mid in session.exec(
-        select(ArchiveNexusLink.filename, ArchiveNexusLink.nexus_mod_id).where(
-            ArchiveNexusLink.game_id == game.id,
-            ArchiveNexusLink.filename.in_(names),  # type: ignore[attr-defined]
-        )
-    ).all():
-        ids[fn] = mid
-    for fn, mid in session.exec(
-        select(DownloadJob.file_name, DownloadJob.nexus_mod_id).where(
-            DownloadJob.game_id == game.id,
-            DownloadJob.status == "completed",
-            DownloadJob.file_name.in_(names),  # type: ignore[attr-defined]
-        )
-    ).all():
-        ids.setdefault(fn, mid)
-    for name in names:
-        parsed_id = parse_mod_filename(name).nexus_mod_id
-        if parsed_id is not None:
-            ids[name] = parsed_id
-    return ids
-
-
 def build_conflict_graph(
     game: Game,
     session: Session,
@@ -241,7 +215,7 @@ def _build_graph(game: Game, session: Session, resource_hash: str | None) -> Con
     archives = list_available_archives(game)
     known_roots = known_roots_for_game(game.domain_name)
     presence = nexus_presence(game, session)
-    archive_ids = _archive_nexus_ids(game, session, archives)
+    archive_ids = archive_nexus_ids(game, session, {p.name for p in archives})
 
     # Pre-compute installed archive names for O(1) lookup
     installed_archive_names: set[str] = set()

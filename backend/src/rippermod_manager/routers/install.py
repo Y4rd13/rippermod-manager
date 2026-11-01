@@ -8,7 +8,6 @@ from sqlmodel import Session, select
 
 from rippermod_manager.database import get_session
 from rippermod_manager.matching.filename_parser import parse_mod_filename
-from rippermod_manager.models.download import DownloadJob
 from rippermod_manager.models.install import ArchiveNexusLink, InstalledMod
 from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 from rippermod_manager.routers.deps import get_game_or_404
@@ -53,6 +52,11 @@ from rippermod_manager.services.install_service import (
     uninstall_mod,
 )
 from rippermod_manager.services.paths import get_mods_dir
+from rippermod_manager.services.presence_service import (
+    archive_nexus_ids,
+    archive_status,
+    nexus_presence,
+)
 from rippermod_manager.services.redscript_analysis import check_redscript_conflicts
 from rippermod_manager.services.settings_helpers import get_setting
 from rippermod_manager.services.update_service import invalidate_update_cache
@@ -94,42 +98,36 @@ def list_archives(
         mods_dir=game.mods_dir,
     )
 
-    # Build fallback map: ArchiveNexusLink → DownloadJob for archives without parsed IDs
-    link_rows = session.exec(
-        select(ArchiveNexusLink.filename, ArchiveNexusLink.nexus_mod_id).where(
-            ArchiveNexusLink.game_id == game.id,
-            ArchiveNexusLink.filename.in_(archive_names),  # type: ignore[union-attr]
-        )
-    ).all()
-    fallback_mod_ids: dict[str, int] = {fn: mid for fn, mid in link_rows}
-
-    dj_rows = session.exec(
-        select(DownloadJob.file_name, DownloadJob.nexus_mod_id).where(
-            DownloadJob.game_id == game.id,
-            DownloadJob.status == "completed",
-            DownloadJob.file_name.in_(archive_names),  # type: ignore[union-attr]
-        )
-    ).all()
-    for fn, mid in dj_rows:
-        if fn not in fallback_mod_ids:
-            fallback_mod_ids[fn] = mid
+    nexus_ids = archive_nexus_ids(game, session, archive_names)
+    presence = nexus_presence(game, session)
+    managed_archives = set(installed_archives)
 
     result: list[AvailableArchive] = []
     for path in archives:
         parsed = parse_mod_filename(path.name)
         stat = path.stat()
         dl_date = dl_date_map.get(path.name)
+        nexus_id = nexus_ids.get(path.name)
+        status = archive_status(path.name, nexus_id, managed_archives, presence)
+        match = (
+            presence.matches.get(nexus_id)
+            if nexus_id is not None and status in ("not_managed", "possible_match")
+            else None
+        )
         result.append(
             AvailableArchive(
                 filename=path.name,
                 size=stat.st_size,
-                nexus_mod_id=parsed.nexus_mod_id or fallback_mod_ids.get(path.name),
+                nexus_mod_id=nexus_id,
                 parsed_name=parsed.name,
                 parsed_version=parsed.version,
                 is_installed=path.name in installed_archives,
                 installed_mod_id=installed_archives.get(path.name),
                 last_downloaded_at=dl_date,
                 is_empty=stat.st_size == 0,
+                status=status,
+                mod_group_id=match.mod_group_id if match else None,
+                match_score=match.score if match else None,
             )
         )
     return result
@@ -473,7 +471,7 @@ def cleanup_orphans(
     game_name: str,
     session: Session = Depends(get_session),
 ) -> OrphanCleanupResult:
-    """Delete all archives not referenced by any installed mod or active download."""
+    """Delete the archives with no managed mod, no Nexus id and no active download."""
     game = get_game_or_404(game_name, session)
     return delete_orphaned_archives(game, session)
 
