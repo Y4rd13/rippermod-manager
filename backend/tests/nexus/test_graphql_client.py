@@ -241,7 +241,7 @@ class TestGetCollectionRevision:
             "id",
             "revisionNumber",
             "revisionStatus",
-            "fileSize",
+            "totalSize",
             "createdAt",
             "updatedAt",
         ),
@@ -260,7 +260,7 @@ class TestGetCollectionRevision:
             "category",
         ),
         # File-level: download plan (fileId is mandatory, size for progress).
-        "file {": ("fileId", "name", "version", "size", "uri"),
+        "file {": ("fileId", "name", "version", "size", "sizeInBytes", "uri"),
         # Mod-level (nested under file.mod): preview card data.
         "mod {": ("modId", "name", "author", "version", "pictureUrl"),
     }

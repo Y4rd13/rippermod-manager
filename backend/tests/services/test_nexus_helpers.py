@@ -4,6 +4,7 @@ from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.models.nexus import NexusDownload, NexusModMeta, NexusModRequirement
 from rippermod_manager.services.nexus_helpers import (
     extract_dlc_requirements,
+    graphql_file_to_rest_file,
     upsert_mod_requirements,
     upsert_nexus_mod,
 )
@@ -212,3 +213,17 @@ class TestExtractDlcRequirements:
         assert len(result) == 1
         assert result[0]["expansion_name"] == ""
         assert result[0]["expansion_id"] is None
+
+
+def test_file_size_comes_from_size_in_bytes():
+    gql_file = {"fileId": 1, "size": 34051, "sizeInBytes": 35227011}
+    assert graphql_file_to_rest_file(gql_file)["size_in_bytes"] == 35227011
+
+
+def test_missing_size_in_bytes_maps_to_zero():
+    """GraphQL ``size`` is kilobytes: it must never be read as bytes."""
+    assert graphql_file_to_rest_file({"fileId": 1, "size": 34051})["size_in_bytes"] == 0
+
+
+def test_null_size_in_bytes_maps_to_zero():
+    assert graphql_file_to_rest_file({"fileId": 1, "sizeInBytes": None})["size_in_bytes"] == 0

@@ -517,7 +517,8 @@ def _shape_preview(slug: str, rev: dict[str, Any]) -> CollectionPreviewOut:
         if not file_id or not mod_id:
             # Malformed entry -- skip rather than fail the whole preview.
             continue
-        size = int(file.get("size") or 0)
+        # ``size`` is kilobytes in the Nexus schema; ``sizeInBytes`` is bytes.
+        size = int(file.get("sizeInBytes") or 0)
         total_size += size
         mods.append(
             CollectionModEntry(
