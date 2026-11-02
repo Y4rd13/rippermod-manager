@@ -40,7 +40,10 @@ export function Titlebar() {
         >
           RMM
         </span>
-        <ActiveGameDeployBadge />
+        {/* App actions go inert while a Dialog is open; the drag region and window buttons do not. */}
+        <div data-inert-scope className="flex items-center gap-3">
+          <ActiveGameDeployBadge />
+        </div>
       </div>
 
       <div className="flex items-center">

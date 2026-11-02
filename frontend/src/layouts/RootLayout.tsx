@@ -49,8 +49,10 @@ export function RootLayout() {
       <Titlebar />
       <AppUpdateBanner />
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
-        <main ref={mainRef} id="main-content" className={`flex-1 overflow-y-auto bg-surface-0 p-6 ${hasDownloads && activeGameName ? "pb-16" : ""}`}>
+        <div data-inert-scope className="contents">
+          <Sidebar />
+        </div>
+        <main data-inert-scope ref={mainRef} id="main-content" className={`flex-1 overflow-y-auto bg-surface-0 p-6 ${hasDownloads && activeGameName ? "pb-16" : ""}`}>
           <ScrollContainerContext value={mainRef}>
             <ErrorBoundary>
               <Outlet />
