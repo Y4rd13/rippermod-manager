@@ -47,6 +47,8 @@ async def match_by_requirements(
             NexusModRequirement.nexus_mod_id.in_(correlated_nexus_ids),  # type: ignore[union-attr]
             NexusModRequirement.required_mod_id.is_not(None),  # type: ignore[union-attr]
             NexusModRequirement.is_external.is_(False),  # type: ignore[union-attr]
+            # Only forward rows: a reverse row names a mod that depends on this one
+            NexusModRequirement.is_reverse.is_(False),  # type: ignore[union-attr]
             NexusModRequirement.required_mod_id.notin_(correlated_nexus_ids),  # type: ignore[union-attr]
         )
     ).all()

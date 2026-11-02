@@ -455,6 +455,15 @@ class TestRevalidateBoosted:
             0.92,
             method="requirement",
         )
+        main = ModGroup(game_id=game.id, display_name="Main Mod")
+        main_dl = NexusDownload(game_id=game.id, nexus_mod_id=100, mod_name="Main Mod")
+        session.add_all([main, main_dl])
+        session.flush()
+        session.add(
+            ModNexusCorrelation(
+                mod_group_id=main.id, nexus_download_id=main_dl.id, score=1.0, method="exact"
+            )
+        )
         session.add(
             NexusModRequirement(
                 nexus_mod_id=100, required_mod_id=700, mod_name="Weather Overhaul Mod"
