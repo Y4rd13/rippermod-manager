@@ -1,12 +1,27 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Minus, Square, X } from "lucide-react";
+import { Loader2, Minus, Square, X } from "lucide-react";
 
 import { DeployStatusBadge } from "@/components/mods/DeployStatusBadge";
+import { useRedmodCompileWatcher } from "@/hooks/use-deploy";
 import { useUIStore } from "@/stores/ui-store";
 
 function ActiveGameDeployBadge() {
   const activeGameName = useUIStore((s) => s.activeGameName);
-  return <DeployStatusBadge gameName={activeGameName} />;
+  const compiling = useRedmodCompileWatcher(activeGameName);
+  return (
+    <>
+      <DeployStatusBadge gameName={activeGameName} />
+      {compiling && (
+        <span
+          role="status"
+          className="flex items-center gap-1 text-xs text-text-muted"
+        >
+          <Loader2 size={12} className="animate-spin" />
+          Compiling REDmod…
+        </span>
+      )}
+    </>
+  );
 }
 
 export function Titlebar() {

@@ -298,6 +298,8 @@ export interface UninstallResult {
   displaced_not_restored: string[];
   /** Paths another installed mod should now provide but could not be linked. */
   not_relinked: string[];
+  /** A background REDmod compile was requested (the mod had files under mods/). */
+  redmod_compile_queued: boolean;
 }
 
 export interface AdoptGroup {
@@ -321,6 +323,8 @@ export interface ToggleResult {
   failed: number;
   displaced_not_restored: string[];
   not_relinked: string[];
+  /** A background REDmod compile was requested (the mod had files under mods/). */
+  redmod_compile_queued: boolean;
 }
 
 export interface DependentMod {
