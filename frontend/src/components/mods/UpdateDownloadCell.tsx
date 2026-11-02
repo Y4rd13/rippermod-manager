@@ -36,12 +36,12 @@ export function UpdateDownloadCell({ update, gameName, downloadJobs }: Props) {
     downloadJobs.find(
       (j) =>
         j.nexus_mod_id === update.nexus_mod_id &&
-        (j.status === "downloading" || j.status === "pending"),
+        (j.status === "downloading" || j.status === "pending" || j.status === "queued"),
     ) ??
     Object.values(storeJobs).find(
       (j) =>
         j.nexus_mod_id === update.nexus_mod_id &&
-        (j.status === "downloading" || j.status === "pending"),
+        (j.status === "downloading" || j.status === "pending" || j.status === "queued"),
     );
 
   const completedJob =

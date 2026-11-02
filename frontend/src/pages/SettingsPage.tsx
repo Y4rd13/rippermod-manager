@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Switch } from "@/components/ui/Switch";
-import { useAbstainMod, useDisconnectNexus, useEndorseMod, useTrackMod, useUntrackMod, useUpdateGame } from "@/hooks/mutations";
+import { useAbstainMod, useDisconnectNexus, useEndorseMod, useSetDownloadConcurrency, useTrackMod, useUntrackMod, useUpdateGame } from "@/hooks/mutations";
 import {
   RIPPERMOD_NEXUS_MOD_ID,
   RIPPERMOD_NEXUS_URL,
@@ -269,6 +269,65 @@ function AboutCard() {
           </div>
         </>
       )}
+    </Card>
+  );
+}
+
+const DEFAULT_DOWNLOAD_CONCURRENCY = 3;
+
+function parseConcurrency(raw: string | undefined): number | null {
+  if (raw == null || !/^\d+$/.test(raw.trim())) return null;
+  const n = Number(raw.trim());
+  return n >= 1 && n <= 10 ? n : null;
+}
+
+function DownloadsCard() {
+  const { data: settings } = useSettings();
+  const stored = parseConcurrency(
+    settings?.find((s) => s.key === "download_concurrency")?.value,
+  ) ?? DEFAULT_DOWNLOAD_CONCURRENCY;
+  // Keyed by the stored value so the field resets when the saved setting changes.
+  return <DownloadConcurrencyField key={stored} stored={stored} />;
+}
+
+function DownloadConcurrencyField({ stored }: { stored: number }) {
+  const [draft, setDraft] = useState(String(stored));
+  const save = useSetDownloadConcurrency();
+
+  const commit = () => {
+    const value = parseConcurrency(draft);
+    if (value == null) {
+      setDraft(String(stored));
+      return;
+    }
+    if (value !== stored) save.mutate(value);
+  };
+
+  return (
+    <Card>
+      <h2 className="text-lg font-semibold text-text-primary">Downloads</h2>
+      <div className="mt-4 flex flex-col gap-1.5">
+        <label htmlFor="download-concurrency" className="text-sm font-medium text-text-secondary">
+          Simultaneous downloads
+        </label>
+        <input
+          id="download-concurrency"
+          type="number"
+          min={1}
+          max={10}
+          step={1}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
+          className="w-24 rounded-lg border border-border bg-surface-1 px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+        />
+        <p className="text-xs text-text-muted">
+          Downloads past this number wait as Queued. A change applies when the next slot frees.
+        </p>
+      </div>
     </Card>
   );
 }
@@ -719,6 +778,7 @@ export function SettingsPage() {
       </Card>
 
       <DeploymentCard />
+      <DownloadsCard />
       <LaunchCard />
       <DiagnosticsCard />
       <SaveBackupsCard />

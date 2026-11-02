@@ -591,7 +591,10 @@ export function useStartDownload() {
       }
       if (result.job) {
         useDownloadStore.getState().setJob(result.job);
-        toast.info("Download started", result.job.file_name);
+        toast.info(
+          result.job.status === "queued" ? "Download queued" : "Download started",
+          result.job.file_name,
+        );
       }
       qc.invalidateQueries({ queryKey: ["download-jobs", gameName] });
     },
@@ -614,11 +617,28 @@ export function useStartModDownload() {
       }
       if (result.job) {
         useDownloadStore.getState().setJob(result.job);
-        toast.info("Download started", result.job.file_name);
+        toast.info(
+          result.job.status === "queued" ? "Download queued" : "Download started",
+          result.job.file_name,
+        );
       }
       qc.invalidateQueries({ queryKey: ["download-jobs", gameName] });
     },
     onError: () => toast.error("Download failed"),
+  });
+}
+
+/** Save ``download_concurrency`` (1-10): how many downloads run at once (S6). */
+export function useSetDownloadConcurrency() {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, number>({
+    mutationFn: (value) =>
+      api.put("/api/v1/settings/", { settings: { download_concurrency: String(value) } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["settings"] });
+    },
+    onError: (err) =>
+      toast.error("Could not save simultaneous downloads", apiErrorDetail(err, "")),
   });
 }
 

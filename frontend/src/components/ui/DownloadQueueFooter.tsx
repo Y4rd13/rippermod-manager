@@ -132,7 +132,9 @@ export function DownloadQueueFooter() {
                   <DownloadProgress
                     job={job}
                     onCancel={
-                      job.status === "pending" || job.status === "downloading"
+                      job.status === "pending" ||
+                      job.status === "queued" ||
+                      job.status === "downloading"
                         ? () =>
                             cancelDownload.mutate({
                               gameName: activeGameName,
