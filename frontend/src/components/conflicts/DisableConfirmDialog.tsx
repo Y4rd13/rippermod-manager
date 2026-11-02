@@ -1,8 +1,9 @@
 import { Power, Trash2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useId } from "react";
 
 import { DependentsWarning } from "@/components/mods/DependentsWarning";
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { useToggleMod, useUninstallMod } from "@/hooks/mutations";
 import { useDependents } from "@/hooks/queries";
 
@@ -18,72 +19,73 @@ export function DisableConfirmDialog({ gameName, modId, modName, onClose, childr
   const toggleMod = useToggleMod();
   const uninstallMod = useUninstallMod();
   const { data: deps } = useDependents(gameName, modId);
+  const titleId = useId();
+
+  const busy = toggleMod.isPending || uninstallMod.isPending;
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
-      onClick={onClose}
+    <Dialog
+      onClose={onClose}
+      titleId={titleId}
+      closeOnEscape={!busy}
+      backdropClassName="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+      className="w-full max-w-md rounded-xl border border-border bg-surface-1 p-6"
     >
-      <div
-        className="w-full max-w-md rounded-xl border border-border bg-surface-1 p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 mb-4 text-danger">
-          <Power size={20} />
-          <h3 className="text-lg font-semibold text-text-primary">
-            Disable &ldquo;{modName}&rdquo;?
-          </h3>
-        </div>
-
-        <div className="text-sm text-text-secondary space-y-3 mb-4">
-          <p>This will disable the mod and all its archives.</p>
-          {children}
-          {deps && deps.count > 0 && <DependentsWarning dependents={deps.dependents} />}
-          <p className="text-xs text-text-muted">
-            The mod can be re-enabled later from the Installed Mods or Archives tab.
-            If uninstalled, it can be reinstalled from the Archives tab.
-          </p>
-        </div>
-
-        <div className="flex justify-end gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={toggleMod.isPending || uninstallMod.isPending}
-            onClick={onClose}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            loading={uninstallMod.isPending}
-            disabled={toggleMod.isPending}
-            onClick={() => {
-              uninstallMod.mutate(
-                { gameName, modId },
-                { onSuccess: onClose },
-              );
-            }}
-          >
-            <Trash2 size={14} /> Uninstall
-          </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            loading={toggleMod.isPending}
-            disabled={uninstallMod.isPending}
-            onClick={() => {
-              toggleMod.mutate(
-                { gameName, modId },
-                { onSuccess: onClose },
-              );
-            }}
-          >
-            <Power size={14} /> Disable
-          </Button>
-        </div>
+      <div className="flex items-center gap-2 mb-4 text-danger">
+        <Power size={20} />
+        <h3 id={titleId} className="text-lg font-semibold text-text-primary">
+          Disable &ldquo;{modName}&rdquo;?
+        </h3>
       </div>
-    </div>
+
+      <div className="text-sm text-text-secondary space-y-3 mb-4">
+        <p>This will disable the mod and all its archives.</p>
+        {children}
+        {deps && deps.count > 0 && <DependentsWarning dependents={deps.dependents} />}
+        <p className="text-xs text-text-muted">
+          The mod can be re-enabled later from the Installed Mods or Archives tab.
+          If uninstalled, it can be reinstalled from the Archives tab.
+        </p>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={toggleMod.isPending || uninstallMod.isPending}
+          onClick={onClose}
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="danger"
+          size="sm"
+          loading={uninstallMod.isPending}
+          disabled={toggleMod.isPending}
+          onClick={() => {
+            uninstallMod.mutate(
+              { gameName, modId },
+              { onSuccess: onClose },
+            );
+          }}
+        >
+          <Trash2 size={14} /> Uninstall
+        </Button>
+        <Button
+          variant="danger"
+          size="sm"
+          loading={toggleMod.isPending}
+          disabled={uninstallMod.isPending}
+          onClick={() => {
+            toggleMod.mutate(
+              { gameName, modId },
+              { onSuccess: onClose },
+            );
+          }}
+        >
+          <Power size={14} /> Disable
+        </Button>
+      </div>
+    </Dialog>
   );
 }

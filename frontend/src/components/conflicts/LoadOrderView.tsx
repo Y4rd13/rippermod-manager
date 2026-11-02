@@ -30,8 +30,10 @@ import {
 import { openPath } from "@tauri-apps/plugin-opener";
 import { useCallback, useMemo, useState } from "react";
 
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Dialog } from "@/components/ui/Dialog";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { useModlistFile, useModlistView, useArchiveConflictSummaries } from "@/hooks/queries";
 import {
@@ -109,10 +111,7 @@ function SortableRow({
       )}
     >
       <div
-        className={cn(
-          "flex items-center gap-3 px-4 py-2.5",
-          group.is_unmanaged && "opacity-50",
-        )}
+        className="flex items-center gap-3 px-4 py-2.5"
       >
         {/* Drag handle */}
         <button
@@ -136,7 +135,7 @@ function SortableRow({
         </button>
 
         {/* Position badge */}
-        <span className="w-8 shrink-0 text-right text-xs font-mono font-bold text-accent">
+        <span className="w-8 shrink-0 text-right text-xs font-mono font-bold text-accent-text">
           #{group.position}
         </span>
 
@@ -145,7 +144,7 @@ function SortableRow({
           className="w-4 shrink-0"
           title={group.has_user_preference ? "Has user preference" : undefined}
         >
-          {group.has_user_preference && <Pin size={12} className="text-accent" />}
+          {group.has_user_preference && <Pin size={12} className="text-accent-text" />}
         </span>
 
         {/* Mod name + archive filename */}
@@ -158,8 +157,13 @@ function SortableRow({
           }
         >
           {group.is_unmanaged ? (
-            <span className="text-sm font-mono text-text-muted/50 truncate block">
-              {group.archive_filenames[0]}
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="text-sm font-mono text-text-muted truncate">
+                {group.archive_filenames[0]}
+              </span>
+              <Badge variant="neutral" className="shrink-0">
+                Unmanaged
+              </Badge>
             </span>
           ) : (
             <>
@@ -320,7 +324,7 @@ function ModlistFilePanel({ gameName }: { gameName: string }) {
       <div className="border-b border-border px-3 py-1.5 text-xs text-text-muted font-mono truncate" title={data.path}>
         {data.path} · {data.lines.length} line{data.lines.length !== 1 ? "s" : ""}
       </div>
-      <ol className="max-h-64 overflow-y-auto py-1 font-mono text-xs text-text-secondary">
+      <ol className="py-1 font-mono text-xs text-text-secondary">
         {data.lines.map((line, i) => (
           <li key={i} className="flex gap-3 px-3">
             <span className="w-8 shrink-0 select-none text-right text-text-muted">{i + 1}</span>
@@ -495,7 +499,7 @@ export function LoadOrderView({ gameName }: Props) {
         {result.modlist_active && (
           <button
             onClick={handleOpenModlist}
-            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-text-muted hover:text-accent hover:bg-surface-2 transition-colors"
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-text-muted hover:text-accent-text hover:bg-surface-2 transition-colors"
             title="Open modlist.txt in your default editor"
           >
             <ExternalLink size={11} />
@@ -508,7 +512,7 @@ export function LoadOrderView({ gameName }: Props) {
             aria-expanded={showModlistFile}
             className={cn(
               "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors hover:bg-surface-2",
-              showModlistFile ? "text-accent" : "text-text-muted hover:text-accent",
+              showModlistFile ? "text-accent-text" : "text-text-muted hover:text-accent-text",
             )}
             title="Show the lines of modlist.txt"
           >
@@ -522,11 +526,20 @@ export function LoadOrderView({ gameName }: Props) {
         <span
           className={cn(
             "text-xs",
-            result.total_preferences > 0 ? "text-accent" : "text-text-muted",
+            result.total_preferences > 0 ? "text-accent-text" : "text-text-muted",
           )}
         >
           {result.total_preferences} preference{result.total_preferences !== 1 ? "s" : ""}
         </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={result.total_preferences === 0 || resetAll.isPending}
+          onClick={() => setConfirmResetAll(true)}
+        >
+          <RotateCcw size={14} />
+          Reset to Default Order
+        </Button>
         <div className="flex-1" />
         <Button
           variant="primary"
@@ -538,15 +551,6 @@ export function LoadOrderView({ gameName }: Props) {
         >
           <Sparkles size={14} />
           Auto-sort
-        </Button>
-        <Button
-          variant="danger"
-          size="sm"
-          disabled={result.total_preferences === 0 || resetAll.isPending}
-          onClick={() => setConfirmResetAll(true)}
-        >
-          <RotateCcw size={14} />
-          Reset to Default Order
         </Button>
       </div>
 
@@ -560,7 +564,7 @@ export function LoadOrderView({ gameName }: Props) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by mod or archive name..."
-          className="w-full rounded-lg border border-border bg-surface-1 py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-accent focus:outline-none"
+          className="w-full rounded-lg border border-border bg-surface-1 py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
         />
       </div>
 
@@ -670,76 +674,73 @@ function AutoSortPreviewDialog({
     preview.proposed_add.length > 0 || preview.proposed_remove.length > 0;
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
-      onClick={() => !loading && onCancel()}
+    <Dialog
+      onClose={onCancel}
+      titleId="auto-sort-preview-title"
+      closeOnEscape={!loading}
+      closeOnBackdrop={!loading}
+      backdropClassName="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+      className="w-full max-w-lg rounded-xl border border-border bg-surface-1 p-6 max-h-[80vh] overflow-y-auto"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="w-full max-w-lg rounded-xl border border-border bg-surface-1 p-6 max-h-[80vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center gap-2 text-accent">
-          <Sparkles size={20} />
-          <h3 className="text-lg font-semibold text-text-primary">
-            Auto-sort Preview
-          </h3>
-        </div>
-
-        <p className="mb-4 text-sm text-text-secondary">{preview.rationale}</p>
-
-        {hasChanges ? (
-          <div className="mb-6 space-y-3">
-            <div className="text-xs text-text-muted">
-              {preview.proposed_add.length} preference{preview.proposed_add.length !== 1 ? "s" : ""}{" "}
-              to add
-              {preview.proposed_remove.length > 0 &&
-                `, ${preview.proposed_remove.length} to remove`}
-              .
-            </div>
-            {preview.affected_mods.length > 0 && (
-              <div className="rounded border border-border bg-surface-0 p-3">
-                <div className="mb-2 text-xs font-medium text-text-secondary">
-                  Affected mods (sorted by file count, smaller = wins):
-                </div>
-                <ul className="space-y-1 text-xs font-mono">
-                  {preview.affected_mods.map((m) => (
-                    <li
-                      key={m.mod_id}
-                      className="flex items-center justify-between gap-2"
-                    >
-                      <span className="truncate text-text-primary">{m.mod_name}</span>
-                      <span className="shrink-0 text-text-muted">
-                        {m.file_count} file{m.file_count !== 1 ? "s" : ""}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="mb-6 rounded border border-border bg-surface-0 p-3 text-xs text-text-muted">
-            Nothing to change.
-          </div>
-        )}
-
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" size="sm" disabled={loading} onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={!hasChanges}
-            loading={loading}
-            onClick={onApply}
-          >
-            Apply
-          </Button>
-        </div>
+      <div className="mb-4 flex items-center gap-2 text-accent-text">
+        <Sparkles size={20} />
+        <h3 id="auto-sort-preview-title" className="text-lg font-semibold text-text-primary">
+          Auto-sort Preview
+        </h3>
       </div>
-    </div>
+
+      <p className="mb-4 text-sm text-text-secondary">{preview.rationale}</p>
+
+      {hasChanges ? (
+        <div className="mb-6 space-y-3">
+          <div className="text-xs text-text-muted">
+            {preview.proposed_add.length} preference{preview.proposed_add.length !== 1 ? "s" : ""}{" "}
+            to add
+            {preview.proposed_remove.length > 0 &&
+              `, ${preview.proposed_remove.length} to remove`}
+            .
+          </div>
+          {preview.affected_mods.length > 0 && (
+            <div className="rounded border border-border bg-surface-0 p-3">
+              <div className="mb-2 text-xs font-medium text-text-secondary">
+                Affected mods (sorted by file count, smaller = wins):
+              </div>
+              <ul className="space-y-1 text-xs font-mono">
+                {preview.affected_mods.map((m) => (
+                  <li
+                    key={m.mod_id}
+                    className="flex items-center justify-between gap-2"
+                  >
+                    <span className="truncate text-text-primary">{m.mod_name}</span>
+                    <span className="shrink-0 text-text-muted">
+                      {m.file_count} file{m.file_count !== 1 ? "s" : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="mb-6 rounded border border-border bg-surface-0 p-3 text-xs text-text-muted">
+          Nothing to change.
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" size="sm" disabled={loading} onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={!hasChanges}
+          loading={loading}
+          onClick={onApply}
+        >
+          Apply
+        </Button>
+      </div>
+    </Dialog>
   );
 }

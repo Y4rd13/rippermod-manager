@@ -12,6 +12,7 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { useArchivePreview } from "@/hooks/queries";
 import { buildFileTree } from "@/lib/file-tree";
 import { formatBytes } from "@/lib/format";
@@ -63,9 +64,9 @@ const PreviewTreeNode = memo(function PreviewTreeNode({
             <ChevronRight size={14} className="shrink-0 text-text-muted" />
           )}
           {open ? (
-            <FolderOpen size={14} className="shrink-0 text-accent" />
+            <FolderOpen size={14} className="shrink-0 text-accent-text" />
           ) : (
-            <Folder size={14} className="shrink-0 text-accent" />
+            <Folder size={14} className="shrink-0 text-accent-text" />
           )}
           <span className="font-mono text-xs text-text-primary truncate">
             {node.name}
@@ -122,7 +123,11 @@ const PreviewTreeNode = memo(function PreviewTreeNode({
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") commitEdit();
-            if (e.key === "Escape") cancelEdit();
+            if (e.key === "Escape") {
+              // Cancel only the rename; the dialog stays open.
+              e.preventDefault();
+              cancelEdit();
+            }
           }}
           onBlur={commitEdit}
           className="min-w-0 flex-1 rounded border border-accent bg-surface-0 px-2 py-0.5 font-mono text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
@@ -138,13 +143,13 @@ const PreviewTreeNode = memo(function PreviewTreeNode({
     >
       <File size={14} className="shrink-0 text-text-muted" />
       <span
-        className={`font-mono text-xs truncate ${isRenamed ? "text-accent font-medium" : "text-text-secondary"}`}
+        className={`font-mono text-xs truncate ${isRenamed ? "text-accent-text font-medium" : "text-text-secondary"}`}
         title={isRenamed ? renamedPath : fullPath}
       >
         {displayName}
       </span>
       {isRenamed && (
-        <span className="shrink-0 text-[10px] text-accent bg-accent/10 px-1 rounded">
+        <span className="shrink-0 text-[11px] text-accent-text bg-accent/10 px-1 rounded">
           renamed
         </span>
       )}
@@ -154,7 +159,7 @@ const PreviewTreeNode = memo(function PreviewTreeNode({
       <button
         onClick={(e) => { e.stopPropagation(); startEditing(); }}
         title="Rename file"
-        className="shrink-0 rounded p-0.5 text-text-muted opacity-0 group-hover:opacity-100 hover:text-accent hover:bg-accent/10 transition-all"
+        className="shrink-0 rounded p-0.5 text-text-muted opacity-0 group-hover:opacity-100 hover:text-accent-text hover:bg-accent/10 transition-all"
       >
         <Pencil size={12} />
       </button>
@@ -197,104 +202,90 @@ export function PreInstallPreview({ gameName, archiveFilename, onConfirm, onCanc
 
   const renameCount = Object.keys(renames).length;
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel]);
-
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
-      onClick={onCancel}
+    <Dialog
+      onClose={onCancel}
+      titleId="preview-dialog-title"
+      backdropClassName="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+      className="w-full max-w-2xl rounded-xl border border-border bg-surface-1 p-6 animate-modal-in"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="preview-dialog-title"
-        className="w-full max-w-2xl rounded-xl border border-border bg-surface-1 p-6 animate-modal-in"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h3 id="preview-dialog-title" className="text-sm font-semibold text-text-primary truncate pr-4">
-            Install with Options
-          </h3>
-          <button
-            onClick={onCancel}
-            className="shrink-0 rounded-md p-1 text-text-muted hover:bg-surface-3 hover:text-text-primary"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        <p className="mb-1 text-xs text-text-muted truncate" title={archiveFilename}>
-          {archiveFilename}
-        </p>
-
-        {isLoading && (
-          <div className="flex items-center justify-center py-12 text-text-muted">
-            <Loader2 size={20} className="animate-spin mr-2" />
-            Loading archive contents...
-          </div>
-        )}
-
-        {error && (
-          <div className="py-8 text-center text-sm text-danger">
-            Failed to load archive contents.
-          </div>
-        )}
-
-        {preview && (preview.is_fomod ? (
-          <>
-            <div className="py-8 text-center text-sm text-warning">
-              This archive is a FOMOD installer. Use the FOMOD wizard instead.
-            </div>
-            <div className="mt-4 flex justify-end">
-              <Button variant="secondary" size="sm" onClick={onCancel}>
-                Close
-              </Button>
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="mb-3 text-xs text-text-secondary">
-              {preview.total_files} file{preview.total_files !== 1 ? "s" : ""} will be extracted.
-              Click the <Pencil size={10} className="inline mx-0.5" /> icon to rename a file before install.
-            </p>
-
-            <div className="max-h-[60vh] overflow-y-auto rounded border border-border bg-surface-0 p-3">
-              {tree.map((node) => (
-                <PreviewTreeNode
-                  key={node.name}
-                  node={node}
-                  depth={0}
-                  parentPath=""
-                  renames={renames}
-                  onRename={handleRename}
-                />
-              ))}
-            </div>
-
-            {renameCount > 0 && (
-              <p className="mt-2 text-xs text-accent">
-                {renameCount} file{renameCount !== 1 ? "s" : ""} will be renamed.
-              </p>
-            )}
-
-            <div className="mt-4 flex justify-end gap-2">
-              <Button variant="secondary" size="sm" onClick={onCancel}>
-                Cancel
-              </Button>
-              <Button size="sm" onClick={() => onConfirm(renames)}>
-                <Check size={14} className="mr-1" />
-                Install{renameCount > 0 ? ` (${renameCount} renamed)` : ""}
-              </Button>
-            </div>
-          </>
-        ))}
+      <div className="mb-4 flex items-center justify-between">
+        <h3 id="preview-dialog-title" className="text-sm font-semibold text-text-primary truncate pr-4">
+          Install with Options
+        </h3>
+        <button
+          onClick={onCancel}
+          className="shrink-0 rounded-md p-1 text-text-muted hover:bg-surface-3 hover:text-text-primary"
+        >
+          <X size={16} />
+        </button>
       </div>
-    </div>
+
+      <p className="mb-1 text-xs text-text-muted truncate" title={archiveFilename}>
+        {archiveFilename}
+      </p>
+
+      {isLoading && (
+        <div className="flex items-center justify-center py-12 text-text-muted">
+          <Loader2 size={20} className="animate-spin mr-2" />
+          Loading archive contents...
+        </div>
+      )}
+
+      {error && (
+        <div className="py-8 text-center text-sm text-danger">
+          Failed to load archive contents.
+        </div>
+      )}
+
+      {preview && (preview.is_fomod ? (
+        <>
+          <div className="py-8 text-center text-sm text-warning">
+            This archive is a FOMOD installer. Use the FOMOD wizard instead.
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button variant="secondary" size="sm" onClick={onCancel}>
+              Close
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="mb-3 text-xs text-text-secondary">
+            {preview.total_files} file{preview.total_files !== 1 ? "s" : ""} will be extracted.
+            Click the <Pencil size={10} className="inline mx-0.5" /> icon to rename a file before install.
+          </p>
+
+          <div className="max-h-[60vh] overflow-y-auto rounded border border-border bg-surface-0 p-3">
+            {tree.map((node) => (
+              <PreviewTreeNode
+                key={node.name}
+                node={node}
+                depth={0}
+                parentPath=""
+                renames={renames}
+                onRename={handleRename}
+              />
+            ))}
+          </div>
+
+          {renameCount > 0 && (
+            <p className="mt-2 text-xs text-accent-text">
+              {renameCount} file{renameCount !== 1 ? "s" : ""} will be renamed.
+            </p>
+          )}
+
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={() => onConfirm(renames)}>
+              <Check size={14} className="mr-1" />
+              Install{renameCount > 0 ? ` (${renameCount} renamed)` : ""}
+            </Button>
+          </div>
+        </>
+      ))}
+    </Dialog>
   );
 }

@@ -1,8 +1,9 @@
 import { AlertTriangle, Download, ExternalLink, Package } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useId, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { DownloadProgress } from "@/components/ui/DownloadProgress";
 import {
   useCancelDownload,
@@ -31,6 +32,7 @@ export function UpdateDownloadCell({ update, gameName, downloadJobs }: Props) {
   const storeJobs = useDownloadStore((s) => s.jobs);
   const [conflicts, setConflicts] = useState<ConflictCheckResult | null>(null);
   const [installingFile, setInstallingFile] = useState<string | null>(null);
+  const conflictTitleId = useId();
 
   const activeJob =
     downloadJobs.find(
@@ -51,16 +53,6 @@ export function UpdateDownloadCell({ update, gameName, downloadJobs }: Props) {
     Object.values(storeJobs).find(
       (j) => j.nexus_mod_id === update.nexus_mod_id && j.status === "completed",
     );
-
-  // Close conflict dialog on Escape
-  useEffect(() => {
-    if (!conflicts) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setConflicts(null);
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [conflicts]);
 
   const doInstall = async (fileName: string, skipConflicts: string[]) => {
     const oldArchive = update.source_archive;
@@ -166,43 +158,47 @@ export function UpdateDownloadCell({ update, gameName, downloadJobs }: Props) {
         </Button>
 
         {conflicts && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="w-full max-w-md rounded-xl border border-border bg-surface-1 p-6">
-              <div className="mb-4 flex items-center gap-2 text-warning">
-                <AlertTriangle size={20} />
-                <h3 className="text-lg font-semibold text-text-primary">
-                  File Conflicts Detected
-                </h3>
-              </div>
-              <p className="mb-3 text-sm text-text-secondary">
-                {conflicts.conflicts.length} file(s) conflict with installed mods:
-              </p>
-              <div className="mb-4 max-h-48 overflow-y-auto rounded border border-border bg-surface-0 p-3">
-                {conflicts.conflicts.map((c) => (
-                  <div key={c.file_path} className="py-1 text-xs">
-                    <span className="font-mono text-text-primary">{c.file_path}</span>
-                    <span className="ml-2 text-text-muted">(owned by {c.owning_mod_name})</span>
-                  </div>
-                ))}
-              </div>
-              <p className="mb-4 text-xs text-text-secondary">
-                Install: this mod&apos;s copy is linked in the game folder. The other mod keeps its
-                own copy and gets the path back if you uninstall this one.
-                Install without these files: the listed files are not extracted from this mod.
-              </p>
-              <div className="flex justify-end gap-2">
-                <Button variant="secondary" size="sm" onClick={() => setConflicts(null)}>
-                  Cancel
-                </Button>
-                <Button variant="secondary" size="sm" onClick={handleInstallWithSkip}>
-                  Install without these files
-                </Button>
-                <Button size="sm" onClick={handleInstallOverwrite}>
-                  Install
-                </Button>
-              </div>
+          <Dialog
+            onClose={() => setConflicts(null)}
+            titleId={conflictTitleId}
+            closeOnBackdrop={false}
+            backdropClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+            className="w-full max-w-md rounded-xl border border-border bg-surface-1 p-6"
+          >
+            <div className="mb-4 flex items-center gap-2 text-warning">
+              <AlertTriangle size={20} />
+              <h3 id={conflictTitleId} className="text-lg font-semibold text-text-primary">
+                File Conflicts Detected
+              </h3>
             </div>
-          </div>
+            <p className="mb-3 text-sm text-text-secondary">
+              {conflicts.conflicts.length} file(s) conflict with installed mods:
+            </p>
+            <div className="mb-4 max-h-48 overflow-y-auto rounded border border-border bg-surface-0 p-3">
+              {conflicts.conflicts.map((c) => (
+                <div key={c.file_path} className="py-1 text-xs">
+                  <span className="font-mono text-text-primary">{c.file_path}</span>
+                  <span className="ml-2 text-text-muted">(owned by {c.owning_mod_name})</span>
+                </div>
+              ))}
+            </div>
+            <p className="mb-4 text-xs text-text-secondary">
+              Install: this mod&apos;s copy is linked in the game folder. The other mod keeps its
+              own copy and gets the path back if you uninstall this one.
+              Install without these files: the listed files are not extracted from this mod.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setConflicts(null)}>
+                Cancel
+              </Button>
+              <Button variant="secondary" size="sm" onClick={handleInstallWithSkip}>
+                Install without these files
+              </Button>
+              <Button size="sm" onClick={handleInstallOverwrite}>
+                Install
+              </Button>
+            </div>
+          </Dialog>
         )}
       </>
     );
@@ -213,7 +209,7 @@ export function UpdateDownloadCell({ update, gameName, downloadJobs }: Props) {
     return (
       <button
         onClick={() => openUrl(update.nexus_url).catch(() => {})}
-        className="inline-flex items-center gap-1 text-accent hover:underline text-xs"
+        className="inline-flex items-center gap-1 text-accent-text hover:underline text-xs"
       >
         <ExternalLink size={12} /> Nexus
       </button>

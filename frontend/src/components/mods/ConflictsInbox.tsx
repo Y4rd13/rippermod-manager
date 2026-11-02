@@ -11,6 +11,7 @@ import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { SortableHeader } from "@/components/ui/SortableHeader";
 import { VirtualTable } from "@/components/ui/VirtualTable";
 import { useConflictsOverview } from "@/hooks/queries";
+import { activationProps } from "@/lib/activation";
 import type { ConflictSeverity, ModConflictSummary } from "@/types/api";
 
 interface Props {
@@ -177,8 +178,8 @@ export function ConflictsInbox({ gameName, modsOnDiskWithConflicts, onOpenCluste
           renderRow={(item) => (
             <tr
               key={item.mod_id}
-              onClick={() => setSelectedMod(item)}
-              className={`border-b border-border/50 cursor-pointer hover:bg-surface-1 transition-colors${item.dismissed ? " opacity-60" : ""}`}
+              {...activationProps(() => setSelectedMod(item))}
+              className={`border-b border-border/50 cursor-pointer hover:bg-surface-1 transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none${item.dismissed ? " opacity-60" : ""}`}
             >
               <td className="py-2.5 pr-4">
                 <div className="flex items-center gap-2">

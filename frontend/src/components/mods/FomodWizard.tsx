@@ -2,6 +2,7 @@ import { AlertTriangle, Check, ChevronLeft, ChevronRight, Loader2, Package } fro
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { useFomodWizard } from "@/hooks/use-fomod-wizard";
 import { cn } from "@/lib/utils";
 import type { FomodConfigOut, FomodGroupOut, FomodPluginOut, PluginTypeString } from "@/types/fomod";
@@ -31,10 +32,11 @@ function StepIndicator({
         <div key={origIdx} className="flex items-center gap-2">
           <div
             title={config.steps[origIdx]?.name}
+            aria-current={i === cursor ? "step" : undefined}
             className={cn(
-              "flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold transition-colors",
+              "flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold transition-colors",
               i < cursor
-                ? "bg-success text-white"
+                ? "bg-success text-surface-0"
                 : i === cursor
                   ? "bg-accent text-white"
                   : "bg-surface-3 text-text-muted",
@@ -57,25 +59,25 @@ function TypeBadge({ type }: { type: string }) {
   switch (type) {
     case "Required":
       return (
-        <span className="text-[10px] font-medium bg-accent/20 text-accent px-1.5 py-0.5 rounded">
+        <span className="text-[11px] font-medium bg-surface-3 text-text-secondary px-1.5 py-0.5 rounded">
           Required
         </span>
       );
     case "Recommended":
       return (
-        <span className="text-[10px] font-medium bg-success/20 text-success px-1.5 py-0.5 rounded">
+        <span className="text-[11px] font-medium bg-success/20 text-success px-1.5 py-0.5 rounded">
           Recommended
         </span>
       );
     case "NotUsable":
       return (
-        <span className="text-[10px] font-medium bg-danger/20 text-danger px-1.5 py-0.5 rounded">
+        <span className="text-[11px] font-medium bg-danger/20 text-danger px-1.5 py-0.5 rounded">
           Not usable
         </span>
       );
     case "CouldBeUsable":
       return (
-        <span className="text-[10px] font-medium bg-warning/20 text-warning px-1.5 py-0.5 rounded flex items-center gap-0.5">
+        <span className="text-[11px] font-medium bg-warning/20 text-warning px-1.5 py-0.5 rounded flex items-center gap-0.5">
           <AlertTriangle size={10} /> Experimental
         </span>
       );
@@ -162,7 +164,7 @@ function GroupSection({
     <div>
       <div className="flex items-center gap-2 mb-2">
         <h4 className="text-sm font-semibold text-text-primary">{group.name}</h4>
-        <span className="text-[10px] text-text-muted">
+        <span className="text-[11px] text-text-muted">
           {group.type === "SelectExactlyOne" && "Pick one"}
           {group.type === "SelectAtMostOne" && "Pick one or none"}
           {group.type === "SelectAtLeastOne" && "Pick at least one"}
@@ -204,25 +206,15 @@ export function FomodWizard({ gameName, archiveFilename, onDismiss, onInstallCom
     }
   }, [wizard.installSuccess, onInstallComplete]);
 
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (wizard.hasModified) {
-          if (window.confirm("Discard FOMOD selections?")) {
-            onDismiss();
-          }
-        } else {
-          onDismiss();
-        }
+  const requestDismiss = useCallback(() => {
+    if (wizard.hasModified) {
+      if (window.confirm("Discard FOMOD selections?")) {
+        onDismiss();
       }
-    },
-    [onDismiss, wizard.hasModified],
-  );
-
-  useEffect(() => {
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyDown]);
+    } else {
+      onDismiss();
+    }
+  }, [onDismiss, wizard.hasModified]);
 
   const currentStepData = wizard.config?.steps[wizard.currentStep];
   const stepName = wizard.isReview
@@ -246,172 +238,159 @@ export function FomodWizard({ gameName, archiveFilename, onDismiss, onInstallCom
   }, [wizard.config, wizard.selections, wizard.currentStep, currentStepData]);
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          if (wizard.hasModified) {
-            if (window.confirm("Discard FOMOD selections?")) onDismiss();
-          } else {
-            onDismiss();
-          }
-        }
-      }}
+    <Dialog
+      onClose={requestDismiss}
+      titleId="fomod-wizard-title"
+      closeOnEscape={!wizard.isInstalling}
+      backdropClassName="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+      className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-xl border border-border bg-surface-1"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="fomod-wizard-title"
-        className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-xl border border-border bg-surface-1"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <div className="flex items-center gap-3">
-            <Package size={20} className="text-accent" />
-            <div>
-              <h3 id="fomod-wizard-title" className="text-base font-semibold text-text-primary">
-                {wizard.config?.module_name || "FOMOD Installer"}
-              </h3>
-              {(wizard.totalSteps > 1 || wizard.isReview) && (
-                <p className="text-xs text-text-muted">{stepName}</p>
-              )}
-            </div>
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-border px-6 py-4">
+        <div className="flex items-center gap-3">
+          <Package size={20} className="text-accent-text" />
+          <div>
+            <h3 id="fomod-wizard-title" className="text-base font-semibold text-text-primary">
+              {wizard.config?.module_name || "FOMOD Installer"}
+            </h3>
+            {(wizard.totalSteps > 1 || wizard.isReview) && (
+              <p className="text-xs text-text-muted">{stepName}</p>
+            )}
           </div>
-          {wizard.config && wizard.totalSteps > 1 && (
-            <StepIndicator
-              cursor={wizard.visibleStepCursor}
-              totalVisible={wizard.totalSteps}
-              visibleSteps={wizard.visibleSteps}
-              config={wizard.config}
-            />
-          )}
         </div>
+        {wizard.config && wizard.totalSteps > 1 && (
+          <StepIndicator
+            cursor={wizard.visibleStepCursor}
+            totalVisible={wizard.totalSteps}
+            visibleSteps={wizard.visibleSteps}
+            config={wizard.config}
+          />
+        )}
+      </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          {wizard.isLoading && (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 size={24} className="animate-spin text-accent" />
-              <span className="ml-2 text-sm text-text-muted">Loading installer config...</span>
-            </div>
-          )}
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto px-6 py-4">
+        {wizard.isLoading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 size={24} className="animate-spin text-accent-text" />
+            <span className="ml-2 text-sm text-text-muted">Loading installer config...</span>
+          </div>
+        )}
 
-          {wizard.error && (
-            <div className="rounded-lg border border-danger/30 bg-danger/5 p-4">
-              <p className="text-sm text-danger">Failed to load FOMOD config</p>
-              <p className="text-xs text-text-muted mt-1">{wizard.error.message}</p>
-            </div>
-          )}
+        {wizard.error && (
+          <div className="rounded-lg border border-danger/30 bg-danger/5 p-4">
+            <p className="text-sm text-danger">Failed to load FOMOD config</p>
+            <p className="text-xs text-text-muted mt-1">{wizard.error.message}</p>
+          </div>
+        )}
 
-          {currentStepData && !wizard.isReview && (
-            <div className="space-y-5">
-              {currentStepData.groups.map((group, groupIdx) => (
-                <GroupSection
-                  key={groupIdx}
-                  group={group}
-                  groupIdx={groupIdx}
-                  stepIdx={wizard.currentStep}
-                  selected={wizard.selections[wizard.currentStep]?.[groupIdx] ?? []}
-                  onSelect={wizard.selectPlugin}
-                  getPluginType={wizard.getPluginType}
-                />
-              ))}
-            </div>
-          )}
-
-          {wizard.config && wizard.isReview && (
-            <div className="space-y-3">
-              <h4 className="text-sm font-semibold text-text-primary">Review</h4>
-              {wizard.isPreviewing && (
-                <div className="flex items-center gap-2 text-sm text-text-muted">
-                  <Loader2 size={14} className="animate-spin" /> Listing the files to install...
-                </div>
-              )}
-              {wizard.previewError && (
-                <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-warning">
-                  Could not preview the files: {wizard.previewError.message}
-                </p>
-              )}
-              {wizard.preview && !wizard.isPreviewing && !wizard.previewError && (
-                <>
-                  <p className="text-sm text-text-secondary">
-                    {wizard.preview.total_files} file(s) will be installed
-                  </p>
-                  <ul className="max-h-64 overflow-y-auto rounded-lg border border-border bg-surface-2 p-2 font-mono text-xs text-text-secondary">
-                    {wizard.preview.files.map((f, i) => (
-                      // Two sources can target one path: the index keeps keys unique.
-                      <li key={`${i}:${f.game_relative_path}`} className="truncate" title={f.game_relative_path}>
-                        {f.game_relative_path}
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Mod name input on the Review step */}
-          {wizard.config && wizard.isReview && (
-            <div className="mt-5 pt-4 border-t border-border">
-              <label className="block text-xs font-medium text-text-secondary mb-1">
-                Mod name
-              </label>
-              <input
-                type="text"
-                value={modName}
-                onChange={(e) => setModNameOverride(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
+        {currentStepData && !wizard.isReview && (
+          <div className="space-y-5">
+            {currentStepData.groups.map((group, groupIdx) => (
+              <GroupSection
+                key={groupIdx}
+                group={group}
+                groupIdx={groupIdx}
+                stepIdx={wizard.currentStep}
+                selected={wizard.selections[wizard.currentStep]?.[groupIdx] ?? []}
+                onSelect={wizard.selectPlugin}
+                getPluginType={wizard.getPluginType}
               />
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
 
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-border px-6 py-3">
-          <span className="text-xs text-text-muted">
-            {wizard.config &&
-              !wizard.isReview &&
-              `${filesCount} file mapping${filesCount !== 1 ? "s" : ""}`}
-          </span>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={() => {
-              if (wizard.hasModified) {
-                if (window.confirm("Discard FOMOD selections?")) onDismiss();
-              } else {
-                onDismiss();
-              }
-            }}>
-              Cancel
-            </Button>
-            {((wizard.isReview && wizard.totalSteps > 0) ||
-              (!wizard.isReview && !wizard.isFirstStep)) && (
-              <Button variant="secondary" size="sm" onClick={wizard.goBack}>
-                <ChevronLeft size={14} /> Back
-              </Button>
+        {wizard.config && wizard.isReview && (
+          <div className="space-y-3">
+            <h4 className="text-sm font-semibold text-text-primary">Review</h4>
+            {wizard.isPreviewing && (
+              <div className="flex items-center gap-2 text-sm text-text-muted">
+                <Loader2 size={14} className="animate-spin" /> Listing the files to install...
+              </div>
             )}
-            {wizard.config && !wizard.isReview && (
-              <Button
-                size="sm"
-                onClick={wizard.isLastStep ? wizard.goToReview : wizard.goNext}
-                disabled={!wizard.canGoNext}
-              >
-                Next <ChevronRight size={14} />
-              </Button>
+            {wizard.previewError && (
+              <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-warning">
+                Could not preview the files: {wizard.previewError.message}
+              </p>
             )}
-            {wizard.isReview && wizard.config && (
-              <Button
-                size="sm"
-                onClick={() => wizard.doInstall(modName)}
-                disabled={!modName.trim()}
-                loading={wizard.isInstalling}
-              >
-                Install
-              </Button>
+            {wizard.preview && !wizard.isPreviewing && !wizard.previewError && (
+              <>
+                <p className="text-sm text-text-secondary">
+                  {wizard.preview.total_files} file(s) will be installed
+                </p>
+                <ul className="max-h-64 overflow-y-auto rounded-lg border border-border bg-surface-2 p-2 font-mono text-xs text-text-secondary">
+                  {wizard.preview.files.map((f, i) => (
+                    // Two sources can target one path: the index keeps keys unique.
+                    <li key={`${i}:${f.game_relative_path}`} className="truncate" title={f.game_relative_path}>
+                      {f.game_relative_path}
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
           </div>
+        )}
+
+        {/* Mod name input on the Review step */}
+        {wizard.config && wizard.isReview && (
+          <div className="mt-5 pt-4 border-t border-border">
+            <label className="block text-xs font-medium text-text-secondary mb-1">
+              Mod name
+            </label>
+            <input
+              type="text"
+              value={modName}
+              onChange={(e) => setModNameOverride(e.target.value)}
+              className="w-full rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between border-t border-border px-6 py-3">
+        <span className="text-xs text-text-muted">
+          {wizard.config &&
+            !wizard.isReview &&
+            `${filesCount} file mapping${filesCount !== 1 ? "s" : ""}`}
+        </span>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => {
+            if (wizard.hasModified) {
+              if (window.confirm("Discard FOMOD selections?")) onDismiss();
+            } else {
+              onDismiss();
+            }
+          }}>
+            Cancel
+          </Button>
+          {((wizard.isReview && wizard.totalSteps > 0) ||
+            (!wizard.isReview && !wizard.isFirstStep)) && (
+            <Button variant="secondary" size="sm" onClick={wizard.goBack}>
+              <ChevronLeft size={14} /> Back
+            </Button>
+          )}
+          {wizard.config && !wizard.isReview && (
+            <Button
+              size="sm"
+              onClick={wizard.isLastStep ? wizard.goToReview : wizard.goNext}
+              disabled={!wizard.canGoNext}
+            >
+              Next <ChevronRight size={14} />
+            </Button>
+          )}
+          {wizard.isReview && wizard.config && (
+            <Button
+              size="sm"
+              onClick={() => wizard.doInstall(modName)}
+              disabled={!modName.trim()}
+              loading={wizard.isInstalling}
+            >
+              Install
+            </Button>
+          )}
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

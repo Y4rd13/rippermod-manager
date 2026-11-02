@@ -25,7 +25,7 @@ export function BulkActionBar({
         {selectedCount} of {totalCount} selected
       </span>
       <button
-        className="text-xs text-accent hover:text-accent-hover transition-colors whitespace-nowrap"
+        className="text-xs text-accent-text hover:text-text-primary transition-colors whitespace-nowrap"
         onClick={isAllSelected ? onDeselectAll : onSelectAll}
       >
         {isAllSelected ? "Deselect all" : "Select all"}

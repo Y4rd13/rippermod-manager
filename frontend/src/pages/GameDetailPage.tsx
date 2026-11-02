@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   Archive,
+  Boxes,
   ChevronRight,
   Eye,
   FolderOpen,
@@ -22,8 +23,9 @@ import { Link, useParams } from "react-router";
 import { ClusterDetailsPanel, ConflictSummaryWidget } from "@/components/conflicts/ConflictSummaryWidget";
 import { ScriptTweakConflicts } from "@/components/conflicts/ScriptTweakConflicts";
 import { AdoptReviewDialog } from "@/components/mods/AdoptReviewDialog";
-import { FrameworksStatCard } from "@/components/FrameworksStatCard";
-import { HealthStatCard } from "@/components/HealthStatCard";
+import { useFrameworksVerdict } from "@/components/FrameworksStatCard";
+import { GameStatusStrip, type StatusItem } from "@/components/GameStatusStrip";
+import { useHealthVerdict } from "@/components/HealthStatCard";
 import { HealthTab } from "@/components/HealthTab";
 import { ArchivesList } from "@/components/mods/ArchivesList";
 import { InstalledCollectionsSection } from "@/components/collections/InstalledCollectionsSection";
@@ -41,12 +43,12 @@ import { ProfileManager } from "@/components/mods/ProfileManager";
 import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { UpdatesTable } from "@/components/mods/UpdatesTable";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ScanProgress, type ScanLog } from "@/components/ui/ScanProgress";
 import { invalidateGameState } from "@/hooks/invalidate";
 import { useDeploy } from "@/hooks/use-deploy";
 import { useInstallFlow } from "@/hooks/use-install-flow";
+import { useRovingTabs } from "@/hooks/use-roving-tabs";
 import {
   useAvailableArchives,
   useConflictCount,
@@ -63,6 +65,7 @@ import {
 } from "@/hooks/queries";
 import { api } from "@/lib/api-client";
 import { parseSSE } from "@/lib/sse-parser";
+import { plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import { useUIStore } from "@/stores/ui-store";
@@ -87,6 +90,7 @@ const MATCHED_SUB_TABS: { key: MatchedSubTab; label: string }[] = [
   { key: "nexus-matched", label: "Nexus Matched" },
   { key: "scan-details", label: "Scan Details" },
 ];
+const MATCHED_SUB_TAB_KEYS = MATCHED_SUB_TABS.map((t) => t.key);
 
 type ConflictSubTab =
   | "file-conflicts"
@@ -116,7 +120,7 @@ function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomai
             className={cn(
               "px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px",
               subTab === key
-                ? "border-accent text-accent"
+                ? "border-accent text-accent-text"
                 : "border-transparent text-text-muted hover:text-text-secondary",
             )}
           >
@@ -160,6 +164,7 @@ const TABS: { key: Tab; label: string; Icon: typeof Package; description: string
   { key: "endorsed", label: "Endorsed", Icon: Heart, description: "Mods you've endorsed on your Nexus account." },
   { key: "tracked", label: "Tracked", Icon: Eye, description: "Mods you're tracking on your Nexus account." },
 ];
+const TAB_KEYS = TABS.map((t) => t.key);
 
 export function GameDetailPage() {
   const { name = "" } = useParams();
@@ -167,7 +172,7 @@ export function GameDetailPage() {
   const warnBeforeLaunch = useUIStore((s) => s.warnBeforeLaunch);
   const adoptBannerDismissed = useUIStore((s) => s.adoptBannerDismissedByGame[name] ?? false);
   const dismissAdoptBanner = useUIStore((s) => s.dismissAdoptBanner);
-  const [adoptSelection, setAdoptSelection] = useState<ModGroup[] | null>(null);
+  const [adoptSelection, setAdoptSelection] = useState<{ mods: ModGroup[]; preselectIds: number[] } | null>(null);
   useEffect(() => {
     setActiveGame(name || null);
     return () => setActiveGame(null);
@@ -409,16 +414,22 @@ export function GameDetailPage() {
   const recognizedNotInstalled = adoptableMods.length;
   // "Detected on disk" is the high-confidence subset (backend `on_disk`); the rest are possible matches.
   const onDiskMods = useMemo(
-    () => adoptableMods.filter((m) => m.nexus_match?.on_disk),
+    () => adoptableMods.filter((m) => m.nexus_match?.on_disk === true),
     [adoptableMods],
   );
 
-  /** Opens the adopt dialog on the given groups, or on every adoptable one when none are given. */
+  /**
+   * Opens the adopt dialog on every adoptable group. With `groupIds` (a single row the user
+   * picked) only those start checked; otherwise only the groups detected on disk do.
+   */
   const openAdopt = (groupIds?: number[]) => {
-    const picked = groupIds
-      ? adoptableMods.filter((m) => groupIds.includes(m.id))
-      : adoptableMods;
-    if (picked.length > 0) setAdoptSelection(picked);
+    if (adoptableMods.length === 0) return;
+    // A row that is no longer adoptable (already installed) opens nothing, as before.
+    if (groupIds && !adoptableMods.some((m) => groupIds.includes(m.id))) return;
+    setAdoptSelection({
+      mods: adoptableMods,
+      preselectIds: groupIds ?? onDiskMods.map((m) => m.id),
+    });
   };
 
   const tabCounts = useMemo<Partial<Record<Tab, number>>>(() => ({
@@ -440,6 +451,11 @@ export function GameDetailPage() {
     endorsedMods.length, endorsedLoading,
     trackedMods.length, trackedLoading,
   ]);
+
+  const frameworksVerdict = useFrameworksVerdict(name);
+  const healthVerdict = useHealthVerdict(name);
+  const gameTabs = useRovingTabs(TAB_KEYS, tab, setTab);
+  const matchedTabs = useRovingTabs(MATCHED_SUB_TAB_KEYS, matchedSubTab, setMatchedSubTab);
 
   const tabsRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -482,16 +498,12 @@ export function GameDetailPage() {
             <div className="h-9 w-36 bg-surface-2 rounded-lg" />
           </div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-border bg-surface-1 px-2 py-1">
           {Array.from({ length: 7 }, (_, i) => (
-            <div key={i} className="rounded-xl border border-border bg-surface-1 p-5">
-              <div className="flex items-center gap-3">
-                <div className="h-5 w-5 bg-surface-2 rounded" />
-                <div className="space-y-1.5 flex-1">
-                  <div className="h-3 w-20 bg-surface-2 rounded" />
-                  <div className="h-5 w-10 bg-surface-2 rounded" />
-                </div>
-              </div>
+            <div key={i} className="flex h-8 items-center gap-1.5 px-2">
+              <div className="h-3.5 w-3.5 bg-surface-2 rounded" />
+              <div className="h-4 w-8 bg-surface-2 rounded" />
+              <div className="h-3 w-14 bg-surface-2 rounded" />
             </div>
           ))}
         </div>
@@ -504,27 +516,92 @@ export function GameDetailPage() {
     );
   }
 
-  return (
-    <div className="space-y-6">
-      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-text-muted">
-        <Link to="/games" className="hover:text-text-primary transition-colors">
-          Games
-        </Link>
-        <ChevronRight size={14} />
-        <span className="text-text-primary font-medium">{game.name}</span>
-      </nav>
+  const updatesAvailable = updates?.updates_available;
+  const conflictMods = conflictCount?.mods_with_conflicts ?? 0;
+  const statusItems: StatusItem[] = [
+    {
+      key: "scanned",
+      label: "Scanned",
+      value: String(mods.length),
+      icon: Package,
+      onSelect: () => { setTab("matched"); setMatchedSubTab("scan-details"); },
+      title: "Total mod groups found by scanning your game folder",
+    },
+    {
+      key: "managed",
+      label: "Managed",
+      value: `${enabledCount}/${installedMods.length}`,
+      icon: UserCheck,
+      onSelect: () => setTab("installed"),
+      title: "Mods managed through this app (enabled / total)",
+    },
+    {
+      key: "matched",
+      label: "Nexus Matched",
+      value: String(nexusMatched.length),
+      icon: Link2,
+      onSelect: () => { setTab("matched"); setMatchedSubTab("nexus-matched"); },
+      title: "Scanned mods matched to Nexus Mods entries",
+    },
+    {
+      key: "updates",
+      label: "Updates",
+      value: updatesAvailable == null ? "--" : String(updatesAvailable),
+      tone: (updatesAvailable ?? 0) > 0 ? "warning" : "neutral",
+      icon: RefreshCw,
+      onSelect: () => setTab("updates"),
+      title: "Newer versions available on Nexus for your mods",
+    },
+    {
+      key: "conflicts",
+      label: "Conflicts",
+      value: conflictsLoading ? "--" : String(conflictMods),
+      tone: conflictMods > 0 ? "warning" : "success",
+      icon: AlertTriangle,
+      onSelect: () => setTab("conflicts"),
+      title: "Mods on disk with file or resource conflicts",
+    },
+    {
+      key: "frameworks",
+      label: "Frameworks",
+      value: frameworksVerdict.value,
+      tone: frameworksVerdict.tone,
+      icon: Boxes,
+      onSelect: goToFrameworks,
+      title: frameworksVerdict.title,
+    },
+    {
+      key: "health",
+      label: "Health",
+      value: healthVerdict.value,
+      tone: healthVerdict.tone,
+      icon: HeartPulse,
+      onSelect: goToHealth,
+      title: healthVerdict.title,
+    },
+  ];
 
+  return (
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
+            <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-text-muted">
+              <Link to="/games" className="hover:text-text-primary transition-colors">
+                Games
+              </Link>
+              <ChevronRight size={14} className="shrink-0" />
+            </nav>
             <h1 className="text-2xl font-bold text-text-primary">{game.name}</h1>
+          </div>
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-text-muted">
             {gameVersion?.version && (
-              <span className="text-xs font-medium text-text-muted bg-surface-secondary px-2 py-0.5 rounded">
+              <span className="text-xs font-medium text-text-muted bg-surface-1 px-2 py-0.5 rounded">
                 v{gameVersion.version}
               </span>
             )}
-          </div>
-          <p className="text-sm text-text-muted">{game.install_path}</p>
+            <span>{game.install_path}</span>
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={handleLaunch} loading={isLaunching} disabled={!gameVersion?.exe_path} title="Launch the game executable">
@@ -540,103 +617,19 @@ export function GameDetailPage() {
         <ScanProgress logs={scanLogs} percent={scanPercent} phase={scanPhase} />
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4">
-        <Card
-          className="hover:border-success/40 transition-colors"
-          onClick={() => { setTab("matched"); setMatchedSubTab("scan-details"); }}
-          title="Total mod groups found by scanning your game folder"
-        >
-          <div className="flex items-center gap-3">
-            <Package size={18} className="text-success" />
-            <div>
-              <p className="text-xs text-text-muted">Scanned Mods</p>
-              <p className="text-lg font-bold text-text-primary">{mods.length}</p>
-            </div>
-          </div>
-        </Card>
-        <Card
-          className="hover:border-accent/40 transition-colors"
-          onClick={() => setTab("installed")}
-          title="Mods managed through this app (enabled / total)"
-        >
-          <div className="flex items-center gap-3">
-            <UserCheck size={18} className="text-accent" />
-            <div>
-              <p className="text-xs text-text-muted">Managed</p>
-              <p className="text-lg font-bold text-text-primary">
-                {enabledCount}/{installedMods.length}
-              </p>
-            </div>
-          </div>
-        </Card>
-        <Card
-          className="hover:border-warning/40 transition-colors"
-          onClick={() => { setTab("matched"); setMatchedSubTab("nexus-matched"); }}
-          title="Scanned mods matched to Nexus Mods entries"
-        >
-          <div className="flex items-center gap-3">
-            <Link2 size={18} className="text-warning" />
-            <div>
-              <p className="text-xs text-text-muted">Nexus Matched</p>
-              <p className="text-lg font-bold text-text-primary">{nexusMatched.length}</p>
-            </div>
-          </div>
-        </Card>
-        <Card
-          className="hover:border-danger/40 transition-colors"
-          onClick={() => setTab("updates")}
-          title="Newer versions available on Nexus for your mods"
-        >
-          <div className="flex items-center gap-3">
-            <RefreshCw size={18} className="text-danger" />
-            <div>
-              <p className="text-xs text-text-muted">Updates</p>
-              <p className="text-lg font-bold text-text-primary">
-                {updates?.updates_available ?? "--"}
-              </p>
-            </div>
-          </div>
-        </Card>
-        <Card
-          className={cn(
-            "transition-colors",
-            (conflictCount?.mods_with_conflicts ?? 0) > 0
-              ? "hover:border-warning/40"
-              : "hover:border-success/40",
-          )}
-          onClick={() => setTab("conflicts")}
-          title="Mods on disk with file or resource conflicts"
-        >
-          <div className="flex items-center gap-3">
-            <AlertTriangle
-              size={18}
-              className={(conflictCount?.mods_with_conflicts ?? 0) > 0 ? "text-warning" : "text-success"}
-            />
-            <div>
-              <p className="text-xs text-text-muted">Conflicts</p>
-              <p className="text-lg font-bold text-text-primary">
-                {conflictsLoading ? "--" : (conflictCount?.mods_with_conflicts ?? 0)}
-              </p>
-            </div>
-          </div>
-        </Card>
-        <FrameworksStatCard gameName={name} onOpen={goToFrameworks} />
-        <HealthStatCard gameName={name} onOpen={goToHealth} />
-      </div>
+      <GameStatusStrip items={statusItems} />
 
       {onDiskMods.length > 0 && !adoptBannerDismissed && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent/5 p-4">
-          <div className="flex items-center gap-3">
-            <Package size={20} className="shrink-0 text-accent" />
-            <div>
-              <p className="text-sm font-medium text-text-primary">
-                {onDiskMods.length} mod{onDiskMods.length === 1 ? "" : "s"} detected on disk{" "}
-                {onDiskMods.length === 1 ? "isn't" : "aren't"} managed yet
-              </p>
-              <p className="text-xs text-text-muted">
-                Adopt them to unlock profiles, updates, and clean uninstall, without re-downloading.
-              </p>
-            </div>
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent/5 px-4 py-2">
+          <div
+            className="flex min-w-0 items-center gap-3"
+            title="Adopt them to unlock profiles, updates, and clean uninstall, without re-downloading."
+          >
+            <Package size={18} className="shrink-0 text-accent-text" />
+            <p className="text-sm font-medium text-text-primary">
+              {plural(onDiskMods.length, "mod")} on disk {onDiskMods.length === 1 ? "isn't" : "aren't"}{" "}
+              managed yet
+            </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Button
@@ -660,24 +653,26 @@ export function GameDetailPage() {
         </div>
       )}
 
-      <div className="relative">
+      <div className="sticky -top-6 z-20 bg-surface-0">
         {canScrollLeft && (
           <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 z-10 bg-gradient-to-r from-surface-0 to-transparent" />
         )}
         <div
           ref={tabsRef}
           onScroll={handleTabScroll}
+          aria-label="Game sections"
+          {...gameTabs.tabListProps}
           className="flex gap-1 border-b border-border overflow-x-auto scrollbar-none"
         >
           {TABS.map(({ key, label, description }) => (
             <button
               key={key}
-              onClick={() => setTab(key)}
+              {...gameTabs.getTabProps(key)}
               title={description}
               className={cn(
-                "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap flex items-center gap-1",
+                "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap flex items-center gap-1 rounded-t focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
                 tab === key
-                  ? "border-accent text-accent"
+                  ? "border-accent text-accent-text"
                   : "border-transparent text-text-muted hover:text-text-secondary",
               )}
             >
@@ -688,7 +683,7 @@ export function GameDetailPage() {
                 </span>
               )}
               {key === "conflicts" && (conflictCount?.mods_with_conflicts ?? 0) > 0 && (
-                <span className="h-1.5 w-1.5 rounded-full bg-danger inline-block" />
+                <span className="h-1.5 w-1.5 rounded-full bg-warning inline-block" />
               )}
               {key === "updates" && (updates?.updates_available ?? 0) > 0 && (
                 <span className="h-1.5 w-1.5 rounded-full bg-warning inline-block" />
@@ -717,18 +712,28 @@ export function GameDetailPage() {
         );
       })()}
 
-      <div key={tab} className="animate-fade-in">
+      <div
+        key={tab}
+        role="tabpanel"
+        id={`tabpanel-${tab}`}
+        aria-labelledby={`tab-${tab}`}
+        className="animate-fade-in"
+      >
       {tab === "matched" && (
         <div className="space-y-4">
-          <div className="flex gap-1 border-b border-border">
+          <div
+            aria-label="Matched views"
+            {...matchedTabs.tabListProps}
+            className="flex gap-1 border-b border-border"
+          >
             {MATCHED_SUB_TABS.map(({ key, label }) => (
               <button
                 key={key}
-                onClick={() => setMatchedSubTab(key)}
+                {...matchedTabs.getTabProps(key)}
                 className={cn(
-                  "px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px",
+                  "px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
                   matchedSubTab === key
-                    ? "border-accent text-accent"
+                    ? "border-accent text-accent-text"
                     : "border-transparent text-text-muted hover:text-text-secondary",
                 )}
               >
@@ -736,6 +741,11 @@ export function GameDetailPage() {
               </button>
             ))}
           </div>
+          <div
+            role="tabpanel"
+            id={`tabpanel-${matchedSubTab}`}
+            aria-labelledby={`tab-${matchedSubTab}`}
+          >
           {matchedSubTab === "nexus-matched" && (
             <NexusMatchedGrid
               mods={nexusMatched}
@@ -750,6 +760,7 @@ export function GameDetailPage() {
           {matchedSubTab === "scan-details" && (
             <ModsTable mods={mods} gameName={name} isLoading={modsLoading} />
           )}
+          </div>
         </div>
       )}
       {tab === "endorsed" && (
@@ -942,7 +953,7 @@ export function GameDetailPage() {
                 setLaunchGate(null);
                 goToHealth();
               }}
-              className="text-xs font-medium text-accent hover:underline"
+              className="text-xs font-medium text-accent-text hover:underline"
             >
               Fix issues first →
             </button>
@@ -970,7 +981,8 @@ export function GameDetailPage() {
       {adoptSelection && (
         <AdoptReviewDialog
           gameName={name}
-          mods={adoptSelection}
+          mods={adoptSelection.mods}
+          preselectIds={adoptSelection.preselectIds}
           onClose={() => setAdoptSelection(null)}
         />
       )}

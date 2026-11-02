@@ -602,7 +602,7 @@ export function ProfileManager({ profiles, gameName, isLoading = false, installe
                       }
                       onClick={() => void handleLoadWithPreview(p.id)}
                     >
-                      <FolderOpen size={14} className="text-accent" />
+                      <FolderOpen size={14} className="text-accent-text" />
                     </Button>
                     <Button
                       variant="ghost"

@@ -16,6 +16,7 @@ import { NexusModTile } from "@/components/mods/NexusModTile";
 import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
+import { Dialog } from "@/components/ui/Dialog";
 import { OverflowMenuButton } from "@/components/ui/OverflowMenuButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FileTreeView } from "@/components/ui/FileTreeView";
@@ -32,6 +33,7 @@ import { useInstallFlow } from "@/hooks/use-install-flow";
 import { useSessionState } from "@/hooks/use-session-state";
 import { useUIStore } from "@/stores/ui-store";
 import { isoToEpoch, timeAgo } from "@/lib/format";
+import { matchMethodLabel } from "@/lib/labels";
 import type {
   AvailableArchive,
   DownloadJobOut,
@@ -40,45 +42,32 @@ import type {
 } from "@/types/api";
 
 function FilesModal({ group, onClose }: { group: ModGroup; onClose: () => void }) {
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
-      onClick={onClose}
+    <Dialog
+      onClose={onClose}
+      titleId="files-dialog-title"
+      backdropClassName="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+      className="w-full max-w-2xl rounded-xl border border-border bg-surface-1 p-6 animate-modal-in"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="files-dialog-title"
-        className="w-full max-w-2xl rounded-xl border border-border bg-surface-1 p-6 animate-modal-in"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h3 id="files-dialog-title" className="text-sm font-semibold text-text-primary truncate pr-4">
-            {group.nexus_match?.mod_name ?? group.display_name}
-          </h3>
-          <button
-            onClick={onClose}
-            className="shrink-0 rounded-md p-1 text-text-muted hover:bg-surface-3 hover:text-text-primary"
-          >
-            <X size={16} />
-          </button>
-        </div>
-        <p className="mb-3 text-xs text-text-muted">
-          {group.files.length} file{group.files.length !== 1 ? "s" : ""}
-        </p>
-        <div className="max-h-80 overflow-y-auto rounded border border-border bg-surface-0 p-3">
-          <FileTreeView tree={buildFileTree(group.files)} />
-        </div>
+      <div className="mb-4 flex items-center justify-between">
+        <h3 id="files-dialog-title" className="text-sm font-semibold text-text-primary truncate pr-4">
+          {group.nexus_match?.mod_name ?? group.display_name}
+        </h3>
+        <button
+          onClick={onClose}
+          className="shrink-0 rounded-md p-1 text-text-muted hover:bg-surface-3 hover:text-text-primary"
+        >
+          <X size={16} />
+        </button>
       </div>
-    </div>
+      <p className="mb-3 text-xs text-text-muted">
+        {group.files.length} file{group.files.length !== 1 ? "s" : ""}
+      </p>
+      <div className="max-h-80 overflow-y-auto rounded border border-border bg-surface-0 p-3">
+        <FileTreeView tree={buildFileTree(group.files)} />
+      </div>
+    </Dialog>
   );
 }
 
@@ -98,18 +87,6 @@ const CONFIDENCE_CHIPS = [
   { key: "medium", label: "Medium (75-89%)" },
   { key: "low", label: "Low (<75%)" },
 ];
-
-const METHOD_LABELS: Record<string, string> = {
-  exact: "Exact",
-  substring: "Substring",
-  fuzzy: "Fuzzy",
-  filename_id: "Filename ID",
-  installed: "Installed",
-  file_list: "File List",
-  endorsed_name: "Endorsed",
-  fomod: "FOMOD",
-  manual: "Manual",
-};
 
 interface Props {
   mods: ModGroup[];
@@ -154,7 +131,7 @@ export function NexusMatchedGrid({
     }
     const chips: { key: string; label: string; count?: number }[] = [{ key: "all", label: "All" }];
     for (const [key, count] of [...counts.entries()].sort((a, b) => b[1] - a[1])) {
-      chips.push({ key, label: METHOD_LABELS[key] ?? key, count });
+      chips.push({ key, label: matchMethodLabel(key), count });
     }
     return chips;
   }, [mods]);
@@ -371,7 +348,7 @@ export function NexusMatchedGrid({
           const footer = (
             <div className="flex items-center gap-1.5 flex-wrap">
               <ConfidenceBadge score={match.score} />
-              <Badge variant="neutral">{match.method}</Badge>
+              <Badge variant="neutral">{matchMethodLabel(match.method)}</Badge>
               <CorrelationActions
                 gameName={gameName}
                 modGroupId={mod.id}
@@ -397,7 +374,7 @@ export function NexusMatchedGrid({
                     e.stopPropagation();
                     setFilesModalGroupId(mod.id);
                   }}
-                  className="ml-auto flex items-center gap-1 text-xs text-accent hover:underline"
+                  className="ml-auto flex items-center gap-1 text-xs text-accent-text hover:underline"
                 >
                   <FileText size={12} />
                   {mod.files.length} file{mod.files.length !== 1 ? "s" : ""}

@@ -61,7 +61,7 @@ export function CorrelationActions({ gameName, modGroupId, confirmed }: Props) {
             e.stopPropagation();
             setShowReassign(true);
           }}
-          className="rounded p-1.5 text-text-muted transition-colors hover:text-accent hover:bg-accent/10"
+          className="rounded p-1.5 text-text-muted transition-colors hover:text-accent-text hover:bg-accent/10"
         >
           <Pencil size={14} />
         </button>

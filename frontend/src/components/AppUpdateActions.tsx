@@ -23,7 +23,7 @@ export function AppUpdateActions({ update, size = "md" }: Props) {
   const accentBtn = cn(
     "inline-flex shrink-0 items-center gap-1 rounded-md border font-medium transition-colors",
     size === "sm" ? "px-2 py-1 text-xs" : "px-2.5 py-1 text-xs",
-    "border-accent/40 bg-accent/15 text-accent hover:bg-accent/25",
+    "border-accent/40 bg-accent/15 text-accent-text hover:bg-accent/25",
   );
 
   return (

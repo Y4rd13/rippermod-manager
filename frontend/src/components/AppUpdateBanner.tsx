@@ -17,7 +17,7 @@ export function AppUpdateBanner() {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-accent/30 bg-accent/10 px-4 py-2 text-sm">
       <div className="flex items-center gap-2 text-text-primary min-w-0">
-        <Sparkles size={14} className="shrink-0 text-accent" />
+        <Sparkles size={14} className="shrink-0 text-accent-text" />
         <span className="truncate">
           <strong className="font-semibold">RipperMod Manager v{update.latestVersion}</strong>{" "}
           is available on Nexus Mods.
