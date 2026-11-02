@@ -23,6 +23,7 @@ Endpoints (mounted under ``/api/v1``):
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -157,6 +158,14 @@ async def install_collection(
         raise HTTPException(404, str(exc)) from exc
 
     try:
+        if body.force_reinstall:
+            # In a worker thread: the uninstall's deploy waits for a background
+            # REDmod compile and may run redMod.exe (up to 10 minutes).
+            await asyncio.to_thread(
+                collection_install_service.uninstall_previous_install_in_own_session,
+                game.id,  # type: ignore[arg-type]
+                preview.slug,
+            )
         row = collection_install_service.start_install(
             game=game,
             request=body,

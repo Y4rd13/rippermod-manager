@@ -492,6 +492,7 @@ class TestModPaths:
             "C:Windows",
             "\\\\server\\share",
             "//server/share",
+            "a\x00b",
         ],
     )
     def test_add_mod_path_rejects_hostile_paths(self, client, tmp_path, bad):

@@ -224,12 +224,12 @@ _BAD_MOD_PATH = "Folder must be a relative path inside the game directory."
 def _normalize_mod_path(install_path: str, relative_path: str) -> str:
     """Return *relative_path* as ``a/b/c``, or raise 422 unless it stays inside the game.
 
-    Refused: empty or ``.``, absolute, with a drive (``C:/x``, ``C:x``), UNC, with a
+    Refused: empty or ``.``, a NUL byte, absolute, with a drive (``C:/x``, ``C:x``), UNC, with a
     ``..`` part, or resolving (symlinks followed) outside ``install_path`` or onto it.
     The folder itself may not exist yet.
     """
     raw = relative_path.strip()
-    if not raw or is_unc_path(raw):
+    if not raw or "\x00" in raw or is_unc_path(raw):
         raise HTTPException(422, _BAD_MOD_PATH)
     rel = raw.replace("\\", "/").rstrip("/")
     win = PureWindowsPath(rel)

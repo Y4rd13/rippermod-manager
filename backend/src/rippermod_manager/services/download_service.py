@@ -96,9 +96,10 @@ def recover_interrupted_jobs(session: Session) -> int:
 
 
 def _fail_job(job_id: int, error: str) -> None:
+    """Mark a queued job failed; a job cancelled meanwhile stays cancelled."""
     with Session(engine) as s:
         job = s.get(DownloadJob, job_id)
-        if job:
+        if job and job.status == "queued":
             job.status = "failed"
             job.error = error[:500]
             s.add(job)
@@ -185,6 +186,10 @@ async def create_and_start_download(
         job.file_name = file_name
         if file_size:
             job.total_bytes = file_size
+        # Saved now so a later refresh keeps them. The UPDATE writes only these
+        # columns, never over a cancel made in the meantime.
+        session.add(job)
+        session.commit()
 
         # No await between the check and the reservation: two requests can never
         # both take the last slot.
@@ -221,6 +226,15 @@ async def create_and_start_download(
                 _active_job_ids.discard(job_id)
             raise
 
+    # Cancelled while the link was fetched: the cancel found no event to set, so
+    # writing "downloading" or "queued" now would undo it.
+    session.refresh(job)
+    if job.status == "cancelled":
+        if has_slot:
+            _active_job_ids.discard(job_id)
+            await _start_next_queued()
+        return job
+
     if not links or not links[0].get("URI"):
         return await _fail_at_request(job, session, "No download links returned", has_slot)
 
@@ -240,6 +254,9 @@ def _enqueue(job: DownloadJob, entry: _QueuedStart, session: Session) -> Downloa
     """Park *job* as ``queued`` until a slot frees; start it now if one already did."""
     job_id = job.id
     assert job_id is not None
+    session.refresh(job)
+    if job.status == "cancelled":
+        return job
     job.status = "queued"
     session.add(job)
     session.commit()
@@ -253,11 +270,14 @@ def _enqueue(job: DownloadJob, entry: _QueuedStart, session: Session) -> Downloa
 async def _fail_at_request(
     job: DownloadJob, session: Session, error: str, held_slot: bool
 ) -> DownloadJob:
-    job.status = "failed"
-    job.error = error
-    session.add(job)
-    session.commit()
+    """Mark *job* failed unless it was cancelled meanwhile; free its slot either way."""
     session.refresh(job)
+    if job.status != "cancelled":
+        job.status = "failed"
+        job.error = error
+        session.add(job)
+        session.commit()
+        session.refresh(job)
     if held_slot:
         _active_job_ids.discard(job.id)  # type: ignore[arg-type]
         await _start_next_queued()
