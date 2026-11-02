@@ -56,8 +56,8 @@ export function InstalledModCardAction({
           title={confirmAction === "disable" ? "Disable Mod?" : "Enable Mod?"}
           message={
             confirmAction === "disable"
-              ? "This mod's files will be renamed and it won't load in-game."
-              : "This mod's files will be restored and it will load in-game."
+              ? "This mod's links are removed from the game folder and it won't load in-game. Its files stay in the staging folder."
+              : "This mod's files are linked into the game folder again and it will load in-game."
           }
           confirmLabel={confirmAction === "disable" ? "Disable" : "Enable"}
           variant="warning"

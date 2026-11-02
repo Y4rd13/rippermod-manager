@@ -76,12 +76,13 @@ export function DeployStatusBadge({ gameName }: DeployStatusBadgeProps) {
           message={
             `${status.foreign} file${status.foreign === 1 ? "" : "s"} in the game folder are currently ` +
             `copies (not RipperMod hardlinks), most likely left over from another mod manager or a ` +
-            `manual install. A regular redeploy refuses to overwrite them. Force redeploy will delete ` +
-            `each of those files and replace them with RipperMod hardlinks. Your staged copies in ` +
-            `downloaded_mods/ are not touched, so this is safe to undo by uninstalling. ` +
-            `Close Cyberpunk 2077 first.`
+            `manual install. Redeploy links everything else and leaves those files in place. ` +
+            `Force redeploy moves each of them to downloaded_mods/_displaced/ and links ` +
+            `RipperMod's copy instead; Undeploy puts them back. Close Cyberpunk 2077 first.`
           }
           confirmLabel="Force redeploy"
+          secondaryLabel="Redeploy"
+          onSecondary={() => runDeploy(false)}
           variant="warning"
           icon={Zap}
           loading={deploy.isPending}
