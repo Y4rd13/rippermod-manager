@@ -203,6 +203,38 @@ class TestInstallKickoff:
             )
         assert r.status_code == 202, r.text
         assert on_loop and on_loop[0] is False
+        from rippermod_manager.routers import collections as collections_router
+
+        assert collections_router._reinstall_uninstalling == set()
+
+    def test_install_is_refused_while_a_reinstall_uninstall_runs(
+        self, client, session, monkeypatch
+    ):
+        from rippermod_manager.models.game import Game
+        from rippermod_manager.routers import collections as collections_router
+        from rippermod_manager.schemas.nexus import NexusKeyResult
+
+        _seed_game(client)
+        _set_api_key(client)
+        game = session.exec(select(Game)).one()
+        monkeypatch.setattr(collections_router, "_reinstall_uninstalling", {(game.id, "starter")})
+        with (
+            patch(
+                "rippermod_manager.nexus.client.NexusClient.validate_key",
+                new=AsyncMock(
+                    return_value=NexusKeyResult(valid=True, is_premium=True, username="u")
+                ),
+            ),
+            patch(
+                "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_collection_revision",
+                new=AsyncMock(return_value=_gql_revision_payload()),
+            ),
+        ):
+            r = client.post(
+                "/api/v1/games/CP/collections/install",
+                json={"slug": "starter", "revision": 1, "force_reinstall": True},
+            )
+        assert r.status_code == 409
 
     def test_premium_user_starts_install(self, client, session):
         _seed_game(client)
