@@ -395,6 +395,65 @@ class TestToggleEndpoint:
         r = client.patch(f"/api/v1/games/{game_name}/install/installed/99999/toggle")
         assert r.status_code == 404
 
+    def _install(self, client, game_name, staging, name, files):
+        _make_zip(staging / f"{name}.zip", files)
+        r = client.post(
+            f"/api/v1/games/{game_name}/install/", json={"archive_filename": f"{name}.zip"}
+        )
+        return r.json()["installed_mod_id"]
+
+    def test_toggle_of_redmod_content_queues_a_compile(
+        self, client, game_setup, background_requests
+    ):
+        game_name, _, staging = game_setup
+        mod_id = self._install(client, game_name, staging, "RedTog", {"mods/tog.txt": b"t"})
+        r = client.patch(f"/api/v1/games/{game_name}/install/installed/{mod_id}/toggle")
+        assert r.json()["redmod_compile_queued"] is True and len(background_requests["redmod"]) == 1
+
+    def test_enable_of_redmod_content_queues_a_compile(
+        self, client, game_setup, background_requests
+    ):
+        game_name, _, staging = game_setup
+        mod_id = self._install(client, game_name, staging, "RedBack", {"mods/b.txt": b"t"})
+        client.patch(f"/api/v1/games/{game_name}/install/installed/{mod_id}/toggle")
+        r = client.patch(f"/api/v1/games/{game_name}/install/installed/{mod_id}/toggle")
+        assert r.json()["disabled"] is False
+        assert r.json()["redmod_compile_queued"] is True and len(background_requests["redmod"]) == 2
+
+    def test_toggle_without_redmod_content_queues_nothing(
+        self, client, game_setup, background_requests
+    ):
+        game_name, _, staging = game_setup
+        mod_id = self._install(
+            client, game_name, staging, "Plain", {"archive/pc/mod/a.archive": b"a"}
+        )
+        r = client.patch(f"/api/v1/games/{game_name}/install/installed/{mod_id}/toggle")
+        assert r.json()["redmod_compile_queued"] is False and background_requests["redmod"] == []
+
+    def test_uninstall_of_redmod_content_queues_a_compile(
+        self, client, game_setup, background_requests
+    ):
+        game_name, _, staging = game_setup
+        mod_id = self._install(client, game_name, staging, "RedRm", {"mods/rm.txt": b"t"})
+        r = client.delete(f"/api/v1/games/{game_name}/install/installed/{mod_id}")
+        assert r.json()["redmod_compile_queued"] is True
+        assert len(background_requests["redmod"]) == 1
+
+    def test_uninstall_without_redmod_content_queues_nothing(
+        self, client, game_setup, background_requests
+    ):
+        game_name, _, staging = game_setup
+        mod_id = self._install(
+            client, game_name, staging, "PlainRm", {"archive/pc/mod/b.archive": b"b"}
+        )
+        r = client.delete(f"/api/v1/games/{game_name}/install/installed/{mod_id}")
+        assert r.json()["redmod_compile_queued"] is False
+        assert background_requests["redmod"] == []
+
+    def test_redmod_status_is_idle_before_any_compile(self, client, game_setup):
+        r = client.get(f"/api/v1/games/{game_setup[0]}/install/redmod/status")
+        assert r.json() == {"state": "idle", "last_result": None, "last_finished_at": None}
+
 
 class TestConflictsEndpoint:
     def test_no_conflicts_returns_empty_list(self, client, game_setup):

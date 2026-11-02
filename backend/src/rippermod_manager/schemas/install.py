@@ -51,6 +51,7 @@ class UninstallResult(BaseModel):
     foreign: int = 0  # game-dir entries left in place: not this mod's own links (S5)
     displaced_not_restored: list[str] = []  # S6 backups whose path is now occupied
     not_relinked: list[str] = []  # paths the next owner should now hold but does not (S4)
+    redmod_compile_queued: bool = False  # a background REDmod compile was requested (S2)
 
 
 class ToggleResult(BaseModel):
@@ -60,6 +61,7 @@ class ToggleResult(BaseModel):
     failed: int = 0  # link/unlink operations that failed, plus paths left unlinked
     displaced_not_restored: list[str] = []  # S6 backups whose path is now occupied
     not_relinked: list[str] = []  # paths that should be linked after this toggle but are not
+    redmod_compile_queued: bool = False  # a background REDmod compile was requested (S2)
 
 
 class FileConflict(BaseModel):

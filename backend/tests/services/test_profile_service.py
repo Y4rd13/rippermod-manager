@@ -191,6 +191,23 @@ class TestLoadProfile:
         mod = session.exec(select(InstalledMod).where(InstalledMod.name == "ReEnable")).first()
         assert mod.disabled is False
 
+    def test_load_profile_requests_a_redmod_compile(
+        self, session, game_and_dirs, background_requests
+    ):
+        game, _game_dir, staging = game_and_dirs
+        archive = staging / "RedProfile.zip"
+        _make_zip(archive, {"mods/rp.txt": b"data"})
+        install_mod(game, archive, session)
+        profile_out = create_profile(game, ProfileCreate(name="RedState"), session)
+        mod = session.exec(select(InstalledMod).where(InstalledMod.name == "RedProfile")).first()
+        mod.disabled = True
+        session.add(mod)
+        session.commit()
+
+        load_profile(session.get(Profile, profile_out.id), game, session)
+
+        assert background_requests["redmod"] == [game.id]
+
     def test_load_profile_refuses_while_game_running(self, monkeypatch, session, game_and_dirs):
         game, _game_dir, staging = game_and_dirs
         archive = staging / "Held.zip"

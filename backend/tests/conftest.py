@@ -29,6 +29,29 @@ def _no_adopt_backfill_thread(monkeypatch):
     monkeypatch.setattr("rippermod_manager.main.run_adopt_backfill_all_games", lambda: None)
 
 
+@pytest.fixture(autouse=True)
+def background_requests(monkeypatch):
+    """Background runners never start threads in tests; their requests are recorded.
+
+    ``calls["redmod"]`` holds the game ids that asked for a REDmod compile. Tests that
+    mean the real job call it directly (``redmod_scheduler._compile_job``).
+    """
+    from rippermod_manager.services.vfs import redmod_scheduler
+
+    calls: dict[str, list[int]] = {"redmod": [], "conflicts": []}
+
+    def _record(kind: str):
+        def _request(key: int) -> bool:
+            calls[kind].append(key)
+            return True
+
+        return _request
+
+    monkeypatch.setattr(redmod_scheduler._runner, "request", _record("redmod"))
+    monkeypatch.setattr(redmod_scheduler, "_last", {})
+    return calls
+
+
 @pytest.fixture
 def engine():
     eng = create_engine(

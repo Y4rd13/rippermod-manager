@@ -691,6 +691,9 @@ def uninstall_mod(
     )
 
     released = {path_key(f.relative_path, f.link_kind) for f in installed_mod.files}
+    from rippermod_manager.services.vfs.deploy_service import has_redmod_files
+
+    had_redmod = has_redmod_files(installed_mod)
     session.delete(installed_mod)
     session.commit()
 
@@ -702,6 +705,10 @@ def uninstall_mod(
     if not_relinked:
         logger.warning("Uninstall left %d path(s) unlinked: %s", len(not_relinked), not_relinked)
     write_modlist(game, session)
+    # The REDmod cache still holds this mod's content until it is compiled again (S2).
+    from rippermod_manager.services.vfs.redmod_scheduler import request_redmod_compile
+
+    redmod_compile_queued = had_redmod and request_redmod_compile(game)
 
     logger.info("Uninstalled '%s' (%d files removed)", installed_mod.name, file_count)
     if record_history:
@@ -723,6 +730,7 @@ def uninstall_mod(
         foreign=removal.foreign,
         displaced_not_restored=not_restored,
         not_relinked=not_relinked,
+        redmod_compile_queued=redmod_compile_queued,
     )
 
 
@@ -812,6 +820,12 @@ def toggle_mod(
 
     write_modlist(game, session)
 
+    # REDmod content changed: the compiled cache is stale until it is rebuilt (S2).
+    from rippermod_manager.services.vfs.deploy_service import has_redmod_files
+    from rippermod_manager.services.vfs.redmod_scheduler import request_redmod_compile
+
+    redmod_compile_queued = has_redmod_files(installed_mod) and request_redmod_compile(game)
+
     action = "Disabled" if should_disable else "Enabled"
     logger.info("%s '%s' (%d files affected)", action, installed_mod.name, affected)
     if commit and record_history:
@@ -834,6 +848,7 @@ def toggle_mod(
         failed=failed,
         displaced_not_restored=not_restored,
         not_relinked=not_relinked,
+        redmod_compile_queued=redmod_compile_queued,
     )
 
 

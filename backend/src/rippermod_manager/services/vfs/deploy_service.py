@@ -690,12 +690,12 @@ def _has_enabled_redmods(game: Game, session: Session) -> bool:
             InstalledMod.disabled.is_(False),  # type: ignore[union-attr]
         )
     ).all()
-    for mod in mods:
-        _ = mod.files
-        for f in mod.files:
-            if f.relative_path.replace("\\", "/").startswith("mods/"):
-                return True
-    return False
+    return any(has_redmod_files(mod) for mod in mods)
+
+
+def has_redmod_files(mod: InstalledMod) -> bool:
+    """True when *mod* owns any file under ``mods/`` (REDmod content)."""
+    return any(f.relative_path.replace("\\", "/").startswith("mods/") for f in mod.files)
 
 
 def redmod_deploy(game: Game) -> RedmodDeployResult:
@@ -713,6 +713,9 @@ def redmod_deploy(game: Game) -> RedmodDeployResult:
     """
     exe = _redmod_exe(game)
     if exe is None:
+        logger.warning(
+            "REDmod compile skipped for %s: %s not found", game.name, REDMOD_REL_PATH.as_posix()
+        )
         return RedmodDeployResult(ran=False, skipped_reason="REDmod binary not found")
 
     try:
@@ -785,8 +788,14 @@ def deploy(game: Game, session: Session, *, force: bool = False) -> DeployReport
             m.deploy_drift = False
             session.add(m)
         session.commit()
-        if _has_enabled_redmods(game, session):
-            report.redmod = redmod_deploy(game)
+        # Taken even with no REDmod content: a background compile in progress
+        # (toggle/uninstall, S2) finishes before this deploy returns, so Play,
+        # which deploys first, never launches over a half-built cache.
+        from rippermod_manager.services.vfs.redmod_scheduler import compile_lock
+
+        with compile_lock(game.id):  # type: ignore[arg-type]
+            if _has_enabled_redmods(game, session):
+                report.redmod = redmod_deploy(game)
     return report
 
 
