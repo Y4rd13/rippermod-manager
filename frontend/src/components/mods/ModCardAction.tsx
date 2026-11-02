@@ -14,6 +14,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Badge } from "@/components/ui/Badge";
 import { DownloadProgress } from "@/components/ui/DownloadProgress";
+import { cn } from "@/lib/utils";
 import type { AvailableArchive, DownloadJobOut } from "@/types/api";
 
 interface Props {
@@ -138,7 +139,11 @@ export function ModCardAction({
           <button
             onClick={onInstallByFilename}
             title={isUpdate ? `Install update${updateVersion ? ` v${updateVersion}` : ""} from: ${completedDownload.file_name}` : `Install from downloaded file: ${completedDownload.file_name}`}
-            className={`inline-flex items-center gap-1 ${showSplit ? "rounded-l-md" : "rounded-md"} px-2 py-1 text-xs font-medium text-white hover:opacity-80 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
+            className={cn(
+              "inline-flex items-center gap-1 px-2 py-1 text-xs font-medium hover:opacity-80",
+              showSplit ? "rounded-l-md" : "rounded-md",
+              isUpdate ? "bg-warning text-black" : "bg-accent text-white",
+            )}
           >
             {isUpdate ? <ArrowUpCircle size={12} /> : <Package size={12} />}
             {isUpdate ? "Install Update" : "Install"}
@@ -147,7 +152,10 @@ export function ModCardAction({
             <button
               ref={chevronRef}
               onClick={handleChevronClick}
-              className={`inline-flex items-center self-stretch rounded-r-md border-l border-white/20 px-1 text-xs font-medium text-white hover:opacity-80 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
+              className={cn(
+                "inline-flex items-center self-stretch rounded-r-md border-l px-1 text-xs font-medium hover:opacity-80",
+                isUpdate ? "border-black/20 bg-warning text-black" : "border-white/20 bg-accent text-white",
+              )}
               title="Install options"
               aria-label="Install options"
             >
@@ -169,7 +177,11 @@ export function ModCardAction({
           <button
             onClick={onInstall}
             disabled={hasConflicts}
-            className={`inline-flex items-center gap-1 ${showSplit ? "rounded-l-md" : "rounded-md"} px-2 py-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
+            className={cn(
+              "inline-flex items-center gap-1 px-2 py-1 text-xs font-medium hover:opacity-80 disabled:opacity-50",
+              showSplit ? "rounded-l-md" : "rounded-md",
+              isUpdate ? "bg-warning text-black" : "bg-accent text-white",
+            )}
             title={isUpdate ? `Install update${updateVersion ? ` v${updateVersion}` : ""} from ${archive.filename}` : `Install from ${archive.filename}`}
           >
             {isUpdate ? <ArrowUpCircle size={12} /> : <Download size={12} />}
@@ -180,7 +192,10 @@ export function ModCardAction({
               ref={chevronRef}
               onClick={handleChevronClick}
               disabled={hasConflicts}
-              className={`inline-flex items-center self-stretch rounded-r-md border-l border-white/20 px-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50 ${isUpdate ? "bg-warning text-black" : "bg-accent"}`}
+              className={cn(
+                "inline-flex items-center self-stretch rounded-r-md border-l px-1 text-xs font-medium hover:opacity-80 disabled:opacity-50",
+                isUpdate ? "border-black/20 bg-warning text-black" : "border-white/20 bg-accent text-white",
+              )}
               title="Install options"
               aria-label="Install options"
             >
@@ -199,7 +214,7 @@ export function ModCardAction({
         onClick={onDownload}
         disabled={isDownloading}
         title={isUpdate ? `Download update${updateVersion ? ` v${updateVersion}` : ""} from Nexus` : "Download this mod from Nexus"}
-        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium disabled:opacity-50 ${isUpdate ? "bg-warning text-black hover:opacity-80" : "border border-accent text-accent hover:bg-accent/10"}`}
+        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium disabled:opacity-50 ${isUpdate ? "bg-warning text-black hover:opacity-80" : "border border-accent text-accent-text hover:bg-accent/10"}`}
       >
         {isDownloading ? (
           <Loader2 size={12} className="animate-spin" />

@@ -143,10 +143,10 @@ const severityBadge: Record<ClusterSeverity, "danger" | "warning" | "neutral"> =
 };
 
 const statCardConfig = [
-  { key: "fileConflicts", label: "File Conflicts", Icon: FileWarning, color: "text-warning" },
-  { key: "resourceConflicts", label: "Resource Conflicts", Icon: Layers, color: "text-danger" },
-  { key: "clusters", label: "Clusters", Icon: Network, color: "text-accent" },
-  { key: "mods", label: "Mods", Icon: Package, color: "text-text-muted" },
+  { key: "fileConflicts", label: "File Conflicts", singular: "File Conflict", Icon: FileWarning, color: "text-warning" },
+  { key: "resourceConflicts", label: "Resource Conflicts", singular: "Resource Conflict", Icon: Layers, color: "text-danger" },
+  { key: "clusters", label: "Clusters", singular: "Cluster", Icon: Network, color: "text-accent-text" },
+  { key: "mods", label: "Mods", singular: "Mod", Icon: Package, color: "text-text-muted" },
 ] as const;
 
 interface Props {
@@ -195,7 +195,7 @@ export function ConflictSummaryWidget({ gameName }: Props) {
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      {statCardConfig.map(({ key, label, Icon, color }) => (
+      {statCardConfig.map(({ key, label, singular, Icon, color }) => (
         <div
           key={key}
           className="rounded-lg border border-border bg-surface-2 px-3 py-2.5"
@@ -206,7 +206,7 @@ export function ConflictSummaryWidget({ gameName }: Props) {
               <p className="text-lg font-bold text-text-primary leading-tight tabular-nums">
                 {stats[key]}
               </p>
-              <p className="text-xs text-text-muted truncate">{label}</p>
+              <p className="text-xs text-text-muted truncate">{stats[key] === 1 ? singular : label}</p>
             </div>
           </div>
         </div>

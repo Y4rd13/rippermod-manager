@@ -1,5 +1,5 @@
 import { CheckCircle, FolderOpen, Gamepad2, Plus, Search, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "@/stores/toast-store";
 import { Link } from "react-router";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { useCreateGame, useDeleteGame, useValidatePath } from "@/hooks/mutations";
 import { useGames } from "@/hooks/queries";
@@ -28,15 +29,6 @@ function AddGameDialog({
   const [validation, setValidation] = useState<PathValidation | null>(null);
   const createGame = useCreateGame();
   const validatePath = useValidatePath();
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -114,9 +106,15 @@ function AddGameDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true">
-      <Card className="w-full max-w-md">
-        <h2 className="text-lg font-semibold text-text-primary mb-4">
+    <Dialog
+      onClose={onClose}
+      titleId="add-game-title"
+      closeOnEscape={!createGame.isPending}
+      closeOnBackdrop={false}
+      className="w-full max-w-md"
+    >
+      <Card>
+        <h2 id="add-game-title" className="text-lg font-semibold text-text-primary mb-4">
           Add Game
         </h2>
         <div className="space-y-4">
@@ -172,7 +170,7 @@ function AddGameDialog({
                     className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-surface-2 transition-colors"
                   >
                     <span className="text-text-primary truncate">{d.path}</span>
-                    <span className="shrink-0 ml-2 text-xs text-accent font-medium">
+                    <span className="shrink-0 ml-2 text-xs text-accent-text font-medium">
                       {d.source}
                     </span>
                   </button>
@@ -208,7 +206,7 @@ function AddGameDialog({
           </div>
         </div>
       </Card>
-    </div>
+    </Dialog>
   );
 }
 
@@ -240,9 +238,9 @@ export function GamesPage() {
               <div className="flex items-center justify-between">
                 <Link
                   to={`/games/${game.name}`}
-                  className="flex items-center gap-3 hover:text-accent transition-colors"
+                  className="flex items-center gap-3 hover:text-accent-text transition-colors"
                 >
-                  <Gamepad2 size={20} className="text-accent" />
+                  <Gamepad2 size={20} className="text-accent-text" />
                   <div>
                     <p className="font-semibold text-text-primary">
                       {game.name}
@@ -256,6 +254,7 @@ export function GamesPage() {
                 <Button
                   variant="danger"
                   size="sm"
+                  aria-label={`Delete ${game.name}`}
                   onClick={() => setConfirmDelete(game.name)}
                 >
                   <Trash2 size={14} />

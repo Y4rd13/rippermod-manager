@@ -15,7 +15,7 @@ const ICON_COLORS: Record<ToastType, string> = {
   success: "text-success",
   error: "text-danger",
   warning: "text-warning",
-  info: "text-accent",
+  info: "text-accent-text",
 };
 
 const ACCENT_COLORS: Record<ToastType, string> = {

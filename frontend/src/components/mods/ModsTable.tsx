@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FileTreeView } from "@/components/ui/FileTreeView";
+import { activationProps } from "@/lib/activation";
 import { buildFileTree } from "@/lib/file-tree";
+import { matchMethodLabel } from "@/lib/labels";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
@@ -78,6 +80,9 @@ export function ModsTable({ mods, gameName, isLoading }: { mods: ModGroup[]; gam
 
     return items;
   }, [mods, filter, matchFilter, sortKey, sortDir]);
+
+  const ariaSort = (key: SortKey) =>
+    sortKey === key ? (sortDir === "asc" ? "ascending" : "descending") : "none";
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -173,45 +178,50 @@ export function ModsTable({ mods, gameName, isLoading }: { mods: ModGroup[]; gam
         renderHead={() => (
           <tr className="sticky top-0 z-10 bg-surface-0 border-b border-border text-left">
             <th className="py-2 pr-4 w-6" />
-            <th
-              className="py-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
-              onClick={() => toggleSort("name")}
-            >
-              <span className="flex items-center gap-1">
+            <th scope="col" aria-sort={ariaSort("name")} className="py-2 pr-4 select-none">
+              <button
+                type="button"
+                onClick={() => toggleSort("name")}
+                className="flex items-center gap-1 rounded text-text-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
                 Mod Name <SortIcon col="name" sortKey={sortKey} sortDir={sortDir} />
-              </span>
+              </button>
             </th>
-            <th
-              className="py-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
-              onClick={() => toggleSort("files")}
-            >
-              <span className="flex items-center gap-1">
+            <th scope="col" aria-sort={ariaSort("files")} className="py-2 pr-4 select-none">
+              <button
+                type="button"
+                onClick={() => toggleSort("files")}
+                className="flex items-center gap-1 rounded text-text-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
                 Files <SortIcon col="files" sortKey={sortKey} sortDir={sortDir} />
-              </span>
+              </button>
             </th>
-            <th
-              className="py-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
-              onClick={() => toggleSort("match")}
-            >
-              <span className="flex items-center gap-1">
+            <th scope="col" aria-sort={ariaSort("match")} className="py-2 pr-4 select-none">
+              <button
+                type="button"
+                onClick={() => toggleSort("match")}
+                className="flex items-center gap-1 rounded text-text-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
                 Nexus Match <SortIcon col="match" sortKey={sortKey} sortDir={sortDir} />
-              </span>
+              </button>
             </th>
-            <th
-              className="py-2 pr-4 cursor-pointer select-none text-text-muted hover:text-text-primary"
-              onClick={() => toggleSort("confidence")}
-            >
-              <span className="flex items-center gap-1" title="How tightly the files in this mod group cluster together">
+            <th scope="col" aria-sort={ariaSort("confidence")} className="py-2 pr-4 select-none">
+              <button
+                type="button"
+                onClick={() => toggleSort("confidence")}
+                className="flex items-center gap-1 rounded text-text-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" title="How tightly the files in this mod group cluster together"
+              >
                 Cluster <SortIcon col="confidence" sortKey={sortKey} sortDir={sortDir} />
-              </span>
+              </button>
             </th>
           </tr>
         )}
         renderRow={(mod) => (
           <>
             <tr
-              className="border-b border-border/50 hover:bg-surface-1/50 cursor-pointer"
-              onClick={() => toggleExpand(mod.id)}
+              className="border-b border-border/50 hover:bg-surface-1/50 cursor-pointer focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+              {...activationProps(() => toggleExpand(mod.id))}
+              aria-expanded={expanded.has(mod.id)}
               onContextMenu={(e) => openMenu(e, mod)}
             >
               <td className="py-2 pr-2">
@@ -246,9 +256,9 @@ export function ModsTable({ mods, gameName, isLoading }: { mods: ModGroup[]; gam
                     <FileTreeView tree={buildFileTree(mod.files)} />
                     {mod.nexus_match && (
                       <div className="mt-2 pt-2 border-t border-border flex items-center gap-2 text-xs">
-                        <ExternalLink size={12} className="text-accent" />
+                        <ExternalLink size={12} className="text-accent-text" />
                         <span className="text-text-muted">
-                          Matched via {mod.nexus_match.method}, Nexus Mod #
+                          Matched via {matchMethodLabel(mod.nexus_match.method)}, Nexus Mod #
                           {mod.nexus_match.nexus_mod_id}
                         </span>
                       </div>
@@ -268,7 +278,7 @@ export function ModsTable({ mods, gameName, isLoading }: { mods: ModGroup[]; gam
             {filter ? <> &quot;{filter}&quot;</> : ""}.
           </p>
           <button
-            className="text-accent hover:text-accent-hover text-xs transition-colors"
+            className="text-accent-text hover:text-text-primary text-xs transition-colors"
             onClick={() => { setFilter(""); setMatchFilter("all"); }}
           >
             Clear filters

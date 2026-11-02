@@ -51,7 +51,8 @@ import { useAbstainMod, useCancelDownload, useEndorseMod, useStartModDownload, u
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { useDependents } from "@/hooks/queries";
 import { api } from "@/lib/api-client";
-import { isoToEpoch, timeAgo } from "@/lib/format";
+import { isoToEpoch, plural, timeAgo } from "@/lib/format";
+import { matchMethodLabel } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import { useUIStore } from "@/stores/ui-store";
@@ -392,7 +393,7 @@ function ManagedModsGrid({
         if (deps.length > 0) {
           setDisableGuard({
             modIds: entries.map((e) => e.id),
-            label: entries[0]?.nexus_name || entries[0]?.name || `${entries.length} files`,
+            label: entries[0]?.nexus_name || entries[0]?.name || plural(entries.length, "file"),
             dependents: deps,
             bulk: false,
           });
@@ -590,7 +591,7 @@ function ManagedModsGrid({
               {isMulti && (
                 <Badge variant="neutral">
                   <Files size={10} className="mr-0.5" />
-                  {group.entries.length} files
+                  {plural(group.entries.length, "file")}
                 </Badge>
               )}
               {update && (
@@ -766,7 +767,7 @@ function ManagedModsGrid({
                     {isMulti && (
                       <Badge variant="neutral">
                         <Files size={10} className="mr-0.5" />
-                        {group.entries.length} files
+                        {plural(group.entries.length, "file")}
                       </Badge>
                     )}
                     {update && (
@@ -812,7 +813,7 @@ function ManagedModsGrid({
                         }}
                         title="Open mod page on Nexus Mods"
                         aria-label="Open on Nexus Mods"
-                        className="ml-auto rounded p-1 text-text-muted hover:text-accent hover:bg-accent/10 shrink-0 transition-colors"
+                        className="ml-auto rounded p-1 text-text-muted hover:text-accent-text hover:bg-accent/10 shrink-0 transition-colors"
                       >
                         <ExternalLink size={12} />
                       </button>
@@ -1061,7 +1062,7 @@ function RecognizedModsGrid({
     const fileCountLabel =
       sourceFolders.length > 1
         ? `${mod.files.length} in ${sourceFolders.length} folders`
-        : `${mod.files.length} files`;
+        : plural(mod.files.length, "file");
     const PATH_PREVIEW_LIMIT = 20;
     const pathTooltip =
       mod.files.length > 0
@@ -1087,7 +1088,7 @@ function RecognizedModsGrid({
     const footer = (
       <div className="flex flex-wrap items-center gap-1.5">
         <ConfidenceBadge score={match.score} />
-        <Badge variant="neutral">{match.method}</Badge>
+        <Badge variant="neutral">{matchMethodLabel(match.method)}</Badge>
         {filesBadge}
         <CorrelationActions gameName={gameName} modGroupId={mod.id} confirmed={match.confirmed} />
         {match.updated_at && (
@@ -1416,9 +1417,9 @@ export function InstalledModsTable({
       {mods.length > 0 && scope !== "detected" && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-text-primary" title="Mods installed and managed through this app. You can enable, disable, or uninstall them">
+            <h2 className="text-sm font-semibold text-text-primary" title="Mods installed and managed through this app. You can enable, disable, or uninstall them">
               Managed ({filteredMods.length})
-            </h3>
+            </h2>
             <FilterChips
               chips={CHIP_OPTIONS}
               active={chip}
@@ -1448,9 +1449,9 @@ export function InstalledModsTable({
       {detectedRecognized.length > 0 && scope !== "installed" && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-text-primary" title="Mods found on disk and matched to Nexus with high confidence. Adopt them to bring them under management.">
+            <h2 className="text-sm font-semibold text-text-primary" title="Mods found on disk and matched to Nexus with high confidence. Adopt them to bring them under management.">
               Detected on disk ({detectedRecognized.length})
-            </h3>
+            </h2>
             <div className="flex items-center gap-2">
               {onReviewAdopt && (
                 <Button size="sm" onClick={onReviewAdopt}>
@@ -1465,7 +1466,7 @@ export function InstalledModsTable({
             </div>
           </div>
           <p className="text-xs text-text-muted mb-3">
-            These mods were detected on disk and matched to Nexus &mdash; sometimes by
+            These mods were detected on disk and matched to Nexus, sometimes by
             file content, sometimes by name against your endorsed/tracked list when
             the local files don&apos;t carry a Nexus ID. Hover the file count on any
             card to see the exact paths that triggered the match. Install them
@@ -1487,9 +1488,9 @@ export function InstalledModsTable({
       {possibleRecognized.length > 0 && scope !== "installed" && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-text-primary" title="Low-confidence matches. Review them in the adopt dialog before bringing them under management.">
+            <h2 className="text-sm font-semibold text-text-primary" title="Low-confidence matches. Review them in the adopt dialog before bringing them under management.">
               Possible matches ({possibleRecognized.length})
-            </h3>
+            </h2>
             {detectedRecognized.length === 0 && onReviewAdopt && (
               <Button size="sm" onClick={onReviewAdopt}>
                 Review &amp; adopt

@@ -1,6 +1,7 @@
 import { Heart, User } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { activationProps } from "@/lib/activation";
 import { cn } from "@/lib/utils";
 
 const PLACEHOLDER_IMG =
@@ -48,9 +49,9 @@ export function NexusModRow({
     <tr
       className={cn(
         "border-b border-border/50 transition-colors",
-        onClick && "cursor-pointer hover:bg-surface-1/50",
+        onClick && "cursor-pointer hover:bg-surface-1/50 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none",
       )}
-      onClick={onClick}
+      {...(onClick ? activationProps(onClick) : {})}
       onContextMenu={onContextMenu}
     >
       {selection && (

@@ -430,19 +430,6 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
     }
   };
 
-  useEffect(() => {
-    if (!conflicts) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setConflicts(null);
-        setSelectedArchive(null);
-        processNextInQueue();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [conflicts]);
-
   if (isLoading) {
     return <SkeletonTable columns={6} rows={5} />;
   }
@@ -667,7 +654,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
           <div className="py-4 text-sm text-text-muted text-center space-y-2">
             <p>No archives matching the current filters.</p>
             <button
-              className="text-accent hover:text-accent-hover text-xs transition-colors"
+              className="text-accent-text hover:text-text-primary text-xs transition-colors"
               onClick={() => { setFilter(""); setLinkChip("all"); }}
             >
               Clear filters

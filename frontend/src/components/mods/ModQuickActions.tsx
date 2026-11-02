@@ -48,8 +48,8 @@ export function ModQuickActions({ isEndorsed, isTracked, modId, gameName }: Prop
         disabled={trackPending}
         className={`rounded p-1 transition-colors ${
           isTracked
-            ? "text-accent hover:text-accent/70"
-            : "text-text-muted hover:text-accent"
+            ? "text-accent-text hover:text-accent-text/70"
+            : "text-text-muted hover:text-accent-text"
         } disabled:opacity-50`}
         onClick={(e) => {
           e.stopPropagation();

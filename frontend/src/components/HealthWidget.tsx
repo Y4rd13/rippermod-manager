@@ -50,14 +50,14 @@ function resolveAction(issue: HealthIssueOut, ctx: ActionCtx): RowAction | null 
   switch (issue.kind) {
     case "failed_install":
       return {
-        label: "Re-deploy",
+        label: "Redeploy",
         Icon: RefreshCw,
         loading: ctx.deploy.isPending,
         run: () => ctx.deploy.mutate({ force: false }),
       };
     case "foreign_files":
       return {
-        label: "Re-deploy",
+        label: "Redeploy",
         Icon: RefreshCw,
         loading: ctx.deploy.isPending,
         run: ctx.askForceDeploy,
@@ -219,7 +219,7 @@ function ForceDeployDialog({
         : `${paths.length} file${paths.length === 1 ? "" : "s"} in the game folder will be moved aside to downloaded_mods/_displaced/ and restored on undeploy:`;
   return (
     <ConfirmDialog
-      title="Re-deploy over foreign files?"
+      title="Redeploy over foreign files?"
       message={message}
       confirmLabel="Move aside and deploy"
       variant="warning"
@@ -345,8 +345,8 @@ export function HealthWidget({
   return (
     <div className="rounded-xl border border-border bg-surface-1 p-4">
       <div className="flex items-center gap-2">
-        <HeartPulse size={16} className="shrink-0 text-accent" />
-        <h3 className="text-sm font-semibold text-text-primary">Pre-launch check</h3>
+        <HeartPulse size={16} className="shrink-0 text-accent-text" />
+        <h2 className="text-sm font-semibold text-text-primary">Pre-launch check</h2>
         <span className="ml-auto flex items-center gap-1.5">
           {data.critical > 0 && <Badge variant="danger">{data.critical} critical</Badge>}
           {data.warning > 0 && <Badge variant="warning">{data.warning} warning</Badge>}

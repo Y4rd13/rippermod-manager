@@ -348,7 +348,7 @@ export function TrendingGrid({
       {filteredTrending.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <TrendingUp size={16} className="text-accent" />
+            <TrendingUp size={16} className="text-accent-text" />
             <h3 className="text-sm font-semibold text-text-primary">Trending</h3>
             <span className="text-xs text-text-muted">
               {filteredTrending.length} mod{filteredTrending.length !== 1 ? "s" : ""}

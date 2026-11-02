@@ -38,7 +38,7 @@ export function Sidebar() {
           {!sidebarCollapsed && (
             <span className="leading-tight min-w-0">
               <span className="block text-sm font-semibold text-text-primary">RipperMod</span>
-              <span className="block text-[10px] font-medium text-text-muted uppercase tracking-wider">Manager</span>
+              <span className="block text-[11px] font-medium text-text-muted uppercase tracking-wider">Manager</span>
             </span>
           )}
         </div>
@@ -61,7 +61,7 @@ export function Sidebar() {
               cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
                 isActive
-                  ? "bg-accent/10 text-accent"
+                  ? "bg-accent/10 text-accent-text"
                   : "text-text-secondary hover:bg-surface-2 hover:text-text-primary",
               )
             }

@@ -44,7 +44,7 @@ function UpdateSection() {
     <div className="mt-4 space-y-2">
       {status === "available" && updateInfo && (
         <div className="rounded-lg border border-accent/30 bg-accent/5 px-3 py-2">
-          <p className="text-sm font-medium text-accent">
+          <p className="text-sm font-medium text-accent-text">
             Version {updateInfo.version} is available
           </p>
           {updateInfo.body && (
@@ -214,7 +214,7 @@ function DeploymentCard() {
             </Button>
           </div>
           {game?.mods_dir == null && (
-            <p className="text-[11px] text-text-muted/80">Using default location.</p>
+            <p className="text-[11px] text-text-muted">Using default location.</p>
           )}
         </div>
 
@@ -239,6 +239,8 @@ function ScannedFoldersBlock({ gameName, installPath }: { gameName: string; inst
   const addPath = useAddModPath();
   const removePath = useRemoveModPath();
   const resetPaths = useResetModPaths();
+  const [pendingRemove, setPendingRemove] = useState<{ id: number; relativePath: string } | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const handleAdd = async () => {
     const picked = await openDialog({
@@ -262,7 +264,7 @@ function ScannedFoldersBlock({ gameName, installPath }: { gameName: string; inst
         <span className="text-sm font-medium text-text-primary">Scanned folders</span>
         <button
           type="button"
-          onClick={() => resetPaths.mutate({ gameName })}
+          onClick={() => setConfirmReset(true)}
           disabled={resetPaths.isPending}
           className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-text-secondary"
         >
@@ -286,7 +288,7 @@ function ScannedFoldersBlock({ gameName, installPath }: { gameName: string; inst
               type="button"
               aria-label={`Remove ${p.relative_path}`}
               title="Remove"
-              onClick={() => removePath.mutate({ gameName, pathId: p.id })}
+              onClick={() => setPendingRemove({ id: p.id, relativePath: p.relative_path })}
               disabled={removePath.isPending}
               className="text-text-muted hover:text-danger"
             >
@@ -301,6 +303,38 @@ function ScannedFoldersBlock({ gameName, installPath }: { gameName: string; inst
       <Button size="sm" variant="secondary" onClick={handleAdd} loading={addPath.isPending}>
         <FolderOpen size={14} /> Add folder…
       </Button>
+
+      {pendingRemove && (
+        <ConfirmDialog
+          title="Remove scanned folder?"
+          message={`${pendingRemove.relativePath} will no longer be scanned. Files on disk are not touched.`}
+          confirmLabel="Remove"
+          variant="warning"
+          icon={X}
+          loading={removePath.isPending}
+          onConfirm={() =>
+            removePath.mutate(
+              { gameName, pathId: pendingRemove.id },
+              { onSettled: () => setPendingRemove(null) },
+            )
+          }
+          onCancel={() => setPendingRemove(null)}
+        />
+      )}
+      {confirmReset && (
+        <ConfirmDialog
+          title="Reset scanned folders?"
+          message="The list goes back to the default folders for this game."
+          confirmLabel="Reset"
+          variant="warning"
+          icon={RotateCcw}
+          loading={resetPaths.isPending}
+          onConfirm={() =>
+            resetPaths.mutate({ gameName }, { onSettled: () => setConfirmReset(false) })
+          }
+          onCancel={() => setConfirmReset(false)}
+        />
+      )}
     </div>
   );
 }
@@ -328,7 +362,7 @@ function AboutCard() {
   return (
     <Card>
       <div className="flex items-start gap-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent/20 to-accent/5 text-accent">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent/20 to-accent/5 text-accent-text">
           <span className="text-xl font-bold leading-none">R</span>
         </div>
         <div className="min-w-0 flex-1 space-y-1">
@@ -384,8 +418,8 @@ function AboutCard() {
                   "inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-all",
                   "disabled:opacity-50",
                   isTracked
-                    ? "border-accent/30 bg-accent/10 text-accent hover:bg-accent/15"
-                    : "border-border bg-surface-2 text-text-secondary hover:border-accent/40 hover:text-accent",
+                    ? "border-accent/30 bg-accent/10 text-accent-text hover:bg-accent/15"
+                    : "border-border bg-surface-2 text-text-secondary hover:border-accent/40 hover:text-accent-text",
                 )}
               >
                 {trackPending ? (
@@ -649,7 +683,7 @@ function DiagnosticsCard() {
                   toast.error("Could not open folder", String(e)),
                 )
               }
-              className="inline-flex shrink-0 items-center gap-1 text-accent hover:underline"
+              className="inline-flex shrink-0 items-center gap-1 text-accent-text hover:underline"
             >
               <FolderOpen size={12} /> Open folder
             </button>
@@ -846,7 +880,7 @@ export function SettingsPage() {
                       {nexusUsername || "Connected"}
                     </p>
                     {nexusIsPremium && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-warning">
                         <Crown size={10} />
                         Premium
                       </span>
@@ -906,7 +940,7 @@ export function SettingsPage() {
                 <button
                   type="button"
                   onClick={() => sso.cancel()}
-                  className="text-accent underline"
+                  className="text-accent-text underline"
                 >
                   Cancel
                 </button>

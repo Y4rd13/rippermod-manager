@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import type { DownloadJobOut } from "@/types/api";
 
 const statusColors: Record<string, string> = {
-  pending: "bg-text-muted",
+  pending: "bg-warning",
   queued: "bg-text-muted",
   downloading: "bg-accent",
   completed: "bg-success",
@@ -30,7 +30,12 @@ export function DownloadProgress({ job, onCancel }: DownloadProgressProps) {
           <span className="truncate text-text-secondary" title={job.file_name}>
             {job.file_name || "Preparing..."}
           </span>
-          <span className="text-text-muted ml-2 whitespace-nowrap">
+          <span
+            className={cn(
+              "ml-2 whitespace-nowrap",
+              job.status === "pending" ? "text-warning" : "text-text-muted",
+            )}
+          >
             {job.status === "downloading" && job.total_bytes > 0
               ? `${formatBytes(job.progress_bytes)}/${formatBytes(job.total_bytes)}`
               : job.status === "completed"
@@ -53,9 +58,11 @@ export function DownloadProgress({ job, onCancel }: DownloadProgressProps) {
       </div>
       {isActive && onCancel && (
         <button
+          type="button"
           onClick={onCancel}
           className="p-0.5 text-text-muted hover:text-danger transition-colors shrink-0"
           title="Cancel download"
+          aria-label={`Cancel download ${job.file_name}`}
         >
           <X size={14} />
         </button>

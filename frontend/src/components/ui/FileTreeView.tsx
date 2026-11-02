@@ -46,9 +46,9 @@ function TreeNode({ node, depth, showSize = true }: { node: ArchiveEntryNode; de
           <ChevronRight size={14} className="shrink-0 text-text-muted" />
         )}
         {open ? (
-          <FolderOpen size={14} className="shrink-0 text-accent" />
+          <FolderOpen size={14} className="shrink-0 text-accent-text" />
         ) : (
-          <Folder size={14} className="shrink-0 text-accent" />
+          <Folder size={14} className="shrink-0 text-accent-text" />
         )}
         <span className="font-mono text-xs text-text-primary truncate">
           {node.name}

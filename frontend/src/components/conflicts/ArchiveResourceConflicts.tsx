@@ -13,13 +13,14 @@ import {
   Shuffle,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -304,7 +305,7 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
           <button
             type="button"
             onClick={() => setHelpOpen(true)}
-            className="rounded-lg p-1.5 text-text-muted hover:text-accent hover:bg-surface-2 transition-colors"
+            className="rounded-lg p-1.5 text-text-muted hover:text-accent-text hover:bg-surface-2 transition-colors"
             title="How do archive conflicts work?"
           >
             <HelpCircle size={16} />
@@ -363,7 +364,7 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
                     )}
                   </td>
                   <td className="py-2.5 pr-4">
-                    <code className="text-xs text-accent font-mono">{item.archive_filename}</code>
+                    <code className="text-xs text-accent-text font-mono">{item.archive_filename}</code>
                   </td>
                   <td className="py-2.5 pr-4">
                     <div className="flex items-center gap-1.5">
@@ -372,7 +373,7 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
                       </span>
                       {item.nexus_mod_id != null && (
                         <button
-                          className="shrink-0 text-text-muted hover:text-accent transition-colors"
+                          className="shrink-0 text-text-muted hover:text-accent-text transition-colors"
                           title="View on Nexus Mods"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -543,7 +544,7 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
                                 <Shuffle size={12} className="text-text-muted shrink-0" />
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2">
-                                    <code className="font-mono text-accent text-xs truncate">{ca.archive_filename}</code>
+                                    <code className="font-mono text-accent-text text-xs truncate">{ca.archive_filename}</code>
                                     {ca.is_winner ? (
                                       <Badge variant="success">wins over</Badge>
                                     ) : (
@@ -553,13 +554,13 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
                                   {partner?.mod_name ? (
                                     <p className="text-text-muted text-xs mt-0.5 truncate">{partner.mod_name}</p>
                                   ) : (
-                                    <p className="text-text-muted/50 text-xs mt-0.5">Unmanaged</p>
+                                    <p className="text-text-muted text-xs mt-0.5">Unmanaged</p>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-1 shrink-0">
                                   {partner?.nexus_mod_id != null && (
                                     <button
-                                      className="rounded p-1.5 text-text-muted hover:text-accent hover:bg-surface-2 transition-colors"
+                                      className="rounded p-1.5 text-text-muted hover:text-accent-text hover:bg-surface-2 transition-colors"
                                       title="View on Nexus Mods"
                                       onClick={() =>
                                         openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${partner.nexus_mod_id}`).catch(() => {})
@@ -593,7 +594,7 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
                         </div>
 
                         <button
-                          className="flex items-center gap-1 mt-2 text-xs text-accent hover:text-accent/80 transition-colors"
+                          className="flex items-center gap-1 mt-2 text-xs text-accent-text hover:text-accent-text/80 transition-colors"
                           onClick={() =>
                             setDetailsOpenFor((cur) =>
                               cur?.archive === item.archive_filename
@@ -627,73 +628,71 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
 
       {/* Prefer Preview Dialog */}
       {previewState && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
-          onClick={handleCancelPrefer}
+        <Dialog
+          onClose={handleCancelPrefer}
+          titleId="prefer-preview-title"
+          closeOnEscape={!preferMod.isPending}
+          backdropClassName="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+          className="w-full max-w-md rounded-xl border border-border bg-surface-1 p-6"
         >
-          <div
-            className="w-full max-w-md rounded-xl border border-border bg-surface-1 p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-2 mb-4 text-accent">
-              <Crown size={20} />
-              <h3 className="text-lg font-semibold text-text-primary">
-                Prefer &ldquo;{previewState.winnerName}&rdquo; over{" "}
-                {previewState.losers.map((l) => `"${l.modName}"`).join(", ")}
-              </h3>
-            </div>
-
-            <p className="text-sm text-text-secondary mb-4">
-              This will update the game&apos;s load order file (<code className="text-xs">modlist.txt</code>) so{" "}
-              <strong>{previewState.winnerName}</strong>&apos;s archives load first, making its
-              resources take priority. No files will be renamed.
-            </p>
-
-            {previewState.losers.length > 0 && (
-              <div className="mb-4">
-                <p className="text-xs text-text-muted font-medium mb-1.5">
-                  Mods that will be demoted ({previewState.losers.length}):
-                </p>
-                <div className="rounded border border-border p-2 bg-surface-0 space-y-1">
-                  {previewState.losers.map((l) => (
-                    <div key={l.modId} className="text-xs text-text-secondary">
-                      {l.modName}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {preferPreview.isPending && (
-              <p className="text-sm text-text-muted py-4 text-center">Computing load order changes...</p>
-            )}
-
-            {previewResult && (
-              <p className="text-sm text-text-secondary mb-4">{previewResult.message}</p>
-            )}
-
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={preferMod.isPending}
-                onClick={handleCancelPrefer}
-              >
-                Cancel
-              </Button>
-              {previewResult && previewResult.preferences_added > 0 && (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  loading={preferMod.isPending}
-                  onClick={handleConfirmPrefer}
-                >
-                  Apply
-                </Button>
-              )}
-            </div>
+          <div className="flex items-center gap-2 mb-4 text-accent-text">
+            <Crown size={20} />
+            <h3 id="prefer-preview-title" className="text-lg font-semibold text-text-primary">
+              Prefer &ldquo;{previewState.winnerName}&rdquo; over{" "}
+              {previewState.losers.map((l) => `"${l.modName}"`).join(", ")}
+            </h3>
           </div>
-        </div>
+
+          <p className="text-sm text-text-secondary mb-4">
+            This will update the game&apos;s load order file (<code className="text-xs">modlist.txt</code>) so{" "}
+            <strong>{previewState.winnerName}</strong>&apos;s archives load first, making its
+            resources take priority. No files will be renamed.
+          </p>
+
+          {previewState.losers.length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs text-text-muted font-medium mb-1.5">
+                Mods that will be demoted ({previewState.losers.length}):
+              </p>
+              <div className="rounded border border-border p-2 bg-surface-0 space-y-1">
+                {previewState.losers.map((l) => (
+                  <div key={l.modId} className="text-xs text-text-secondary">
+                    {l.modName}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {preferPreview.isPending && (
+            <p className="text-sm text-text-muted py-4 text-center">Computing load order changes...</p>
+          )}
+
+          {previewResult && (
+            <p className="text-sm text-text-secondary mb-4">{previewResult.message}</p>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={preferMod.isPending}
+              onClick={handleCancelPrefer}
+            >
+              Cancel
+            </Button>
+            {previewResult && previewResult.preferences_added > 0 && (
+              <Button
+                variant="primary"
+                size="sm"
+                loading={preferMod.isPending}
+                onClick={handleConfirmPrefer}
+              >
+                Apply
+              </Button>
+            )}
+          </div>
+        </Dialog>
       )}
 
       {/* Disable Confirmation Dialog */}
@@ -723,68 +722,53 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
 }
 
 function ConflictHelpModal({ onClose }: { onClose: () => void }) {
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
-
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+    <Dialog
+      onClose={onClose}
+      titleId="conflict-help-title"
+      backdropClassName="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+      className="w-full max-w-md rounded-xl border border-border bg-surface-1 p-6 animate-modal-in"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="conflict-help-title"
-        className="w-full max-w-md rounded-xl border border-border bg-surface-1 p-6 animate-modal-in"
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <HelpCircle size={18} className="text-accent" />
-            <h3 id="conflict-help-title" className="text-lg font-semibold text-text-primary">
-              How do archive conflicts work?
-            </h3>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded p-1 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"
-            aria-label="Close"
-          >
-            <X size={18} />
-          </button>
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <HelpCircle size={18} className="text-accent-text" />
+          <h3 id="conflict-help-title" className="text-lg font-semibold text-text-primary">
+            How do archive conflicts work?
+          </h3>
         </div>
-
-        <div className="space-y-3 text-sm text-text-secondary">
-          <p>
-            <Badge variant="success">cosmetic</Badge>{" "}
-            Both archives contain identical data for this resource. No gameplay impact, safe to ignore.
-          </p>
-          <p>
-            <Badge variant="danger">real</Badge>{" "}
-            Archives contain different data. The winner&apos;s version is used in-game.
-          </p>
-          <p>
-            <Badge variant="warning">dependency</Badge>{" "}
-            One mod requires the other, so the override is intentional. Usually safe to leave as-is.
-          </p>
-          <p>
-            <Badge variant="success">wins over</Badge>{" "}
-            This archive loads first (lower ASCII filename), so its resources take priority over the other archive.
-          </p>
-          <p>
-            <Badge variant="danger">loses to</Badge>{" "}
-            The other archive loads first, overriding this archive&apos;s resources.
-            Use the <strong className="text-text-primary">Prefer</strong> button to update modlist.txt so your preferred mod wins.
-          </p>
-        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="shrink-0 rounded p-1 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"
+          aria-label="Close"
+        >
+          <X size={18} />
+        </button>
       </div>
-    </div>
+
+      <div className="space-y-3 text-sm text-text-secondary">
+        <p>
+          <Badge variant="success">cosmetic</Badge>{" "}
+          Both archives contain identical data for this resource. No gameplay impact, safe to ignore.
+        </p>
+        <p>
+          <Badge variant="danger">real</Badge>{" "}
+          Archives contain different data. The winner&apos;s version is used in-game.
+        </p>
+        <p>
+          <Badge variant="warning">dependency</Badge>{" "}
+          One mod requires the other, so the override is intentional. Usually safe to leave as-is.
+        </p>
+        <p>
+          <Badge variant="success">wins over</Badge>{" "}
+          This archive loads first (lower ASCII filename), so its resources take priority over the other archive.
+        </p>
+        <p>
+          <Badge variant="danger">loses to</Badge>{" "}
+          The other archive loads first, overriding this archive&apos;s resources.
+          Use the <strong className="text-text-primary">Prefer</strong> button to update modlist.txt so your preferred mod wins.
+        </p>
+      </div>
+    </Dialog>
   );
 }

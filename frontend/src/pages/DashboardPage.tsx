@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { Card } from "@/components/ui/Card";
+import { countTrustedMatches } from "@/lib/matches";
 import { cn } from "@/lib/utils";
 import { useConflictCount, useGames, useInstalledMods, useMods, useTrendingMods, useUpdates } from "@/hooks/queries";
 import { formatCount } from "@/lib/format";
@@ -59,7 +60,7 @@ function GameStatsReporter({ gameName, onReport }: { gameName: string; onReport:
 
   const stats = useMemo(() => ({
     totalInstalled: installed.length,
-    nexusMatched: mods.filter((m) => m.nexus_match?.on_disk === true).length,
+    nexusMatched: countTrustedMatches(mods),
     updatesAvailable: updates?.updates_available ?? 0,
     conflictsAffected: conflicts?.mods_with_conflicts ?? 0,
   }), [installed.length, mods, updates?.updates_available, conflicts?.mods_with_conflicts]);
@@ -123,7 +124,7 @@ function CommunityActivity({ gameName }: { gameName: string }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <TrendingUp size={14} className="text-accent" />
+        <TrendingUp size={14} className="text-accent-text" />
         <h3 className="text-sm font-medium text-text-secondary">{gameName}</h3>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -181,7 +182,7 @@ export function DashboardPage() {
           icon={Gamepad2}
           label="Games"
           value={games.length}
-          color="bg-accent/10 text-accent"
+          color="bg-accent/10 text-accent-text"
           hoverBorder="hover:border-accent/40"
           onClick={firstGame ? () => navigate(`/games/${firstGame}`) : undefined}
           title="View your games"
@@ -202,14 +203,14 @@ export function DashboardPage() {
           color="bg-warning/10 text-warning"
           hoverBorder="hover:border-warning/40"
           onClick={firstGame ? () => navigate(`/games/${firstGame}`) : undefined}
-          title="Mods on disk linked to a Nexus page"
+          title="Scanned mods whose Nexus match is confirmed or scores at least 75%. Low-confidence matches are listed in the Matched tab for review."
         />
         <StatCard
           icon={RefreshCw}
           label="Updates Available"
           value={games.length > 0 ? totals.updatesAvailable : "--"}
-          color="bg-danger/10 text-danger"
-          hoverBorder="hover:border-danger/40"
+          color="bg-warning/10 text-warning"
+          hoverBorder="hover:border-warning/40"
           onClick={firstGame ? () => navigate(`/games/${firstGame}`) : undefined}
           title="View available updates"
         />
@@ -281,7 +282,7 @@ export function DashboardPage() {
                   className="flex items-center justify-between rounded-lg border border-border p-3 hover:bg-surface-2 transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <Gamepad2 size={18} className="text-accent" />
+                    <Gamepad2 size={18} className="text-accent-text" />
                     <div>
                       <p className="text-sm font-medium text-text-primary">
                         {game.name}

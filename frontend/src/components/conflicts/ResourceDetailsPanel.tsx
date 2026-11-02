@@ -70,7 +70,7 @@ function ResourceHashList({ resources }: { resources: ResourceConflictDetail[] }
       ))}
       {!expanded && remaining > 0 && (
         <button
-          className="text-xs text-accent hover:text-accent/80 transition-colors mt-1"
+          className="text-xs text-accent-text hover:text-accent-text/80 transition-colors mt-1"
           onClick={() => setExpanded(true)}
         >
           Show {remaining} more hash{remaining !== 1 ? "es" : ""}...
@@ -120,7 +120,7 @@ function GroupSection({
             ) : (
               <ChevronDown size={12} className="text-text-muted shrink-0" />
             )}
-            <code className="font-mono text-accent text-xs truncate">{group.partner_archive}</code>
+            <code className="font-mono text-accent-text text-xs truncate">{group.partner_archive}</code>
             {group.is_winner ? (
               <Badge variant="success">wins over</Badge>
             ) : (
@@ -131,9 +131,9 @@ function GroupSection({
             {group.partner_mod_name ? (
               <span className="text-text-muted text-xs truncate">{group.partner_mod_name}</span>
             ) : (
-              <span className="text-text-muted/50 text-xs">Unmanaged</span>
+              <span className="text-text-muted text-xs">Unmanaged</span>
             )}
-            <span className="text-[10px] text-text-muted/60">
+            <span className="text-[11px] text-text-muted">
               {filtered.length} conflict{filtered.length !== 1 ? "s" : ""}
               {group.real_count > 0 && <span className="text-danger ml-1">{group.real_count} real</span>}
               {group.dependency_count > 0 && <span className="text-warning ml-1">{group.dependency_count} dep</span>}
@@ -144,7 +144,7 @@ function GroupSection({
         <div className="flex items-center gap-1 shrink-0">
           {group.partner_nexus_mod_id != null && (
             <button
-              className="rounded p-1.5 text-text-muted hover:text-accent hover:bg-surface-2 transition-colors"
+              className="rounded p-1.5 text-text-muted hover:text-accent-text hover:bg-surface-2 transition-colors"
               title="View on Nexus Mods"
               onClick={() =>
                 openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${group.partner_nexus_mod_id}`).catch(() => {})
