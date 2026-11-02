@@ -94,9 +94,10 @@ def token_jaccard(a: str, b: str) -> float:
 def _is_word_substring(a: str, b: str) -> bool:
     """Check whether the shorter of two normalized names sits on word boundaries in the longer.
 
-    The shorter name must start at a word start. Unless it has two or more tokens, it must
-    also end at a word end, so "ash" does not match inside "splash", and it must make up at
-    least half of the longer name's words, so "ash" does not stand for "ash female v preset".
+    The shorter name must start at a word start. A single-word name must also end at a word
+    end, so "ash" does not match inside "splash", and the longer name may have at most two
+    words, so "ash" does not stand for "ash female v preset". A name of two or more words
+    only has to start at a word start.
     """
     short, long = (a, b) if len(a) <= len(b) else (b, a)
     if not short:
@@ -118,6 +119,9 @@ def _is_word_substring(a: str, b: str) -> bool:
 def compute_name_score(local_name: str, nexus_name: str) -> tuple[float, str]:
     ln = normalize(local_name)
     nn = normalize(nexus_name)
+
+    if not ln or not nn:
+        return 0.0, "fuzzy"
 
     if ln == nn:
         return 1.0, "exact"
@@ -203,9 +207,33 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
         )
     ).all()
 
+    # Build endorsement count map for popularity tiebreaking (scoped to this game)
+    game_nexus_ids = {dl.nexus_mod_id for dl in downloads if dl.nexus_mod_id}
+    meta_rows = (
+        session.exec(
+            select(NexusModMeta).where(
+                NexusModMeta.nexus_mod_id.in_(game_nexus_ids)  # type: ignore[union-attr]
+            )
+        ).all()
+        if game_nexus_ids
+        else []
+    )
+    endorsement_map: dict[int, int] = {m.nexus_mod_id: m.endorsement_count for m in meta_rows}
+    # Build category map for Nexus mods
+    nexus_category_map: dict[int, str] = {
+        m.nexus_mod_id: m.category for m in meta_rows if m.category
+    }
+
+    # Build local group category map
+    group_category_map: dict[int, str | None] = {}
+    for g in groups:
+        _ = g.files
+        group_category_map[g.id] = classify_group_category(g.files)  # type: ignore[arg-type]
+
     # Re-validate name-based correlations: NexusDownload names may have
-    # changed since the correlation was created (sync updates mod_name).
-    # Purge stale ones so they get re-evaluated with current names.
+    # changed since the correlation was created (sync updates mod_name), and the
+    # name rule may have changed since the score was stored. Re-score those that
+    # still clear 0.4 and purge the rest so they get re-evaluated.
     _NAME_METHODS = {"exact", "substring", "fuzzy"}
     dl_map: dict[int, NexusDownload] = {dl.id: dl for dl in downloads if dl.id is not None}
     group_map: dict[int, ModGroup] = {g.id: g for g in groups if g.id is not None}
@@ -221,10 +249,17 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
             purged += 1
             continue
         score, method = compute_name_score(grp.display_name, dl.mod_name)
+        # Same category penalty as the slow path, or every run would undo it.
+        if score > 0 and not _categories_compatible(
+            group_category_map.get(grp.id),  # type: ignore[arg-type]
+            nexus_category_map.get(dl.nexus_mod_id, ""),
+        ):
+            score = max(0.0, score - _CATEGORY_PENALTY)
         if score >= 0.4 and (score, method) != (corr.score, corr.method):
             # Keep the stored score in step with the current name rule.
             corr.score = score
             corr.method = method
+            corr.reasoning = f"re-scored: {method} name similarity {score:.2f}"
             session.add(corr)
             continue
         if score < 0.4:
@@ -262,29 +297,6 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
     for dl in downloads:
         if dl.nexus_mod_id:
             nexus_id_map.setdefault(dl.nexus_mod_id, dl)
-
-    # Build endorsement count map for popularity tiebreaking (scoped to this game)
-    game_nexus_ids = {dl.nexus_mod_id for dl in downloads if dl.nexus_mod_id}
-    meta_rows = (
-        session.exec(
-            select(NexusModMeta).where(
-                NexusModMeta.nexus_mod_id.in_(game_nexus_ids)  # type: ignore[union-attr]
-            )
-        ).all()
-        if game_nexus_ids
-        else []
-    )
-    endorsement_map: dict[int, int] = {m.nexus_mod_id: m.endorsement_count for m in meta_rows}
-    # Build category map for Nexus mods
-    nexus_category_map: dict[int, str] = {
-        m.nexus_mod_id: m.category for m in meta_rows if m.category
-    }
-
-    # Build local group category map
-    group_category_map: dict[int, str | None] = {}
-    for g in groups:
-        _ = g.files
-        group_category_map[g.id] = classify_group_category(g.files)  # type: ignore[arg-type]
 
     # Auto-correlate from installed mods (source of truth)
     installed_mods = session.exec(
