@@ -40,6 +40,16 @@ describe("tokens", () => {
 });
 
 describe("dialogs", () => {
+  it("leaves Escape to Dialog: no other document keydown listener handles it", () => {
+    const offenders = sourceFiles().filter((f) => {
+      // ContextMenu is a menu, not a dialog: it closes itself on Escape.
+      if (f.endsWith("components/ui/Dialog.tsx") || f.endsWith("components/ui/ContextMenu.tsx")) return false;
+      const src = readFileSync(f, "utf8");
+      return /addEventListener\(\s*"keydown"/.test(src) && src.includes('"Escape"');
+    });
+    expect(offenders).toEqual([]);
+  });
+
   it("only Dialog renders aria-modal", () => {
     const offenders = sourceFiles().filter((f) => !f.endsWith("components/ui/Dialog.tsx") && readFileSync(f, "utf8").includes("aria-modal"));
     expect(offenders).toEqual([]);
