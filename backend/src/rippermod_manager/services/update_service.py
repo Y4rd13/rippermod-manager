@@ -52,6 +52,19 @@ _CACHE_TTL = timedelta(hours=24)
 _ARCHIVE_EXTENSIONS = {".zip", ".7z", ".rar"}
 
 
+_UNVERIFIED_VERSION = "0.0.0-unverified"
+
+
+def is_known_version(v: str | None) -> bool:
+    """False for a version that carries no information (missing, empty or unverified).
+
+    ``0.0.0-unverified`` is the placeholder the file-list matcher stores when it
+    matched a mod by its files only. Comparing it with a Nexus version would
+    report an update that nobody verified.
+    """
+    return bool(v) and v != _UNVERIFIED_VERSION
+
+
 @dataclass(frozen=True, slots=True)
 class TrackedMod:
     """A mod we track for updates, from any source."""
@@ -684,9 +697,14 @@ async def check_all_updates(
             is_ts_flagged = True
 
         # b) VERSION comparison (secondary)
-        is_version_newer = is_newer_version(meta.version, mod.local_version)
-        is_version_equal = not is_version_newer and not is_newer_version(
-            mod.local_version, meta.version
+        # An unknown local version proves neither "newer" nor "equal": only the
+        # download date and the timestamps can detect an update for it.
+        local_known = is_known_version(mod.local_version)
+        is_version_newer = local_known and is_newer_version(meta.version, mod.local_version)
+        is_version_equal = (
+            local_known
+            and not is_version_newer
+            and not is_newer_version(mod.local_version, meta.version)
         )
 
         # c) DOWNLOAD DATE comparison (user's rule: always flag if Nexus updated
@@ -910,7 +928,9 @@ def check_cached_updates(
         meta = meta_map.get(mid)
         if not meta or not meta.version:
             continue
-        if is_newer_version(meta.version, mod.local_version):
+        if is_known_version(mod.local_version) and is_newer_version(
+            meta.version, mod.local_version
+        ):
             updates.append(
                 {
                     "installed_mod_id": mod.installed_mod_id,

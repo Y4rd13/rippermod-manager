@@ -225,7 +225,9 @@ export function FomodWizard({ gameName, archiveFilename, onDismiss, onInstallCom
   }, [handleKeyDown]);
 
   const currentStepData = wizard.config?.steps[wizard.currentStep];
-  const stepName = currentStepData?.name || `Step ${wizard.visibleStepCursor + 1}`;
+  const stepName = wizard.isReview
+    ? "Review"
+    : currentStepData?.name || `Step ${wizard.visibleStepCursor + 1}`;
 
   const filesCount = useMemo(() => {
     if (!wizard.config) return 0;
@@ -271,7 +273,7 @@ export function FomodWizard({ gameName, archiveFilename, onDismiss, onInstallCom
               <h3 id="fomod-wizard-title" className="text-base font-semibold text-text-primary">
                 {wizard.config?.module_name || "FOMOD Installer"}
               </h3>
-              {wizard.totalSteps > 1 && (
+              {(wizard.totalSteps > 1 || wizard.isReview) && (
                 <p className="text-xs text-text-muted">{stepName}</p>
               )}
             </div>
@@ -302,7 +304,7 @@ export function FomodWizard({ gameName, archiveFilename, onDismiss, onInstallCom
             </div>
           )}
 
-          {currentStepData && (
+          {currentStepData && !wizard.isReview && (
             <div className="space-y-5">
               {currentStepData.groups.map((group, groupIdx) => (
                 <GroupSection
@@ -318,8 +320,39 @@ export function FomodWizard({ gameName, archiveFilename, onDismiss, onInstallCom
             </div>
           )}
 
-          {/* Mod name input on last step */}
-          {wizard.config && wizard.isLastStep && (
+          {wizard.config && wizard.isReview && (
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-text-primary">Review</h4>
+              {wizard.isPreviewing && (
+                <div className="flex items-center gap-2 text-sm text-text-muted">
+                  <Loader2 size={14} className="animate-spin" /> Listing the files to install...
+                </div>
+              )}
+              {wizard.previewError && (
+                <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-warning">
+                  Could not preview the files: {wizard.previewError.message}
+                </p>
+              )}
+              {wizard.preview && !wizard.isPreviewing && !wizard.previewError && (
+                <>
+                  <p className="text-sm text-text-secondary">
+                    {wizard.preview.total_files} file(s) will be installed
+                  </p>
+                  <ul className="max-h-64 overflow-y-auto rounded-lg border border-border bg-surface-2 p-2 font-mono text-xs text-text-secondary">
+                    {wizard.preview.files.map((f, i) => (
+                      // Two sources can target one path: the index keeps keys unique.
+                      <li key={`${i}:${f.game_relative_path}`} className="truncate" title={f.game_relative_path}>
+                        {f.game_relative_path}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Mod name input on the Review step */}
+          {wizard.config && wizard.isReview && (
             <div className="mt-5 pt-4 border-t border-border">
               <label className="block text-xs font-medium text-text-secondary mb-1">
                 Mod name
@@ -337,7 +370,9 @@ export function FomodWizard({ gameName, archiveFilename, onDismiss, onInstallCom
         {/* Footer */}
         <div className="flex items-center justify-between border-t border-border px-6 py-3">
           <span className="text-xs text-text-muted">
-            {wizard.config && `${filesCount} file mapping${filesCount !== 1 ? "s" : ""}`}
+            {wizard.config &&
+              !wizard.isReview &&
+              `${filesCount} file mapping${filesCount !== 1 ? "s" : ""}`}
           </span>
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" onClick={() => {
@@ -349,21 +384,26 @@ export function FomodWizard({ gameName, archiveFilename, onDismiss, onInstallCom
             }}>
               Cancel
             </Button>
-            {!wizard.isFirstStep && (
+            {((wizard.isReview && wizard.totalSteps > 0) ||
+              (!wizard.isReview && !wizard.isFirstStep)) && (
               <Button variant="secondary" size="sm" onClick={wizard.goBack}>
                 <ChevronLeft size={14} /> Back
               </Button>
             )}
-            {!wizard.isLastStep && (
-              <Button size="sm" onClick={wizard.goNext} disabled={!wizard.canGoNext}>
+            {wizard.config && !wizard.isReview && (
+              <Button
+                size="sm"
+                onClick={wizard.isLastStep ? wizard.goToReview : wizard.goNext}
+                disabled={!wizard.canGoNext}
+              >
                 Next <ChevronRight size={14} />
               </Button>
             )}
-            {wizard.isLastStep && wizard.config && (
+            {wizard.isReview && wizard.config && (
               <Button
                 size="sm"
                 onClick={() => wizard.doInstall(modName)}
-                disabled={!wizard.canGoNext || !modName.trim()}
+                disabled={!modName.trim()}
                 loading={wizard.isInstalling}
               >
                 Install

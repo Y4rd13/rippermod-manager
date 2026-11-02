@@ -15,7 +15,7 @@ No more guessing which mod broke your game. No more manually tracking 200 mods a
 [list]
 [*]Automatically scans your game folder and discovers all installed mod files — no matter how many you've got.
 [*]Groups scattered files that belong to the same mod using TF-IDF clustering — even when they are spread across multiple directories (mods, archive_mods, red4ext, bin, etc.).
-[*]Reads FOMOD and REDmod metadata to improve grouping accuracy.
+[*]Reads FOMOD info.xml and REDmod info.json inside your archives to find the Nexus mod id and a clearer mod name.
 [*]Streaming progress indicator with phase-by-phase feedback during scans.
 [/list]
 
@@ -47,7 +47,7 @@ The algorithm does the heavy lifting, but you're the one calling the shots:
 [*]Full FOMOD wizard that parses ModuleConfig.xml from archives.
 [*]Multi-step conditional UI with plugin groups, dependency resolution, and visual indicators (Required, Recommended, Optional, Not Usable).
 [*]Preview file selections before installing.
-[*]Supports composite dependencies (AND/OR/XOR conditions).
+[*]Supports composite dependencies (AND/OR conditions).
 [/list]
 
 [b]Mod Installation & Management[/b]
@@ -55,9 +55,9 @@ The algorithm does the heavy lifting, but you're the one calling the shots:
 [*][b]Install[/b] from downloaded archives with automatic conflict detection.
 [*][b]Uninstall[/b] mods cleanly with confirmation.
 [*][b]Enable / Disable[/b] individual mods without removing them.
-[*][b]Conflict resolution[/b] dialog showing exactly which files overlap, with Overwrite, Skip, or Cancel options.
+[*][b]Conflict resolution[/b] dialog showing exactly which files overlap, with three choices: [b]Install[/b] (the new mod's copy is linked; the other mod keeps its own copy and gets the path back if you uninstall the new one), [b]Install without these files[/b], or [b]Cancel[/b].
 [*][b]Bulk operations[/b] — Select multiple mods and enable, disable, or uninstall them all at once.
-[*][b]Archive cleanup[/b] — Remove orphan archives not linked to any installed mod.
+[*][b]Archive cleanup[/b] - Remove orphan archives: archives with no Nexus id that RipperMod has not installed.
 [*][b]Clean game folder[/b] - Mod content lives in [i]downloaded_mods/[/i] and is linked into the game directory only when deployed. Steam "Verify integrity" only sees vanilla files. Profile switching is instant.
 [/list]
 
@@ -87,7 +87,7 @@ The algorithm does the heavy lifting, but you're the one calling the shots:
 [*][b]Dependency-aware severity[/b] — Conflicts between mods with a dependency relationship are classified as medium severity (intentional override). Identical content across archives is classified as low (cosmetic, safe to ignore).
 [*][b]Conflict actions[/b] — Disable, uninstall, or set load order preferences on conflicting mods directly from the conflict view. Each archive links to its Nexus Mods page. Confirmation dialogs explain what will happen before you act.
 [*][b]Conflict inbox[/b] — Centralized view of all detected conflicts with resolve (reinstall with new priority) or dismiss actions.
-[*][b]Conflict graph[/b] — Visual graph of which mods conflict with each other.
+[*][b]Conflict clusters[/b] - Groups of mods that share files, with the files they share.
 [*][b]Archive-level details[/b] — See exactly which resources overlap between archives, with per-resource severity and auto-collapsed hash lists.
 [*][b]Load order management[/b] — View and reorder archive load order with preference rules, dry-run previews, and automatic modlist.txt generation.
 [/list]

@@ -4,6 +4,7 @@ from sqlmodel import Session, select
 from rippermod_manager.database import get_session
 from rippermod_manager.models.settings import AppSetting, PCSpecs
 from rippermod_manager.schemas.settings import PCSpecsOut, SettingOut, SettingsUpdate
+from rippermod_manager.services.download_service import DOWNLOAD_CONCURRENCY_RANGE
 from rippermod_manager.services.keyring_service import SECRET_KEYS, get_secret
 from rippermod_manager.services.settings_helpers import set_setting
 
@@ -14,8 +15,10 @@ HIDDEN_KEYS = {"nexus_api_key"}
 # Only these keys may be written through PUT /settings. Anything that points the
 # backend at a filesystem path (e.g. ``save_backup_path``) has its own validated
 # endpoint instead.
-ALLOWED_SETTING_KEYS = frozenset({"nexus_api_key", "save_backup_enabled"})
+ALLOWED_SETTING_KEYS = frozenset({"nexus_api_key", "save_backup_enabled", "download_concurrency"})
 _ALLOWED_VALUES: dict[str, frozenset[str]] = {"save_backup_enabled": frozenset({"true", "false"})}
+# Integer settings and their inclusive range.
+_INT_RANGES: dict[str, tuple[int, int]] = {"download_concurrency": DOWNLOAD_CONCURRENCY_RANGE}
 
 
 def _validate_update(settings: dict[str, str]) -> None:
@@ -26,6 +29,14 @@ def _validate_update(settings: dict[str, str]) -> None:
         if key in settings and settings[key] not in allowed:
             raise HTTPException(
                 422, f"Invalid value for {key}: expected one of {', '.join(sorted(allowed))}"
+            )
+    for key, (low, high) in _INT_RANGES.items():
+        if key not in settings:
+            continue
+        value = settings[key].strip()
+        if not (value.isascii() and value.isdigit() and low <= int(value) <= high):
+            raise HTTPException(
+                422, f"Invalid value for {key}: expected a whole number from {low} to {high}"
             )
 
 

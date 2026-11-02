@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { useFomodConfig, useFomodInstall } from "@/hooks/mutations";
+import { useFomodConfig, useFomodInstall, useFomodPreview } from "@/hooks/mutations";
 import {
   computeFlags,
   computeVisibleSteps,
@@ -68,9 +68,23 @@ export function useFomodWizard(gameName: string, archiveFilename: string) {
   const [visibleStepCursor, setVisibleStepCursor] = useState(0);
   const [selections, setSelections] = useState<FomodSelections>({});
   const [hasModified, setHasModified] = useState(false);
+  // The "Review" step after the last option step: lists the files to install.
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   const fetchConfig = useFomodConfig();
   const installMutation = useFomodInstall();
+  const previewMutation = useFomodPreview();
+
+  const requestPreview = useCallback(
+    (sels: FomodSelections) => {
+      previewMutation.mutate({
+        gameName,
+        data: { archive_filename: archiveFilename, selections: sels },
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gameName, archiveFilename],
+  );
 
   // Load config on mount
   useEffect(() => {
@@ -78,8 +92,13 @@ export function useFomodWizard(gameName: string, archiveFilename: string) {
       { gameName, archiveFilename },
       {
         onSuccess: (data) => {
+          const defaults = initializeDefaults(data);
           setConfig(data);
-          setSelections(initializeDefaults(data));
+          setSelections(defaults);
+          // No option step to show: the wizard opens on Review.
+          if (computeVisibleSteps(data, computeFlags(data, defaults)).length === 0) {
+            requestPreview(defaults);
+          }
         },
       },
     );
@@ -175,10 +194,22 @@ export function useFomodWizard(gameName: string, archiveFilename: string) {
   }, [visibleSteps.length, clampedCursor]);
 
   const goBack = useCallback(() => {
+    if (reviewOpen) {
+      // Back from Review returns to the last option step.
+      setReviewOpen(false);
+      return;
+    }
     if (clampedCursor > 0) {
       setVisibleStepCursor((c) => c - 1);
     }
-  }, [clampedCursor]);
+  }, [clampedCursor, reviewOpen]);
+
+  const goToReview = useCallback(() => {
+    setReviewOpen(true);
+    requestPreview(selections);
+  }, [requestPreview, selections]);
+
+  const isReview = reviewOpen || (config !== null && visibleSteps.length === 0);
 
   const doInstall = useCallback(
     (modName: string) => {
@@ -213,10 +244,15 @@ export function useFomodWizard(gameName: string, archiveFilename: string) {
     isLastStep,
     totalSteps,
     hasModified,
+    isReview,
+    preview: previewMutation.data ?? null,
+    isPreviewing: previewMutation.isPending,
+    previewError: previewMutation.error,
     selectPlugin,
     getPluginType,
     goNext,
     goBack,
+    goToReview,
     doInstall,
   };
 }

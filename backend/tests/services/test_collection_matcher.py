@@ -105,7 +105,8 @@ class TestMatchByCollections:
         ).all()
         assert len(corrs) == 1
         assert corrs[0].method == "collection"
-        assert corrs[0].score == 0.85
+        # Exact name: the score is the name score; the 0.85 floor only lifts weaker names
+        assert corrs[0].score == 1.0
 
     @pytest.mark.asyncio
     async def test_group_with_prior_correlation_skipped(self, session, make_game):
@@ -172,3 +173,59 @@ class TestMatchByCollections:
 
         # Group already had a correlation — should not be matched again
         assert result.matched == 0
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("group_name", "coll_name", "expected"),
+        [
+            ("Immersive Rippers", "Immersive Bartenders - Dogtown", 0.557),
+            ("Weather Mod", "Weather Overhaul Mod", 0.85),
+        ],
+    )
+    async def test_collection_boost_only_for_close_names(
+        self, session, make_game, group_name, coll_name, expected
+    ):
+        game = make_game()
+        for i in range(3):
+            g = ModGroup(game_id=game.id, display_name=f"Mod{i}")
+            session.add(g)
+            dl = NexusDownload(game_id=game.id, nexus_mod_id=100 + i, mod_name=f"CorrelatedMod{i}")
+            session.add(dl)
+            session.flush()
+            session.add(
+                ModNexusCorrelation(
+                    mod_group_id=g.id, nexus_download_id=dl.id, score=1.0, method="exact"
+                )
+            )
+        unmatched = ModGroup(game_id=game.id, display_name=group_name)
+        session.add(unmatched)
+        session.commit()
+
+        collections = [
+            {
+                "slug": "test-coll",
+                "name": "Test Collection",
+                "endorsements": 500,
+                "latestPublishedRevision": {"revisionNumber": 1},
+            }
+        ]
+        revision = {
+            "revisionNumber": 1,
+            "modFiles": [
+                {"file": {"mod": {"modId": 100, "name": "CorrelatedMod0"}}, "optional": False},
+                {"file": {"mod": {"modId": 101, "name": "CorrelatedMod1"}}, "optional": False},
+                {"file": {"mod": {"modId": 102, "name": "CorrelatedMod2"}}, "optional": False},
+                {"file": {"mod": {"modId": 999, "name": coll_name}}, "optional": False},
+            ],
+        }
+        with patch("rippermod_manager.services.collection_matcher.NexusGraphQLClient") as mock_cls:
+            mock_cls.return_value = _make_gql_mock(
+                collections=collections, revision_return=revision
+            )
+            result = await match_by_collections(game, "key", session)
+
+        assert result.matched == 1
+        corr = session.exec(
+            select(ModNexusCorrelation).where(ModNexusCorrelation.mod_group_id == unmatched.id)
+        ).one()
+        assert corr.score == pytest.approx(expected, abs=0.01)

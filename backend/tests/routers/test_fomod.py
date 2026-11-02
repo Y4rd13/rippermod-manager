@@ -345,6 +345,19 @@ class TestInstall:
         assert (game_dir / "mods" / "a.txt").read_bytes() == b"content_a"
         assert not (game_dir / "mods" / "b.txt").exists()
 
+    def test_fomod_install_requests_a_reindex(self, client, fomod_setup, background_requests):
+        game_name, _, _ = fomod_setup
+        r = client.post(
+            f"/api/v1/games/{game_name}/install/fomod/install",
+            json={
+                "archive_filename": "TestFomod.zip",
+                "mod_name": "TestFOMOD_R",
+                "selections": {"0": {"0": [0]}},
+            },
+        )
+        assert r.status_code == 201
+        assert len(background_requests["conflicts"]) == 1
+
     def test_install_option_b(self, client, fomod_setup):
         game_name, game_dir, _ = fomod_setup
         r = client.post(

@@ -11,7 +11,8 @@ class DownloadJob(SQLModel, table=True):
     nexus_mod_id: int
     nexus_file_id: int
     file_name: str = ""
-    status: str = "pending"  # pending | downloading | completed | failed | cancelled
+    # pending | queued | downloading | completed | failed | cancelled
+    status: str = "pending"
     progress_bytes: int = 0
     total_bytes: int = 0
     error: str = ""

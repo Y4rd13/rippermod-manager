@@ -14,10 +14,13 @@ from rippermod_manager.matching.normalization import (
 from rippermod_manager.models.mod import ModFile
 
 VERSION_RE = re.compile(r"[_\-.]?v?\d+\.\d+(\.\d+)?[_\-.]?", re.IGNORECASE)
+ARCHIVE_XL_RE = re.compile(r"\.archive\.xl$", re.IGNORECASE)
 
 
 def normalize_name(name: str) -> str:
     name = strip_ordering_prefix(name)
+    # `X.archive.xl` normalizes as `X.archive`, so the rsplit below drops the same suffix.
+    name = ARCHIVE_XL_RE.sub(".archive", name)
     name = name.rsplit(".", 1)[0]
     name = VERSION_RE.sub(" ", name)
     name = split_camel(name)

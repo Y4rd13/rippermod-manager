@@ -1,6 +1,12 @@
 import type { DeployReport } from "@/hooks/use-deploy";
 import { toast } from "@/stores/toast-store";
 
+/** ``skipped_reason`` the backend sends when tools/redmod/bin/redMod.exe is absent. */
+export const REDMOD_MISSING_REASON = "REDmod binary not found";
+
+export const REDMOD_MISSING_MESSAGE =
+  "REDmod content changed but redMod.exe was not found. REDmods will not load until the REDmod DLC is installed.";
+
 /**
  * Shared toast helper for deploy-style operations (Deploy, Undeploy, Redeploy).
  *
@@ -32,12 +38,18 @@ export function reportDeployOutcome(report: DeployReport, action: string): void 
     );
     return;
   }
+  if (report.redmod && !report.redmod.ran && report.redmod.skipped_reason === REDMOD_MISSING_REASON) {
+    toast.warning(`${action} complete, REDmod not compiled`, REDMOD_MISSING_MESSAGE);
+    return;
+  }
   const skipped = report.skipped_existing
     ? ` (${report.skipped_existing} already current)`
     : "";
   const redmodNote = report.redmod?.success ? " · REDmod compiled" : "";
+  const removed = report.removed_paths ?? [];
+  const removedNote = removed.length > 0 ? ` · removed ${removed.join(", ")}` : "";
   toast.success(
     `${action} complete`,
-    `${report.done} operation(s) succeeded${skipped}${redmodNote}`,
+    `${report.done} operation(s) succeeded${skipped}${redmodNote}${removedNote}`,
   );
 }

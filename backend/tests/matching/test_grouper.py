@@ -28,6 +28,17 @@ class TestNormalizeName:
     def test_lowercases(self):
         assert normalize_name("MyMod.archive") == "my mod"
 
+    def test_archive_xl_normalizes_like_its_archive(self):
+        assert normalize_name("MetroPocketGuide.archive.xl") == normalize_name(
+            "MetroPocketGuide.archive"
+        )
+
+    def test_archive_xl_with_dotted_name_normalizes_like_its_archive(self):
+        assert normalize_name("Mod.Name.archive.xl") == "mod name"
+
+    def test_archive_xl_suffix_is_case_insensitive(self):
+        assert normalize_name("MetroPocketGuide.ARCHIVE.XL") == "metro pocket guide"
+
 
 class TestGroupModFiles:
     def test_empty_list(self):

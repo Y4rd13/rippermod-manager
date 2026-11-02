@@ -17,11 +17,13 @@ from rippermod_manager.schemas.conflict import (
     ArchiveResourceDetailsResult,
     ConflictEvidenceOut,
     ConflictingArchiveRef,
+    ConflictReindexStatus,
     ConflictSummary,
     ModRef,
     ReindexResult,
 )
 from rippermod_manager.schemas.conflicts import (
+    ConflictCount,
     ConflictGraphResult,
     ConflictSeverity,
     ConflictsOverview,
@@ -32,13 +34,18 @@ from rippermod_manager.schemas.conflicts import (
     ResolveRequest,
     ResolveResult,
 )
-from rippermod_manager.services.conflict_graph_service import build_conflict_graph
+from rippermod_manager.services.conflict_graph_service import (
+    build_conflict_graph,
+    conflict_count,
+)
 from rippermod_manager.services.conflict_service import (
     check_installed_conflicts,
     check_pairwise_conflict,
 )
-from rippermod_manager.services.conflicts.engine import ConflictEngine
+from rippermod_manager.services.conflicts.auto_reindex import conflict_reindex_busy
+from rippermod_manager.services.conflicts.engine import reindex_game
 from rippermod_manager.services.conflicts_inbox_service import (
+    ResolveRefusedError,
     dismiss_conflict,
     get_conflicts_overview,
     get_mod_conflict_detail,
@@ -135,13 +142,8 @@ def reindex_conflicts(
     """Trigger a full conflict re-scan for all installed mods."""
     game = get_game_or_404(game_name, session)
 
-    from rippermod_manager.services.archive_index_service import index_game_archives
-
-    index_game_archives(game, session, force_reindex=False)
-
     start = time.perf_counter()
-    engine = ConflictEngine()
-    evidence = engine.run(game, session)
+    evidence = reindex_game(game, session)
     elapsed_ms = int((time.perf_counter() - start) * 1000)
 
     by_kind: dict[ConflictKind, int] = {k: 0 for k in ConflictKind}
@@ -153,6 +155,17 @@ def reindex_conflicts(
         by_kind=by_kind,
         duration_ms=elapsed_ms,
     )
+
+
+@_engine_router.get("/reindex/status", response_model=ConflictReindexStatus)
+def conflict_reindex_status(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> ConflictReindexStatus:
+    """Background conflict reindex state: ``running`` while one waits or runs, else ``idle``."""
+    game = get_game_or_404(game_name, session)
+    busy = conflict_reindex_busy(game.id)  # type: ignore[arg-type]
+    return ConflictReindexStatus(state="running" if busy else "idle")
 
 
 @_engine_router.get("/archive-summaries", response_model=ArchiveConflictSummariesResult)
@@ -313,6 +326,8 @@ def inbox_resolve(
         raise HTTPException(404, "Installed mod not found")
     try:
         return resolve_conflict(game, mod, session, action=data.action)
+    except ResolveRefusedError as exc:
+        raise HTTPException(409, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except FileNotFoundError as exc:
@@ -359,6 +374,16 @@ def conflict_graph(
     """Build a conflict graph across all installed mods and uninstalled archives."""
     game = get_game_or_404(game_name, session)
     return build_conflict_graph(game, session, resource_hash=resource_hash)
+
+
+@_engine_router.get("/count", response_model=ConflictCount)
+def conflicts_count(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> ConflictCount:
+    """The one conflict number: mods on disk that share files, and how many files."""
+    game = get_game_or_404(game_name, session)
+    return conflict_count(game, session)
 
 
 router.include_router(_engine_router)

@@ -47,7 +47,7 @@ export function useInstallFlow(
   const activeDownloadByModId = useMemo(() => {
     const map = new Map<number, DownloadJobOut>();
     for (const job of downloadJobs) {
-      if (job.status === "downloading" || job.status === "pending") {
+      if (job.status === "downloading" || job.status === "pending" || job.status === "queued") {
         map.set(job.nexus_mod_id, job);
       }
     }

@@ -61,6 +61,7 @@ from rippermod_manager.schemas.collection import (
     CollectionProgressEvent,
     CollectionUpdateOut,
 )
+from rippermod_manager.services.nexus_helpers import parse_size_in_bytes
 from rippermod_manager.services.paths import resolve_mods_dir
 
 logger = logging.getLogger(__name__)
@@ -173,17 +174,9 @@ def start_install(
     # Force-reinstall path: cascade through the previous install BEFORE
     # the upsert so the orchestrator starts from a clean row + zero child
     # mods. No-op when nothing is installed yet for this (game, slug).
+    # The router runs it first in a worker thread; this call then finds nothing.
     if request.force_reinstall:
-        existing = session.exec(
-            select(InstalledCollection).where(
-                InstalledCollection.game_id == game.id,
-                InstalledCollection.slug == preview.slug,
-            )
-        ).first()
-        if existing is not None and existing.id is not None:
-            if existing.id in _event_queues:
-                raise CollectionInstallInProgressError(existing.id)
-            uninstall_collection(existing.id, session)
+        uninstall_previous_install(game.id, preview.slug, session)
 
     collection = _upsert_collection_row(game, preview, session)
 
@@ -242,6 +235,47 @@ async def stream_events(collection_id: int) -> AsyncIterator[CollectionProgressE
         if event is None:
             break
         yield event
+
+
+def uninstall_previous_install(game_id: int, slug: str, session: Session) -> None:
+    """Uninstall the (game, slug) collection before a force reinstall; no-op without one.
+
+    Raises :class:`CollectionInstallInProgressError` while that install still runs.
+    """
+    existing = session.exec(
+        select(InstalledCollection).where(
+            InstalledCollection.game_id == game_id,
+            InstalledCollection.slug == slug,
+        )
+    ).first()
+    if existing is None or existing.id is None:
+        return
+    if existing.id in _event_queues:
+        raise CollectionInstallInProgressError(existing.id)
+    uninstall_collection(existing.id, session)
+
+
+def uninstall_previous_install_in_own_session(game_id: int, slug: str) -> None:
+    """:func:`uninstall_previous_install` with its own session, for ``asyncio.to_thread``.
+
+    Its deploy waits for a background REDmod compile and may run redMod.exe, so an
+    async caller must not run it on the event loop.
+    """
+    from rippermod_manager.database import engine
+
+    with Session(engine) as s:
+        uninstall_previous_install(game_id, slug, s)
+
+
+def _final_deploy(game_id: int) -> None:
+    """Deploy *game_id* in its own session; run through ``asyncio.to_thread``."""
+    from rippermod_manager.database import engine
+    from rippermod_manager.services.vfs.deploy_service import deploy
+
+    with Session(engine) as s:
+        game = s.get(Game, game_id)
+        if game is not None:
+            deploy(game, s)
 
 
 def uninstall_collection(collection_id: int, session: Session) -> dict[str, int]:
@@ -517,7 +551,8 @@ def _shape_preview(slug: str, rev: dict[str, Any]) -> CollectionPreviewOut:
         if not file_id or not mod_id:
             # Malformed entry -- skip rather than fail the whole preview.
             continue
-        size = int(file.get("size") or 0)
+        # ``size`` is kilobytes in the Nexus schema; ``sizeInBytes`` is bytes (as a string).
+        size = parse_size_in_bytes(file.get("sizeInBytes"))
         total_size += size
         mods.append(
             CollectionModEntry(
@@ -810,19 +845,24 @@ def _unregister_nxm_wait(nexus_mod_id: int, nexus_file_id: int) -> None:
 
 
 async def _wait_for_download(job_id: int) -> DownloadJob:
-    """Poll the DB until the download job leaves the in-flight states."""
+    """Poll the DB until the download job leaves the in-flight states.
+
+    The timeout counts only time spent out of ``queued``: a job waiting for a
+    download slot (S6) is not hanging.
+    """
     from rippermod_manager.database import engine
 
     elapsed = 0.0
     while elapsed < _DOWNLOAD_TIMEOUT_S:
         await asyncio.sleep(_DOWNLOAD_POLL_INTERVAL_S)
-        elapsed += _DOWNLOAD_POLL_INTERVAL_S
         with Session(engine) as s:
             job = s.get(DownloadJob, job_id)
             if job is None:
                 raise RuntimeError(f"Download job {job_id} vanished")
             if job.status in ("completed", "failed", "cancelled"):
                 return job
+            if job.status != "queued":
+                elapsed += _DOWNLOAD_POLL_INTERVAL_S
     raise TimeoutError(f"Download job {job_id} did not complete in {_DOWNLOAD_TIMEOUT_S}s")
 
 
@@ -846,7 +886,6 @@ async def _run_install(
     """
     from rippermod_manager.database import engine
     from rippermod_manager.services.download_service import create_and_start_download
-    from rippermod_manager.services.vfs.deploy_service import deploy
 
     completed = 0
     failed = 0
@@ -1104,10 +1143,9 @@ async def _run_install(
             status="installing",
         )
         try:
-            with Session(engine) as s:
-                game = s.get(Game, game_id)
-                if game is not None:
-                    deploy(game, s)
+            # Off the loop: deploy waits for a background REDmod compile and may
+            # run redMod.exe itself, which would freeze every other request.
+            await asyncio.to_thread(_final_deploy, game_id)
         except (OSError, RuntimeError):
             logger.exception("Collection %d: final deploy failed", collection_id)
 

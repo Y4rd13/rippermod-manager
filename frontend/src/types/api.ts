@@ -55,6 +55,11 @@ export interface CorrelationBrief {
   picture_url: string;
   nexus_url: string;
   updated_at: string | null;
+  /** True when the match is strong enough (or user-confirmed) to treat the mod as on disk. */
+  on_disk: boolean;
+  /** From the game's NexusDownload row for this mod; false without one. */
+  is_endorsed: boolean;
+  is_tracked: boolean;
 }
 
 export interface ModGroup {
@@ -169,6 +174,8 @@ export interface ModUpdate {
   source_archive: string | null;
   reason: string;
   local_download_date: number | null;
+  /** How the update was found: a newer version string, a newer upload, or both. */
+  detection_method: "timestamp" | "version" | "both";
 }
 
 export interface GameVersion {
@@ -197,6 +204,14 @@ export interface UpdateCheckResult {
 
 // Install feature types
 
+export type ArchiveStatus =
+  | "managed"
+  | "not_managed"
+  | "possible_match"
+  | "other_version"
+  | "not_installed"
+  | "orphan";
+
 export interface AvailableArchive {
   filename: string;
   size: number;
@@ -207,6 +222,9 @@ export interface AvailableArchive {
   installed_mod_id: number | null;
   last_downloaded_at: string | null;
   is_empty: boolean;
+  status: ArchiveStatus;
+  mod_group_id: number | null;
+  match_score: number | null;
 }
 
 export interface ArchiveDeleteResult {
@@ -268,12 +286,20 @@ export interface ArchivePreviewResult {
   files: ArchiveFileEntry[];
 }
 
+/** The part of the backend's DeployReport that the install toasts read. */
+export interface InstallDeploySummary {
+  failed: number;
+  preflight: { ok: boolean; reasons: string[]; game_running: boolean } | null;
+}
+
 export interface InstallResult {
   installed_mod_id: number;
   name: string;
   files_extracted: number;
   files_skipped: number;
   files_overwritten: number;
+  redmod_compile_queued?: boolean;
+  deploy?: InstallDeploySummary | null;
 }
 
 export interface UninstallResult {
@@ -285,6 +311,8 @@ export interface UninstallResult {
   displaced_not_restored: string[];
   /** Paths another installed mod should now provide but could not be linked. */
   not_relinked: string[];
+  /** A background REDmod compile was requested (the mod had files under mods/). */
+  redmod_compile_queued: boolean;
 }
 
 export interface AdoptGroup {
@@ -308,6 +336,8 @@ export interface ToggleResult {
   failed: number;
   displaced_not_restored: string[];
   not_relinked: string[];
+  /** A background REDmod compile was requested (the mod had files under mods/). */
+  redmod_compile_queued: boolean;
 }
 
 export interface DependentMod {
@@ -343,6 +373,8 @@ export interface HealthIssueOut {
   nexus_url: string | null;
   action_mod_id: number | null;
   required_name: string;
+  /** Set for `unmanaged_requirement`: the on-disk mod group the user can adopt. */
+  mod_group_id: number | null;
 }
 
 export interface HealthReport {
@@ -428,10 +460,21 @@ export interface ConflictSummaryResult {
   evidence: ConflictEvidenceOut[];
 }
 
+/** The one conflict number: mods on disk that share files, and how many files they share. */
+export interface ConflictCount {
+  mods_with_conflicts: number;
+  file_conflicts: number;
+}
+
 export interface ReindexResult {
   conflicts_found: number;
   by_kind: Partial<Record<ConflictKind, number>>;
   duration_ms: number;
+}
+
+/** Background conflict reindex state for one game; "running" while it waits or runs. */
+export interface ConflictReindexStatus {
+  state: "idle" | "running";
 }
 
 // Conflicts inbox types
@@ -531,6 +574,7 @@ export interface ProfileLoadResult {
   profile: ProfileOut;
   skipped_mods: SkippedMod[];
   skipped_count: number;
+  failed_count: number;
 }
 
 export interface ProfileImportResult {
@@ -596,6 +640,7 @@ export interface DownloadRequest {
 
 export type DownloadStatus =
   | "pending"
+  | "queued"
   | "downloading"
   | "completed"
   | "failed"
@@ -618,6 +663,8 @@ export interface DownloadJobOut {
 export interface DownloadStartResult {
   job: DownloadJobOut | null;
   requires_nxm: boolean;
+  /** With requires_nxm: the mod's Files tab on Nexus, opened for the user. */
+  nexus_url?: string | null;
   requires_file_selection: boolean;
   // True when the freshly-arrived nxm:// key was consumed by an in-flight
   // Collections install orchestrator instead of starting a standalone
@@ -798,6 +845,13 @@ export interface PreferenceOut {
   winner_mod_name: string;
   loser_mod_id: number;
   loser_mod_name: string;
+}
+
+/** The lines of archive/pc/mod/modlist.txt, in file order. */
+export interface ModlistFileResult {
+  exists: boolean;
+  path: string;
+  lines: string[];
 }
 
 export interface ModlistViewResult {

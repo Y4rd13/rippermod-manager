@@ -30,11 +30,11 @@
 - **Nexus Mods Integration** — Connects to your Nexus account via SSO, syncs tracked/endorsed mods, fetches mod metadata, and searches Nexus by name via GraphQL v2.
 - **Endorse & Track** — Toggle endorse/track status on any mod directly from card buttons, context menus, or the mod detail modal — syncs with the Nexus Mods API in real time.
 - **Auto-Correlation** — Multi-tier matching pipeline: filename ID extraction, MD5 hash batch lookup, file content reverse lookup, endorsed/tracked sync, Nexus collection matching, mod requirement propagation, and Jaccard + Jaro-Winkler fuzzy matching. Manual reassign, confirm, and reject actions.
-- **Mod Installation** — Install mods from downloaded archives with pre-install preview, conflict detection, skip/overwrite resolution, and enable/disable toggling. Includes FOMOD installer wizard for scripted mod packages.
-- **Clean Game Folder & Smart Deployment** — Mod content stays in a managed staging directory (`<install>/downloaded_mods/`). The game directory itself is untouched — only hardlinks (and REDmod junctions) are placed there when a mod is deployed via the `/deploy` endpoint or auto-deploy on launch. Steam "Verify integrity" sees only vanilla files. Includes: **Deploy / Undeploy** controls, **auto-compile REDmods** (runs `redMod.exe deploy` for you on install/enable), **drift detection** (catches game patches or external tools that modify the game folder), **one-time migration tool** for pre-existing in-place installs, and instant profile switching via DB flag + link rebuild.
+- **Mod Installation** — Install mods from downloaded archives with pre-install preview, conflict detection, a choice to install with the new mod winning the shared paths or without those files, and enable/disable toggling. Includes FOMOD installer wizard for scripted mod packages.
+- **Clean Game Folder & Smart Deployment** — Mod content stays in a managed staging directory (`<install>/downloaded_mods/`). The game directory itself is untouched — only hardlinks (and REDmod junctions) are placed there when a mod is deployed via the `/deploy` endpoint or auto-deploy on launch. Steam "Verify integrity" sees only vanilla files. Includes: **Deploy / Undeploy** controls, **auto-compile REDmods** (runs `redMod.exe deploy` for you on install/enable), **drift detection** (catches game patches or external tools that modify the game folder), **Adopt** for mods already in the game folder (manual or Vortex installs), which brings them under management without reinstalling, and instant profile switching via DB flag + link rebuild.
 - **Conflict Detection** — Multi-layer conflict engine: file-level overlap detection, archive-level resource conflicts with dependency-aware severity classification, redscript annotation analysis, TweakXL conflict scanning, and a conflict inbox for resolution. Disable, uninstall, or set load order preferences directly from the conflict view with Nexus Mods links on every archive.
 - **Load Order** — View and manage archive load order with preference rules, modlist.txt generation, and dry-run previews.
-- **Archive Management** — Browse archive contents, link/unlink archives to Nexus mods, delete, and clean up orphaned mod archives from the downloads staging folder.
+- **Archive Management** — Browse archive contents, link/unlink archives to Nexus mods, delete, and clean up orphan archives (no Nexus id and not installed by RipperMod) from the downloads staging folder.
 - **Download Manager** — Download mod archives directly from Nexus Mods with progress tracking, NXM deep link handling, and premium account support.
 - **Trending Mods** — Browse trending and recently updated mods from Nexus with one-click install, endorse, or track actions.
 - **Endorsed & Tracked Tabs** — Browse your endorsed and tracked mods from Nexus with install actions or direct Nexus links.
@@ -260,7 +260,6 @@ All endpoints are prefixed with `/api/v1/`.
 | `POST` | `/games/{name}/install/deploy` | Deploy all enabled mods to the game folder (hardlinks + REDmod junctions) |
 | `POST` | `/games/{name}/install/undeploy` | Remove all VFS links from the game folder (revert to vanilla) |
 | `GET` | `/games/{name}/install/deploy/status` | Drift report — counts of linked, missing, and foreign files per mod |
-| `POST` | `/games/{name}/install/migrate-to-vfs` | One-time migration: convert existing in-place installs to staged + linked layout |
 | `GET` | `/games/{name}/install/untracked-files` | List files in the game directory not owned by any installed mod |
 
 </details>

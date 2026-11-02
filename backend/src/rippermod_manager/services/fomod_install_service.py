@@ -432,13 +432,21 @@ def install_fomod(
     if auto_deploy:
         from rippermod_manager.services.vfs import deploy_service
 
-        deploy_report = deploy_service.deploy(game, session)
+        # deploy() also rewrites modlist.txt with the new archives in the load order.
+        deploy_report = deploy_service.deploy(game, session, compile_redmod=False)
 
-        # Regenerate modlist.txt to include new archives in the load order
-        from rippermod_manager.services.modlist_service import write_modlist
+    # New REDmod content loads only once compiled (S2); compile in the background.
+    redmod_compile_queued = False
+    # A deploy refused by pre-flight (game running) linked nothing to compile.
+    if deploy_report is not None and deploy_report.preflight is None:
+        from rippermod_manager.services.vfs.deploy_service import has_redmod_files
+        from rippermod_manager.services.vfs.redmod_scheduler import request_redmod_compile
 
-        write_modlist(game, session)
+        _ = installed.files  # ensure files are loaded
+        redmod_compile_queued = has_redmod_files(installed) and request_redmod_compile(game)
+    from rippermod_manager.services.conflicts.auto_reindex import request_conflict_reindex
 
+    request_conflict_reindex(game.id)
     logger.info(
         "FOMOD installed '%s' (%d files staged, %d overwritten in staging)",
         mod_name,
@@ -453,4 +461,5 @@ def install_fomod(
         files_overwritten=overwritten,
         installed_mod_name_safe=safe_name,
         deploy=deploy_report,
+        redmod_compile_queued=redmod_compile_queued,
     )

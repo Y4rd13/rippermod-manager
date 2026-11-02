@@ -30,6 +30,7 @@ from rippermod_manager.schemas.profile import (
     ProfileUpdate,
     SkippedMod,
 )
+from rippermod_manager.services import install_service
 from rippermod_manager.services.install_service import toggle_mod
 from rippermod_manager.services.vfs.primitives import VfsError
 
@@ -245,6 +246,7 @@ def preview_profile(profile: Profile, game: Game, session: Session) -> ProfileDi
 
 def load_profile(profile: Profile, game: Game, session: Session) -> ProfileLoadResult:
     """Apply a profile: enable/disable mods to match the saved state."""
+    install_service.ensure_game_closed()
     _ = profile.entries
     mod_state: dict[int, bool] = {}
     profile_mod_names: dict[int, str] = {}
@@ -275,7 +277,7 @@ def load_profile(profile: Profile, game: Game, session: Session) -> ProfileLoadR
     failed: list[ProfileModFailure] = []
     for mod in [*to_disable, *to_enable]:
         try:
-            result = toggle_mod(mod, game, session, commit=False)
+            result = toggle_mod(mod, game, session, commit=False, check_game=False)
         except (VfsError, OSError) as exc:
             session.refresh(mod)
             failed.append(

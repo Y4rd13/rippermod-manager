@@ -16,6 +16,7 @@ from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.models.mod import ModFile, ModGroup
 from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 from rippermod_manager.schemas.mod import CorrelateResult
+from rippermod_manager.services.rejections import rejected_pairs
 
 logger = logging.getLogger(__name__)
 # Characters that filesystem paths often strip (apostrophes, quotes, parens)
@@ -90,14 +91,42 @@ def token_jaccard(a: str, b: str) -> float:
     return len(intersection) / len(union)
 
 
+def _is_word_substring(a: str, b: str) -> bool:
+    """Check whether the shorter of two normalized names sits on word boundaries in the longer.
+
+    The shorter name must start at a word start. A single-word name must also end at a word
+    end, so "ash" does not match inside "splash", and the longer name may have at most two
+    words, so "ash" does not stand for "ash female v preset". A name of two or more words
+    only has to start at a word start.
+    """
+    short, long = (a, b) if len(a) <= len(b) else (b, a)
+    if not short:
+        return False
+    multi_token = len(short.split()) >= 2
+    if not multi_token and len(long.split()) > 2:
+        return False
+    start = long.find(short)
+    while start != -1:
+        end = start + len(short)
+        starts_word = start == 0 or not long[start - 1].isalnum()
+        ends_word = end == len(long) or not long[end].isalnum()
+        if starts_word and (multi_token or ends_word):
+            return True
+        start = long.find(short, start + 1)
+    return False
+
+
 def compute_name_score(local_name: str, nexus_name: str) -> tuple[float, str]:
     ln = normalize(local_name)
     nn = normalize(nexus_name)
 
+    if not ln or not nn:
+        return 0.0, "fuzzy"
+
     if ln == nn:
         return 1.0, "exact"
 
-    if ln in nn or nn in ln:
+    if _is_word_substring(ln, nn):
         return 0.9, "substring"
 
     jaccard = token_jaccard(local_name, nexus_name)
@@ -178,52 +207,6 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
         )
     ).all()
 
-    # Re-validate name-based correlations: NexusDownload names may have
-    # changed since the correlation was created (sync updates mod_name).
-    # Purge stale ones so they get re-evaluated with current names.
-    _NAME_METHODS = {"exact", "substring", "fuzzy"}
-    dl_map: dict[int, NexusDownload] = {dl.id: dl for dl in downloads if dl.id is not None}
-    group_map: dict[int, ModGroup] = {g.id: g for g in groups if g.id is not None}
-    purged = 0
-    for corr in list(existing):
-        if corr.confirmed_by_user or corr.method not in _NAME_METHODS:
-            continue
-        grp = group_map.get(corr.mod_group_id)
-        dl = dl_map.get(corr.nexus_download_id)
-        if not grp or not dl:
-            session.delete(corr)
-            existing.remove(corr)
-            purged += 1
-            continue
-        score, _ = compute_name_score(grp.display_name, dl.mod_name)
-        if score < 0.4:
-            logger.info(
-                "Purging stale correlation: '%s' -> '%s' (was %s/%.2f, now %.2f)",
-                grp.display_name,
-                dl.mod_name,
-                corr.method,
-                corr.score,
-                score,
-            )
-            session.delete(corr)
-            existing.remove(corr)
-            purged += 1
-    if purged:
-        logger.info("Purged %d stale name-based correlations", purged)
-
-    already_matched: set[int] = set()
-    already_matched_nexus_ids: set[int] = set()
-    for corr in existing:
-        already_matched.add(corr.mod_group_id)
-        dl = dl_map.get(corr.nexus_download_id)
-        if dl:
-            already_matched_nexus_ids.add(dl.nexus_mod_id)
-
-    nexus_id_map: dict[int, NexusDownload] = {}
-    for dl in downloads:
-        if dl.nexus_mod_id:
-            nexus_id_map.setdefault(dl.nexus_mod_id, dl)
-
     # Build endorsement count map for popularity tiebreaking (scoped to this game)
     game_nexus_ids = {dl.nexus_mod_id for dl in downloads if dl.nexus_mod_id}
     meta_rows = (
@@ -247,6 +230,74 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
         _ = g.files
         group_category_map[g.id] = classify_group_category(g.files)  # type: ignore[arg-type]
 
+    # Re-validate name-based correlations: NexusDownload names may have
+    # changed since the correlation was created (sync updates mod_name), and the
+    # name rule may have changed since the score was stored. Re-score those that
+    # still clear 0.4 and purge the rest so they get re-evaluated.
+    _NAME_METHODS = {"exact", "substring", "fuzzy"}
+    dl_map: dict[int, NexusDownload] = {dl.id: dl for dl in downloads if dl.id is not None}
+    group_map: dict[int, ModGroup] = {g.id: g for g in groups if g.id is not None}
+    purged = 0
+    for corr in list(existing):
+        if corr.confirmed_by_user or corr.method not in _NAME_METHODS:
+            continue
+        grp = group_map.get(corr.mod_group_id)
+        dl = dl_map.get(corr.nexus_download_id)
+        if not grp or not dl:
+            session.delete(corr)
+            existing.remove(corr)
+            purged += 1
+            continue
+        score, method = compute_name_score(grp.display_name, dl.mod_name)
+        # Same category penalty as the slow path, or every run would undo it.
+        if score > 0 and not _categories_compatible(
+            group_category_map.get(grp.id),  # type: ignore[arg-type]
+            nexus_category_map.get(dl.nexus_mod_id, ""),
+        ):
+            score = max(0.0, score - _CATEGORY_PENALTY)
+        if score >= 0.4 and (score, method) != (corr.score, corr.method):
+            # Keep the stored score in step with the current name rule.
+            corr.score = score
+            corr.method = method
+            corr.reasoning = f"re-scored: {method} name similarity {score:.2f}"
+            session.add(corr)
+            continue
+        if score < 0.4:
+            logger.info(
+                "Purging stale correlation: '%s' -> '%s' (was %s/%.2f, now %.2f)",
+                grp.display_name,
+                dl.mod_name,
+                corr.method,
+                corr.score,
+                score,
+            )
+            session.delete(corr)
+            existing.remove(corr)
+            purged += 1
+    if purged:
+        logger.info("Purged %d stale name-based correlations", purged)
+
+    # The endorsed/collection/requirement boost applies only from the on-disk line:
+    # re-score those that were stored with the old fixed score.
+    from rippermod_manager.services.name_boost import revalidate_boosted
+
+    revalidate_boosted(session, existing, group_map, dl_map)
+
+    rejected = rejected_pairs(session, game.id)  # type: ignore[arg-type]
+
+    already_matched: set[int] = set()
+    already_matched_nexus_ids: set[int] = set()
+    for corr in existing:
+        already_matched.add(corr.mod_group_id)
+        dl = dl_map.get(corr.nexus_download_id)
+        if dl:
+            already_matched_nexus_ids.add(dl.nexus_mod_id)
+
+    nexus_id_map: dict[int, NexusDownload] = {}
+    for dl in downloads:
+        if dl.nexus_mod_id:
+            nexus_id_map.setdefault(dl.nexus_mod_id, dl)
+
     # Auto-correlate from installed mods (source of truth)
     installed_mods = session.exec(
         select(InstalledMod).where(
@@ -259,7 +310,7 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
         if im.mod_group_id in already_matched:
             continue
         dl = nexus_id_map.get(im.nexus_mod_id)  # type: ignore[arg-type]
-        if not dl:
+        if not dl or (im.mod_group_id, dl.nexus_mod_id) in rejected:
             continue
         corr = ModNexusCorrelation(
             mod_group_id=im.mod_group_id,  # type: ignore[arg-type]
@@ -295,7 +346,10 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
             parsed = parse_mod_filename(f.filename)
             if parsed.nexus_mod_id and parsed.nexus_mod_id in nexus_id_map:
                 dl_candidate = nexus_id_map[parsed.nexus_mod_id]
-                if dl_candidate.nexus_mod_id not in already_matched_nexus_ids:
+                if (
+                    dl_candidate.nexus_mod_id not in already_matched_nexus_ids
+                    and (group.id, dl_candidate.nexus_mod_id) not in rejected
+                ):
                     best_download = dl_candidate
                     best_score = 0.95
                     best_method = "filename_id"
@@ -306,6 +360,8 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
             local_cat = group_category_map.get(group.id)  # type: ignore[arg-type]
             for dl in downloads:
                 if dl.nexus_mod_id in already_matched_nexus_ids:
+                    continue
+                if (group.id, dl.nexus_mod_id) in rejected:
                     continue
                 score, method = compute_name_score(group.display_name, dl.mod_name)
                 # Apply category penalty for incompatible types

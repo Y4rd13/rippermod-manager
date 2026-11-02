@@ -103,7 +103,7 @@ Got different mod setups for different playthroughs? Use profiles:
 
 [size=3][b]Step 7 — Keeping Mods Updated[/b][/size]
 
-Go to the [b]Updates[/b] page (or the Updates tab on your game's page) to see which mods have newer versions available on Nexus. The app compares your installed version against the latest on Nexus using download timestamps for accuracy — no false positives from version string quirks.
+Go to the [b]Updates[/b] page (or the Updates tab on your game's page) to see which mods have newer versions available on Nexus. The app compares your installed version with the version on Nexus, and the date of your file with the latest upload on Nexus. Each row shows which signal flagged it: [b]Version[/b], [b]Newer file[/b] or [b]Version + file[/b]. A local version that cannot be compared can still show an update that is not a real one.
 
 Click [b]Download[/b] to grab the latest version, then install it from the Archives tab.
 
@@ -125,7 +125,7 @@ Click [b]Download[/b] to grab the latest version, then install it from the Archi
 
 [list]
 [*][b]Endorse your mods on Nexus[/b] — This dramatically improves scan accuracy. The endorsed list is one of the strongest signals in the matching pipeline.
-[*][b]Keep archives around[/b] — The app uses MD5 hashes from your archives for matching. Deleting them removes a gold-standard matching signal.
+[*][b]Keep archives around[/b] - The app computes the MD5 of your archives to tell which Nexus mod and file each one is. Deleting them removes that signal.
 [*][b]Use the detail modal[/b] — Click any mod card to see full Nexus info, files, requirements, and changelogs without leaving the app.
 [*][b]Right-click for context menus[/b] — Most lists and cards support right-click actions for quick operations.
 [*][b]Bulk select with checkboxes[/b] — Tables have checkboxes for selecting multiple items at once. A bulk action bar appears at the bottom.

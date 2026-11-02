@@ -25,6 +25,11 @@ class GameUpdate(BaseModel):
     install_path: str | None = None
 
 
+class ModPathCreate(BaseModel):
+    relative_path: str
+    description: str = ""
+
+
 class ModPathOut(BaseModel):
     id: int
     relative_path: str

@@ -26,7 +26,7 @@ def _gql_revision_payload(slug: str = "starter", rev: int = 1) -> dict:
         "revisionStatus": "published",
         "createdAt": "2026-05-01T00:00:00Z",
         "updatedAt": "2026-05-10T00:00:00Z",
-        "fileSize": 1024,
+        "totalSize": 1024,
         "collection": {
             "id": "coll_uuid",
             "slug": slug,
@@ -47,7 +47,8 @@ def _gql_revision_payload(slug: str = "starter", rev: int = 1) -> dict:
                     "fileId": 1001,
                     "name": "Cool Mod.zip",
                     "version": "1.0",
-                    "size": 5000,
+                    "size": 5,
+                    "sizeInBytes": "5000",
                     "uri": "Cool_Mod-1001.zip",
                     "mod": {
                         "modId": 100,
@@ -65,7 +66,8 @@ def _gql_revision_payload(slug: str = "starter", rev: int = 1) -> dict:
                     "fileId": 2002,
                     "name": "Optional Mod.zip",
                     "version": "0.5",
-                    "size": 1500,
+                    "size": 2,
+                    "sizeInBytes": "1500",
                     "uri": "Optional_Mod-2002.zip",
                     "mod": {
                         "modId": 200,
@@ -105,6 +107,52 @@ class TestShapePreview:
         assert out.mods[0].nexus_file_id == 1001
         assert out.mods[0].optional is False
         assert out.mods[1].optional is True
+
+    def test_collection_preview_sums_bytes(self):
+        """``size`` is kilobytes; only ``sizeInBytes`` may feed the byte total."""
+        rev = _gql_revision_payload()
+        rev["modFiles"] = [
+            {
+                "optional": False,
+                "file": {
+                    "fileId": 1,
+                    "size": 1024,
+                    "sizeInBytes": "1048576",
+                    "mod": {"modId": 100, "name": "M"},
+                },
+            }
+        ]
+        out = svc._shape_preview("starter", rev)
+        assert out.total_size_bytes == 1048576
+        assert out.mods[0].size_bytes == 1048576
+
+    @pytest.mark.parametrize("raw", [None, "", "n/a", "-3", True])
+    def test_collection_preview_unparsable_size_in_bytes_counts_zero(self, raw):
+        rev = _gql_revision_payload()
+        rev["modFiles"] = [
+            {
+                "optional": False,
+                "file": {
+                    "fileId": 1,
+                    "sizeInBytes": raw,
+                    "mod": {"modId": 100, "name": "M"},
+                },
+            }
+        ]
+        out = svc._shape_preview("starter", rev)
+        assert out.total_size_bytes == 0
+        assert len(out.mods) == 1
+
+    def test_collection_preview_ignores_kilobyte_size_without_bytes(self):
+        rev = _gql_revision_payload()
+        rev["modFiles"] = [
+            {
+                "optional": False,
+                "file": {"fileId": 1, "size": 1024, "mod": {"modId": 100, "name": "M"}},
+            }
+        ]
+        out = svc._shape_preview("starter", rev)
+        assert out.total_size_bytes == 0
 
     def test_skips_malformed_entries_missing_ids(self):
         rev = _gql_revision_payload()
@@ -463,9 +511,17 @@ class TestRunInstallHappyPath:
         )
 
         deploy_called: list[int] = []
+        on_loop: list[bool] = []
 
         def _fake_deploy(_game, _session):
             deploy_called.append(1)
+            # The final deploy waits on compile_lock and may run redMod.exe: it
+            # must run in a worker thread, never on the event loop.
+            try:
+                asyncio.get_running_loop()
+                on_loop.append(True)
+            except RuntimeError:
+                on_loop.append(False)
 
         # Wire up the queue manually so _emit has a sink, then drain in parallel.
         from rippermod_manager.services.collection_install_service import _event_queues
@@ -538,6 +594,7 @@ class TestRunInstallHappyPath:
         # Sanity: every mod got an install attempt + a deploy at the end.
         assert len(install_calls) == 2
         assert len(deploy_called) == 1
+        assert on_loop == [False]
 
         # Final row state.
         session.expire_all()
@@ -1438,3 +1495,35 @@ class TestForceReinstall:
             sql_select(InstalledCollection).where(InstalledCollection.slug == "starter")
         ).all()
         assert len(rows) == 1
+
+
+async def test_wait_for_download_timeout_starts_when_job_leaves_queued(
+    session, engine, make_game, monkeypatch
+):
+    import asyncio
+
+    from rippermod_manager.models.download import DownloadJob
+
+    monkeypatch.setattr("rippermod_manager.database.engine", engine)
+    monkeypatch.setattr(svc, "_DOWNLOAD_POLL_INTERVAL_S", 0.01)
+    monkeypatch.setattr(svc, "_DOWNLOAD_TIMEOUT_S", 0.05)
+    game = make_game()
+    job = DownloadJob(game_id=game.id, nexus_mod_id=1, nexus_file_id=1, status="queued")
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+
+    async def progress() -> None:
+        await asyncio.sleep(0.1)  # longer than the timeout, all of it queued
+        job.status = "downloading"
+        session.add(job)
+        session.commit()
+        await asyncio.sleep(0.02)
+        job.status = "completed"
+        session.add(job)
+        session.commit()
+
+    mover = asyncio.create_task(progress())
+    result = await svc._wait_for_download(job.id)
+    await mover
+    assert result.status == "completed"

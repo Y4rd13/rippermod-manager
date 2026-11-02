@@ -22,6 +22,7 @@ from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
 from rippermod_manager.models.load_order import LoadOrderPreference
 from rippermod_manager.schemas.load_order import (
+    ModlistFileResult,
     ModlistGroupEntry,
     ModlistViewResult,
     PreferenceOut,
@@ -345,6 +346,20 @@ def get_modlist_view(game: Game, session: Session) -> ModlistViewResult:
         modlist_active=modlist_path.is_file(),
         modlist_path=str(modlist_path),
     )
+
+
+def read_modlist_file(game: Game) -> ModlistFileResult:
+    """Read ``modlist.txt`` as the game sees it.
+
+    A hand-edited file may hold bytes that are not UTF-8: they show as U+FFFD
+    instead of failing the request. A missing or unreadable file is ``exists=False``.
+    """
+    path = Path(game.install_path) / _ARCHIVE_DIR / "modlist.txt"
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ModlistFileResult(exists=False, path=str(path), lines=[])
+    return ModlistFileResult(exists=True, path=str(path), lines=text.splitlines())
 
 
 def apply_preferences_batch(

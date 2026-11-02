@@ -24,10 +24,12 @@ from rippermod_manager.schemas.conflicts import (
     ResolveResult,
 )
 from rippermod_manager.services.archive_layout import (
+    ArchiveLayout,
     apply_layout_transform,
     detect_layout,
     known_roots_for_game,
 )
+from rippermod_manager.services.doc_files import is_root_doc_file
 from rippermod_manager.services.install_service import (
     get_file_ownership_map,
     install_mod,
@@ -36,6 +38,10 @@ from rippermod_manager.services.install_service import (
 from rippermod_manager.services.paths import get_mods_dir
 
 logger = logging.getLogger(__name__)
+
+
+class ResolveRefusedError(Exception):
+    """The reinstall cannot be done safely; nothing was uninstalled."""
 
 
 def _compute_severity(conflict_count: int, total_files: int) -> InboxSeverity:
@@ -99,6 +105,8 @@ def get_conflicts_overview(game: Game, session: Session) -> ConflictsOverview:
 
         evidence: list[tuple[str, InstalledMod]] = []
         for file_path in archive_files:
+            if is_root_doc_file(file_path):
+                continue
             normalised_lower = file_path.replace("\\", "/").lower()
             owner = ownership.get(normalised_lower)
             if owner and owner.id != mod.id:
@@ -146,6 +154,8 @@ def get_mod_conflict_detail(
     evidence: list[ConflictEvidence] = []
     if archive_files:
         for file_path in archive_files:
+            if is_root_doc_file(file_path):
+                continue
             normalised_lower = file_path.replace("\\", "/").lower()
             owner = ownership.get(normalised_lower)
             if owner and owner.id != mod.id:
@@ -182,9 +192,32 @@ def resolve_conflict(
     if not archive_path.is_file():
         raise FileNotFoundError(f"Source archive not found: {mod.source_archive}")
 
+    # install_mod refuses FOMOD archives; refuse before uninstalling so the mod stays installed.
+    with open_archive(archive_path) as archive:
+        layout_result = detect_layout(
+            archive.list_entries(), known_roots_for_game(game.domain_name)
+        )
+    if layout_result.layout == ArchiveLayout.FOMOD:
+        raise ResolveRefusedError(
+            "This mod was installed with a FOMOD installer. "
+            "Reinstall it from Archives to choose its options again."
+        )
+
+    archive_files = _archive_files_for_mod(mod, game) or []
+    # An adopted mod can own files its archive lacks (a user.ini it wrote at runtime);
+    # uninstalling would delete them and the reinstall would not bring them back.
+    in_archive = {p.replace("\\", "/").lower() for p in archive_files}
+    outside = {f.relative_path.replace("\\", "/").lower() for f in mod.files} - in_archive
+    if outside:
+        n = len(outside)
+        noun, verb, pronoun = ("file", "is", "it") if n == 1 else ("files", "are", "them")
+        raise ResolveRefusedError(
+            f"This mod has {n} {noun} that {verb} not in its archive, such as settings it "
+            f"wrote. Reinstalling would delete {pronoun}."
+        )
+
     # Count current conflicts before reinstall
     ownership = get_file_ownership_map(session, game.id)  # type: ignore[arg-type]
-    archive_files = _archive_files_for_mod(mod, game) or []
     pre_conflicts = 0
     for file_path in archive_files:
         normalised_lower = file_path.replace("\\", "/").lower()

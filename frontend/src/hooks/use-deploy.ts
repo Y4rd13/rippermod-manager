@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 
+import { invalidateConflictViews } from "@/hooks/invalidate";
 import { api } from "@/lib/api-client";
+import { REDMOD_MISSING_MESSAGE, REDMOD_MISSING_REASON } from "@/lib/deploy-toast";
+import { toast } from "@/stores/toast-store";
+import type { ConflictReindexStatus } from "@/types/api";
 
 export interface DriftReport {
   total: number;
@@ -53,6 +58,15 @@ export interface DeployReport {
   redmod: RedmodDeployResult | null;
   /** Files a force deploy moved aside that could not go back: their path is occupied. */
   displaced_not_restored: string[];
+  /** Deploy traces a clean undeploy deleted (modlist.txt, r6/cache/modded). */
+  removed_paths: string[];
+}
+
+/** Background REDmod compile state for one game (toggle, uninstall, profile load). */
+export interface RedmodStatus {
+  state: "idle" | "compiling";
+  last_result: RedmodDeployResult | null;
+  last_finished_at: string | null;
 }
 
 /** Game-dir paths a force deploy would move aside to `<mods_dir>/_displaced/`. */
@@ -68,6 +82,10 @@ const statusPath = (gameName: string) =>
   `/api/v1/games/${encodeURIComponent(gameName)}/install/deploy/status`;
 const forcePreviewPath = (gameName: string) =>
   `/api/v1/games/${encodeURIComponent(gameName)}/install/deploy/force-preview`;
+const redmodStatusPath = (gameName: string) =>
+  `/api/v1/games/${encodeURIComponent(gameName)}/install/redmod/status`;
+const conflictReindexStatusPath = (gameName: string) =>
+  `/api/v1/games/${encodeURIComponent(gameName)}/conflicts/reindex/status`;
 const untrackedPath = (gameName: string) =>
   `/api/v1/games/${encodeURIComponent(gameName)}/install/untracked-files`;
 
@@ -79,6 +97,80 @@ export function useDeployStatus(gameName: string | null) {
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
+}
+
+/**
+ * Background REDmod compile state. Polls every 1.5 s only while a compile is
+ * running; toggle, uninstall and profile load invalidate it to start polling.
+ */
+export function useRedmodStatus(gameName: string | null) {
+  return useQuery<RedmodStatus, Error>({
+    queryKey: ["redmod-status", gameName],
+    queryFn: () => api.get<RedmodStatus>(redmodStatusPath(gameName!)),
+    enabled: !!gameName,
+    refetchInterval: (query) => (query.state.data?.state === "compiling" ? 1500 : false),
+  });
+}
+
+/**
+ * Watches background REDmod compiles and toasts their outcome: a failed compile
+ * shows its error, a missing redMod.exe shows ``REDMOD_MISSING_MESSAGE``.
+ * Results that already existed when the game was first seen are not toasted.
+ * Returns true while a compile is running.
+ */
+export function useRedmodCompileWatcher(gameName: string | null): boolean {
+  const { data } = useRedmodStatus(gameName);
+  const seen = useRef<{ game: string | null; finishedAt: string | null } | null>(null);
+
+  useEffect(() => {
+    if (!data) return;
+    const finishedAt = data.last_finished_at;
+    const prev = seen.current;
+    seen.current = { game: gameName, finishedAt };
+    if (prev === null || prev.game !== gameName) return;
+    if (!finishedAt || finishedAt === prev.finishedAt) return;
+    const result = data.last_result;
+    if (!result) return;
+    if (result.ran && !result.success) {
+      toast.error("REDmod compile failed", result.error || "redmod deploy returned an error");
+    } else if (!result.ran && result.skipped_reason === REDMOD_MISSING_REASON) {
+      toast.warning("REDmod not compiled", REDMOD_MISSING_MESSAGE);
+    }
+  }, [data, gameName]);
+
+  return data?.state === "compiling";
+}
+
+/**
+ * Background conflict reindex state. Polls every 1 s only while a reindex is
+ * running; ``invalidateGameState`` invalidates it to start polling after a change.
+ */
+export function useConflictReindexStatus(gameName: string | null) {
+  return useQuery<ConflictReindexStatus, Error>({
+    queryKey: ["conflict-reindex-status", gameName],
+    queryFn: () => api.get<ConflictReindexStatus>(conflictReindexStatusPath(gameName!)),
+    enabled: !!gameName,
+    refetchInterval: (query) => (query.state.data?.state === "running" ? 1000 : false),
+  });
+}
+
+/**
+ * Refetches every conflict view when the background reindex goes from running to
+ * idle, so the lists show the reindexed result instead of the one fetched before it.
+ */
+export function useConflictReindexWatcher(gameName: string | null): void {
+  const qc = useQueryClient();
+  const { data } = useConflictReindexStatus(gameName);
+  const prev = useRef<{ game: string | null; state: string } | null>(null);
+
+  useEffect(() => {
+    if (!data) return;
+    const before = prev.current;
+    prev.current = { game: gameName, state: data.state };
+    if (before?.game === gameName && before.state === "running" && data.state === "idle") {
+      invalidateConflictViews(qc, gameName);
+    }
+  }, [data, gameName, qc]);
 }
 
 /**

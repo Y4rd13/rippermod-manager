@@ -35,6 +35,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
+import { SortableHeader } from "@/components/ui/SortableHeader";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { VirtualCardGrid } from "@/components/ui/VirtualCardGrid";
@@ -119,7 +120,14 @@ interface Props {
   onReviewAdopt?: () => void;
 }
 
-type SortKey = "name" | "version" | "files" | "disabled" | "updated";
+type SortKey = "name" | "author" | "version" | "endorsements" | "files" | "disabled" | "updated";
+
+type SortDir = "asc" | "desc";
+
+/** Keys whose natural first click is the largest or newest first. */
+const DESC_BY_DEFAULT: ReadonlySet<SortKey> = new Set(["updated", "endorsements", "files"]);
+
+const defaultSortDir = (key: SortKey): SortDir => (DESC_BY_DEFAULT.has(key) ? "desc" : "asc");
 
 type RecognizedSortKey = "name" | "endorsements" | "updated" | "confidence";
 
@@ -150,8 +158,10 @@ const RECOGNIZED_SORT_OPTIONS: { value: RecognizedSortKey; label: string }[] = [
 const MANAGED_SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "updated", label: "Recently Updated" },
   { value: "name", label: "Mod Name" },
+  { value: "author", label: "Author" },
   { value: "disabled", label: "Status" },
   { value: "version", label: "Version" },
+  { value: "endorsements", label: "Endorsements" },
   { value: "files", label: "File Count" },
 ];
 
@@ -177,6 +187,18 @@ function ManagedModsGrid({
   viewMode: ModViewMode;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("updated");
+  const [sortDir, setSortDir] = useState<SortDir>(defaultSortDir("updated"));
+  // One sort state for the SortSelect and the list headers, so both stay in sync:
+  // the active header flips the direction, any other key starts at its default.
+  const handleSort = (key: string) => {
+    const k = key as SortKey;
+    if (k === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(k);
+    setSortDir(defaultSortDir(k));
+  };
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmDeleteModId, setConfirmDeleteModId] = useState<number | null>(null);
   const [fileAction, setFileAction] = useState<{ type: FileActionType; group: GroupedMod } | null>(null);
@@ -210,7 +232,10 @@ function ManagedModsGrid({
   const activeDownloadByModId = useMemo(() => {
     const map = new Map<number, DownloadJobOut>();
     for (const job of downloadJobs) {
-      if ((job.status === "downloading" || job.status === "pending") && job.nexus_mod_id) {
+      if (
+        (job.status === "downloading" || job.status === "pending" || job.status === "queued") &&
+        job.nexus_mod_id
+      ) {
         map.set(job.nexus_mod_id, job);
       }
     }
@@ -222,22 +247,30 @@ function ManagedModsGrid({
       [...groups].sort((a, b) => {
         const ap = a.primary;
         const bp = b.primary;
-        switch (sortKey) {
-          case "name":
-            return (ap.nexus_name || ap.name).localeCompare(bp.nexus_name || bp.name);
-          case "version":
-            return ap.installed_version.localeCompare(bp.installed_version);
-          case "files":
-            return b.totalFiles - a.totalFiles;
-          case "disabled":
-            return Number(ap.disabled) - Number(bp.disabled);
-          case "updated":
-            return isoToEpoch(bp.nexus_updated_at) - isoToEpoch(ap.nexus_updated_at);
-          default:
-            return 0;
-        }
+        // Ascending comparison; the direction flips it below.
+        const asc = (() => {
+          switch (sortKey) {
+            case "name":
+              return (ap.nexus_name || ap.name).localeCompare(bp.nexus_name || bp.name);
+            case "author":
+              return (ap.author ?? "").localeCompare(bp.author ?? "");
+            case "version":
+              return ap.installed_version.localeCompare(bp.installed_version, undefined, { numeric: true });
+            case "endorsements":
+              return (ap.endorsement_count ?? 0) - (bp.endorsement_count ?? 0);
+            case "files":
+              return a.totalFiles - b.totalFiles;
+            case "disabled":
+              return Number(ap.disabled) - Number(bp.disabled);
+            case "updated":
+              return isoToEpoch(ap.nexus_updated_at) - isoToEpoch(bp.nexus_updated_at);
+            default:
+              return 0;
+          }
+        })();
+        return sortDir === "asc" ? asc : -asc;
       }),
-    [groups, sortKey],
+    [groups, sortKey, sortDir],
   );
 
   const sortedIds = useMemo(() => sorted.map((g) => g.key), [sorted]);
@@ -505,7 +538,10 @@ function ManagedModsGrid({
       <div className="flex items-center justify-between mb-3">
         <SortSelect
           value={sortKey}
-          onChange={(v) => setSortKey(v as SortKey)}
+          onChange={(v) => {
+            setSortKey(v as SortKey);
+            setSortDir(defaultSortDir(v as SortKey));
+          }}
           options={MANAGED_SORT_OPTIONS}
         />
       </div>
@@ -615,12 +651,13 @@ function ManagedModsGrid({
               dynamicHeight
               renderHead={() => (
                 <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted text-xs">
+                  <th className="w-[28px]" />
                   <th className="py-2 pr-2 w-[60px]" />
-                  <th className="py-2 pr-2 font-medium" style={{ width: "100%" }}>Mod</th>
-                  <th className="py-2 pr-2 font-medium w-[100px]">Author</th>
-                  <th className="py-2 pr-2 font-medium w-[70px]">Version</th>
-                  <th className="py-2 pr-2 font-medium w-[90px]">Endorsements</th>
-                  <th className="py-2 pr-2 font-medium w-[110px]">State</th>
+                  <SortableHeader label="Mod" sortKey="name" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-2 w-full" />
+                  <SortableHeader label="Author" sortKey="author" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-2 w-[100px]" />
+                  <SortableHeader label="Version" sortKey="version" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-2 w-[70px]" />
+                  <SortableHeader label="Endorsements" sortKey="endorsements" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-2 w-[90px]" />
+                  <SortableHeader label="State" sortKey="disabled" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="py-2 pr-2 w-[110px]" />
                   <th className="py-2 pl-2 text-right font-medium w-[140px]">Actions</th>
                 </tr>
               )}
@@ -628,6 +665,16 @@ function ManagedModsGrid({
                 const c = buildCommon(group);
                 return (
                   <NexusModRow
+                    selection={
+                      <input
+                        type="checkbox"
+                        checked={bulk.isSelected(group.key)}
+                        onChange={() => bulk.toggle(group.key)}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`Select ${c.mod.nexus_name || c.mod.name}`}
+                        className="shrink-0"
+                      />
+                    }
                     modName={c.mod.nexus_name || c.mod.name}
                     summary={c.mod.summary ?? undefined}
                     author={c.mod.author ?? undefined}
@@ -659,6 +706,16 @@ function ManagedModsGrid({
                 return (
                   <div className={cn(c.allDisabled && "opacity-60")}>
                     <NexusModTile
+                      selection={
+                        <input
+                          type="checkbox"
+                          checked={bulk.isSelected(group.key)}
+                          onChange={() => bulk.toggle(group.key)}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label={`Select ${c.mod.nexus_name || c.mod.name}`}
+                          className="shrink-0"
+                        />
+                      }
                       modName={c.mod.nexus_name || c.mod.name}
                       pictureUrl={c.mod.picture_url ?? undefined}
                       badge={c.badge}
@@ -1052,6 +1109,7 @@ function RecognizedModsGrid({
           dynamicHeight
           renderHead={() => (
             <tr className="sticky top-0 z-10 border-b border-border bg-surface-0 text-left text-text-muted text-xs">
+              <th className="w-[28px]" />
               <th className="py-2 pr-2 w-[60px]" />
               <th className="py-2 pr-2 font-medium" style={{ width: "100%" }}>Mod</th>
               <th className="py-2 pr-2 font-medium w-[100px]">Author</th>
@@ -1066,6 +1124,16 @@ function RecognizedModsGrid({
             if (!c) return null;
             return (
               <NexusModRow
+                selection={
+                  <input
+                    type="checkbox"
+                    checked={bulk.isSelected(String(mod.id))}
+                    onChange={() => bulk.toggle(String(mod.id))}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Select ${c.match.mod_name}`}
+                    className="shrink-0"
+                  />
+                }
                 modName={c.match.mod_name}
                 summary={c.match.summary}
                 author={c.match.author}
@@ -1091,6 +1159,16 @@ function RecognizedModsGrid({
             if (!c) return null;
             return (
               <NexusModTile
+                selection={
+                  <input
+                    type="checkbox"
+                    checked={bulk.isSelected(String(mod.id))}
+                    onChange={() => bulk.toggle(String(mod.id))}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Select ${c.match.mod_name}`}
+                    className="shrink-0"
+                  />
+                }
                 modName={c.match.mod_name}
                 pictureUrl={c.match.picture_url}
                 badge={c.badge}
@@ -1274,6 +1352,18 @@ export function InstalledModsTable({
     return items;
   }, [recognized, q, recognizedSort]);
 
+  // High-confidence matches (backend `on_disk`) are "detected on disk"; the rest are only possible matches.
+  const detectedRecognized = useMemo(
+    () => filteredRecognized.filter((m) => m.nexus_match?.on_disk),
+    [filteredRecognized],
+  );
+  const possibleRecognized = useMemo(
+    () => filteredRecognized.filter((m) => !m.nexus_match?.on_disk),
+    [filteredRecognized],
+  );
+  const detectedCount = recognized.filter((m) => m.nexus_match?.on_disk).length;
+  const possibleCount = recognized.length - detectedCount;
+
   const groupedFilteredMods = useMemo(() => groupByNexusId(filteredMods), [filteredMods]);
 
   const totalCount =
@@ -1313,7 +1403,8 @@ export function InstalledModsTable({
           />
         )}
         <span className="text-xs text-text-muted">
-          {totalCount} mod{totalCount !== 1 ? "s" : ""}
+          Managed ({mods.length}) · Detected on disk ({detectedCount})
+          {possibleCount > 0 && <> · Possible matches ({possibleCount})</>}
         </span>
         <ViewModeToggle
           className="ml-auto"
@@ -1326,7 +1417,7 @@ export function InstalledModsTable({
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-text-primary" title="Mods installed and managed through this app. You can enable, disable, or uninstall them">
-              Installed Mods ({groupedFilteredMods.length})
+              Managed ({filteredMods.length})
             </h3>
             <FilterChips
               chips={CHIP_OPTIONS}
@@ -1354,11 +1445,11 @@ export function InstalledModsTable({
         </div>
       )}
 
-      {filteredRecognized.length > 0 && scope !== "installed" && (
+      {detectedRecognized.length > 0 && scope !== "installed" && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-text-primary" title="Mods found on disk and matched to Nexus. Adopt them to bring them under management.">
-              Detected on Disk ({filteredRecognized.length})
+            <h3 className="text-sm font-semibold text-text-primary" title="Mods found on disk and matched to Nexus with high confidence. Adopt them to bring them under management.">
+              Detected on disk ({detectedRecognized.length})
             </h3>
             <div className="flex items-center gap-2">
               {onReviewAdopt && (
@@ -1381,7 +1472,36 @@ export function InstalledModsTable({
             through the manager to unlock profiles, updates, and clean uninstall.
           </p>
           <RecognizedModsGrid
-            mods={filteredRecognized}
+            mods={detectedRecognized}
+            archives={archives}
+            installedModIds={installedNexusIds}
+            gameName={gameName}
+            downloadJobs={downloadJobs}
+            updateByNexusId={updateByNexusId}
+            onModClick={onModClick}
+            viewMode={viewMode}
+          />
+        </div>
+      )}
+
+      {possibleRecognized.length > 0 && scope !== "installed" && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-text-primary" title="Low-confidence matches. Review them in the adopt dialog before bringing them under management.">
+              Possible matches ({possibleRecognized.length})
+            </h3>
+            {detectedRecognized.length === 0 && onReviewAdopt && (
+              <Button size="sm" onClick={onReviewAdopt}>
+                Review &amp; adopt
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-text-muted mb-3">
+            These mods only loosely resemble a Nexus entry. They are not counted as
+            detected, so check the match before adopting them.
+          </p>
+          <RecognizedModsGrid
+            mods={possibleRecognized}
             archives={archives}
             installedModIds={installedNexusIds}
             gameName={gameName}

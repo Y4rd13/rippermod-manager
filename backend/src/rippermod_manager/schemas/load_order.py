@@ -91,6 +91,14 @@ class ModlistViewResult(BaseModel):
     modlist_path: str
 
 
+class ModlistFileResult(BaseModel):
+    """The lines of ``archive/pc/mod/modlist.txt`` in file order (S8)."""
+
+    exists: bool
+    path: str
+    lines: list[str]
+
+
 class RemovePreferenceResult(BaseModel):
     success: bool
     message: str

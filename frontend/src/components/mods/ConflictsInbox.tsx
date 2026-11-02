@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { ConflictDetailDrawer } from "@/components/mods/ConflictDetailDrawer";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -14,6 +15,9 @@ import type { ConflictSeverity, ModConflictSummary } from "@/types/api";
 
 interface Props {
   gameName: string;
+  /** Mods on disk that share files, from the conflict graph (managed or not). */
+  modsOnDiskWithConflicts: number;
+  onOpenClusterDetails?: () => void;
 }
 
 type FilterKey = "all" | "critical" | "warning" | "dismissed";
@@ -34,7 +38,7 @@ const SEVERITY_VARIANT: Record<ConflictSeverity, "danger" | "warning" | "success
   info: "success",
 };
 
-export function ConflictsInbox({ gameName }: Props) {
+export function ConflictsInbox({ gameName, modsOnDiskWithConflicts, onOpenClusterDetails }: Props) {
   const { data: overview, isLoading } = useConflictsOverview(gameName);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
@@ -108,6 +112,22 @@ export function ConflictsInbox({ gameName }: Props) {
   }
 
   if (!overview || overview.summaries.length === 0) {
+    if (modsOnDiskWithConflicts > 0) {
+      return (
+        <EmptyState
+          icon={ShieldAlert}
+          title="No conflicts between managed mods"
+          description={`${modsOnDiskWithConflicts} mod${modsOnDiskWithConflicts !== 1 ? "s" : ""} detected on disk share files. See Cluster Details.`}
+          actions={
+            onOpenClusterDetails && (
+              <Button variant="secondary" size="sm" onClick={onOpenClusterDetails}>
+                Open Cluster Details
+              </Button>
+            )
+          }
+        />
+      );
+    }
     return (
       <EmptyState
         icon={CheckCircle}
@@ -129,8 +149,8 @@ export function ConflictsInbox({ gameName }: Props) {
         <div className="flex items-center gap-2 ml-auto text-xs text-text-muted">
           <ShieldAlert size={14} className="text-warning" />
           <span>
-            {overview.total_conflicts} conflict{overview.total_conflicts !== 1 ? "s" : ""} across{" "}
-            {overview.mods_affected} mod{overview.mods_affected !== 1 ? "s" : ""}
+            {overview.total_conflicts} conflict{overview.total_conflicts !== 1 ? "s" : ""} between{" "}
+            {overview.mods_affected} managed mod{overview.mods_affected !== 1 ? "s" : ""}
             {overview.dismissed_count > 0 && (
               <> &middot; {overview.dismissed_count} dismissed</>
             )}

@@ -63,6 +63,13 @@ def _discover_files(game: Game) -> list[tuple[Path, str]]:
     return files
 
 
+def _request_conflict_reindex(game: Game) -> None:
+    """A scan changes what is on disk: refresh the conflict evidence in the background (S3)."""
+    from rippermod_manager.services.conflicts.auto_reindex import request_conflict_reindex
+
+    request_conflict_reindex(game.id)
+
+
 def scan_game_mods(
     game: Game,
     session: Session,
@@ -81,6 +88,7 @@ def scan_game_mods(
 
     if total_files == 0:
         on_progress("done", "No mod files found", 100)
+        _request_conflict_reindex(game)
         return ScanResult(files_found=0, groups_created=0, new_files=0)
 
     discovered_files: list[ModFile] = []
@@ -155,6 +163,7 @@ def scan_game_mods(
 
     msg = f"Scan complete: {len(discovered_files)} files, {groups_created} groups"
     on_progress("scan", msg, 85)
+    _request_conflict_reindex(game)
 
     return ScanResult(
         files_found=len(discovered_files),

@@ -20,6 +20,11 @@ from rippermod_manager.schemas.mod import (
     ModGroupOut,
     ScanResult,
 )
+from rippermod_manager.services.presence_service import (
+    ON_DISK_MIN_SCORE,
+    winning_correlations,
+)
+from rippermod_manager.services.rejections import clear_rejection, remember_rejection
 from rippermod_manager.services.update_service import batch_group_file_mtimes
 
 logger = logging.getLogger(__name__)
@@ -34,52 +39,63 @@ def _get_game(game_name: str, session: Session) -> Game:
     return game
 
 
+def _endorse_track_flags(
+    session: Session, game_id: int, nexus_ids: set[int]
+) -> dict[int, tuple[bool, bool]]:
+    """``(is_endorsed, is_tracked)`` per Nexus mod id, from the game's NexusDownload rows.
+
+    With several rows for one mod, the first by id wins: it is the row the
+    endorse and track endpoints write (``_get_or_create_download``).
+    """
+    if not nexus_ids:
+        return {}
+    rows = session.exec(
+        select(NexusDownload)
+        .where(
+            NexusDownload.game_id == game_id,
+            NexusDownload.nexus_mod_id.in_(nexus_ids),  # type: ignore[attr-defined]
+        )
+        .order_by(NexusDownload.id)  # type: ignore[arg-type]
+    ).all()
+    flags: dict[int, tuple[bool, bool]] = {}
+    for row in rows:
+        flags.setdefault(row.nexus_mod_id, (row.is_endorsed, row.is_tracked))
+    return flags
+
+
 @router.get("/", response_model=list[ModGroupOut])
 def list_mod_groups(game_name: str, session: Session = Depends(get_session)) -> list[ModGroupOut]:
     game = _get_game(game_name, session)
     groups = session.exec(select(ModGroup).where(ModGroup.game_id == game.id)).all()
 
     group_ids = [g.id for g in groups]
-    corr_rows = session.exec(
-        select(ModNexusCorrelation, NexusDownload, NexusModMeta)
-        .join(NexusDownload, ModNexusCorrelation.nexus_download_id == NexusDownload.id)
-        .outerjoin(NexusModMeta, NexusDownload.nexus_mod_id == NexusModMeta.nexus_mod_id)
-        .where(ModNexusCorrelation.mod_group_id.in_(group_ids))  # type: ignore[union-attr]
-    ).all()
-    corr_map: dict[int, tuple[ModNexusCorrelation, NexusDownload, NexusModMeta | None]] = {}
-    for corr, nd, meta in corr_rows:
-        existing = corr_map.get(corr.mod_group_id)
-        if existing is None or corr.score > existing[0].score:
-            corr_map[corr.mod_group_id] = (corr, nd, meta)
-
-    # Deduplicate across groups: if multiple groups match the same nexus_mod_id,
-    # only the group with the highest score keeps the match.
-    nexus_id_best: dict[int, tuple[int, float]] = {}  # nexus_mod_id -> (group_id, score)
-    for group_id, (corr, nd, _meta) in corr_map.items():
-        nid = nd.nexus_mod_id
-        prev = nexus_id_best.get(nid)
-        if prev is None or corr.score > prev[1]:
-            nexus_id_best[nid] = (group_id, corr.score)
-
-    nexus_id_winner: set[int] = set()  # group_ids that won dedup
-    for _nid, (group_id, _score) in nexus_id_best.items():
-        nexus_id_winner.add(group_id)
+    winners = winning_correlations(session, game.id)  # type: ignore[arg-type]
+    nexus_ids = {nd.nexus_mod_id for _corr, nd in winners.values()}
+    meta_map: dict[int, NexusModMeta] = {}
+    if nexus_ids:
+        metas = session.exec(
+            select(NexusModMeta).where(NexusModMeta.nexus_mod_id.in_(nexus_ids))  # type: ignore[attr-defined]
+        ).all()
+        meta_map = {m.nexus_mod_id: m for m in metas}
 
     mtime_map = batch_group_file_mtimes(group_ids, game.install_path, session)
+    flag_map = _endorse_track_flags(session, game.id, nexus_ids)  # type: ignore[arg-type]
 
     result: list[ModGroupOut] = []
     for g in groups:
         _ = g.files
         nexus_match = None
-        match = corr_map.get(g.id)  # type: ignore[arg-type]
-        if match and g.id in nexus_id_winner:
-            corr, nd, meta = match
+        match = winners.get(g.id)  # type: ignore[arg-type]
+        if match:
+            corr, nd = match
+            meta = meta_map.get(nd.nexus_mod_id)
             nexus_match = CorrelationBrief(
                 nexus_mod_id=nd.nexus_mod_id,
                 mod_name=nd.mod_name,
                 score=corr.score,
                 method=corr.method,
                 confirmed=corr.confirmed_by_user,
+                on_disk=corr.confirmed_by_user or corr.score >= ON_DISK_MIN_SCORE,
                 author=meta.author if meta else "",
                 summary=meta.summary if meta else "",
                 version=meta.version if meta else nd.version,
@@ -88,6 +104,8 @@ def list_mod_groups(game_name: str, session: Session = Depends(get_session)) -> 
                 picture_url=meta.picture_url if meta else "",
                 nexus_url=nd.nexus_url,
                 updated_at=meta.updated_at if meta else None,
+                is_endorsed=flag_map.get(nd.nexus_mod_id, (False, False))[0],
+                is_tracked=flag_map.get(nd.nexus_mod_id, (False, False))[1],
             )
 
         result.append(
@@ -325,22 +343,27 @@ def confirm_correlation(
     ).first()
     if not corr:
         raise HTTPException(404, "No correlation found for this mod group")
-    corr.confirmed_by_user = True
-    session.add(corr)
-    session.commit()
-    session.refresh(corr)
     dl = session.get(NexusDownload, corr.nexus_download_id)
     if not dl:
         raise HTTPException(404, "NexusDownload not found")
+    corr.confirmed_by_user = True
+    session.add(corr)
+    clear_rejection(session, mod_group_id, dl.nexus_mod_id)
+    session.commit()
+    session.refresh(corr)
     meta = session.exec(
         select(NexusModMeta).where(NexusModMeta.nexus_mod_id == dl.nexus_mod_id)
     ).first()
+    flags = _endorse_track_flags(session, dl.game_id, {dl.nexus_mod_id}).get(
+        dl.nexus_mod_id, (False, False)
+    )
     return CorrelationBrief(
         nexus_mod_id=dl.nexus_mod_id,
         mod_name=dl.mod_name,
         score=corr.score,
         method=corr.method,
         confirmed=corr.confirmed_by_user,
+        on_disk=corr.confirmed_by_user or corr.score >= ON_DISK_MIN_SCORE,
         author=meta.author if meta else "",
         summary=meta.summary if meta else "",
         version=meta.version if meta else dl.version,
@@ -349,6 +372,8 @@ def confirm_correlation(
         picture_url=meta.picture_url if meta else "",
         nexus_url=dl.nexus_url,
         updated_at=meta.updated_at if meta else None,
+        is_endorsed=flags[0],
+        is_tracked=flags[1],
     )
 
 
@@ -358,10 +383,17 @@ def reject_correlation(
 ) -> dict[str, bool]:
     _get_game(game_name, session)
     corrs = session.exec(
-        select(ModNexusCorrelation).where(ModNexusCorrelation.mod_group_id == mod_group_id)
+        select(ModNexusCorrelation)
+        .where(ModNexusCorrelation.mod_group_id == mod_group_id)
+        .order_by(ModNexusCorrelation.score.desc())  # type: ignore[union-attr]
     ).all()
     if not corrs:
         raise HTTPException(404, "No correlations found for this mod group")
+    # Remember only the pair the user saw (the top-scored one, as confirm picks it): a
+    # lower-scored correlation was never shown, so rejecting it would hide a possible match.
+    top_dl = session.get(NexusDownload, corrs[0].nexus_download_id)
+    if top_dl:
+        remember_rejection(session, mod_group_id, top_dl.nexus_mod_id)
     for c in corrs:
         session.delete(c)
     session.commit()
@@ -414,6 +446,8 @@ async def reassign_correlation(
         )
         session.flush()
 
+    # Choosing the pair again is the user's decision: it lifts an earlier rejection.
+    clear_rejection(session, mod_group_id, dl.nexus_mod_id)
     corr = ModNexusCorrelation(
         mod_group_id=mod_group_id,
         nexus_download_id=dl.id,  # type: ignore[arg-type]
@@ -428,12 +462,16 @@ async def reassign_correlation(
     meta = session.exec(
         select(NexusModMeta).where(NexusModMeta.nexus_mod_id == dl.nexus_mod_id)
     ).first()
+    flags = _endorse_track_flags(session, dl.game_id, {dl.nexus_mod_id}).get(
+        dl.nexus_mod_id, (False, False)
+    )
     return CorrelationBrief(
         nexus_mod_id=dl.nexus_mod_id,
         mod_name=dl.mod_name,
         score=corr.score,
         method=corr.method,
         confirmed=corr.confirmed_by_user,
+        on_disk=corr.confirmed_by_user or corr.score >= ON_DISK_MIN_SCORE,
         author=meta.author if meta else "",
         summary=meta.summary if meta else "",
         version=meta.version if meta else dl.version,
@@ -442,6 +480,8 @@ async def reassign_correlation(
         picture_url=meta.picture_url if meta else "",
         nexus_url=dl.nexus_url,
         updated_at=meta.updated_at if meta else None,
+        is_endorsed=flags[0],
+        is_tracked=flags[1],
     )
 
 
