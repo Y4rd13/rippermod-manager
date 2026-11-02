@@ -335,7 +335,12 @@ export function HealthWidget({
     askForceDeploy: () => setConfirmForce(true),
     onAdopt,
   };
-  const hasAttention = reqGroups.length > 0 || otherAttention.length > 0;
+  // A group whose requirements are all on disk but unmanaged is info, not a problem.
+  const isInfoOnly = (issues: HealthIssueOut[]) =>
+    issues.every((i) => i.kind === "unmanaged_requirement");
+  const attentionGroups = reqGroups.filter((g) => !isInfoOnly(g.issues));
+  const infoGroups = reqGroups.filter((g) => isInfoOnly(g.issues));
+  const hasAttention = attentionGroups.length > 0 || otherAttention.length > 0;
 
   return (
     <div className="rounded-xl border border-border bg-surface-1 p-4">
@@ -362,11 +367,22 @@ export function HealthWidget({
           <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
             Needs attention
           </p>
-          {reqGroups.map((g) => (
+          {attentionGroups.map((g) => (
             <RequirementGroup key={g.modName} modName={g.modName} issues={g.issues} ctx={ctx} />
           ))}
           {otherAttention.map((issue, i) => (
             <HealthRow key={i} issue={issue} action={resolveAction(issue, ctx)} />
+          ))}
+        </div>
+      )}
+
+      {infoGroups.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+            On disk, not managed
+          </p>
+          {infoGroups.map((g) => (
+            <RequirementGroup key={g.modName} modName={g.modName} issues={g.issues} ctx={ctx} />
           ))}
         </div>
       )}

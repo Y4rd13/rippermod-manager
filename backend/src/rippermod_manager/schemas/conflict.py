@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 from rippermod_manager.models.conflict import ConflictKind, Severity
@@ -42,6 +44,12 @@ class ReindexResult(BaseModel):
     conflicts_found: int
     by_kind: dict[ConflictKind, int]
     duration_ms: int
+
+
+class ConflictReindexStatus(BaseModel):
+    """State of the background conflict reindex for one game (S3)."""
+
+    state: Literal["idle", "running"] = "idle"
 
 
 class ConflictingArchiveRef(BaseModel):

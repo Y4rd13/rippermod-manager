@@ -39,3 +39,8 @@ def request_conflict_reindex(game_id: int | None) -> None:
     if game_id is None:
         return
     _runner.request(game_id)
+
+
+def conflict_reindex_busy(game_id: int) -> bool:
+    """True while a background reindex of *game_id* waits out its debounce or runs."""
+    return _runner.is_busy(game_id)

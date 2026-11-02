@@ -17,6 +17,7 @@ from rippermod_manager.schemas.conflict import (
     ArchiveResourceDetailsResult,
     ConflictEvidenceOut,
     ConflictingArchiveRef,
+    ConflictReindexStatus,
     ConflictSummary,
     ModRef,
     ReindexResult,
@@ -41,6 +42,7 @@ from rippermod_manager.services.conflict_service import (
     check_installed_conflicts,
     check_pairwise_conflict,
 )
+from rippermod_manager.services.conflicts.auto_reindex import conflict_reindex_busy
 from rippermod_manager.services.conflicts.engine import reindex_game
 from rippermod_manager.services.conflicts_inbox_service import (
     ResolveRefusedError,
@@ -153,6 +155,17 @@ def reindex_conflicts(
         by_kind=by_kind,
         duration_ms=elapsed_ms,
     )
+
+
+@_engine_router.get("/reindex/status", response_model=ConflictReindexStatus)
+def conflict_reindex_status(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> ConflictReindexStatus:
+    """Background conflict reindex state: ``running`` while one waits or runs, else ``idle``."""
+    game = get_game_or_404(game_name, session)
+    busy = conflict_reindex_busy(game.id)  # type: ignore[arg-type]
+    return ConflictReindexStatus(state="running" if busy else "idle")
 
 
 @_engine_router.get("/archive-summaries", response_model=ArchiveConflictSummariesResult)

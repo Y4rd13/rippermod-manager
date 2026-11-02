@@ -2,12 +2,13 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Loader2, Minus, Square, X } from "lucide-react";
 
 import { DeployStatusBadge } from "@/components/mods/DeployStatusBadge";
-import { useRedmodCompileWatcher } from "@/hooks/use-deploy";
+import { useConflictReindexWatcher, useRedmodCompileWatcher } from "@/hooks/use-deploy";
 import { useUIStore } from "@/stores/ui-store";
 
 function ActiveGameDeployBadge() {
   const activeGameName = useUIStore((s) => s.activeGameName);
   const compiling = useRedmodCompileWatcher(activeGameName);
+  useConflictReindexWatcher(activeGameName);
   return (
     <>
       <DeployStatusBadge gameName={activeGameName} />

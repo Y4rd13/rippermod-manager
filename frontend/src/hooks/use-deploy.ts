@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
+import { invalidateConflictViews } from "@/hooks/invalidate";
 import { api } from "@/lib/api-client";
 import { REDMOD_MISSING_MESSAGE, REDMOD_MISSING_REASON } from "@/lib/deploy-toast";
 import { toast } from "@/stores/toast-store";
+import type { ConflictReindexStatus } from "@/types/api";
 
 export interface DriftReport {
   total: number;
@@ -82,6 +84,8 @@ const forcePreviewPath = (gameName: string) =>
   `/api/v1/games/${encodeURIComponent(gameName)}/install/deploy/force-preview`;
 const redmodStatusPath = (gameName: string) =>
   `/api/v1/games/${encodeURIComponent(gameName)}/install/redmod/status`;
+const conflictReindexStatusPath = (gameName: string) =>
+  `/api/v1/games/${encodeURIComponent(gameName)}/conflicts/reindex/status`;
 const untrackedPath = (gameName: string) =>
   `/api/v1/games/${encodeURIComponent(gameName)}/install/untracked-files`;
 
@@ -135,6 +139,38 @@ export function useRedmodCompileWatcher(gameName: string | null): boolean {
   }, [data, gameName]);
 
   return data?.state === "compiling";
+}
+
+/**
+ * Background conflict reindex state. Polls every 1 s only while a reindex is
+ * running; ``invalidateGameState`` invalidates it to start polling after a change.
+ */
+export function useConflictReindexStatus(gameName: string | null) {
+  return useQuery<ConflictReindexStatus, Error>({
+    queryKey: ["conflict-reindex-status", gameName],
+    queryFn: () => api.get<ConflictReindexStatus>(conflictReindexStatusPath(gameName!)),
+    enabled: !!gameName,
+    refetchInterval: (query) => (query.state.data?.state === "running" ? 1000 : false),
+  });
+}
+
+/**
+ * Refetches every conflict view when the background reindex goes from running to
+ * idle, so the lists show the reindexed result instead of the one fetched before it.
+ */
+export function useConflictReindexWatcher(gameName: string | null): void {
+  const qc = useQueryClient();
+  const { data } = useConflictReindexStatus(gameName);
+  const prev = useRef<{ game: string | null; state: string } | null>(null);
+
+  useEffect(() => {
+    if (!data) return;
+    const before = prev.current;
+    prev.current = { game: gameName, state: data.state };
+    if (before?.game === gameName && before.state === "running" && data.state === "idle") {
+      invalidateConflictViews(qc, gameName);
+    }
+  }, [data, gameName, qc]);
 }
 
 /**
