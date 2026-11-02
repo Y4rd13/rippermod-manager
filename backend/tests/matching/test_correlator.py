@@ -56,7 +56,7 @@ class TestComputeNameScore:
         assert method == "exact"
 
     def test_substring_match(self):
-        score, method = compute_name_score("weather", "enhanced weather mod")
+        score, method = compute_name_score("weather", "enhanced weather")
         assert score == 0.9
         assert method == "substring"
 
@@ -112,6 +112,19 @@ class TestComputeNameScore:
 
     def test_single_whole_word_substring_counts(self):
         assert compute_name_score("Config", "WTNC Config")[1] == "substring"
+
+    @pytest.mark.parametrize(
+        "local,nexus",
+        [
+            ("Ash", "Ash - Female V Preset"),
+            ("Config", "Cyberware-EX - Custom Expansion Mode (Raito Labs Config)"),
+            ("LHUD", "Enterable Interiors - LHUD 2.22 updated patch"),
+            ("Airdrops", "Airdrops - More Hidden Gems"),
+        ],
+    )
+    def test_single_word_covering_under_half_is_not_substring(self, local, nexus):
+        """A lone word only stands for a name it makes up at least half of."""
+        assert compute_name_score(local, nexus)[1] != "substring"
 
     def test_later_whole_word_occurrence_counts(self):
         """An in-word occurrence earlier in the name must not hide a whole-word one."""
