@@ -37,6 +37,9 @@ class CorrelationBrief(BaseModel):
     picture_url: str = ""
     nexus_url: str = ""
     updated_at: datetime | None = None
+    # From the game's NexusDownload row for this mod (False without one), S10.
+    is_endorsed: bool = False
+    is_tracked: bool = False
 
 
 class ScanResult(BaseModel):

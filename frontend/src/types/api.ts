@@ -57,6 +57,9 @@ export interface CorrelationBrief {
   updated_at: string | null;
   /** True when the match is strong enough (or user-confirmed) to treat the mod as on disk. */
   on_disk: boolean;
+  /** From the game's NexusDownload row for this mod; false without one. */
+  is_endorsed: boolean;
+  is_tracked: boolean;
 }
 
 export interface ModGroup {
