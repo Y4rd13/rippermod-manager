@@ -583,12 +583,12 @@ export function GameDetailPage() {
           </div>
         </Card>
         <Card
-          className="hover:border-danger/40 transition-colors"
+          className="hover:border-warning/40 transition-colors"
           onClick={() => setTab("updates")}
           title="Newer versions available on Nexus for your mods"
         >
           <div className="flex items-center gap-3">
-            <RefreshCw size={18} className="text-danger" />
+            <RefreshCw size={18} className="text-warning" />
             <div>
               <p className="text-xs text-text-muted">Updates</p>
               <p className="text-lg font-bold text-text-primary">
@@ -688,7 +688,7 @@ export function GameDetailPage() {
                 </span>
               )}
               {key === "conflicts" && (conflictCount?.mods_with_conflicts ?? 0) > 0 && (
-                <span className="h-1.5 w-1.5 rounded-full bg-danger inline-block" />
+                <span className="h-1.5 w-1.5 rounded-full bg-warning inline-block" />
               )}
               {key === "updates" && (updates?.updates_available ?? 0) > 0 && (
                 <span className="h-1.5 w-1.5 rounded-full bg-warning inline-block" />

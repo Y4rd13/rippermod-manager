@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useAdoptMods } from "@/hooks/mutations";
+import { plural } from "@/lib/format";
 import type { AdoptGroup, ModFileOut, ModGroup } from "@/types/api";
 
 /** Best-effort mod-type label from where the first file lives on disk. */
@@ -222,8 +223,8 @@ export function AdoptReviewDialog({ gameName, mods, onClose }: Props) {
               loading={adopt.isPending}
               onClick={handleAdopt}
             >
-              Adopt {selectedMods.length} mod{selectedMods.length === 1 ? "" : "s"}
-              {selectedFileCount > 0 ? ` (${selectedFileCount} files)` : ""}
+              Adopt {plural(selectedMods.length, "mod")}
+              {selectedFileCount > 0 ? ` (${plural(selectedFileCount, "file")})` : ""}
             </Button>
           </div>
         </div>
