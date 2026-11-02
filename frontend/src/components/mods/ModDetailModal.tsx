@@ -237,7 +237,7 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                   onClick={() => setActiveTab(t.key)}
                   className={`px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
                     activeTab === t.key
-                      ? "border-accent text-accent"
+                      ? "border-accent text-accent-text"
                       : "border-transparent text-text-muted hover:text-text-secondary"
                   }`}
                 >
@@ -298,7 +298,7 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                             className={
                               req.is_installed
                                 ? "inline-flex items-center gap-1.5 rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success hover:bg-success/20 hover:border-success/50 transition-colors disabled:opacity-50 disabled:cursor-default"
-                                : "inline-flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/15 hover:border-accent/40 transition-colors disabled:opacity-50 disabled:cursor-default"
+                                : "inline-flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs font-medium text-accent-text hover:bg-accent/15 hover:border-accent/40 transition-colors disabled:opacity-50 disabled:cursor-default"
                             }
                             onClick={() => {
                               if (canNavInApp && req.required_mod_id != null) {
@@ -329,7 +329,7 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                     className="text-sm text-text-secondary leading-relaxed
                       [&_strong]:text-text-primary [&_strong]:font-semibold
                       [&_em]:italic
-                      [&_a]:text-accent [&_a]:underline [&_a:hover]:text-accent-hover [&_a]:cursor-pointer
+                      [&_a]:text-accent-text [&_a]:underline [&_a:hover]:text-text-primary [&_a]:cursor-pointer
                       [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-text-muted [&_blockquote]:my-2
                       [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-0.5 [&_ul]:my-2
                       [&_h3]:text-text-primary [&_h3]:font-semibold [&_h3]:text-base [&_h3]:mt-4 [&_h3]:mb-1
@@ -456,7 +456,7 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                           </p>
                           {descText.length > 120 && (
                             <button
-                              className="text-xs text-accent hover:text-accent-hover mt-0.5"
+                              className="text-xs text-accent-text hover:text-text-primary mt-0.5"
                               onClick={() =>
                                 setExpandedDescriptions((prev) => {
                                   const next = new Set(prev);

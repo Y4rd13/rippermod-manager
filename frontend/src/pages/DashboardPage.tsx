@@ -123,7 +123,7 @@ function CommunityActivity({ gameName }: { gameName: string }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <TrendingUp size={14} className="text-accent" />
+        <TrendingUp size={14} className="text-accent-text" />
         <h3 className="text-sm font-medium text-text-secondary">{gameName}</h3>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

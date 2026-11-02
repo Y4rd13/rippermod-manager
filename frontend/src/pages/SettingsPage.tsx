@@ -44,7 +44,7 @@ function UpdateSection() {
     <div className="mt-4 space-y-2">
       {status === "available" && updateInfo && (
         <div className="rounded-lg border border-accent/30 bg-accent/5 px-3 py-2">
-          <p className="text-sm font-medium text-accent">
+          <p className="text-sm font-medium text-accent-text">
             Version {updateInfo.version} is available
           </p>
           {updateInfo.body && (

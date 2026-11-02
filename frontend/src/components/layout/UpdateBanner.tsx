@@ -22,11 +22,11 @@ export function UpdateBanner() {
         {/* Icon */}
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent/15">
           {status === "downloading" ? (
-            <Download size={14} className="text-accent animate-pulse" />
+            <Download size={14} className="text-accent-text animate-pulse" />
           ) : status === "ready" ? (
             <RotateCcw size={14} className="text-success" />
           ) : (
-            <Sparkles size={14} className="text-accent" />
+            <Sparkles size={14} className="text-accent-text" />
           )}
         </div>
 
