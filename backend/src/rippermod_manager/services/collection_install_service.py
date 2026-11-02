@@ -812,19 +812,24 @@ def _unregister_nxm_wait(nexus_mod_id: int, nexus_file_id: int) -> None:
 
 
 async def _wait_for_download(job_id: int) -> DownloadJob:
-    """Poll the DB until the download job leaves the in-flight states."""
+    """Poll the DB until the download job leaves the in-flight states.
+
+    The timeout counts only time spent out of ``queued``: a job waiting for a
+    download slot (S6) is not hanging.
+    """
     from rippermod_manager.database import engine
 
     elapsed = 0.0
     while elapsed < _DOWNLOAD_TIMEOUT_S:
         await asyncio.sleep(_DOWNLOAD_POLL_INTERVAL_S)
-        elapsed += _DOWNLOAD_POLL_INTERVAL_S
         with Session(engine) as s:
             job = s.get(DownloadJob, job_id)
             if job is None:
                 raise RuntimeError(f"Download job {job_id} vanished")
             if job.status in ("completed", "failed", "cancelled"):
                 return job
+            if job.status != "queued":
+                elapsed += _DOWNLOAD_POLL_INTERVAL_S
     raise TimeoutError(f"Download job {job_id} did not complete in {_DOWNLOAD_TIMEOUT_S}s")
 
 

@@ -55,3 +55,27 @@ def test_free_from_mod_returns_files_url(client):
     r = client.post(f"{G}/from-mod", json={"nexus_mod_id": 107})
     assert r.json()["requires_nxm"] is True
     assert r.json()["nexus_url"] == "https://www.nexusmods.com/cyberpunk2077/mods/107?tab=files"
+
+
+@respx.mock
+def test_from_mod_returns_the_queued_job_of_the_same_file(client, engine):
+    from sqlmodel import Session, select
+
+    from rippermod_manager.models.download import DownloadJob
+    from rippermod_manager.models.game import Game
+
+    _setup(client)
+    _mock_validate(True)
+    _mock_one_main_file(9001)
+    with Session(engine) as s:
+        game = s.exec(select(Game)).one()
+        job = DownloadJob(game_id=game.id, nexus_mod_id=107, nexus_file_id=9001, status="queued")
+        s.add(job)
+        s.commit()
+        existing_id = job.id
+
+    r = client.post(f"{G}/from-mod", json={"nexus_mod_id": 107})
+
+    assert r.json()["job"]["id"] == existing_id
+    with Session(engine) as s:
+        assert len(s.exec(select(DownloadJob)).all()) == 1

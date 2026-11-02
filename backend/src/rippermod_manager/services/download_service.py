@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import unquote
@@ -13,8 +14,13 @@ from sqlmodel import Session, col, select
 from rippermod_manager.database import engine
 from rippermod_manager.models.download import DownloadJob
 from rippermod_manager.models.game import Game
-from rippermod_manager.nexus.client import NexusClient, NexusPremiumRequiredError
+from rippermod_manager.nexus.client import (
+    NexusClient,
+    NexusPremiumRequiredError,
+    NexusRateLimitError,
+)
 from rippermod_manager.services.paths import resolve_mods_dir
+from rippermod_manager.services.settings_helpers import get_setting
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +31,83 @@ _background_tasks: set[asyncio.Task] = set()  # type: ignore[type-arg]
 
 _PROGRESS_DB_INTERVAL = 5  # seconds between DB progress updates
 
+# Download queue (S6): at most ``download_concurrency`` jobs hold a slot (link
+# fetch + transfer); the rest wait as ``queued`` and start oldest id first.
+DEFAULT_DOWNLOAD_CONCURRENCY = 3
+DOWNLOAD_CONCURRENCY_RANGE = (1, 10)
+QUEUED_LINK_EXPIRED = "The Nexus download link expired while queued. Download it again from Nexus."
+INTERRUPTED_ERROR = "Interrupted when the app closed"
+_IN_FLIGHT_STATUSES = ("queued", "pending", "downloading")
+
+
+@dataclass
+class _QueuedStart:
+    """What a queued job needs to start when it gets a slot. Never holds an NXM key."""
+
+    api_key: str
+    game_domain: str
+    install_path: str
+    mods_dir: str | None
+    file_name: str
+    needs_extension: bool
+    # Fetched at request time for NXM (free) requests, while the key is fresh;
+    # ``None`` for premium requests, which fetch the link at their slot.
+    cdn_url: str | None = None
+
+
+# Job ids holding a slot, and queued jobs waiting for one, keyed by job id.
+_active_job_ids: set[int] = set()
+_queued_starts: dict[int, _QueuedStart] = {}
+
+
+def download_concurrency(session: Session) -> int:
+    """The stored ``download_concurrency`` when it is an integer in range, else 3.
+
+    An empty, non-numeric or out-of-range value would mean zero slots (a stuck
+    queue) or an unbounded number of transfers, so it falls back to the default.
+    """
+    raw = (get_setting(session, "download_concurrency") or "").strip()
+    if raw.isascii() and raw.isdigit():
+        value = int(raw)
+        low, high = DOWNLOAD_CONCURRENCY_RANGE
+        if low <= value <= high:
+            return value
+    return DEFAULT_DOWNLOAD_CONCURRENCY
+
+
+def recover_interrupted_jobs(session: Session) -> int:
+    """Mark jobs left in flight by a previous run as failed; return how many.
+
+    The CDN links, NXM keys and transfer tasks lived in memory, so these jobs can
+    never finish and would otherwise hold a queue slot forever.
+    """
+    jobs = session.exec(
+        select(DownloadJob).where(
+            DownloadJob.status.in_(_IN_FLIGHT_STATUSES)  # type: ignore[union-attr]
+        )
+    ).all()
+    for job in jobs:
+        job.status = "failed"
+        job.error = INTERRUPTED_ERROR
+        session.add(job)
+    if jobs:
+        session.commit()
+    return len(jobs)
+
+
+def _fail_job(job_id: int, error: str) -> None:
+    with Session(engine) as s:
+        job = s.get(DownloadJob, job_id)
+        if job:
+            job.status = "failed"
+            job.error = error[:500]
+            s.add(job)
+            s.commit()
+
 
 async def shutdown() -> None:
     """Cancel all active downloads and wait for completion."""
+    _queued_starts.clear()
     for event in _cancel_events.values():
         event.set()
     if _background_tasks:
@@ -47,9 +127,10 @@ async def create_and_start_download(
     nxm_key: str | None = None,
     nxm_expires: int | None = None,
 ) -> DownloadJob:
-    """Create a download job and kick off the download as a background task.
+    """Create a download job and start it, or queue it behind the concurrency cap.
 
-    Returns the job immediately in "downloading" status (non-blocking).
+    Returns the job immediately (non-blocking): ``downloading`` when it got a slot,
+    ``queued`` when every slot is taken, ``failed`` when no link could be had.
     """
     job = DownloadJob(
         game_id=game.id,  # type: ignore[arg-type]
@@ -88,7 +169,33 @@ async def create_and_start_download(
         # Sanitize filename to prevent path traversal
         file_name = Path(file_name).name
 
-        # Fetch download links (this is fast, do it before backgrounding)
+        # Cancelled while the metadata was fetched: nothing to start or queue.
+        session.refresh(job)
+        if job.status == "cancelled":
+            return job
+
+        entry = _QueuedStart(
+            api_key=api_key,
+            game_domain=game_domain,
+            install_path=install_path,
+            mods_dir=game.mods_dir,
+            file_name=file_name,
+            needs_extension=not file_name_from_api,
+        )
+        job.file_name = file_name
+        if file_size:
+            job.total_bytes = file_size
+
+        # No await between the check and the reservation: two requests can never
+        # both take the last slot.
+        has_slot = len(_active_job_ids) < download_concurrency(session)
+        if has_slot:
+            _active_job_ids.add(job_id)
+        elif nxm_key is None:
+            # Premium: the link is fetched when the slot frees (S6).
+            return _enqueue(job, entry, session)
+
+        # A slot now, or an NXM request whose key may expire before its slot.
         try:
             links = await client.get_download_links(
                 game_domain,
@@ -98,52 +205,162 @@ async def create_and_start_download(
                 nxm_expires=nxm_expires,
             )
         except NexusPremiumRequiredError:
-            job.status = "failed"
-            job.error = "Premium account required for direct downloads"
-            job.file_name = file_name
-            session.add(job)
-            session.commit()
-            session.refresh(job)
-            return job
+            return await _fail_at_request(
+                job, session, "Premium account required for direct downloads", has_slot
+            )
+        except NexusRateLimitError:
+            return await _fail_at_request(
+                job, session, "Nexus rate limit reached, try again later", has_slot
+            )
+        except httpx.HTTPError as exc:
+            return await _fail_at_request(
+                job, session, f"Could not get the download link: {exc}", has_slot
+            )
+        except BaseException:
+            if has_slot:
+                _active_job_ids.discard(job_id)
+            raise
 
     if not links or not links[0].get("URI"):
-        job.status = "failed"
-        job.error = "No download links returned"
-        job.file_name = file_name
-        session.add(job)
-        session.commit()
-        session.refresh(job)
-        return job
+        return await _fail_at_request(job, session, "No download links returned", has_slot)
 
-    cdn_url = links[0]["URI"]
+    entry.cdn_url = links[0]["URI"]
+    if not has_slot:
+        return _enqueue(job, entry, session)
 
-    # Update job with metadata, set to downloading
-    job.file_name = file_name
-    if file_size:
-        job.total_bytes = file_size
     job.status = "downloading"
     session.add(job)
     session.commit()
     session.refresh(job)
+    _launch_transfer(job_id, entry, queued_nxm_url=False)
+    return job
 
-    # Create cancel event and fire background task
+
+def _enqueue(job: DownloadJob, entry: _QueuedStart, session: Session) -> DownloadJob:
+    """Park *job* as ``queued`` until a slot frees; start it now if one already did."""
+    job_id = job.id
+    assert job_id is not None
+    job.status = "queued"
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    _queued_starts[job_id] = entry
+    # A slot may have freed while this request awaited Nexus.
+    _schedule_fill()
+    return job
+
+
+async def _fail_at_request(
+    job: DownloadJob, session: Session, error: str, held_slot: bool
+) -> DownloadJob:
+    job.status = "failed"
+    job.error = error
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    if held_slot:
+        _active_job_ids.discard(job.id)  # type: ignore[arg-type]
+        await _start_next_queued()
+    return job
+
+
+def _launch_transfer(job_id: int, entry: _QueuedStart, *, queued_nxm_url: bool) -> None:
     cancel_event = asyncio.Event()
     _cancel_events[job_id] = cancel_event
-    task = asyncio.create_task(
-        _run_download(
-            job_id,
-            cdn_url,
-            install_path,
-            file_name,
-            cancel_event,
-            needs_extension=not file_name_from_api,
-            mods_dir=game.mods_dir,
-        )
-    )
+    task = asyncio.create_task(_transfer(job_id, entry, cancel_event, queued_nxm_url))
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
 
-    return job
+
+def _schedule_fill() -> None:
+    if not _queued_starts:
+        return
+    task = asyncio.get_running_loop().create_task(_start_next_queued())
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+
+async def _transfer(
+    job_id: int, entry: _QueuedStart, cancel_event: asyncio.Event, queued_nxm_url: bool
+) -> None:
+    """Run one transfer in its slot, then hand the slot to the next queued job."""
+    try:
+        assert entry.cdn_url is not None
+        await _run_download(
+            job_id,
+            entry.cdn_url,
+            entry.install_path,
+            entry.file_name,
+            cancel_event,
+            needs_extension=entry.needs_extension,
+            mods_dir=entry.mods_dir,
+            queued_nxm_url=queued_nxm_url,
+        )
+    finally:
+        _active_job_ids.discard(job_id)
+        await _start_next_queued()
+
+
+async def _start_next_queued() -> None:
+    """Fill every free slot with the oldest queued jobs (lowest id first).
+
+    The cap is read again each time, so a changed ``download_concurrency``
+    applies at the next free slot without touching running transfers.
+    """
+    while _queued_starts:
+        with Session(engine) as s:
+            cap = download_concurrency(s)
+        if len(_active_job_ids) >= cap:
+            return
+        job_id = min(_queued_starts)
+        entry = _queued_starts.pop(job_id)
+        _active_job_ids.add(job_id)
+        try:
+            started = await _start_queued(job_id, entry)
+        except BaseException:
+            _active_job_ids.discard(job_id)
+            raise
+        if not started:
+            _active_job_ids.discard(job_id)
+
+
+async def _start_queued(job_id: int, entry: _QueuedStart) -> bool:
+    """Start one queued job in the slot it was given; False when it did not start."""
+    with Session(engine) as s:
+        job = s.get(DownloadJob, job_id)
+        if job is None or job.status != "queued":
+            return False
+        mod_id, file_id = job.nexus_mod_id, job.nexus_file_id
+
+    queued_nxm_url = entry.cdn_url is not None
+    if entry.cdn_url is None:
+        try:
+            async with NexusClient(entry.api_key) as client:
+                links = await client.get_download_links(entry.game_domain, mod_id, file_id)
+        except NexusPremiumRequiredError:
+            _fail_job(job_id, "Premium account required for direct downloads")
+            return False
+        except NexusRateLimitError:
+            _fail_job(job_id, "Nexus rate limit reached, try again later")
+            return False
+        except httpx.HTTPError as exc:
+            _fail_job(job_id, f"Could not get the download link: {exc}")
+            return False
+        if not links or not links[0].get("URI"):
+            _fail_job(job_id, "No download links returned")
+            return False
+        entry.cdn_url = links[0]["URI"]
+
+    with Session(engine) as s:
+        job = s.get(DownloadJob, job_id)
+        # Cancelled while its link was being fetched: give the slot back.
+        if job is None or job.status != "queued":
+            return False
+        job.status = "downloading"
+        s.add(job)
+        s.commit()
+    _launch_transfer(job_id, entry, queued_nxm_url=queued_nxm_url)
+    return True
 
 
 def _parse_content_disposition(header: str) -> str | None:
@@ -181,8 +398,13 @@ async def _run_download(
     *,
     needs_extension: bool = False,
     mods_dir: str | None = None,
+    queued_nxm_url: bool = False,
 ) -> None:
-    """Background task that streams the download and updates the DB periodically."""
+    """Background task that streams the download and updates the DB periodically.
+
+    ``queued_nxm_url``: the CDN URL was fetched with an NXM key when the job was
+    queued; an HTTP error at the start of the transfer means it expired meanwhile.
+    """
     dest_dir = resolve_mods_dir(install_path, mods_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_path = dest_dir / file_name
@@ -288,11 +510,12 @@ async def _run_download(
     except Exception as e:
         part_path.unlink(missing_ok=True)
         logger.exception("Download failed for job %d", job_id)
+        expired = queued_nxm_url and isinstance(e, httpx.HTTPStatusError)
         with Session(engine) as s:
             job = s.get(DownloadJob, job_id)
             if job:
                 job.status = "failed"
-                job.error = str(e)[:500]
+                job.error = QUEUED_LINK_EXPIRED if expired else str(e)[:500]
                 s.add(job)
                 s.commit()
 
@@ -317,7 +540,8 @@ def list_jobs(game_id: int, session: Session) -> list[DownloadJob]:
 
 
 def cancel_job(job: DownloadJob, session: Session) -> DownloadJob:
-    if job.status in ("pending", "downloading"):
+    if job.status in ("pending", "queued", "downloading"):
+        _queued_starts.pop(job.id, None)  # type: ignore[arg-type]
         job.status = "cancelled"
         session.add(job)
         session.commit()

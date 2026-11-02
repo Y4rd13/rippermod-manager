@@ -65,7 +65,10 @@ class TestUpdateSettings:
     def test_allowlist_matches_plan(self):
         from rippermod_manager.routers.settings import ALLOWED_SETTING_KEYS
 
-        assert frozenset({"nexus_api_key", "save_backup_enabled"}) == ALLOWED_SETTING_KEYS
+        assert (
+            frozenset({"nexus_api_key", "save_backup_enabled", "download_concurrency"})
+            == ALLOWED_SETTING_KEYS
+        )
 
     def test_masks_in_response(self, client):
         r = client.put(
@@ -96,3 +99,15 @@ class TestSpecs:
         r = client.post("/api/v1/settings/specs/capture", json=payload)
         assert r.status_code == 200
         assert r.json()["cpu"] == "i9-13900K"
+
+
+class TestDownloadConcurrencySetting:
+    @pytest.mark.parametrize("value", ["0", "11", "abc", "", "3.5", "-1"])
+    def test_rejects_download_concurrency_out_of_range(self, client, value):
+        r = client.put("/api/v1/settings/", json={"settings": {"download_concurrency": value}})
+        assert r.status_code == 422
+
+    @pytest.mark.parametrize("value", ["1", "10"])
+    def test_accepts_download_concurrency_in_range(self, client, value):
+        r = client.put("/api/v1/settings/", json={"settings": {"download_concurrency": value}})
+        assert r.status_code == 200

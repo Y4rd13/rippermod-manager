@@ -117,17 +117,6 @@ async def start_download_from_mod(
     from rippermod_manager.models.download import DownloadJob
     from rippermod_manager.nexus.client import NexusClient
 
-    # Return existing active job instead of creating duplicates
-    existing = session.exec(
-        select(DownloadJob).where(
-            DownloadJob.game_id == game.id,
-            DownloadJob.nexus_mod_id == body.nexus_mod_id,
-            DownloadJob.status == "downloading",
-        )
-    ).first()
-    if existing:
-        return DownloadStartResult(job=_job_to_out(existing), requires_nxm=False)
-
     async with NexusClient(api_key) as client:
         key_result = await client.validate_key()
         files_resp = await client.get_mod_files(
@@ -157,6 +146,18 @@ async def start_download_from_mod(
     nexus_file_id = target.get("file_id")
     if not nexus_file_id:
         raise HTTPException(502, "Nexus API returned a file entry without a file_id")
+
+    # Return the job already queued or running for this file instead of a duplicate.
+    existing = session.exec(
+        select(DownloadJob).where(
+            DownloadJob.game_id == game.id,
+            DownloadJob.nexus_mod_id == body.nexus_mod_id,
+            DownloadJob.nexus_file_id == nexus_file_id,
+            DownloadJob.status.in_(("pending", "queued", "downloading")),  # type: ignore[union-attr]
+        )
+    ).first()
+    if existing:
+        return DownloadStartResult(job=_job_to_out(existing), requires_nxm=False)
 
     if not key_result.is_premium:
         return DownloadStartResult(

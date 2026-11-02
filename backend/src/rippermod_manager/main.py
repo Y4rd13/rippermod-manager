@@ -123,6 +123,20 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 )
     except Exception:
         logger.exception("Stale collection-install recovery failed, continuing anyway")
+    # Download jobs left queued or in flight by a previous run can never finish:
+    # their CDN links, NXM keys and tasks were in memory (S6).
+    try:
+        from sqlmodel import Session
+
+        from rippermod_manager.database import engine
+        from rippermod_manager.services import download_service
+
+        with Session(engine) as _session:
+            interrupted = download_service.recover_interrupted_jobs(_session)
+            if interrupted:
+                logger.info("Marked %d interrupted download(s) as failed on startup", interrupted)
+    except Exception:
+        logger.exception("Interrupted-download recovery failed, continuing anyway")
     # Daemon thread: the backfill never delays serving or holds shutdown.
     threading.Thread(
         target=run_adopt_backfill_all_games, name="adopt-archive-backfill", daemon=True
