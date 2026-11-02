@@ -772,7 +772,9 @@ def redmod_deploy(game: Game) -> RedmodDeployResult:
 
     try:
         proc = subprocess.run(
-            [str(exe), "deploy", "-reportProgress"],
+            # -root is required: without it redMod.exe takes its own bin folder as
+            # the game root and finds no mods to compile.
+            [str(exe), "deploy", "-reportProgress", "-root", str(Path(game.install_path))],
             cwd=str(exe.parent),
             capture_output=True,
             text=True,
