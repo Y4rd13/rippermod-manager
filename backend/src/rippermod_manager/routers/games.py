@@ -1,6 +1,6 @@
 import os
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, func
@@ -15,6 +15,8 @@ from rippermod_manager.schemas.game import (
     GameOut,
     GameUpdate,
     GameVersion,
+    ModPathCreate,
+    ModPathOut,
     PathValidation,
     PathValidationRequest,
 )
@@ -214,6 +216,118 @@ def update_game(name: str, data: GameUpdate, session: Session = Depends(get_sess
 
     _ = game.mod_paths
     return game
+
+
+_BAD_MOD_PATH = "Folder must be a relative path inside the game directory."
+
+
+def _normalize_mod_path(install_path: str, relative_path: str) -> str:
+    """Return *relative_path* as ``a/b/c``, or raise 422 unless it stays inside the game.
+
+    Refused: empty or ``.``, absolute, with a drive (``C:/x``, ``C:x``), UNC, with a
+    ``..`` part, or resolving (symlinks followed) outside ``install_path`` or onto it.
+    The folder itself may not exist yet.
+    """
+    raw = relative_path.strip()
+    if not raw or is_unc_path(raw):
+        raise HTTPException(422, _BAD_MOD_PATH)
+    rel = raw.replace("\\", "/").rstrip("/")
+    win = PureWindowsPath(rel)
+    if not rel or PurePosixPath(rel).is_absolute() or win.drive or win.is_absolute():
+        raise HTTPException(422, _BAD_MOD_PATH)
+    parts = PurePosixPath(rel).parts
+    if ".." in parts:
+        raise HTTPException(422, _BAD_MOD_PATH)
+    parts = tuple(p for p in parts if p != ".")
+    if not parts:
+        raise HTTPException(422, _BAD_MOD_PATH)
+    normalized = "/".join(parts)
+    root = Path(install_path).resolve()
+    target = (root / normalized).resolve()
+    if root not in target.parents:
+        raise HTTPException(422, _BAD_MOD_PATH)
+    return normalized
+
+
+def _game_or_404(name: str, session: Session) -> Game:
+    game = session.exec(select(Game).where(Game.name == name)).first()
+    if not game:
+        raise HTTPException(404, f"Game '{name}' not found")
+    return game
+
+
+def _mod_paths_out(game: Game, session: Session) -> list[ModPathOut]:
+    rows = session.exec(
+        select(GameModPath).where(GameModPath.game_id == game.id).order_by(GameModPath.id)  # type: ignore[arg-type]
+    ).all()
+    return [
+        ModPathOut(
+            id=r.id,  # type: ignore[arg-type]
+            relative_path=r.relative_path,
+            description=r.description,
+            is_default=r.is_default,
+        )
+        for r in rows
+    ]
+
+
+@router.get("/{name}/mod-paths", response_model=list[ModPathOut])
+def list_mod_paths(name: str, session: Session = Depends(get_session)) -> list[ModPathOut]:
+    """The folders the scanner reads for this game, relative to its install path."""
+    return _mod_paths_out(_game_or_404(name, session), session)
+
+
+@router.post("/{name}/mod-paths", response_model=list[ModPathOut], status_code=201)
+def add_mod_path(
+    name: str, data: ModPathCreate, session: Session = Depends(get_session)
+) -> list[ModPathOut]:
+    """Add a scanned folder; it applies on the next scan. Returns the whole list."""
+    game = _game_or_404(name, session)
+    rel = _normalize_mod_path(game.install_path, data.relative_path)
+    existing = session.exec(select(GameModPath).where(GameModPath.game_id == game.id)).all()
+    key = rel.casefold()
+    if any(e.relative_path.replace("\\", "/").strip("/").casefold() == key for e in existing):
+        raise HTTPException(409, "This folder is already scanned.")
+    session.add(
+        GameModPath(
+            game_id=game.id,  # type: ignore[arg-type]
+            relative_path=rel,
+            description=data.description.strip(),
+            is_default=False,
+        )
+    )
+    session.commit()
+    return _mod_paths_out(game, session)
+
+
+@router.delete("/{name}/mod-paths/{path_id}", status_code=204)
+def remove_mod_path(name: str, path_id: int, session: Session = Depends(get_session)) -> None:
+    """Stop scanning one folder. Files already scanned under it stay listed."""
+    game = _game_or_404(name, session)
+    row = session.get(GameModPath, path_id)
+    if row is None or row.game_id != game.id:
+        raise HTTPException(404, "Scanned folder not found")
+    session.delete(row)
+    session.commit()
+
+
+@router.post("/{name}/mod-paths/reset", response_model=list[ModPathOut])
+def reset_mod_paths(name: str, session: Session = Depends(get_session)) -> list[ModPathOut]:
+    """Replace the scanned folders with the game's defaults (none for other games)."""
+    game = _game_or_404(name, session)
+    session.exec(delete(GameModPath).where(GameModPath.game_id == game.id))  # type: ignore[arg-type]
+    if game.domain_name == "cyberpunk2077":
+        for rel_path, desc, is_default in CYBERPUNK_DEFAULT_PATHS:
+            session.add(
+                GameModPath(
+                    game_id=game.id,  # type: ignore[arg-type]
+                    relative_path=rel_path,
+                    description=desc,
+                    is_default=is_default,
+                )
+            )
+    session.commit()
+    return _mod_paths_out(game, session)
 
 
 @router.get("/{name}/version", response_model=GameVersion)

@@ -1,4 +1,4 @@
-import { CheckCircle, ClipboardCopy, Crown, ExternalLink, Eye, EyeOff, FileText, FolderOpen, Heart, LogOut, RotateCcw, Save, Sparkles, User } from "lucide-react";
+import { CheckCircle, ClipboardCopy, Crown, ExternalLink, Eye, EyeOff, FileText, FolderOpen, Heart, LogOut, RotateCcw, Save, Sparkles, User, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Switch } from "@/components/ui/Switch";
-import { useAbstainMod, useDisconnectNexus, useEndorseMod, useSetDownloadConcurrency, useTrackMod, useUntrackMod, useUpdateGame } from "@/hooks/mutations";
+import { useAbstainMod, useAddModPath, useDisconnectNexus, useEndorseMod, useRemoveModPath, useResetModPaths, useSetDownloadConcurrency, useTrackMod, useUntrackMod, useUpdateGame } from "@/hooks/mutations";
 import {
   RIPPERMOD_NEXUS_MOD_ID,
   RIPPERMOD_NEXUS_URL,
@@ -26,7 +26,7 @@ import {
   useSetSaveBackupEnabled,
   useSetSaveBackupPath,
 } from "@/hooks/use-save-backups";
-import { useGame, useGames, useModSummary, useSettings } from "@/hooks/queries";
+import { useGame, useGames, useModPaths, useModSummary, useSettings } from "@/hooks/queries";
 import { api } from "@/lib/api-client";
 import { reportDeployOutcome } from "@/lib/deploy-toast";
 import { cn } from "@/lib/utils";
@@ -138,8 +138,91 @@ function DeploymentCard() {
             <p className="text-[11px] text-text-muted/80">Using default location.</p>
           )}
         </div>
+
+        {game && <ScannedFoldersBlock gameName={gameName} installPath={game.install_path} />}
       </div>
     </Card>
+  );
+}
+
+/** ``picked`` relative to ``root`` with "/", or null when it is not strictly inside. */
+function relativeInside(root: string, picked: string): string | null {
+  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
+  const r = norm(root);
+  const p = norm(picked);
+  if (p.length <= r.length || p.slice(0, r.length).toLowerCase() !== r.toLowerCase()) return null;
+  if (p[r.length] !== "/") return null;
+  return p.slice(r.length + 1);
+}
+
+function ScannedFoldersBlock({ gameName, installPath }: { gameName: string; installPath: string }) {
+  const { data: paths = [] } = useModPaths(gameName);
+  const addPath = useAddModPath();
+  const removePath = useRemoveModPath();
+  const resetPaths = useResetModPaths();
+
+  const handleAdd = async () => {
+    const picked = await openDialog({
+      directory: true,
+      multiple: false,
+      title: "Choose a folder to scan",
+      defaultPath: installPath,
+    });
+    if (typeof picked !== "string") return;
+    const rel = relativeInside(installPath, picked);
+    if (rel == null) {
+      toast.error("Pick a folder inside the game directory");
+      return;
+    }
+    addPath.mutate({ gameName, relativePath: rel });
+  };
+
+  return (
+    <div className="border-t border-border pt-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-text-primary">Scanned folders</span>
+        <button
+          type="button"
+          onClick={() => resetPaths.mutate({ gameName })}
+          disabled={resetPaths.isPending}
+          className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-text-secondary"
+        >
+          <RotateCcw size={12} /> Reset to defaults
+        </button>
+      </div>
+      <p className="text-xs text-text-muted">
+        Folders inside the game directory that a scan reads for mods. Changes apply on the next
+        scan.
+      </p>
+      <ul className="space-y-1">
+        {paths.map((p) => (
+          <li
+            key={p.id}
+            className="flex items-center gap-2 rounded-md border border-border bg-surface-2 px-2.5 py-1 text-xs"
+          >
+            <span className="flex-1 truncate font-mono text-text-secondary" title={p.description || p.relative_path}>
+              {p.relative_path}
+            </span>
+            <button
+              type="button"
+              aria-label={`Remove ${p.relative_path}`}
+              title="Remove"
+              onClick={() => removePath.mutate({ gameName, pathId: p.id })}
+              disabled={removePath.isPending}
+              className="text-text-muted hover:text-danger"
+            >
+              <X size={12} />
+            </button>
+          </li>
+        ))}
+        {paths.length === 0 && (
+          <li className="text-xs text-text-muted">No folders are scanned for this game.</li>
+        )}
+      </ul>
+      <Button size="sm" variant="secondary" onClick={handleAdd} loading={addPath.isPending}>
+        <FolderOpen size={14} /> Add folder…
+      </Button>
+    </div>
   );
 }
 

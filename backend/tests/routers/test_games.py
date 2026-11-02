@@ -458,3 +458,90 @@ class TestDeleteGameCascade:
         assert reborn.id == a_id
         for model in dependent_models:
             assert session.exec(select(model).where(model.game_id == reborn.id)).all() == []
+
+
+class TestModPaths:
+    B = "/api/v1/games/CP/mod-paths"
+
+    def _setup(self, client, tmp_path):
+        assert _create(client, "CP", _cp_dir(tmp_path)).status_code == 201
+
+    def test_list_returns_the_ten_defaults(self, client, tmp_path):
+        self._setup(client, tmp_path)
+        assert len(client.get(self.B).json()) == 10
+
+    def test_add_normalizes_backslashes(self, client, tmp_path):
+        self._setup(client, tmp_path)
+        r = client.post(self.B, json={"relative_path": "archive\\pc\\extra\\"})
+        assert r.status_code == 201 and r.json()[-1]["relative_path"] == "archive/pc/extra"
+        assert r.json()[-1]["is_default"] is False
+        assert len(client.get(self.B).json()) == 11
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            "",
+            " ",
+            ".",
+            "./",
+            "../x",
+            "a/../../x",
+            "..\\x",
+            "/etc",
+            "C:/Windows",
+            "C:Windows",
+            "\\\\server\\share",
+            "//server/share",
+        ],
+    )
+    def test_add_mod_path_rejects_hostile_paths(self, client, tmp_path, bad):
+        self._setup(client, tmp_path)
+        assert client.post(self.B, json={"relative_path": bad}).status_code == 422
+        assert len(client.get(self.B).json()) == 10
+
+    def test_add_rejects_a_symlink_that_leaves_the_game_dir(self, client, tmp_path):
+        self._setup(client, tmp_path)
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (tmp_path / "game" / "escape").symlink_to(outside, target_is_directory=True)
+        assert client.post(self.B, json={"relative_path": "escape"}).status_code == 422
+
+    def test_add_accepts_a_folder_that_does_not_exist_yet(self, client, tmp_path):
+        self._setup(client, tmp_path)
+        r = client.post(self.B, json={"relative_path": "new/folder"})
+        assert r.status_code == 201
+
+    def test_add_rejects_a_duplicate_ignoring_case(self, client, tmp_path):
+        self._setup(client, tmp_path)
+        assert client.post(self.B, json={"relative_path": "Archive/PC/Mod/"}).status_code == 409
+
+    def test_delete_removes_one(self, client, tmp_path):
+        self._setup(client, tmp_path)
+        first_id = client.get(self.B).json()[0]["id"]
+        assert client.delete(f"{self.B}/{first_id}").status_code == 204
+        assert len(client.get(self.B).json()) == 9
+
+    def test_delete_of_another_games_path_is_404(self, client, tmp_path):
+        self._setup(client, tmp_path)
+        assert _create(client, "CP2", _cp_dir(tmp_path, "game2")).status_code == 201
+        b2 = "/api/v1/games/CP2/mod-paths"
+        other_id = client.get(b2).json()[0]["id"]
+        assert client.delete(f"{self.B}/{other_id}").status_code == 404
+        assert len(client.get(b2).json()) == 10
+
+    def test_reset_restores_the_cyberpunk_defaults(self, client, tmp_path):
+        from rippermod_manager.constants import CYBERPUNK_DEFAULT_PATHS
+
+        self._setup(client, tmp_path)
+        first_id = client.get(self.B).json()[0]["id"]
+        client.delete(f"{self.B}/{first_id}")
+        client.post(self.B, json={"relative_path": "extra"})
+        r = client.post(f"{self.B}/reset")
+        assert r.status_code == 200
+        assert {p["relative_path"] for p in r.json()} == {
+            p for p, _d, _x in CYBERPUNK_DEFAULT_PATHS
+        }
+        assert len(r.json()) == 10
+
+    def test_unknown_game_is_404(self, client):
+        assert client.get("/api/v1/games/Nope/mod-paths").status_code == 404

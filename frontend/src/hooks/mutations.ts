@@ -18,6 +18,7 @@ import { formatBytes } from "@/lib/format";
 import { useDownloadStore } from "@/stores/download-store";
 import { toast } from "@/stores/toast-store";
 import type {
+  ModPath,
   ActivityLogEntry,
   AdoptGroup,
   AdoptResult,
@@ -118,6 +119,48 @@ export function useUpdateGame() {
     },
     onError: (err) =>
       toast.error("Failed to update game", apiErrorDetail(err, err.message)),
+  });
+}
+
+const modPathsUrl = (gameName: string) =>
+  `/api/v1/games/${encodeURIComponent(gameName)}/mod-paths`;
+
+/** Add a scanned folder (relative to the game dir); applies on the next scan. */
+export function useAddModPath() {
+  const qc = useQueryClient();
+  return useMutation<ModPath[], Error, { gameName: string; relativePath: string }>({
+    mutationFn: ({ gameName, relativePath }) =>
+      api.post(modPathsUrl(gameName), { relative_path: relativePath }),
+    onSuccess: () => {
+      // Prefix: covers the mod-paths list and the game (its mod_paths count).
+      qc.invalidateQueries({ queryKey: ["games"] });
+    },
+    onError: (err) => toast.error("Could not add the folder", apiErrorDetail(err, err.message)),
+  });
+}
+
+export function useRemoveModPath() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, { gameName: string; pathId: number }>({
+    mutationFn: ({ gameName, pathId }) => api.delete(`${modPathsUrl(gameName)}/${pathId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["games"] });
+    },
+    onError: (err) =>
+      toast.error("Could not remove the folder", apiErrorDetail(err, err.message)),
+  });
+}
+
+export function useResetModPaths() {
+  const qc = useQueryClient();
+  return useMutation<ModPath[], Error, { gameName: string }>({
+    mutationFn: ({ gameName }) => api.post(`${modPathsUrl(gameName)}/reset`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["games"] });
+      toast.success("Scanned folders reset to defaults");
+    },
+    onError: (err) =>
+      toast.error("Could not reset the folders", apiErrorDetail(err, err.message)),
   });
 }
 
