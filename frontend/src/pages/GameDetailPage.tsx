@@ -172,7 +172,7 @@ export function GameDetailPage() {
   const warnBeforeLaunch = useUIStore((s) => s.warnBeforeLaunch);
   const adoptBannerDismissed = useUIStore((s) => s.adoptBannerDismissedByGame[name] ?? false);
   const dismissAdoptBanner = useUIStore((s) => s.dismissAdoptBanner);
-  const [adoptSelection, setAdoptSelection] = useState<ModGroup[] | null>(null);
+  const [adoptSelection, setAdoptSelection] = useState<{ mods: ModGroup[]; preselectIds: number[] } | null>(null);
   useEffect(() => {
     setActiveGame(name || null);
     return () => setActiveGame(null);
@@ -414,16 +414,22 @@ export function GameDetailPage() {
   const recognizedNotInstalled = adoptableMods.length;
   // "Detected on disk" is the high-confidence subset (backend `on_disk`); the rest are possible matches.
   const onDiskMods = useMemo(
-    () => adoptableMods.filter((m) => m.nexus_match?.on_disk),
+    () => adoptableMods.filter((m) => m.nexus_match?.on_disk === true),
     [adoptableMods],
   );
 
-  /** Opens the adopt dialog on the given groups, or on every adoptable one when none are given. */
+  /**
+   * Opens the adopt dialog on every adoptable group. With `groupIds` (a single row the user
+   * picked) only those start checked; otherwise only the groups detected on disk do.
+   */
   const openAdopt = (groupIds?: number[]) => {
-    const picked = groupIds
-      ? adoptableMods.filter((m) => groupIds.includes(m.id))
-      : adoptableMods;
-    if (picked.length > 0) setAdoptSelection(picked);
+    if (adoptableMods.length === 0) return;
+    // A row that is no longer adoptable (already installed) opens nothing, as before.
+    if (groupIds && !adoptableMods.some((m) => groupIds.includes(m.id))) return;
+    setAdoptSelection({
+      mods: adoptableMods,
+      preselectIds: groupIds ?? onDiskMods.map((m) => m.id),
+    });
   };
 
   const tabCounts = useMemo<Partial<Record<Tab, number>>>(() => ({
@@ -975,7 +981,8 @@ export function GameDetailPage() {
       {adoptSelection && (
         <AdoptReviewDialog
           gameName={name}
-          mods={adoptSelection}
+          mods={adoptSelection.mods}
+          preselectIds={adoptSelection.preselectIds}
           onClose={() => setAdoptSelection(null)}
         />
       )}
