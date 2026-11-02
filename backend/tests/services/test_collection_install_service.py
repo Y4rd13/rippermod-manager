@@ -1486,3 +1486,35 @@ class TestForceReinstall:
             sql_select(InstalledCollection).where(InstalledCollection.slug == "starter")
         ).all()
         assert len(rows) == 1
+
+
+async def test_wait_for_download_timeout_starts_when_job_leaves_queued(
+    session, engine, make_game, monkeypatch
+):
+    import asyncio
+
+    from rippermod_manager.models.download import DownloadJob
+
+    monkeypatch.setattr("rippermod_manager.database.engine", engine)
+    monkeypatch.setattr(svc, "_DOWNLOAD_POLL_INTERVAL_S", 0.01)
+    monkeypatch.setattr(svc, "_DOWNLOAD_TIMEOUT_S", 0.05)
+    game = make_game()
+    job = DownloadJob(game_id=game.id, nexus_mod_id=1, nexus_file_id=1, status="queued")
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+
+    async def progress() -> None:
+        await asyncio.sleep(0.1)  # longer than the timeout, all of it queued
+        job.status = "downloading"
+        session.add(job)
+        session.commit()
+        await asyncio.sleep(0.02)
+        job.status = "completed"
+        session.add(job)
+        session.commit()
+
+    mover = asyncio.create_task(progress())
+    result = await svc._wait_for_download(job.id)
+    await mover
+    assert result.status == "completed"
