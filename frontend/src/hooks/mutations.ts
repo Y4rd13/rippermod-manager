@@ -902,6 +902,8 @@ export function useEndorseMod() {
       qc.invalidateQueries({ queryKey: ["nexus-downloads", gameName] });
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["mod-detail"] });
+      // The Matched tab reads endorse/track flags from the mods list (S10).
+      qc.invalidateQueries({ queryKey: ["mods", gameName] });
       toast.success("Mod endorsed");
     },
     onError: () => toast.error("Failed to endorse mod"),
@@ -918,6 +920,8 @@ export function useAbstainMod() {
       qc.invalidateQueries({ queryKey: ["nexus-downloads", gameName] });
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["mod-detail"] });
+      // The Matched tab reads endorse/track flags from the mods list (S10).
+      qc.invalidateQueries({ queryKey: ["mods", gameName] });
       toast.success("Endorsement removed");
     },
     onError: () => toast.error("Failed to remove endorsement"),
@@ -934,6 +938,8 @@ export function useTrackMod() {
       qc.invalidateQueries({ queryKey: ["nexus-downloads", gameName] });
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["mod-detail"] });
+      // The Matched tab reads endorse/track flags from the mods list (S10).
+      qc.invalidateQueries({ queryKey: ["mods", gameName] });
       toast.success("Mod tracked");
     },
     onError: () => toast.error("Failed to track mod"),
@@ -950,6 +956,8 @@ export function useUntrackMod() {
       qc.invalidateQueries({ queryKey: ["nexus-downloads", gameName] });
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["mod-detail"] });
+      // The Matched tab reads endorse/track flags from the mods list (S10).
+      qc.invalidateQueries({ queryKey: ["mods", gameName] });
       toast.success("Mod untracked");
     },
     onError: () => toast.error("Failed to untrack mod"),

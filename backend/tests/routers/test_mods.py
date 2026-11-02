@@ -84,6 +84,46 @@ class TestListModGroups:
         assert by_name["Sure"]["on_disk"] is True
         assert by_name["Maybe"]["on_disk"] is False
 
+    def test_list_mods_exposes_endorse_and_track_flags(self, client, engine):
+        from sqlmodel import Session
+
+        from rippermod_manager.models.correlation import ModNexusCorrelation
+        from rippermod_manager.models.game import Game, GameModPath
+        from rippermod_manager.models.mod import ModGroup
+        from rippermod_manager.models.nexus import NexusDownload
+
+        with Session(engine) as s:
+            game = Game(name="G", domain_name="g", install_path="/g")
+            s.add(game)
+            s.flush()
+            s.add(GameModPath(game_id=game.id, relative_path="mods"))
+            for display, nexus_id, flag in (("Liked", 4885, True), ("Plain", 28966, False)):
+                group = ModGroup(game_id=game.id, display_name=display, confidence=0.9)
+                nd = NexusDownload(
+                    game_id=game.id,
+                    nexus_mod_id=nexus_id,
+                    mod_name=display,
+                    is_endorsed=flag,
+                    is_tracked=flag,
+                )
+                s.add(group)
+                s.add(nd)
+                s.flush()
+                s.add(
+                    ModNexusCorrelation(
+                        mod_group_id=group.id,
+                        nexus_download_id=nd.id,
+                        score=0.9,
+                        method="filename_id",
+                    )
+                )
+            s.commit()
+
+        r = client.get("/api/v1/games/G/mods/")
+        by_name = {g["display_name"]: g["nexus_match"] for g in r.json()}
+        assert (by_name["Liked"]["is_endorsed"], by_name["Liked"]["is_tracked"]) == (True, True)
+        assert (by_name["Plain"]["is_endorsed"], by_name["Plain"]["is_tracked"]) == (False, False)
+
 
 class TestScanMods:
     def test_scan_mock(self, client):

@@ -39,6 +39,30 @@ def _get_game(game_name: str, session: Session) -> Game:
     return game
 
 
+def _endorse_track_flags(
+    session: Session, game_id: int, nexus_ids: set[int]
+) -> dict[int, tuple[bool, bool]]:
+    """``(is_endorsed, is_tracked)`` per Nexus mod id, from the game's NexusDownload rows.
+
+    With several rows for one mod, the first by id wins: it is the row the
+    endorse and track endpoints write (``_get_or_create_download``).
+    """
+    if not nexus_ids:
+        return {}
+    rows = session.exec(
+        select(NexusDownload)
+        .where(
+            NexusDownload.game_id == game_id,
+            NexusDownload.nexus_mod_id.in_(nexus_ids),  # type: ignore[attr-defined]
+        )
+        .order_by(NexusDownload.id)  # type: ignore[arg-type]
+    ).all()
+    flags: dict[int, tuple[bool, bool]] = {}
+    for row in rows:
+        flags.setdefault(row.nexus_mod_id, (row.is_endorsed, row.is_tracked))
+    return flags
+
+
 @router.get("/", response_model=list[ModGroupOut])
 def list_mod_groups(game_name: str, session: Session = Depends(get_session)) -> list[ModGroupOut]:
     game = _get_game(game_name, session)
@@ -55,6 +79,7 @@ def list_mod_groups(game_name: str, session: Session = Depends(get_session)) -> 
         meta_map = {m.nexus_mod_id: m for m in metas}
 
     mtime_map = batch_group_file_mtimes(group_ids, game.install_path, session)
+    flag_map = _endorse_track_flags(session, game.id, nexus_ids)  # type: ignore[arg-type]
 
     result: list[ModGroupOut] = []
     for g in groups:
@@ -79,6 +104,8 @@ def list_mod_groups(game_name: str, session: Session = Depends(get_session)) -> 
                 picture_url=meta.picture_url if meta else "",
                 nexus_url=nd.nexus_url,
                 updated_at=meta.updated_at if meta else None,
+                is_endorsed=flag_map.get(nd.nexus_mod_id, (False, False))[0],
+                is_tracked=flag_map.get(nd.nexus_mod_id, (False, False))[1],
             )
 
         result.append(
@@ -327,6 +354,9 @@ def confirm_correlation(
     meta = session.exec(
         select(NexusModMeta).where(NexusModMeta.nexus_mod_id == dl.nexus_mod_id)
     ).first()
+    flags = _endorse_track_flags(session, dl.game_id, {dl.nexus_mod_id}).get(
+        dl.nexus_mod_id, (False, False)
+    )
     return CorrelationBrief(
         nexus_mod_id=dl.nexus_mod_id,
         mod_name=dl.mod_name,
@@ -341,6 +371,8 @@ def confirm_correlation(
         picture_url=meta.picture_url if meta else "",
         nexus_url=dl.nexus_url,
         updated_at=meta.updated_at if meta else None,
+        is_endorsed=flags[0],
+        is_tracked=flags[1],
     )
 
 
@@ -429,6 +461,9 @@ async def reassign_correlation(
     meta = session.exec(
         select(NexusModMeta).where(NexusModMeta.nexus_mod_id == dl.nexus_mod_id)
     ).first()
+    flags = _endorse_track_flags(session, dl.game_id, {dl.nexus_mod_id}).get(
+        dl.nexus_mod_id, (False, False)
+    )
     return CorrelationBrief(
         nexus_mod_id=dl.nexus_mod_id,
         mod_name=dl.mod_name,
@@ -443,6 +478,8 @@ async def reassign_correlation(
         picture_url=meta.picture_url if meta else "",
         nexus_url=dl.nexus_url,
         updated_at=meta.updated_at if meta else None,
+        is_endorsed=flags[0],
+        is_tracked=flags[1],
     )
 
 
