@@ -37,6 +37,9 @@ class DownloadJobOut(BaseModel):
 class DownloadStartResult(BaseModel):
     job: DownloadJobOut | None = None
     requires_nxm: bool = False
+    # With ``requires_nxm``: the mod's Files tab on Nexus, where a free user
+    # clicks "Mod Manager Download" to send the nxm:// link back (S1).
+    nexus_url: str | None = None
     requires_file_selection: bool = False
     # When a free-tier user's ``nxm://`` click matches a mod that a
     # Collections install orchestrator is currently waiting for, the key
