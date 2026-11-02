@@ -432,12 +432,8 @@ def install_fomod(
     if auto_deploy:
         from rippermod_manager.services.vfs import deploy_service
 
+        # deploy() also rewrites modlist.txt with the new archives in the load order.
         deploy_report = deploy_service.deploy(game, session, compile_redmod=False)
-
-        # Regenerate modlist.txt to include new archives in the load order
-        from rippermod_manager.services.modlist_service import write_modlist
-
-        write_modlist(game, session)
 
     # New REDmod content loads only once compiled (S2); compile in the background.
     redmod_compile_queued = False

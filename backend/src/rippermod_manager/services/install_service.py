@@ -303,7 +303,11 @@ def install_mod(
     # Regenerate modlist.txt to include new archives in the load order
     from rippermod_manager.services.modlist_service import write_modlist
 
-    write_modlist(game, session)
+    try:
+        write_modlist(game, session)
+    except OSError:
+        # The mod is staged and linked; a locked modlist.txt must not fail the install.
+        logger.warning("Could not write modlist.txt for %s", game.name, exc_info=True)
 
     logger.info(
         "Installed '%s' (%d files staged, %d overwritten in staging)",

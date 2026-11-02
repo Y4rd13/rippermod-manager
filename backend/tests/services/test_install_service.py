@@ -1216,3 +1216,16 @@ def test_install_refused_by_preflight_does_not_queue_redmod_compile(
 
     assert result.redmod_compile_queued is False
     assert background_requests["redmod"] == []
+
+
+def test_install_survives_an_unwritable_modlist(session, game, staging_dir):
+    """The mod is installed even when modlist.txt cannot be written."""
+    archive = staging_dir / "LockedList.zip"
+    _make_zip(archive, {"archive/pc/mod/l.archive": b"FAKE"})
+    with patch(
+        "rippermod_manager.services.modlist_service.write_modlist",
+        side_effect=PermissionError("modlist.txt is locked"),
+    ):
+        result = install_mod(game, archive, session, auto_deploy=False)
+
+    assert result.files_extracted == 1
