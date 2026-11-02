@@ -1,7 +1,6 @@
 from fastapi import APIRouter
 
 from rippermod_manager.routers.activity import router as activity_router
-from rippermod_manager.routers.app_update import router as app_update_router
 from rippermod_manager.routers.collections import router as collections_router
 from rippermod_manager.routers.conflicts import router as conflicts_router
 from rippermod_manager.routers.diagnostics import router as diagnostics_router
@@ -40,5 +39,4 @@ api_router.include_router(updates_router)
 api_router.include_router(downloads_router)
 api_router.include_router(fomod_router)
 api_router.include_router(collections_router)
-api_router.include_router(app_update_router)
 api_router.include_router(activity_router)
