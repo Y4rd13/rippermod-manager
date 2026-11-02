@@ -7,10 +7,11 @@ import { DownloadProgress } from "@/components/ui/DownloadProgress";
 import { useCancelDownload } from "@/hooks/mutations";
 import { useAvailableArchives } from "@/hooks/queries";
 import { useInstallFlow } from "@/hooks/use-install-flow";
+import { summarizeDownloads } from "@/lib/download-progress";
+import { plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { TERMINAL_STATUSES, useDownloadStore } from "@/stores/download-store";
 import { useUIStore } from "@/stores/ui-store";
-import type { DownloadJobOut } from "@/types/api";
 
 export function DownloadQueueFooter() {
   const jobs = useDownloadStore((s) => s.jobs);
@@ -18,6 +19,7 @@ export function DownloadQueueFooter() {
   const toggleFooter = useDownloadStore((s) => s.toggleFooter);
   const clearCompleted = useDownloadStore((s) => s.clearCompleted);
   const activeGameName = useUIStore((s) => s.activeGameName);
+  const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const cancelDownload = useCancelDownload();
   const { data: archives = [] } = useAvailableArchives(activeGameName ?? "");
   const jobArray = useMemo(() => Object.values(jobs), [jobs]);
@@ -57,35 +59,36 @@ export function DownloadQueueFooter() {
     [jobArray],
   );
 
-  const { activeJobs, terminalJobs, aggregatePercent } = useMemo(() => {
-    const active: DownloadJobOut[] = [];
-    const terminal: DownloadJobOut[] = [];
-
-    for (const job of jobList) {
-      if (TERMINAL_STATUSES.has(job.status)) {
-        terminal.push(job);
-      } else {
-        active.push(job);
-      }
-    }
-
-    const avg = active.length > 0
-      ? Math.round(active.reduce((sum, j) => sum + j.percent, 0) / active.length)
-      : 100;
-    return { activeJobs: active, terminalJobs: terminal, aggregatePercent: avg };
-  }, [jobList]);
+  const { terminalJobs, summary } = useMemo(
+    () => ({
+      terminalJobs: jobList.filter((job) => TERMINAL_STATUSES.has(job.status)),
+      summary: summarizeDownloads(jobList),
+    }),
+    [jobList],
+  );
 
   if (!activeGameName || jobList.length === 0) return null;
 
-  const countLabel = activeJobs.length > 0
-    ? `${activeJobs.length} download${activeJobs.length !== 1 ? "s" : ""}`
-    : `${terminalJobs.length} completed`;
+  // Only downloading jobs feed the percentage; queued ones are named instead of averaged in.
+  const allDone = summary.active === 0;
+  const barPercent = summary.downloadingPercent ?? (allDone ? 100 : 0);
+  const countLabel = allDone
+    ? `${terminalJobs.length} completed`
+    : `${plural(summary.active, "download")}${summary.queued > 0 ? ` · ${summary.queued} queued` : ""}`;
 
   return (
     <>
-    <div className="fixed bottom-0 left-0 right-0 z-30 animate-slide-up bg-surface-1 border-t border-border">
+    <div
+      className={cn(
+        "fixed bottom-0 right-0 z-30 animate-slide-up bg-surface-1 border-t border-border transition-[left] duration-200",
+        sidebarCollapsed ? "left-14" : "left-52",
+      )}
+    >
       <button
+        type="button"
         onClick={toggleFooter}
+        aria-expanded={footerExpanded}
+        aria-label={footerExpanded ? "Hide downloads" : "Show downloads"}
         className="flex w-full items-center gap-3 px-4 h-10 hover:bg-surface-2/50 transition-colors"
       >
         <Download size={16} className="text-accent-text shrink-0" />
@@ -94,14 +97,16 @@ export function DownloadQueueFooter() {
           <div
             className={cn(
               "h-full rounded-full transition-all duration-300",
-              aggregatePercent >= 100 ? "bg-success" : "bg-accent",
+              allDone ? "bg-success" : "bg-accent",
             )}
-            style={{ width: `${Math.min(aggregatePercent, 100)}%` }}
+            style={{ width: `${Math.min(barPercent, 100)}%` }}
           />
         </div>
-        <span className="text-xs text-text-muted tabular-nums whitespace-nowrap">
-          {aggregatePercent}%
-        </span>
+        {(summary.downloadingPercent != null || allDone) && (
+          <span className="text-xs text-text-muted tabular-nums whitespace-nowrap">
+            {barPercent}%
+          </span>
+        )}
         <ChevronUp
           size={16}
           className={cn(
@@ -154,9 +159,11 @@ export function DownloadQueueFooter() {
                     <Loader2 size={16} className="text-accent-text shrink-0 animate-spin" />
                   ) : (
                     <button
+                      type="button"
                       onClick={() => handleInstall(job.nexus_mod_id, job.file_name)}
                       className="p-1 text-accent-text hover:text-text-primary transition-colors shrink-0"
                       title="Install mod"
+                      aria-label={`Install ${job.file_name}`}
                     >
                       <PackagePlus size={16} />
                     </button>

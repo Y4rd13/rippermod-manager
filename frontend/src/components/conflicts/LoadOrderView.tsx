@@ -324,7 +324,7 @@ function ModlistFilePanel({ gameName }: { gameName: string }) {
       <div className="border-b border-border px-3 py-1.5 text-xs text-text-muted font-mono truncate" title={data.path}>
         {data.path} · {data.lines.length} line{data.lines.length !== 1 ? "s" : ""}
       </div>
-      <ol className="max-h-64 overflow-y-auto py-1 font-mono text-xs text-text-secondary">
+      <ol className="py-1 font-mono text-xs text-text-secondary">
         {data.lines.map((line, i) => (
           <li key={i} className="flex gap-3 px-3">
             <span className="w-8 shrink-0 select-none text-right text-text-muted">{i + 1}</span>
