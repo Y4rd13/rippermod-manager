@@ -5,6 +5,7 @@ import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FileTreeView } from "@/components/ui/FileTreeView";
 import { buildFileTree } from "@/lib/file-tree";
+import { matchMethodLabel } from "@/lib/labels";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
@@ -248,7 +249,7 @@ export function ModsTable({ mods, gameName, isLoading }: { mods: ModGroup[]; gam
                       <div className="mt-2 pt-2 border-t border-border flex items-center gap-2 text-xs">
                         <ExternalLink size={12} className="text-accent" />
                         <span className="text-text-muted">
-                          Matched via {mod.nexus_match.method}, Nexus Mod #
+                          Matched via {matchMethodLabel(mod.nexus_match.method)}, Nexus Mod #
                           {mod.nexus_match.nexus_mod_id}
                         </span>
                       </div>

@@ -32,6 +32,7 @@ import { useInstallFlow } from "@/hooks/use-install-flow";
 import { useSessionState } from "@/hooks/use-session-state";
 import { useUIStore } from "@/stores/ui-store";
 import { isoToEpoch, timeAgo } from "@/lib/format";
+import { matchMethodLabel } from "@/lib/labels";
 import type {
   AvailableArchive,
   DownloadJobOut,
@@ -99,18 +100,6 @@ const CONFIDENCE_CHIPS = [
   { key: "low", label: "Low (<75%)" },
 ];
 
-const METHOD_LABELS: Record<string, string> = {
-  exact: "Exact",
-  substring: "Substring",
-  fuzzy: "Fuzzy",
-  filename_id: "Filename ID",
-  installed: "Installed",
-  file_list: "File List",
-  endorsed_name: "Endorsed",
-  fomod: "FOMOD",
-  manual: "Manual",
-};
-
 interface Props {
   mods: ModGroup[];
   archives: AvailableArchive[];
@@ -154,7 +143,7 @@ export function NexusMatchedGrid({
     }
     const chips: { key: string; label: string; count?: number }[] = [{ key: "all", label: "All" }];
     for (const [key, count] of [...counts.entries()].sort((a, b) => b[1] - a[1])) {
-      chips.push({ key, label: METHOD_LABELS[key] ?? key, count });
+      chips.push({ key, label: matchMethodLabel(key), count });
     }
     return chips;
   }, [mods]);
@@ -371,7 +360,7 @@ export function NexusMatchedGrid({
           const footer = (
             <div className="flex items-center gap-1.5 flex-wrap">
               <ConfidenceBadge score={match.score} />
-              <Badge variant="neutral">{match.method}</Badge>
+              <Badge variant="neutral">{matchMethodLabel(match.method)}</Badge>
               <CorrelationActions
                 gameName={gameName}
                 modGroupId={mod.id}
