@@ -9,6 +9,7 @@ import {
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { buildFileTree } from "@/lib/file-tree";
 import type { ArchiveEntryNode, ConflictCheckResult } from "@/types/api";
 
@@ -109,50 +110,49 @@ export function ConflictDialog({ conflicts, onCancel, onSkip, onOverwrite }: Pro
   }, [conflicts]);
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="conflict-dialog-title"
-        className="w-full max-w-2xl rounded-xl border border-border bg-surface-1 p-6"
-      >
-        <div className="mb-4 flex items-center gap-2 text-warning">
-          <AlertTriangle size={20} />
-          <h3 id="conflict-dialog-title" className="text-lg font-semibold text-text-primary">
-            File Conflicts Detected
-          </h3>
-        </div>
-        <p className="mb-3 text-sm text-text-secondary">
-          {conflicts.conflicts.length} file(s) conflict with installed mods:
-        </p>
-        <div className="mb-4 max-h-48 overflow-y-auto rounded border border-border bg-surface-0 p-2">
-          {tree.map((node) => (
-            <ConflictTreeNode
-              key={node.name}
-              node={node}
-              depth={0}
-              parentPath=""
-              ownerMap={ownerMap}
-            />
-          ))}
-        </div>
-        <p className="mb-4 text-xs text-text-secondary">
-          Install: this mod&apos;s copy is linked in the game folder. The other mod keeps its own copy
-          and gets the path back if you uninstall this one. Install without these files: the listed
-          files are not extracted from this mod.
-        </p>
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" size="sm" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button variant="secondary" size="sm" onClick={onSkip}>
-            Install without these files
-          </Button>
-          <Button size="sm" onClick={onOverwrite}>
-            Install
-          </Button>
-        </div>
+    <Dialog
+      onClose={onCancel}
+      titleId="conflict-dialog-title"
+      closeOnBackdrop={false}
+      backdropClassName="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+      className="w-full max-w-2xl rounded-xl border border-border bg-surface-1 p-6"
+    >
+      <div className="mb-4 flex items-center gap-2 text-warning">
+        <AlertTriangle size={20} />
+        <h3 id="conflict-dialog-title" className="text-lg font-semibold text-text-primary">
+          File Conflicts Detected
+        </h3>
       </div>
-    </div>
+      <p className="mb-3 text-sm text-text-secondary">
+        {conflicts.conflicts.length} file(s) conflict with installed mods:
+      </p>
+      <div className="mb-4 max-h-48 overflow-y-auto rounded border border-border bg-surface-0 p-2">
+        {tree.map((node) => (
+          <ConflictTreeNode
+            key={node.name}
+            node={node}
+            depth={0}
+            parentPath=""
+            ownerMap={ownerMap}
+          />
+        ))}
+      </div>
+      <p className="mb-4 text-xs text-text-secondary">
+        Install: this mod&apos;s copy is linked in the game folder. The other mod keeps its own copy
+        and gets the path back if you uninstall this one. Install without these files: the listed
+        files are not extracted from this mod.
+      </p>
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button variant="secondary" size="sm" onClick={onSkip}>
+          Install without these files
+        </Button>
+        <Button size="sm" onClick={onOverwrite}>
+          Install
+        </Button>
+      </div>
+    </Dialog>
   );
 }

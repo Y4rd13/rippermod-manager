@@ -38,3 +38,10 @@ describe("tokens", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("dialogs", () => {
+  it("only Dialog renders aria-modal", () => {
+    const offenders = sourceFiles().filter((f) => !f.endsWith("components/ui/Dialog.tsx") && readFileSync(f, "utf8").includes("aria-modal"));
+    expect(offenders).toEqual([]);
+  });
+});

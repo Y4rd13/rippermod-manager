@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Dialog } from "@/components/ui/Dialog";
 import { FileTreeView } from "@/components/ui/FileTreeView";
 import { useDismissConflict, useResolveConflict, useRestoreConflict, useUninstallMod } from "@/hooks/mutations";
 import { useModConflicts } from "@/hooks/queries";
@@ -75,14 +76,6 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, dismi
   const [confirmReinstall, setConfirmReinstall] = useState(false);
 
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
-
-  useEffect(() => {
     if (resolve.isSuccess) onClose();
   }, [resolve.isSuccess, onClose]);
 
@@ -126,16 +119,11 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, dismi
   const winnerName = isSuperseded ? grouped[0][0] : null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="conflict-detail-title"
+    <>
+      <Dialog
+        onClose={onClose}
+        titleId="conflict-detail-title"
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
         className="w-full max-w-2xl rounded-xl border border-border bg-surface-1 flex flex-col max-h-[85vh] animate-modal-in"
       >
         {/* Header */}
@@ -250,7 +238,7 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, dismi
             Close
           </Button>
         </div>
-      </div>
+      </Dialog>
       {confirmReinstall && (
         <ConfirmDialog
           title="Reinstall this mod?"
@@ -279,6 +267,6 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, dismi
           onCancel={() => setShowRemoveConfirm(false)}
         />
       )}
-    </div>
+    </>
   );
 }

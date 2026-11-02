@@ -16,6 +16,7 @@ import { NexusModTile } from "@/components/mods/NexusModTile";
 import { Badge, ConfidenceBadge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
+import { Dialog } from "@/components/ui/Dialog";
 import { OverflowMenuButton } from "@/components/ui/OverflowMenuButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FileTreeView } from "@/components/ui/FileTreeView";
@@ -41,45 +42,32 @@ import type {
 } from "@/types/api";
 
 function FilesModal({ group, onClose }: { group: ModGroup; onClose: () => void }) {
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
-      onClick={onClose}
+    <Dialog
+      onClose={onClose}
+      titleId="files-dialog-title"
+      backdropClassName="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+      className="w-full max-w-2xl rounded-xl border border-border bg-surface-1 p-6 animate-modal-in"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="files-dialog-title"
-        className="w-full max-w-2xl rounded-xl border border-border bg-surface-1 p-6 animate-modal-in"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h3 id="files-dialog-title" className="text-sm font-semibold text-text-primary truncate pr-4">
-            {group.nexus_match?.mod_name ?? group.display_name}
-          </h3>
-          <button
-            onClick={onClose}
-            className="shrink-0 rounded-md p-1 text-text-muted hover:bg-surface-3 hover:text-text-primary"
-          >
-            <X size={16} />
-          </button>
-        </div>
-        <p className="mb-3 text-xs text-text-muted">
-          {group.files.length} file{group.files.length !== 1 ? "s" : ""}
-        </p>
-        <div className="max-h-80 overflow-y-auto rounded border border-border bg-surface-0 p-3">
-          <FileTreeView tree={buildFileTree(group.files)} />
-        </div>
+      <div className="mb-4 flex items-center justify-between">
+        <h3 id="files-dialog-title" className="text-sm font-semibold text-text-primary truncate pr-4">
+          {group.nexus_match?.mod_name ?? group.display_name}
+        </h3>
+        <button
+          onClick={onClose}
+          className="shrink-0 rounded-md p-1 text-text-muted hover:bg-surface-3 hover:text-text-primary"
+        >
+          <X size={16} />
+        </button>
       </div>
-    </div>
+      <p className="mb-3 text-xs text-text-muted">
+        {group.files.length} file{group.files.length !== 1 ? "s" : ""}
+      </p>
+      <div className="max-h-80 overflow-y-auto rounded border border-border bg-surface-0 p-3">
+        <FileTreeView tree={buildFileTree(group.files)} />
+      </div>
+    </Dialog>
   );
 }
 
