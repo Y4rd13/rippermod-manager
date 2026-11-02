@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { Card } from "@/components/ui/Card";
+import { countTrustedMatches } from "@/lib/matches";
 import { cn } from "@/lib/utils";
 import { useConflictCount, useGames, useInstalledMods, useMods, useUpdates } from "@/hooks/queries";
 
@@ -57,7 +58,7 @@ function GameStatsReporter({ gameName, onReport }: { gameName: string; onReport:
 
   const stats = useMemo(() => ({
     totalInstalled: installed.length,
-    nexusMatched: mods.filter((m) => m.nexus_match).length,
+    nexusMatched: countTrustedMatches(mods),
     updatesAvailable: updates?.updates_available ?? 0,
     conflictsAffected: conflicts?.mods_with_conflicts ?? 0,
   }), [installed.length, mods, updates?.updates_available, conflicts?.mods_with_conflicts]);
@@ -140,7 +141,7 @@ export function DashboardPage() {
           color="bg-warning/10 text-warning"
           hoverBorder="hover:border-warning/40"
           onClick={firstGame ? () => navigate(`/games/${firstGame}`) : undefined}
-          title="Scanned mods matched to Nexus Mods entries"
+          title="Scanned mods whose Nexus match is confirmed or scores at least 75%. Low-confidence matches are listed in the Matched tab for review."
         />
         <StatCard
           icon={RefreshCw}
