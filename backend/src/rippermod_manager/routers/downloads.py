@@ -117,6 +117,18 @@ async def start_download_from_mod(
     from rippermod_manager.models.download import DownloadJob
     from rippermod_manager.nexus.client import NexusClient
 
+    # A repeated click while this mod is already downloading returns that job without
+    # spending Nexus API calls on resolving its file again.
+    active = session.exec(
+        select(DownloadJob).where(
+            DownloadJob.game_id == game.id,
+            DownloadJob.nexus_mod_id == body.nexus_mod_id,
+            DownloadJob.status.in_(("pending", "queued", "downloading")),  # type: ignore[union-attr]
+        )
+    ).first()
+    if active:
+        return DownloadStartResult(job=_job_to_out(active), requires_nxm=False)
+
     async with NexusClient(api_key) as client:
         key_result = await client.validate_key()
         files_resp = await client.get_mod_files(

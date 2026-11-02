@@ -203,9 +203,21 @@ def resolve_conflict(
             "Reinstall it from Archives to choose its options again."
         )
 
+    archive_files = _archive_files_for_mod(mod, game) or []
+    # An adopted mod can own files its archive lacks (a user.ini it wrote at runtime);
+    # uninstalling would delete them and the reinstall would not bring them back.
+    in_archive = {p.replace("\\", "/").lower() for p in archive_files}
+    outside = {f.relative_path.replace("\\", "/").lower() for f in mod.files} - in_archive
+    if outside:
+        n = len(outside)
+        noun, verb, pronoun = ("file", "is", "it") if n == 1 else ("files", "are", "them")
+        raise ResolveRefusedError(
+            f"This mod has {n} {noun} that {verb} not in its archive, such as settings it "
+            f"wrote. Reinstalling would delete {pronoun}."
+        )
+
     # Count current conflicts before reinstall
     ownership = get_file_ownership_map(session, game.id)  # type: ignore[arg-type]
-    archive_files = _archive_files_for_mod(mod, game) or []
     pre_conflicts = 0
     for file_path in archive_files:
         normalised_lower = file_path.replace("\\", "/").lower()

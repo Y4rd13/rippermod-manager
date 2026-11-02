@@ -438,3 +438,21 @@ class TestRejectRemembersOnlyTheVisiblePair:
         assert r.status_code == 200
         session.expire_all()
         assert session.exec(select(RejectedCorrelation)).all() == []
+
+
+class TestCorrelationEndpointsReportOnDisk:
+    def test_confirm_correlation_reports_on_disk(self, client, matched_group):
+        game, group, _nexus_mod_id = matched_group
+        r = client.patch(f"/api/v1/games/{game.name}/mods/{group.id}/correlation/confirm")
+        assert r.status_code == 200
+        assert r.json()["confirmed"] is True
+        assert r.json()["on_disk"] is True
+
+    def test_reassign_correlation_reports_on_disk(self, client, matched_group):
+        game, group, nexus_mod_id = matched_group
+        r = client.put(
+            f"/api/v1/games/{game.name}/mods/{group.id}/correlation",
+            json={"nexus_mod_id": nexus_mod_id},
+        )
+        assert r.status_code == 200
+        assert r.json()["on_disk"] is True
