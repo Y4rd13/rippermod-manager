@@ -291,7 +291,7 @@ def install_mod(
     if auto_deploy:
         from rippermod_manager.services.vfs import deploy_service
 
-        deploy_report = deploy_service.deploy(game, session)
+        deploy_report = deploy_service.deploy(game, session, compile_redmod=False)
 
     # Index .archive files for resource-level conflict detection
     from rippermod_manager.services.archive_index_service import index_mod_archives
@@ -311,6 +311,13 @@ def install_mod(
         len(extracted_paths),
         overwritten,
     )
+    # New REDmod content loads only once compiled (S2); compile in the background.
+    redmod_compile_queued = False
+    if auto_deploy:
+        from rippermod_manager.services.vfs.deploy_service import has_redmod_files
+        from rippermod_manager.services.vfs.redmod_scheduler import request_redmod_compile
+
+        redmod_compile_queued = has_redmod_files(installed) and request_redmod_compile(game)
     from rippermod_manager.services.conflicts.auto_reindex import request_conflict_reindex
 
     request_conflict_reindex(game.id)
@@ -334,6 +341,7 @@ def install_mod(
         files_overwritten=overwritten,
         installed_mod_name_safe=safe_name,
         deploy=deploy_report,
+        redmod_compile_queued=redmod_compile_queued,
     )
 
 

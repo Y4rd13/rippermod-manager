@@ -203,6 +203,7 @@ class TestLoadProfile:
         mod.disabled = True
         session.add(mod)
         session.commit()
+        background_requests["redmod"].clear()  # the install queued its own compile
 
         load_profile(session.get(Profile, profile_out.id), game, session)
 

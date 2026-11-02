@@ -1140,3 +1140,56 @@ class TestGameRunningGuard:
     def test_ensure_game_closed_passes_when_game_closed(self, monkeypatch):
         monkeypatch.setattr(install_service, "is_game_running", lambda *a, **k: False)
         assert install_service.ensure_game_closed() is None
+
+
+class TestInstallQueuesRedmodCompile:
+    """Installing REDmod content queues a background compile, not one inside the request."""
+
+    def _cp_game(self, session, game_dir):
+        g = Game(name="CP77Queue", domain_name="cyberpunk2077", install_path=str(game_dir))
+        session.add(g)
+        session.flush()
+        session.add(GameModPath(game_id=g.id, relative_path="mods"))
+        session.commit()
+        return g
+
+    def test_redmod_install_queues_compile_and_deploys_without_it(
+        self, session, game_dir, staging_dir, background_requests
+    ):
+        from rippermod_manager.schemas.deploy import DeployReport
+
+        game = self._cp_game(session, game_dir)
+        archive = staging_dir / "QueuedREDmod-1-1-0.zip"
+        _make_zip(
+            archive,
+            {
+                "QueuedPkg/info.json": b'{"name":"Queued","version":"1.0"}',
+                "QueuedPkg/archives/a.archive": b"FAKE",
+            },
+        )
+        with patch(
+            "rippermod_manager.services.vfs.deploy_service.deploy",
+            return_value=DeployReport(total=0, done=0, failed=0),
+        ) as deploy_mock:
+            result = install_mod(game, archive, session)
+
+        assert deploy_mock.call_args.kwargs.get("compile_redmod") is False
+        assert result.redmod_compile_queued is True
+        assert background_requests["redmod"] == [game.id]
+
+    def test_plain_install_does_not_queue_compile(
+        self, session, game_dir, staging_dir, background_requests
+    ):
+        from rippermod_manager.schemas.deploy import DeployReport
+
+        game = self._cp_game(session, game_dir)
+        archive = staging_dir / "PlainArchive-2-1-0.zip"
+        _make_zip(archive, {"archive/pc/mod/plain.archive": b"FAKE"})
+        with patch(
+            "rippermod_manager.services.vfs.deploy_service.deploy",
+            return_value=DeployReport(total=0, done=0, failed=0),
+        ):
+            result = install_mod(game, archive, session)
+
+        assert result.redmod_compile_queued is False
+        assert background_requests["redmod"] == []

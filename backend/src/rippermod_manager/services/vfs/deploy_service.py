@@ -805,7 +805,9 @@ def redmod_deploy(game: Game) -> RedmodDeployResult:
     )
 
 
-def deploy(game: Game, session: Session, *, force: bool = False) -> DeployReport:
+def deploy(
+    game: Game, session: Session, *, force: bool = False, compile_redmod: bool = True
+) -> DeployReport:
     """Compose pre_flight_check, plan_deploy, execute_plan and redmod_deploy.
 
     If pre-flight fails, returns an empty report with the ``preflight`` field
@@ -821,6 +823,9 @@ def deploy(game: Game, session: Session, *, force: bool = False) -> DeployReport
     destination instead of skipping them as conflicts. Use this when the user
     has explicitly opted into a "force redeploy" (e.g., to migrate from another
     mod manager that left copy-installed files behind).
+
+    ``compile_redmod=False`` skips the REDmod step: install passes it and queues a
+    background compile instead (S2), so the request never waits on redMod.exe.
     """
     pre = pre_flight_check(game)
     if not pre.ok:
@@ -856,9 +861,10 @@ def deploy(game: Game, session: Session, *, force: bool = False) -> DeployReport
     # which deploys first, never launches over a half-built cache.
     from rippermod_manager.services.vfs.redmod_scheduler import compile_lock
 
-    with compile_lock(game.id):  # type: ignore[arg-type]
-        if _has_enabled_redmods(game, session):
-            report.redmod = redmod_deploy(game)
+    if compile_redmod:
+        with compile_lock(game.id):  # type: ignore[arg-type]
+            if _has_enabled_redmods(game, session):
+                report.redmod = redmod_deploy(game)
     return report
 
 
