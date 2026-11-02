@@ -171,6 +171,8 @@ export interface ModUpdate {
   source_archive: string | null;
   reason: string;
   local_download_date: number | null;
+  /** How the update was found: a newer version string, a newer upload, or both. */
+  detection_method: "timestamp" | "version" | "both";
 }
 
 export interface GameVersion {
