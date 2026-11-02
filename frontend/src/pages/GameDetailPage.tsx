@@ -47,6 +47,7 @@ import { ScanProgress, type ScanLog } from "@/components/ui/ScanProgress";
 import { invalidateGameState } from "@/hooks/invalidate";
 import { useDeploy } from "@/hooks/use-deploy";
 import { useInstallFlow } from "@/hooks/use-install-flow";
+import { useRovingTabs } from "@/hooks/use-roving-tabs";
 import {
   useAvailableArchives,
   useConflictCount,
@@ -87,6 +88,7 @@ const MATCHED_SUB_TABS: { key: MatchedSubTab; label: string }[] = [
   { key: "nexus-matched", label: "Nexus Matched" },
   { key: "scan-details", label: "Scan Details" },
 ];
+const MATCHED_SUB_TAB_KEYS = MATCHED_SUB_TABS.map((t) => t.key);
 
 type ConflictSubTab =
   | "file-conflicts"
@@ -160,6 +162,7 @@ const TABS: { key: Tab; label: string; Icon: typeof Package; description: string
   { key: "endorsed", label: "Endorsed", Icon: Heart, description: "Mods you've endorsed on your Nexus account." },
   { key: "tracked", label: "Tracked", Icon: Eye, description: "Mods you're tracking on your Nexus account." },
 ];
+const TAB_KEYS = TABS.map((t) => t.key);
 
 export function GameDetailPage() {
   const { name = "" } = useParams();
@@ -441,6 +444,9 @@ export function GameDetailPage() {
     trackedMods.length, trackedLoading,
   ]);
 
+  const gameTabs = useRovingTabs(TAB_KEYS, tab, setTab);
+  const matchedTabs = useRovingTabs(MATCHED_SUB_TAB_KEYS, matchedSubTab, setMatchedSubTab);
+
   const tabsRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -667,15 +673,17 @@ export function GameDetailPage() {
         <div
           ref={tabsRef}
           onScroll={handleTabScroll}
+          aria-label="Game sections"
+          {...gameTabs.tabListProps}
           className="flex gap-1 border-b border-border overflow-x-auto scrollbar-none"
         >
           {TABS.map(({ key, label, description }) => (
             <button
               key={key}
-              onClick={() => setTab(key)}
+              {...gameTabs.getTabProps(key)}
               title={description}
               className={cn(
-                "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap flex items-center gap-1",
+                "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap flex items-center gap-1 rounded-t focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
                 tab === key
                   ? "border-accent text-accent-text"
                   : "border-transparent text-text-muted hover:text-text-secondary",
@@ -717,16 +725,26 @@ export function GameDetailPage() {
         );
       })()}
 
-      <div key={tab} className="animate-fade-in">
+      <div
+        key={tab}
+        role="tabpanel"
+        id={`tabpanel-${tab}`}
+        aria-labelledby={`tab-${tab}`}
+        className="animate-fade-in"
+      >
       {tab === "matched" && (
         <div className="space-y-4">
-          <div className="flex gap-1 border-b border-border">
+          <div
+            aria-label="Matched views"
+            {...matchedTabs.tabListProps}
+            className="flex gap-1 border-b border-border"
+          >
             {MATCHED_SUB_TABS.map(({ key, label }) => (
               <button
                 key={key}
-                onClick={() => setMatchedSubTab(key)}
+                {...matchedTabs.getTabProps(key)}
                 className={cn(
-                  "px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px",
+                  "px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
                   matchedSubTab === key
                     ? "border-accent text-accent-text"
                     : "border-transparent text-text-muted hover:text-text-secondary",
@@ -736,6 +754,11 @@ export function GameDetailPage() {
               </button>
             ))}
           </div>
+          <div
+            role="tabpanel"
+            id={`tabpanel-${matchedSubTab}`}
+            aria-labelledby={`tab-${matchedSubTab}`}
+          >
           {matchedSubTab === "nexus-matched" && (
             <NexusMatchedGrid
               mods={nexusMatched}
@@ -750,6 +773,7 @@ export function GameDetailPage() {
           {matchedSubTab === "scan-details" && (
             <ModsTable mods={mods} gameName={name} isLoading={modsLoading} />
           )}
+          </div>
         </div>
       )}
       {tab === "endorsed" && (
