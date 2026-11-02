@@ -95,7 +95,7 @@ export function HealthStatCard({ gameName, onOpen }: { gameName: string; onOpen:
               <li className="text-[11px] text-text-muted">+{s.attention.length - 6} more</li>
             )}
           </ul>
-          <p className="mt-2 text-[10px] text-text-muted">Click to view details</p>
+          <p className="mt-2 text-[11px] text-text-muted">Click to view details</p>
         </div>
       )}
     </Card>

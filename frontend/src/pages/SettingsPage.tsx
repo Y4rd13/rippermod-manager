@@ -784,7 +784,7 @@ export function SettingsPage() {
                       {nexusUsername || "Connected"}
                     </p>
                     {nexusIsPremium && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-warning">
                         <Crown size={10} />
                         Premium
                       </span>

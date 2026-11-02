@@ -59,12 +59,12 @@ export function LogErrorsWidget({ gameName }: { gameName: string }) {
                 <AlertTriangle size={14} className="mt-0.5 shrink-0 text-warning" />
               )}
               <div className="min-w-0">
-                <span className="mr-1.5 rounded bg-surface-3 px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
+                <span className="mr-1.5 rounded bg-surface-3 px-1.5 py-0.5 text-xs font-medium text-text-muted">
                   {e.source}
                 </span>
                 {e.mod_name && (
                   <span
-                    className="mr-1.5 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent-text"
+                    className="mr-1.5 rounded bg-accent/15 px-1.5 py-0.5 text-[11px] font-medium text-accent-text"
                     title="Attributed to this installed mod"
                   >
                     {e.mod_name}

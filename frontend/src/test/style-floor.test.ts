@@ -45,3 +45,10 @@ describe("dialogs", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("text size", () => {
+  it("has no text below 11px", () => {
+    const offenders = sourceFiles().filter((f) => /text-\[(?:[0-9]|10)px\]/.test(readFileSync(f, "utf8")));
+    expect(offenders).toEqual([]);
+  });
+});

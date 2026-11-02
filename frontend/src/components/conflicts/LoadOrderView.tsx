@@ -30,6 +30,7 @@ import {
 import { openPath } from "@tauri-apps/plugin-opener";
 import { useCallback, useMemo, useState } from "react";
 
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Dialog } from "@/components/ui/Dialog";
@@ -110,10 +111,7 @@ function SortableRow({
       )}
     >
       <div
-        className={cn(
-          "flex items-center gap-3 px-4 py-2.5",
-          group.is_unmanaged && "opacity-50",
-        )}
+        className="flex items-center gap-3 px-4 py-2.5"
       >
         {/* Drag handle */}
         <button
@@ -159,8 +157,13 @@ function SortableRow({
           }
         >
           {group.is_unmanaged ? (
-            <span className="text-sm font-mono text-text-muted/50 truncate block">
-              {group.archive_filenames[0]}
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="text-sm font-mono text-text-muted truncate">
+                {group.archive_filenames[0]}
+              </span>
+              <Badge variant="neutral" className="shrink-0">
+                Unmanaged
+              </Badge>
             </span>
           ) : (
             <>
