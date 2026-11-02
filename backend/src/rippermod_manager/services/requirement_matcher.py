@@ -18,6 +18,7 @@ from rippermod_manager.schemas.mod import RequirementMatchResult
 from rippermod_manager.services.name_boost import boosted_score
 from rippermod_manager.services.nexus_helpers import upsert_nexus_mod
 from rippermod_manager.services.progress import ProgressCallback, noop_progress
+from rippermod_manager.services.rejections import rejected_pairs
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,7 @@ async def match_by_requirements(
     matched = 0
     newly_matched_groups: set[int] = set()
     newly_matched_nexus_ids: set[int] = set()
+    rejected = rejected_pairs(session, game.id)  # type: ignore[arg-type]
 
     for group in unmatched_groups:
         if group.id in newly_matched_groups:
@@ -106,7 +108,7 @@ async def match_by_requirements(
         best_req_name = ""
 
         for req_mod_id, (req_name, _requiring_mod_id) in req_map.items():
-            if req_mod_id in newly_matched_nexus_ids:
+            if req_mod_id in newly_matched_nexus_ids or (group.id, req_mod_id) in rejected:
                 continue
 
             score, _ = compute_name_score(group.display_name, req_name)

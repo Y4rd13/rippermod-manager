@@ -434,3 +434,28 @@ class TestWinSeqMigration:
         col = next((r for r in rows if r[1] == "win_seq"), None)
         assert col is not None, "win_seq column not created by migration"
         assert col[4] == "0"
+
+
+def test_rejected_correlations_table_created(engine):
+    from sqlalchemy import inspect
+
+    assert "rejected_correlations" in inspect(engine).get_table_names()
+
+
+def test_create_db_and_tables_adds_rejected_correlations_to_an_existing_db():
+    """A database from before the table existed gets it on startup."""
+    from sqlalchemy import inspect
+
+    eng = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    with eng.connect() as conn:
+        conn.execute(text("CREATE TABLE mod_groups (id INTEGER PRIMARY KEY, game_id INTEGER)"))
+        conn.commit()
+    assert "rejected_correlations" not in inspect(eng).get_table_names()
+
+    with patch("rippermod_manager.database.engine", eng):
+        from rippermod_manager.database import create_db_and_tables
+
+        create_db_and_tables()
+    assert "rejected_correlations" in inspect(eng).get_table_names()
