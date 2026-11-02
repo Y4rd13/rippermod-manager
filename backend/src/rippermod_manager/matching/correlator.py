@@ -220,7 +220,13 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
             existing.remove(corr)
             purged += 1
             continue
-        score, _ = compute_name_score(grp.display_name, dl.mod_name)
+        score, method = compute_name_score(grp.display_name, dl.mod_name)
+        if score >= 0.4 and (score, method) != (corr.score, corr.method):
+            # Keep the stored score in step with the current name rule.
+            corr.score = score
+            corr.method = method
+            session.add(corr)
+            continue
         if score < 0.4:
             logger.info(
                 "Purging stale correlation: '%s' -> '%s' (was %s/%.2f, now %.2f)",
