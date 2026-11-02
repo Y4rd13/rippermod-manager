@@ -412,6 +412,22 @@ class TestRevalidateBoosted:
         session.commit()
         return game, corr.id
 
+    def test_revalidate_rescores_stored_substring_match_under_current_rule(
+        self, session, make_game
+    ):
+        """A name match stored as substring 0.9 takes the score the current rule gives it."""
+        game, corr_id = self._store(
+            session,
+            make_game,
+            "LHUD",
+            "Enterable Interiors - LHUD 2.22 updated patch",
+            0.9,
+            method="substring",
+        )
+        correlate_game_mods(game, session)
+        corr = session.get(ModNexusCorrelation, corr_id)
+        assert corr is None or (corr.score < 0.75 and corr.method == "fuzzy")
+
     def test_revalidate_lowers_boosted_endorsed_match_below_on_disk(self, session, make_game):
         game, corr_id = self._store(
             session, make_game, "Immersive Rippers", "Immersive Bartenders - Dogtown", 0.85
