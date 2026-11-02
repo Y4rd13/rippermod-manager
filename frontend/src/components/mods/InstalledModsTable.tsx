@@ -1422,9 +1422,9 @@ export function InstalledModsTable({
       {mods.length > 0 && scope !== "detected" && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-text-primary" title="Mods installed and managed through this app. You can enable, disable, or uninstall them">
+            <h2 className="text-sm font-semibold text-text-primary" title="Mods installed and managed through this app. You can enable, disable, or uninstall them">
               Managed ({filteredMods.length})
-            </h3>
+            </h2>
             <FilterChips
               chips={CHIP_OPTIONS}
               active={chip}
@@ -1453,9 +1453,9 @@ export function InstalledModsTable({
       {detectedRecognized.length > 0 && scope !== "installed" && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-text-primary" title="Mods found on disk and matched to Nexus with high confidence. Adopt them to bring them under management.">
+            <h2 className="text-sm font-semibold text-text-primary" title="Mods found on disk and matched to Nexus with high confidence. Adopt them to bring them under management.">
               Detected on disk ({detectedRecognized.length})
-            </h3>
+            </h2>
             <div className="flex items-center gap-2">
               {onReviewAdopt && (
                 <Button size="sm" onClick={onReviewAdopt}>
@@ -1470,7 +1470,7 @@ export function InstalledModsTable({
             </div>
           </div>
           <p className="text-xs text-text-muted mb-3">
-            These mods were detected on disk and matched to Nexus &mdash; sometimes by
+            These mods were detected on disk and matched to Nexus, sometimes by
             file content, sometimes by name against your endorsed/tracked list when
             the local files don&apos;t carry a Nexus ID. Hover the file count on any
             card to see the exact paths that triggered the match. Install them
@@ -1492,9 +1492,9 @@ export function InstalledModsTable({
       {possibleRecognized.length > 0 && scope !== "installed" && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-text-primary" title="Low-confidence matches. Review them in the adopt dialog before bringing them under management.">
+            <h2 className="text-sm font-semibold text-text-primary" title="Low-confidence matches. Review them in the adopt dialog before bringing them under management.">
               Possible matches ({possibleRecognized.length})
-            </h3>
+            </h2>
             {detectedRecognized.length === 0 && onReviewAdopt && (
               <Button size="sm" onClick={onReviewAdopt}>
                 Review &amp; adopt

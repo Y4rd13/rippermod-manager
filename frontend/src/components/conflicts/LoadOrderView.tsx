@@ -531,6 +531,15 @@ export function LoadOrderView({ gameName }: Props) {
         >
           {result.total_preferences} preference{result.total_preferences !== 1 ? "s" : ""}
         </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={result.total_preferences === 0 || resetAll.isPending}
+          onClick={() => setConfirmResetAll(true)}
+        >
+          <RotateCcw size={14} />
+          Reset to Default Order
+        </Button>
         <div className="flex-1" />
         <Button
           variant="primary"
@@ -542,15 +551,6 @@ export function LoadOrderView({ gameName }: Props) {
         >
           <Sparkles size={14} />
           Auto-sort
-        </Button>
-        <Button
-          variant="danger"
-          size="sm"
-          disabled={result.total_preferences === 0 || resetAll.isPending}
-          onClick={() => setConfirmResetAll(true)}
-        >
-          <RotateCcw size={14} />
-          Reset to Default Order
         </Button>
       </div>
 
