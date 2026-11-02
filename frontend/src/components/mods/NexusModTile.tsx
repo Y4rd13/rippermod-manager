@@ -11,6 +11,8 @@ interface Props {
   badge?: ReactNode;
   footer?: ReactNode;
   action?: ReactNode;
+  /** Selection control (a checkbox) shown at the top-left over the image. */
+  selection?: ReactNode;
   onClick?: () => void;
   onContextMenu?: React.MouseEventHandler;
 }
@@ -21,6 +23,7 @@ export function NexusModTile({
   badge,
   footer,
   action,
+  selection,
   onClick,
   onContextMenu,
 }: Props) {
@@ -43,8 +46,18 @@ export function NexusModTile({
             (e.target as HTMLImageElement).src = PLACEHOLDER_IMG;
           }}
         />
+        {selection && (
+          <div className="absolute top-1.5 left-1.5 z-10" onClick={(e) => e.stopPropagation()}>
+            {selection}
+          </div>
+        )}
         {badge && (
-          <div className="absolute top-1 left-1 right-1 flex flex-wrap gap-0.5 scale-90 origin-top-left">
+          <div
+            className={cn(
+              "absolute top-1 right-1 flex flex-wrap gap-0.5 scale-90 origin-top-left",
+              selection ? "left-7" : "left-1",
+            )}
+          >
             {badge}
           </div>
         )}
