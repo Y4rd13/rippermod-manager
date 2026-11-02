@@ -286,6 +286,12 @@ export interface ArchivePreviewResult {
   files: ArchiveFileEntry[];
 }
 
+/** The part of the backend's DeployReport that the install toasts read. */
+export interface InstallDeploySummary {
+  failed: number;
+  preflight: { ok: boolean; reasons: string[]; game_running: boolean } | null;
+}
+
 export interface InstallResult {
   installed_mod_id: number;
   name: string;
@@ -293,6 +299,7 @@ export interface InstallResult {
   files_skipped: number;
   files_overwritten: number;
   redmod_compile_queued?: boolean;
+  deploy?: InstallDeploySummary | null;
 }
 
 export interface UninstallResult {

@@ -220,6 +220,30 @@ export function useDisconnectNexus() {
   });
 }
 
+/** Report an install: whether its deploy ran, and duplicate paths inside the archive. */
+function installToast(result: InstallResult): void {
+  const preflight = result.deploy?.preflight;
+  const failed = result.deploy?.failed ?? 0;
+  if (preflight && !preflight.ok) {
+    const hint = preflight.game_running ? " Close the game and use Redeploy in the title bar." : "";
+    toast.warning("Mod installed but not deployed", preflight.reasons.join(" ") + hint);
+  } else if (failed > 0) {
+    toast.warning(
+      "Mod installed, but some game files were not linked",
+      `${failed} file${failed === 1 ? "" : "s"} in the game folder could not be linked. Use Redeploy in the title bar.`,
+    );
+  } else {
+    toast.success("Mod installed", `${result.files_extracted} files extracted`);
+  }
+  const dupes = result.files_overwritten;
+  if (dupes > 0) {
+    toast.info(
+      "Duplicate paths in the archive",
+      `${dupes} path${dupes === 1 ? "" : "s"} appear${dupes === 1 ? "s" : ""} more than once in the archive; one copy of each was kept.`,
+    );
+  }
+}
+
 export function useInstallMod() {
   const qc = useQueryClient();
   return useMutation<InstallResult, Error, { gameName: string; data: InstallRequest }>({
@@ -233,13 +257,7 @@ export function useInstallMod() {
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
       qc.invalidateQueries({ queryKey: ["updates", gameName] });
       invalidateGameState(qc, gameName);
-      toast.success("Mod installed", `${result.files_extracted} files extracted`);
-      if (result.files_overwritten > 0) {
-        toast.warning(
-          "Files overwritten",
-          `${result.files_overwritten} existing file${result.files_overwritten === 1 ? " was" : "s were"} replaced`,
-        );
-      }
+      installToast(result);
     },
     onError: (err) =>
       toast.error(
@@ -267,7 +285,7 @@ export function useUninstallMod() {
       if (unlinked.length > 0) {
         toast.warning(
           "Mod uninstalled, but some files were not handed to another mod",
-          `${unlinked.length} file${unlinked.length === 1 ? "" : "s"} left unlinked. Close the game and run Deploy.`,
+          `${unlinked.length} file${unlinked.length === 1 ? "" : "s"} left unlinked. Close the game and use Redeploy in the title bar.`,
         );
       } else {
         toast.success("Mod uninstalled");
@@ -347,7 +365,7 @@ export function useToggleMod() {
       if (unlinked.length > 0) {
         toast.warning(
           result.disabled ? "Mod disabled, but some files were not relinked" : "Some files were not linked",
-          `${unlinked.length} file${unlinked.length === 1 ? "" : "s"} left unlinked. Close the game and run Deploy.`,
+          `${unlinked.length} file${unlinked.length === 1 ? "" : "s"} left unlinked. Close the game and use Redeploy in the title bar.`,
         );
       }
     },
@@ -865,13 +883,7 @@ export function useFomodInstall() {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
       invalidateGameState(qc, gameName);
-      toast.success("Mod installed", `${result.files_extracted} files extracted`);
-      if (result.files_overwritten > 0) {
-        toast.warning(
-          "Files overwritten",
-          `${result.files_overwritten} existing file${result.files_overwritten === 1 ? " was" : "s were"} replaced`,
-        );
-      }
+      installToast(result);
     },
     onError: () => toast.error("FOMOD installation failed"),
   });
