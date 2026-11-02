@@ -426,7 +426,38 @@ class TestRevalidateBoosted:
         )
         correlate_game_mods(game, session)
         corr = session.get(ModNexusCorrelation, corr_id)
-        assert corr is None or (corr.score < 0.75 and corr.method == "fuzzy")
+        assert corr is not None
+        assert corr.method == "fuzzy"
+        assert corr.score == pytest.approx(0.42, abs=0.01)
+        assert corr.reasoning.startswith("re-scored:")
+
+    def test_revalidate_keeps_the_category_penalty(self, session, make_game):
+        """A stored score that carries the category penalty is not raised back to the raw score."""
+        game, corr_id = self._store(
+            session, make_game, "Cool Mod Remix", "Cool Mod", 0.82, method="substring"
+        )
+        corr = session.get(ModNexusCorrelation, corr_id)
+        session.add(
+            ModFile(
+                mod_group_id=corr.mod_group_id,
+                file_path="r6/scripts/cool.reds",
+                filename="cool.reds",
+            )
+        )
+        session.add(
+            NexusModMeta(
+                game_domain=game.domain_name,
+                nexus_mod_id=700,
+                name="Cool Mod",
+                category="Models and Textures",
+            )
+        )
+        session.commit()
+
+        correlate_game_mods(game, session)
+
+        corr = session.get(ModNexusCorrelation, corr_id)
+        assert corr.score == pytest.approx(0.82)
 
     def test_revalidate_lowers_boosted_endorsed_match_below_on_disk(self, session, make_game):
         game, corr_id = self._store(
@@ -532,3 +563,8 @@ class TestRevalidateBoosted:
         assert [(c.nexus_download_id, c.method, c.score) for c in corrs] == [
             (better.id, "exact", 1.0)
         ]
+
+
+def test_names_that_normalize_to_nothing_do_not_match():
+    """Two punctuation-only names are not an exact match."""
+    assert compute_name_score("##", "---") == (0.0, "fuzzy")
