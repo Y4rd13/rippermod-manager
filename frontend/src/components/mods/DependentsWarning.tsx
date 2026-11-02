@@ -26,7 +26,7 @@ export function DependentsWarning({ dependents }: Props) {
           </li>
         ))}
       </ul>
-      <p className="mt-1.5 text-[10px] text-text-muted">
+      <p className="mt-1.5 text-[11px] text-text-muted">
         Based on synced requirement data; some dependents may not be listed.
       </p>
     </div>

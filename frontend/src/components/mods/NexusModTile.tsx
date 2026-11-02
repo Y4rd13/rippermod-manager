@@ -70,7 +70,7 @@ export function NexusModTile({
           {modName}
         </h3>
         {footer && (
-          <div className="flex flex-wrap items-center gap-1 text-[10px] text-text-muted overflow-hidden">
+          <div className="flex flex-wrap items-center gap-1 text-[11px] text-text-muted overflow-hidden">
             {footer}
           </div>
         )}

@@ -38,7 +38,7 @@ export function Sidebar() {
           {!sidebarCollapsed && (
             <span className="leading-tight min-w-0">
               <span className="block text-sm font-semibold text-text-primary">RipperMod</span>
-              <span className="block text-[10px] font-medium text-text-muted uppercase tracking-wider">Manager</span>
+              <span className="block text-[11px] font-medium text-text-muted uppercase tracking-wider">Manager</span>
             </span>
           )}
         </div>

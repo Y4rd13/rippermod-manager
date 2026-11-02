@@ -84,7 +84,7 @@ function ConflictTreeNode({
         {node.name}
       </span>
       {owner && (
-        <span className="ml-auto shrink-0 text-[10px] text-text-muted whitespace-nowrap">
+        <span className="ml-auto shrink-0 text-[11px] text-text-muted whitespace-nowrap">
           owned by {owner}
         </span>
       )}

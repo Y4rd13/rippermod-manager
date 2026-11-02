@@ -32,10 +32,11 @@ function StepIndicator({
         <div key={origIdx} className="flex items-center gap-2">
           <div
             title={config.steps[origIdx]?.name}
+            aria-current={i === cursor ? "step" : undefined}
             className={cn(
-              "flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold transition-colors",
+              "flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold transition-colors",
               i < cursor
-                ? "bg-success text-white"
+                ? "bg-success text-surface-0"
                 : i === cursor
                   ? "bg-accent text-white"
                   : "bg-surface-3 text-text-muted",
@@ -58,25 +59,25 @@ function TypeBadge({ type }: { type: string }) {
   switch (type) {
     case "Required":
       return (
-        <span className="text-[10px] font-medium bg-accent/20 text-accent-text px-1.5 py-0.5 rounded">
+        <span className="text-[11px] font-medium bg-surface-3 text-text-secondary px-1.5 py-0.5 rounded">
           Required
         </span>
       );
     case "Recommended":
       return (
-        <span className="text-[10px] font-medium bg-success/20 text-success px-1.5 py-0.5 rounded">
+        <span className="text-[11px] font-medium bg-success/20 text-success px-1.5 py-0.5 rounded">
           Recommended
         </span>
       );
     case "NotUsable":
       return (
-        <span className="text-[10px] font-medium bg-danger/20 text-danger px-1.5 py-0.5 rounded">
+        <span className="text-[11px] font-medium bg-danger/20 text-danger px-1.5 py-0.5 rounded">
           Not usable
         </span>
       );
     case "CouldBeUsable":
       return (
-        <span className="text-[10px] font-medium bg-warning/20 text-warning px-1.5 py-0.5 rounded flex items-center gap-0.5">
+        <span className="text-[11px] font-medium bg-warning/20 text-warning px-1.5 py-0.5 rounded flex items-center gap-0.5">
           <AlertTriangle size={10} /> Experimental
         </span>
       );
@@ -163,7 +164,7 @@ function GroupSection({
     <div>
       <div className="flex items-center gap-2 mb-2">
         <h4 className="text-sm font-semibold text-text-primary">{group.name}</h4>
-        <span className="text-[10px] text-text-muted">
+        <span className="text-[11px] text-text-muted">
           {group.type === "SelectExactlyOne" && "Pick one"}
           {group.type === "SelectAtMostOne" && "Pick one or none"}
           {group.type === "SelectAtLeastOne" && "Pick at least one"}

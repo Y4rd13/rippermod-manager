@@ -149,7 +149,7 @@ const PreviewTreeNode = memo(function PreviewTreeNode({
         {displayName}
       </span>
       {isRenamed && (
-        <span className="shrink-0 text-[10px] text-accent-text bg-accent/10 px-1 rounded">
+        <span className="shrink-0 text-[11px] text-accent-text bg-accent/10 px-1 rounded">
           renamed
         </span>
       )}

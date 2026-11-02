@@ -105,7 +105,7 @@ export function FrameworksStatCard({ gameName, onOpen }: { gameName: string; onO
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-[10px] text-text-muted">Click to view details</p>
+          <p className="mt-2 text-[11px] text-text-muted">Click to view details</p>
         </div>
       )}
     </Card>
