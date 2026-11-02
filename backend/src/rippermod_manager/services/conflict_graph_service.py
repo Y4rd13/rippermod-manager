@@ -28,6 +28,7 @@ from rippermod_manager.services.archive_layout import (
     detect_layout,
     known_roots_for_game,
 )
+from rippermod_manager.services.doc_files import is_root_doc_file
 from rippermod_manager.services.install_service import (
     get_file_ownership_map,
     list_available_archives,
@@ -194,7 +195,8 @@ def _build_graph(game: Game, session: Session, resource_hash: str | None) -> Con
     for path, mod in ownership.items():
         node_id = f"installed:{mod.id}"
         mod_files[node_id].add(path)
-        path_to_nodes[path].append(node_id)
+        if not is_root_doc_file(path):
+            path_to_nodes[path].append(node_id)
 
     seen_mod_ids: set[int] = set()
     for mod in ownership.values():
@@ -268,7 +270,8 @@ def _build_graph(game: Game, session: Session, resource_hash: str | None) -> Con
                 continue
             normalised = normalised.lower()
             file_paths.add(normalised)
-            path_to_nodes[normalised].append(node_id)
+            if not is_root_doc_file(normalised):
+                path_to_nodes[normalised].append(node_id)
 
         if file_paths:
             node_info[node_id] = {

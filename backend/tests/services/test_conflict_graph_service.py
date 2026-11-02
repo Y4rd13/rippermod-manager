@@ -438,3 +438,35 @@ def test_cache_invalidates_when_a_download_job_completes(session, game):
     session.commit()
 
     assert conflict_count(game, session).mods_with_conflicts == 2
+
+
+def test_root_doc_file_is_not_a_conflict_between_archives(session, game):
+    _on_disk(session, game, 101)
+    _on_disk(session, game, 202)
+    _archive(game, "ModA-101-1-0-1700000000.zip", ["codes.txt", "archive/pc/mod/a.archive"])
+    _archive(game, "ModB-202-1-0-1700000000.zip", ["codes.txt", "archive/pc/mod/b.archive"])
+
+    assert conflict_count(game, session).mods_with_conflicts == 0
+    assert build_conflict_graph(game, session).edges == []
+
+
+def test_root_doc_file_is_not_a_conflict_with_an_installed_mod(session, game):
+    _installed(session, game, "Top A", None, ["Codes.TXT", "archive/pc/mod/a.archive"])
+    _on_disk(session, game, 202)
+    _archive(game, "ModB-202-1-0-1700000000.zip", ["codes.txt", "archive/pc/mod/b.archive"])
+
+    s = conflict_count(game, session)
+
+    assert s.mods_with_conflicts == 0 and s.file_conflicts == 0
+
+
+def test_doc_file_inside_folder_still_conflicts(session, game):
+    icon = "bin/x64/plugins/cyber_engine_tweaks/mods/x/icon.png"
+    _on_disk(session, game, 101)
+    _on_disk(session, game, 202)
+    _archive(game, "ModA-101-1-0-1700000000.zip", [icon, "archive/pc/mod/a.archive"])
+    _archive(game, "ModB-202-1-0-1700000000.zip", [icon, "archive/pc/mod/b.archive"])
+
+    s = conflict_count(game, session)
+
+    assert s.mods_with_conflicts == 2 and s.file_conflicts == 1

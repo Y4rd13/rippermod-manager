@@ -29,6 +29,7 @@ from rippermod_manager.services.archive_layout import (
     detect_layout,
     known_roots_for_game,
 )
+from rippermod_manager.services.doc_files import is_root_doc_file
 from rippermod_manager.services.install_service import (
     get_file_ownership_map,
     install_mod,
@@ -104,6 +105,8 @@ def get_conflicts_overview(game: Game, session: Session) -> ConflictsOverview:
 
         evidence: list[tuple[str, InstalledMod]] = []
         for file_path in archive_files:
+            if is_root_doc_file(file_path):
+                continue
             normalised_lower = file_path.replace("\\", "/").lower()
             owner = ownership.get(normalised_lower)
             if owner and owner.id != mod.id:
@@ -151,6 +154,8 @@ def get_mod_conflict_detail(
     evidence: list[ConflictEvidence] = []
     if archive_files:
         for file_path in archive_files:
+            if is_root_doc_file(file_path):
+                continue
             normalised_lower = file_path.replace("\\", "/").lower()
             owner = ownership.get(normalised_lower)
             if owner and owner.id != mod.id:

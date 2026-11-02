@@ -10,6 +10,8 @@ from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
 from rippermod_manager.services.conflicts_inbox_service import (
     ResolveRefusedError,
+    get_conflicts_overview,
+    get_mod_conflict_detail,
     resolve_conflict,
 )
 
@@ -86,3 +88,58 @@ def test_resolve_reinstalls_a_plain_archive(session, tmp_path: Path):
 
     assert result.files_extracted == 1
     assert session.get(InstalledMod, result.installed_mod_id) is not None
+
+
+def _game_with_mods_sharing(session, tmp_path: Path, shared: str):
+    """Two installed mods whose source archives both hold ``shared``; the second owns it."""
+    install_path = tmp_path / "game3"
+    staging = install_path / "downloaded_mods"
+    staging.mkdir(parents=True)
+    game = Game(name="Cyberpunk 2077", domain_name="cyberpunk2077", install_path=str(install_path))
+    session.add(game)
+    session.flush()
+    session.add(GameModPath(game_id=game.id, relative_path="archive/pc/mod"))
+    mods = []
+    for label in ("a", "b"):
+        with zipfile.ZipFile(staging / f"{label}.zip", "w") as zf:
+            zf.writestr(shared, b"x")
+            zf.writestr(f"archive/pc/mod/{label}.archive", b"x")
+        mod = InstalledMod(game_id=game.id, name=f"Mod {label}", source_archive=f"{label}.zip")
+        session.add(mod)
+        session.flush()
+        session.add(InstalledModFile(installed_mod_id=mod.id, relative_path=shared))
+        session.add(
+            InstalledModFile(
+                installed_mod_id=mod.id, relative_path=f"archive/pc/mod/{label}.archive"
+            )
+        )
+        mods.append(mod)
+    session.commit()
+    session.refresh(game)
+    return game, mods
+
+
+def test_inbox_ignores_root_doc_file(session, tmp_path: Path):
+    game, _ = _game_with_mods_sharing(session, tmp_path, "codes.txt")
+
+    overview = get_conflicts_overview(game, session)
+
+    assert overview.total_conflicts == 0
+    assert overview.summaries == []
+
+
+def test_inbox_detail_ignores_root_doc_file(session, tmp_path: Path):
+    game, mods = _game_with_mods_sharing(session, tmp_path, "codes.txt")
+
+    detail = get_mod_conflict_detail(game, mods[0], session)
+
+    assert detail.evidence == []
+
+
+def test_inbox_counts_doc_file_inside_folder(session, tmp_path: Path):
+    game, mods = _game_with_mods_sharing(session, tmp_path, "bin/x64/mods/x/icon.png")
+
+    overview = get_conflicts_overview(game, session)
+
+    assert overview.total_conflicts == 1
+    assert len(get_mod_conflict_detail(game, mods[0], session).evidence) == 1
