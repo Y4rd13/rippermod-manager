@@ -6,18 +6,8 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useUndoActivity } from "@/hooks/mutations";
 import { useActivity, useGames } from "@/hooks/queries";
 import { isoToEpoch, timeAgo } from "@/lib/format";
+import { activityLabel } from "@/lib/labels";
 import type { ActivityLogEntry } from "@/types/api";
-
-const ACTION_LABELS: Record<string, string> = {
-  install: "Installed",
-  uninstall: "Uninstalled",
-  enable: "Enabled",
-  disable: "Disabled",
-  deploy: "Deployed",
-  undeploy: "Undeployed",
-  download: "Downloaded",
-  undo: "Undid",
-};
 
 // Actions whose inverse is implemented (Tier A+B). Others are observe-only.
 const UNDOABLE_ACTIONS = new Set(["install", "uninstall", "enable", "disable"]);
@@ -66,7 +56,7 @@ function GameActivity({ gameName }: { gameName: string }) {
             <tr key={e.id} className="border-t border-border">
               <td className="py-1.5 pr-3">
                 <span className="inline-block rounded bg-surface-2 px-1.5 py-0.5 text-xs font-medium text-text-secondary">
-                  {ACTION_LABELS[e.action] ?? e.action}
+                  {activityLabel(e.action)}
                 </span>
               </td>
               <td className="max-w-xs truncate py-1.5 pr-3 text-text-secondary">

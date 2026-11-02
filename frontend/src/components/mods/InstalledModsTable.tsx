@@ -52,6 +52,7 @@ import { useInstallFlow } from "@/hooks/use-install-flow";
 import { useDependents } from "@/hooks/queries";
 import { api } from "@/lib/api-client";
 import { isoToEpoch, timeAgo } from "@/lib/format";
+import { matchMethodLabel } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import { useUIStore } from "@/stores/ui-store";
@@ -1087,7 +1088,7 @@ function RecognizedModsGrid({
     const footer = (
       <div className="flex flex-wrap items-center gap-1.5">
         <ConfidenceBadge score={match.score} />
-        <Badge variant="neutral">{match.method}</Badge>
+        <Badge variant="neutral">{matchMethodLabel(match.method)}</Badge>
         {filesBadge}
         <CorrelationActions gameName={gameName} modGroupId={mod.id} confirmed={match.confirmed} />
         {match.updated_at && (
