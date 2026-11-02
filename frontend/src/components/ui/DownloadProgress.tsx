@@ -6,6 +6,7 @@ import type { DownloadJobOut } from "@/types/api";
 
 const statusColors: Record<string, string> = {
   pending: "bg-text-muted",
+  queued: "bg-text-muted",
   downloading: "bg-accent",
   completed: "bg-success",
   failed: "bg-danger",
@@ -18,7 +19,8 @@ interface DownloadProgressProps {
 }
 
 export function DownloadProgress({ job, onCancel }: DownloadProgressProps) {
-  const isActive = job.status === "pending" || job.status === "downloading";
+  const isActive =
+    job.status === "pending" || job.status === "queued" || job.status === "downloading";
   const barColor = statusColors[job.status] ?? "bg-accent";
 
   return (
@@ -37,7 +39,9 @@ export function DownloadProgress({ job, onCancel }: DownloadProgressProps) {
                   ? "Failed"
                   : job.status === "cancelled"
                     ? "Cancelled"
-                    : "Pending"}
+                    : job.status === "queued"
+                      ? "Queued"
+                      : "Pending"}
           </span>
         </div>
         <div className="h-1.5 w-full rounded-full bg-surface-3 overflow-hidden">

@@ -622,6 +622,7 @@ export interface DownloadRequest {
 
 export type DownloadStatus =
   | "pending"
+  | "queued"
   | "downloading"
   | "completed"
   | "failed"

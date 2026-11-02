@@ -168,7 +168,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
   const activeDownloadByModId = useMemo(() => {
     const map = new Map<number, { status: string }>();
     for (const job of downloadJobs) {
-      if (job.status === "downloading" || job.status === "pending") {
+      if (job.status === "downloading" || job.status === "pending" || job.status === "queued") {
         map.set(job.nexus_mod_id, { status: job.status });
       }
     }

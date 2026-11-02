@@ -232,7 +232,10 @@ function ManagedModsGrid({
   const activeDownloadByModId = useMemo(() => {
     const map = new Map<number, DownloadJobOut>();
     for (const job of downloadJobs) {
-      if ((job.status === "downloading" || job.status === "pending") && job.nexus_mod_id) {
+      if (
+        (job.status === "downloading" || job.status === "pending" || job.status === "queued") &&
+        job.nexus_mod_id
+      ) {
         map.set(job.nexus_mod_id, job);
       }
     }
