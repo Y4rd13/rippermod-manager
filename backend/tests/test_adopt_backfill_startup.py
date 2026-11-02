@@ -61,7 +61,7 @@ def test_startup_backfill_failure_in_one_game_does_not_stop_the_next(
 
     def flaky(game, sess):
         if game.id == game1.id:
-            raise RuntimeError("boom")
+            raise OSError("boom")
         return real(game, sess)
 
     monkeypatch.setattr(install_service, "backfill_adopted_archives", flaky)

@@ -10,7 +10,7 @@ from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.services import install_service
 from rippermod_manager.services.install_service import install_mod
 
-RUNNING_MESSAGE = "Cyberpunk 2077 is running, close it before deploying."
+RUNNING_MESSAGE = "Cyberpunk 2077 is running, close it first."
 
 
 @pytest.fixture

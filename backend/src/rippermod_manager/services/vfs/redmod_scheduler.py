@@ -5,10 +5,13 @@ they ask for a compile here instead of running ``redMod.exe`` inside the request
 Requests that arrive while a compile runs coalesce into one more run.
 ``compile_lock`` is the same lock ``deploy()`` takes around its own compile, so a
 deploy (and Play, which deploys first) waits for a compile in progress.
+A compile requested before an undeploy is skipped, so it cannot write the REDmod
+cache that undeploy removed back into the game dir.
 """
 
 from __future__ import annotations
 
+import itertools
 import logging
 import threading
 from datetime import UTC, datetime
@@ -25,10 +28,29 @@ logger = logging.getLogger(__name__)
 _last: dict[int, tuple[RedmodDeployResult, datetime]] = {}
 _last_guard = threading.Lock()
 
+# Positions on one shared counter, not clock times: two events in the same clock tick
+# (Windows' monotonic clock advances in ~16 ms steps) must still be ordered.
+_sequence = itertools.count(1)
+_last_request_at: dict[int, int] = {}
+_undeployed_at: dict[int, int] = {}
+
+_UNDEPLOYED_REASON = "Game was undeployed after this compile was requested"
+
 
 def _compile_job(game_id: int) -> None:
     """Run ``redMod.exe deploy`` for one game and keep its result with the time."""
     from rippermod_manager.services.vfs import deploy_service
+
+    with _last_guard:
+        undeployed = _undeployed_at.get(game_id, 0) >= _last_request_at.get(game_id, 0) > 0
+    if undeployed:
+        with _last_guard:
+            _last[game_id] = (
+                RedmodDeployResult(ran=False, skipped_reason=_UNDEPLOYED_REASON),
+                datetime.now(UTC),
+            )
+        logger.info("REDmod compile for game %s skipped: undeployed after the request", game_id)
+        return
 
     with Session(database.engine) as session:
         game = session.get(Game, game_id)
@@ -54,7 +76,15 @@ def request_redmod_compile(game: Game) -> bool:
     """Queue a background REDmod compile for *game*; True when it was queued."""
     if game.id is None:
         return False
+    with _last_guard:
+        _last_request_at[game.id] = next(_sequence)
     return _runner.request(game.id)
+
+
+def mark_undeployed(game_id: int) -> None:
+    """Record that *game_id* was undeployed; compiles requested before now are skipped."""
+    with _last_guard:
+        _undeployed_at[game_id] = next(_sequence)
 
 
 def redmod_status(game_id: int) -> RedmodStatus:

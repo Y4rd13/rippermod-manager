@@ -357,3 +357,62 @@ def test_backfill_flag_is_per_game_so_every_game_gets_backfilled(session, game, 
     assert backfill_adopted_archives(other, session) == 1
     assert backfill_adopted_archives(other, session) == 0
     assert get_setting(session, f"adopt_archive_backfill_done:{other.id}") == "1"
+
+
+def _two_adopted_mods_with_archives(session, game) -> list[InstalledMod]:
+    mods = []
+    for name, mod_id in (("X", 4198), ("Y", 5555)):
+        rel = f"archive/pc/mod/{name.lower()}.archive"
+        mod = InstalledMod(
+            game_id=game.id, name=name, staging_dir=name, source_archive="", nexus_mod_id=mod_id
+        )
+        session.add(mod)
+        session.flush()
+        session.add(InstalledModFile(installed_mod_id=mod.id, relative_path=rel, source_path=rel))
+        session.commit()
+        archive = f"{name}-{mod_id}-1-0.zip"
+        _zip(game, archive, [rel])
+        _link(session, game, archive, mod_id=mod_id)
+        mods.append(mod)
+    return mods
+
+
+def test_backfill_writes_only_after_choosing_every_archive(session, game, monkeypatch):
+    from rippermod_manager.services import conflict_service
+
+    mods = _two_adopted_mods_with_archives(session, game)
+    real = conflict_service._get_archive_file_set
+    calls = []
+
+    def guarded(g, name):
+        # Opening an archive must happen before any source_archive is assigned: an
+        # assignment followed by a query autoflushes and holds the write lock.
+        assert not session.dirty and not session.new
+        assert all(m.source_archive == "" for m in mods)
+        calls.append(name)
+        return real(g, name)
+
+    monkeypatch.setattr(conflict_service, "_get_archive_file_set", guarded)
+
+    assert backfill_adopted_archives(game, session) == 2
+    assert len(calls) >= 2
+    for m in mods:
+        session.refresh(m)
+    assert {m.source_archive for m in mods} == {"X-4198-1-0.zip", "Y-5555-1-0.zip"}
+
+
+def test_backfill_lists_archives_once(session, game, monkeypatch):
+    from rippermod_manager.services import install_service
+
+    _two_adopted_mods_with_archives(session, game)
+    real = install_service.list_available_archives
+    calls = []
+
+    def counting(g):
+        calls.append(g.id)
+        return real(g)
+
+    monkeypatch.setattr(install_service, "list_available_archives", counting)
+
+    assert backfill_adopted_archives(game, session) == 2
+    assert len(calls) == 1
