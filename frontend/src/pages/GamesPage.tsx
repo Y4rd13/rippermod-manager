@@ -1,5 +1,5 @@
 import { CheckCircle, FolderOpen, Gamepad2, Plus, Search, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "@/stores/toast-store";
 import { Link } from "react-router";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { useCreateGame, useDeleteGame, useValidatePath } from "@/hooks/mutations";
 import { useGames } from "@/hooks/queries";
@@ -28,15 +29,6 @@ function AddGameDialog({
   const [validation, setValidation] = useState<PathValidation | null>(null);
   const createGame = useCreateGame();
   const validatePath = useValidatePath();
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -114,9 +106,15 @@ function AddGameDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true">
-      <Card className="w-full max-w-md">
-        <h2 className="text-lg font-semibold text-text-primary mb-4">
+    <Dialog
+      onClose={onClose}
+      titleId="add-game-title"
+      closeOnEscape={!createGame.isPending}
+      closeOnBackdrop={false}
+      className="w-full max-w-md"
+    >
+      <Card>
+        <h2 id="add-game-title" className="text-lg font-semibold text-text-primary mb-4">
           Add Game
         </h2>
         <div className="space-y-4">
@@ -208,7 +206,7 @@ function AddGameDialog({
           </div>
         </div>
       </Card>
-    </div>
+    </Dialog>
   );
 }
 

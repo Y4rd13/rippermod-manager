@@ -171,6 +171,9 @@ function OpenDialog({
         )}
         onClick={(e) => {
           if (closeOnBackdrop && e.target === e.currentTarget) onClose();
+          // The portal still bubbles through the React tree: keep clicks inside the dialog
+          // from reaching a clickable row or card that rendered it.
+          e.stopPropagation();
         }}
       >
         <div
