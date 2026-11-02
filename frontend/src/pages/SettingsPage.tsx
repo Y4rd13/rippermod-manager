@@ -135,7 +135,7 @@ function DeploymentCard() {
             </Button>
           </div>
           {game?.mods_dir == null && (
-            <p className="text-[11px] text-text-muted/80">Using default location.</p>
+            <p className="text-[11px] text-text-muted">Using default location.</p>
           )}
         </div>
 

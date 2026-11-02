@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-02T20:43:42+00:00",
+  "generatedAt": "2026-11-02T20:49:32+00:00",
   "title": "Design System: RipperMod Manager",
   "draft": true,
   "extensions": {
@@ -211,6 +211,22 @@
           "oklch(72% 0.208 25)",
           "oklch(84% 0.162 25)",
           "oklch(95% 0.113 25)"
+        ]
+      },
+      "danger-text": {
+        "role": "status",
+        "displayName": "Flatline Text",
+        "canonical": "#f87171",
+        "oklch": "oklch(71.1% 0.166 22)",
+        "tonalRamp": [
+          "oklch(15% 0.054 22)",
+          "oklch(26% 0.094 22)",
+          "oklch(37% 0.134 22)",
+          "oklch(48% 0.166 22)",
+          "oklch(60% 0.166 22)",
+          "oklch(72% 0.166 22)",
+          "oklch(84% 0.129 22)",
+          "oklch(95% 0.090 22)"
         ]
       },
       "text-primary": {
@@ -516,7 +532,7 @@
       },
       {
         "name": "The Text Contrast Rule",
-        "body": "Every text color passes 4.5:1 on the surface it sits on. Indigo as text is always `accent-text`; text on a solid amber fill is black (9.78:1); text on a solid green fill is Void (`text-surface-0`, 8.67:1), never white (2.28:1). Muted rows are shown with Smoke text and a label, never with opacity.",
+        "body": "Every text color passes 4.5:1 on the surface it sits on. Indigo as text is always `accent-text`; text on a solid amber fill is black (9.78:1); text on a solid green or red fill is Void (`text-surface-0`, 8.67:1 on green), never white (2.28:1 on green); red text inside a red tint uses `danger-text`. Muted rows are shown with Smoke text and a label, never with opacity.",
         "section": "colors"
       },
       {
@@ -541,7 +557,7 @@
       }
     ],
     "dos": [
-      "**Do** take every color from the `@theme` tokens in `frontend/src/index.css`; the palette is 16 tokens and nothing else.",
+      "**Do** take every color from the `@theme` tokens in `frontend/src/index.css`; the palette is 17 tokens and nothing else.",
       "**Do** build buttons, inputs, cards and badges from `components/ui` (`Button`, `Input`, `Card`, `Badge`) so radius, focus ring and hover stay consistent.",
       "**Do** show status with the tinted treatment (10 to 15% fill, 20 to 40% border, full text color) and keep solid status fills for prominent counts.",
       "**Do** raise hover and nesting by one surface step (Void to Panel to Raised to Lifted) with a Hairline border instead of adding a shadow.",

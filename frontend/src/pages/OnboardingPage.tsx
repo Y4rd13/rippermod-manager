@@ -32,7 +32,7 @@ function StepIndicator({ current }: { current: number }) {
             className={cn(
               "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-colors",
               i < current
-                ? "bg-success text-white"
+                ? "bg-success text-surface-0"
                 : i === current
                   ? "bg-accent text-white"
                   : "bg-surface-3 text-text-muted",
