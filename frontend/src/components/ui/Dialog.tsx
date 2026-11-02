@@ -146,7 +146,7 @@ function OpenDialog({
   const parentId = useContext(ParentDialogContext);
   const panelRef = useRef<HTMLDivElement>(null);
   const pressedOnBackdrop = useRef(false);
-  const options =useRef({ closeOnEscape, onEscape: onEscape ?? onClose });
+  const options = useRef({ closeOnEscape, onEscape: onEscape ?? onClose });
   useEffect(() => {
     options.current = { closeOnEscape, onEscape: onEscape ?? onClose };
   });
