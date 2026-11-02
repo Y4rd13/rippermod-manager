@@ -28,3 +28,39 @@ def test_request_redmod_compile_hands_the_game_id_to_the_runner(
     game = make_game()
     assert redmod_scheduler.request_redmod_compile(game) is True
     assert background_requests["redmod"] == [game.id]
+
+
+def _fail_if_called(_g):
+    raise AssertionError("redmod_deploy must not run")
+
+
+def test_compile_requested_before_undeploy_is_skipped(session, make_game, monkeypatch):
+    game = make_game()
+    monkeypatch.setattr(deploy_service, "redmod_deploy", _fail_if_called)
+    redmod_scheduler.request_redmod_compile(game)
+    redmod_scheduler.mark_undeployed(game.id)
+
+    redmod_scheduler._compile_job(game.id)
+
+    st = redmod_scheduler.redmod_status(game.id)
+    assert st.last_result is not None
+    assert st.last_result.ran is False
+    assert st.last_result.skipped_reason == "Game was undeployed after this compile was requested"
+
+
+def test_compile_requested_after_undeploy_runs(session, make_game, monkeypatch):
+    game = make_game()
+    ran: list[int] = []
+
+    def fake_deploy(g):
+        ran.append(g.id)
+        return RedmodDeployResult(ran=True, success=True)
+
+    monkeypatch.setattr(deploy_service, "redmod_deploy", fake_deploy)
+    redmod_scheduler.request_redmod_compile(game)
+    redmod_scheduler.mark_undeployed(game.id)
+    redmod_scheduler.request_redmod_compile(game)
+
+    redmod_scheduler._compile_job(game.id)
+
+    assert ran == [game.id]

@@ -367,22 +367,39 @@ def find_source_archive(
 ) -> str | None:
     """The staging archive of ``nexus_mod_id`` that holds the adopted files, if any.
 
-    Coverage is the share of ``relative_paths`` present in the archive. An
-    archive qualifies at ``LINK_MIN_COVERAGE``, or when at least that share of
-    its non-documentation files is among the adopted ones and its coverage
-    still reaches ``LINK_MIN_ADOPTED_SHARE`` (the mod wrote extra files such as
-    a user.ini at runtime). The qualifying archive with the highest coverage
-    wins, ties going to the most recently modified. FOMOD and unreadable archives
-    never qualify (their file set is unknown).
+    See ``_pick_source_archive`` for the rules.
     """
-    # Local import: conflict_service imports this module at load time.
-    from rippermod_manager.services.conflict_service import _get_archive_file_set
-
     adopted = {p.replace("\\", "/").lower() for p in relative_paths}
     if not adopted:
         return None
     archives = {p.name: p for p in list_available_archives(game)}
     ids = archive_nexus_ids(game, session, set(archives))
+    return _pick_source_archive(game, nexus_mod_id, adopted, archives, ids)
+
+
+def _pick_source_archive(
+    game: Game,
+    nexus_mod_id: int,
+    adopted: set[str],
+    archives: dict[str, Path],
+    ids: dict[str, int],
+) -> str | None:
+    """Choose the archive of ``nexus_mod_id`` among ``archives`` that holds ``adopted``.
+
+    ``adopted`` holds lowercased relative paths with "/" separators; ``ids`` maps archive
+    names to Nexus mod ids. Coverage is the share of ``adopted`` present in the archive.
+    An archive qualifies at ``LINK_MIN_COVERAGE``, or when at least that share of its
+    non-documentation files is among the adopted ones and its coverage still reaches
+    ``LINK_MIN_ADOPTED_SHARE`` (the mod wrote extra files such as a user.ini at runtime).
+    The qualifying archive with the highest coverage wins, ties going to the most recently
+    modified. FOMOD and unreadable archives never qualify (their file set is unknown).
+    Reads archives only, never the database.
+    """
+    # Local import: conflict_service imports this module at load time.
+    from rippermod_manager.services.conflict_service import _get_archive_file_set
+
+    if not adopted:
+        return None
     best: tuple[float, float, str] | None = None
     for name, path in archives.items():
         if ids.get(name) != nexus_mod_id:
@@ -413,6 +430,9 @@ def backfill_adopted_archives(game: Game, session: Session) -> int:
 
     Runs once per game (guarded by the ``adopt_archive_backfill_done:<game id>`` setting).
     Returns the number of mods linked. Commits.
+
+    Every archive is chosen in a read-only pass before any mod is changed: assigning first
+    would autoflush on the next query and hold SQLite's write lock while archives are opened.
     """
     from rippermod_manager.services.settings_helpers import get_setting, set_setting
 
@@ -426,17 +446,20 @@ def backfill_adopted_archives(game: Game, session: Session) -> int:
             InstalledMod.nexus_mod_id.is_not(None),  # type: ignore[union-attr]
         )
     ).all()
-    linked = 0
+    archives = {p.name: p for p in list_available_archives(game)} if mods else {}
+    ids = archive_nexus_ids(game, session, set(archives)) if archives else {}
+    chosen: list[tuple[InstalledMod, str]] = []
     for mod in mods:
-        paths = [f.relative_path for f in mod.files]
-        archive = find_source_archive(game, mod.nexus_mod_id, paths, session)  # type: ignore[arg-type]
+        adopted = {f.relative_path.replace("\\", "/").lower() for f in mod.files}
+        archive = _pick_source_archive(game, mod.nexus_mod_id, adopted, archives, ids)  # type: ignore[arg-type]
         if archive:
-            mod.source_archive = archive
-            session.add(mod)
-            linked += 1
+            chosen.append((mod, archive))
+    for mod, archive in chosen:
+        mod.source_archive = archive
+        session.add(mod)
     set_setting(session, flag, "1")
     session.commit()
-    return linked
+    return len(chosen)
 
 
 def adopt_mod(
@@ -643,7 +666,7 @@ def adopt_mod(
 def ensure_game_closed() -> None:
     """Raise ``GameRunningError`` while Cyberpunk runs: its files are locked then."""
     if is_game_running():
-        raise GameRunningError("Cyberpunk 2077 is running, close it before deploying.")
+        raise GameRunningError("Cyberpunk 2077 is running, close it first.")
 
 
 def uninstall_mod(
@@ -760,6 +783,7 @@ def toggle_mod(
     *,
     commit: bool = True,
     record_history: bool = True,
+    check_game: bool = True,
 ) -> ToggleResult:
     """Flip ``installed_mod.disabled`` and deploy/undeploy that mod's files.
 
@@ -771,9 +795,12 @@ def toggle_mod(
     then relinks this mod's paths, taking over the ones it wins (S4).
 
     Pass ``commit=False`` to defer the DB commit (useful for batching in
-    profile loads); the caller becomes responsible for commits.
+    profile loads); the caller becomes responsible for commits. Pass
+    ``check_game=False`` when the caller already ran ``ensure_game_closed()``
+    for the whole batch.
     """
-    ensure_game_closed()
+    if check_game:
+        ensure_game_closed()
     from rippermod_manager.services.vfs.deploy_service import (
         execute_plan,
         plan_remove_mod_links,

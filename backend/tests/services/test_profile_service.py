@@ -695,3 +695,18 @@ class TestLoadProfileOrdering:
                 continue
             session.refresh(m)
             assert m.disabled is not enabled
+
+    def test_load_profile_checks_game_once(self, session, four_mods_and_profile, monkeypatch):
+        game, _mods, profile = four_mods_and_profile
+        checks: list[int] = []
+
+        def counting(*_a, **_k):
+            checks.append(1)
+            return False
+
+        monkeypatch.setattr(install_service, "is_game_running", counting)
+
+        result = load_profile(profile, game, session)
+
+        assert result.failed_count == 0
+        assert len(checks) == 1

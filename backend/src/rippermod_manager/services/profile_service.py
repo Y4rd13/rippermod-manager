@@ -277,7 +277,7 @@ def load_profile(profile: Profile, game: Game, session: Session) -> ProfileLoadR
     failed: list[ProfileModFailure] = []
     for mod in [*to_disable, *to_enable]:
         try:
-            result = toggle_mod(mod, game, session, commit=False)
+            result = toggle_mod(mod, game, session, commit=False, check_game=False)
         except (VfsError, OSError) as exc:
             session.refresh(mod)
             failed.append(

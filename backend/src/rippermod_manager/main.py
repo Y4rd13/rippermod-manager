@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 import rippermod_manager.models  # noqa: F401 — register all models with SQLModel
 from rippermod_manager.config import settings
@@ -68,10 +69,10 @@ def run_adopt_backfill_all_games() -> None:
                     linked = install_service.backfill_adopted_archives(game, session)
                     if linked:
                         logger.info("Linked %d adopted mod(s) to their archive", linked)
-                except Exception as exc:
+                except (OSError, ValueError, SQLAlchemyError) as exc:
                     session.rollback()
                     logger.warning("adopt archive backfill failed for game %s: %s", game_id, exc)
-    except Exception:
+    except Exception:  # top-level startup guard: never crash the app, log the traceback
         logger.exception("Adopt archive backfill failed, continuing anyway")
 
 

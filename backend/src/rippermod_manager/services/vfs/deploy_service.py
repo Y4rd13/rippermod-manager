@@ -573,11 +573,16 @@ def undeploy(game: Game, session: Session) -> DeployReport:
             m.deployed = False
             session.add(m)
         session.commit()
-        from rippermod_manager.services.vfs.redmod_scheduler import compile_lock
+        from rippermod_manager.services.vfs.redmod_scheduler import (
+            compile_lock,
+            mark_undeployed,
+        )
 
         # A background compile (toggle/uninstall, S2) finishes before the cache is
-        # deleted, so it cannot write the removed mods back into it.
+        # deleted, so it cannot write the removed mods back into it, and one still
+        # queued from before this undeploy is skipped when it starts.
         with compile_lock(game.id):  # type: ignore[arg-type]
+            mark_undeployed(game.id)  # type: ignore[arg-type]
             report.removed_paths = _remove_deploy_traces(game)
             # REDmods installed outside the app still need a cache without ours (S11).
             if _has_unmanaged_redmods(game):

@@ -51,6 +51,8 @@ def background_requests(monkeypatch):
 
     monkeypatch.setattr(redmod_scheduler._runner, "request", _record("redmod"))
     monkeypatch.setattr(redmod_scheduler, "_last", {})
+    monkeypatch.setattr(redmod_scheduler, "_last_request_at", {})
+    monkeypatch.setattr(redmod_scheduler, "_undeployed_at", {})
     monkeypatch.setattr(auto_reindex._runner, "request", _record("conflicts"))
     return calls
 
