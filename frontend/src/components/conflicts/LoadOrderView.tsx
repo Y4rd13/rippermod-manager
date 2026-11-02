@@ -18,6 +18,7 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   ChevronDown,
   ChevronUp,
+  Eye,
   ExternalLink,
   FileText,
   GripVertical,
@@ -32,7 +33,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
-import { useModlistView, useArchiveConflictSummaries } from "@/hooks/queries";
+import { useModlistFile, useModlistView, useArchiveConflictSummaries } from "@/hooks/queries";
 import {
   useAutoSortApply,
   useAutoSortPreview,
@@ -304,6 +305,33 @@ function computeReorderDiff(
   return { add, remove };
 }
 
+/** Read-only, numbered lines of modlist.txt as the game reads them. */
+function ModlistFilePanel({ gameName }: { gameName: string }) {
+  const { data, isLoading, error } = useModlistFile(gameName, true);
+  if (isLoading) return <SkeletonTable columns={1} />;
+  if (error) {
+    return <p className="text-xs text-danger">Could not read modlist.txt: {error.message}</p>;
+  }
+  if (!data?.exists) {
+    return <p className="text-xs text-text-muted">modlist.txt was not found.</p>;
+  }
+  return (
+    <div className="rounded-lg border border-border bg-surface-2">
+      <div className="border-b border-border px-3 py-1.5 text-xs text-text-muted font-mono truncate" title={data.path}>
+        {data.path} · {data.lines.length} line{data.lines.length !== 1 ? "s" : ""}
+      </div>
+      <ol className="max-h-64 overflow-y-auto py-1 font-mono text-xs text-text-secondary">
+        {data.lines.map((line, i) => (
+          <li key={i} className="flex gap-3 px-3">
+            <span className="w-8 shrink-0 select-none text-right text-text-muted">{i + 1}</span>
+            <span className="truncate" title={line}>{line}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 export function LoadOrderView({ gameName }: Props) {
   const { data: result, isLoading } = useModlistView(gameName);
   const { data: conflictData } = useArchiveConflictSummaries(gameName);
@@ -315,6 +343,7 @@ export function LoadOrderView({ gameName }: Props) {
   const [search, setSearch] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
   const [confirmResetAll, setConfirmResetAll] = useState(false);
+  const [showModlistFile, setShowModlistFile] = useState(false);
   const [autoSortPlan, setAutoSortPlan] = useState<AutoSortPreviewT | null>(null);
 
   const sensors = useSensors(
@@ -473,6 +502,20 @@ export function LoadOrderView({ gameName }: Props) {
             Edit
           </button>
         )}
+        {result.modlist_active && (
+          <button
+            onClick={() => setShowModlistFile((v) => !v)}
+            aria-expanded={showModlistFile}
+            className={cn(
+              "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors hover:bg-surface-2",
+              showModlistFile ? "text-accent" : "text-text-muted hover:text-accent",
+            )}
+            title="Show the lines of modlist.txt"
+          >
+            <Eye size={11} />
+            View
+          </button>
+        )}
         <span className="text-xs text-text-muted">
           {result.total_archives} archive{result.total_archives !== 1 ? "s" : ""}
         </span>
@@ -506,6 +549,8 @@ export function LoadOrderView({ gameName }: Props) {
           Reset to Default Order
         </Button>
       </div>
+
+      {result.modlist_active && showModlistFile && <ModlistFilePanel gameName={gameName} />}
 
       {/* Search */}
       <div className="relative">

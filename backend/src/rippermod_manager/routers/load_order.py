@@ -15,6 +15,7 @@ from rippermod_manager.schemas.load_order import (
     BatchPreferencesRequest,
     BatchPreferencesResult,
     LoadOrderResult,
+    ModlistFileResult,
     ModlistViewResult,
     PreferModRequest,
     PreferModResult,
@@ -28,6 +29,7 @@ from rippermod_manager.services.modlist_service import (
     apply_preferences_batch,
     generate_modlist,
     get_modlist_view,
+    read_modlist_file,
     remove_all_preferences,
     remove_preference,
 )
@@ -132,6 +134,16 @@ async def modlist_view(
     """Return ordered mod groups and preferences for the Load Order view."""
     game = get_game_or_404(game_name, session)
     return get_modlist_view(game, session)
+
+
+@router.get("/modlist/file", response_model=ModlistFileResult)
+def modlist_file(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> ModlistFileResult:
+    """Return the lines of modlist.txt in order, read-only, or ``exists: false``."""
+    game = get_game_or_404(game_name, session)
+    return read_modlist_file(game)
 
 
 @router.delete("/preferences", response_model=ResetPreferencesResult)

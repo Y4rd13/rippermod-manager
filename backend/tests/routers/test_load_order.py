@@ -377,3 +377,26 @@ class TestAutoSortEndpoints:
         data = r.json()
         assert data["added"] == 0
         assert data["removed"] == 0
+
+
+class TestModlistFile:
+    def _url(self, name):
+        return f"/api/v1/games/{name}/load-order/modlist/file"
+
+    def test_returns_lines_in_order(self, client, game_setup):
+        name, game_dir = game_setup
+        (game_dir / "archive" / "pc" / "mod" / "modlist.txt").write_text("b.archive\na.archive\n")
+        body = client.get(self._url(name)).json()
+        assert body["exists"] is True and body["lines"] == ["b.archive", "a.archive"]
+        assert body["path"].endswith("modlist.txt")
+
+    def test_missing_file(self, client, game_setup):
+        name, _game_dir = game_setup
+        body = client.get(self._url(name)).json()
+        assert body["exists"] is False and body["lines"] == []
+
+    def test_modlist_file_tolerates_non_utf8_bytes(self, client, game_setup):
+        name, game_dir = game_setup
+        (game_dir / "archive" / "pc" / "mod" / "modlist.txt").write_bytes(b"caf\xe9.archive\n")
+        r = client.get(self._url(name))
+        assert r.status_code == 200 and r.json()["lines"] == ["caf�.archive"]
