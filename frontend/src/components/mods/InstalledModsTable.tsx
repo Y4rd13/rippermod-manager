@@ -255,7 +255,7 @@ function ManagedModsGrid({
             case "author":
               return (ap.author ?? "").localeCompare(bp.author ?? "");
             case "version":
-              return ap.installed_version.localeCompare(bp.installed_version);
+              return ap.installed_version.localeCompare(bp.installed_version, undefined, { numeric: true });
             case "endorsements":
               return (ap.endorsement_count ?? 0) - (bp.endorsement_count ?? 0);
             case "files":
