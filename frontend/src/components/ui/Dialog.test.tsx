@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -203,5 +203,24 @@ describe("Dialog", () => {
     );
     await user.click(screen.getByRole("button", { name: "inside" }));
     expect(rowClick).not.toHaveBeenCalled();
+  });
+
+  it("closes on the backdrop only when the press started on the backdrop", () => {
+    const onClose = vi.fn();
+    render(
+      <Dialog onClose={onClose} titleId="t">
+        <h2 id="t">Title</h2>
+        <p>path/to/file.archive</p>
+      </Dialog>,
+    );
+    const backdrop = screen.getByRole("dialog").parentElement!;
+    // A text selection that starts inside the panel and ends over the backdrop:
+    // Chromium fires the click on the backdrop.
+    fireEvent.mouseDown(screen.getByText("path/to/file.archive"));
+    fireEvent.click(backdrop);
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.mouseDown(backdrop);
+    fireEvent.click(backdrop);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
