@@ -69,6 +69,7 @@ import {
 import { api } from "@/lib/api-client";
 import { parseSSE } from "@/lib/sse-parser";
 import { plural } from "@/lib/format";
+import { countTrustedMatches } from "@/lib/matches";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import { useUIStore } from "@/stores/ui-store";
@@ -551,10 +552,10 @@ export function GameDetailPage() {
     {
       key: "matched",
       label: "Nexus Matched",
-      value: String(nexusMatched.length),
+      value: String(countTrustedMatches(nexusMatched)),
       icon: Link2,
       onSelect: () => { setTab("matched"); setMatchedSubTab("nexus-matched"); },
-      title: "Scanned mods matched to Nexus Mods entries",
+      title: "Scanned mods whose Nexus match is confirmed or scores at least 75%. Low-confidence matches are listed in the Matched tab for review.",
     },
     {
       key: "updates",
