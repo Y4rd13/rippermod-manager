@@ -98,3 +98,18 @@ class TestScanGameMods:
         )
         result = scan_game_mods(game, session)
         assert result.groups_created >= 1
+
+    def test_scan_requests_a_reindex(self, tmp_path, session, make_game, background_requests):
+        mod_dir = tmp_path / "archive" / "pc" / "mod"
+        mod_dir.mkdir(parents=True)
+        (mod_dir / "cool.archive").write_bytes(b"data")
+        game = make_game(install_path=str(tmp_path), mod_paths=["archive/pc/mod"])
+        scan_game_mods(game, session)
+        assert background_requests["conflicts"] == [game.id]
+
+    def test_empty_scan_still_requests_a_reindex(
+        self, tmp_path, session, make_game, background_requests
+    ):
+        game = make_game(install_path=str(tmp_path), mod_paths=["archive/pc/mod"])
+        scan_game_mods(game, session)
+        assert background_requests["conflicts"] == [game.id]

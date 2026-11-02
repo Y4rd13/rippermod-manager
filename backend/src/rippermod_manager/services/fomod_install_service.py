@@ -439,6 +439,9 @@ def install_fomod(
 
         write_modlist(game, session)
 
+    from rippermod_manager.services.conflicts.auto_reindex import request_conflict_reindex
+
+    request_conflict_reindex(game.id)
     logger.info(
         "FOMOD installed '%s' (%d files staged, %d overwritten in staging)",
         mod_name,

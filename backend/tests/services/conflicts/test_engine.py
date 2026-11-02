@@ -95,3 +95,34 @@ class TestConflictEngine:
         # Should have exactly one conflict, not accumulated across runs
         archive_conflicts = [e for e in persisted if e.key == "overlap.txt"]
         assert len(archive_conflicts) == 1
+
+
+def test_reindex_job_persists_evidence(session, game):
+    from rippermod_manager.services.conflicts import auto_reindex
+
+    mod_a = InstalledMod(game_id=game.id, name="A")
+    mod_b = InstalledMod(game_id=game.id, name="B")
+    session.add_all([mod_a, mod_b])
+    session.flush()
+    session.add(InstalledModFile(installed_mod_id=mod_a.id, relative_path="shared.dll"))
+    session.add(InstalledModFile(installed_mod_id=mod_b.id, relative_path="shared.dll"))
+    session.commit()
+
+    auto_reindex._reindex_job(game.id)
+    session.expire_all()
+
+    rows = session.exec(select(ConflictEvidence).where(ConflictEvidence.game_id == game.id)).all()
+    assert rows != []
+
+
+def test_auto_reindex_waits_two_seconds():
+    from rippermod_manager.services.conflicts import auto_reindex
+
+    assert auto_reindex._runner.debounce_s == 2.0
+
+
+def test_request_conflict_reindex_hands_the_game_id_to_the_runner(background_requests):
+    from rippermod_manager.services.conflicts import auto_reindex
+
+    auto_reindex.request_conflict_reindex(5)
+    assert background_requests["conflicts"] == [5]

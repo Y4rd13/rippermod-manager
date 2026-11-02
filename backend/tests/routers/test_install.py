@@ -455,6 +455,19 @@ class TestToggleEndpoint:
         assert r.json() == {"state": "idle", "last_result": None, "last_finished_at": None}
 
 
+class TestAutoReindex:
+    def test_install_toggle_and_uninstall_request_a_reindex(
+        self, client, game_setup, background_requests
+    ):
+        game_name, _, staging = game_setup
+        _make_zip(staging / "Re.zip", {"archive/pc/mod/a.archive": b"a"})
+        r = client.post(f"/api/v1/games/{game_name}/install/", json={"archive_filename": "Re.zip"})
+        mod_id = r.json()["installed_mod_id"]
+        client.patch(f"/api/v1/games/{game_name}/install/installed/{mod_id}/toggle")
+        client.delete(f"/api/v1/games/{game_name}/install/installed/{mod_id}")
+        assert len(background_requests["conflicts"]) == 3
+
+
 class TestConflictsEndpoint:
     def test_no_conflicts_returns_empty_list(self, client, game_setup):
         game_name, _, staging = game_setup
