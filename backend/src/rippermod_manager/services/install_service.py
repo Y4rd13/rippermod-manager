@@ -43,6 +43,7 @@ from rippermod_manager.services.archive_layout import (
     detect_layout,
     known_roots_for_game,
 )
+from rippermod_manager.services.doc_files import is_doc_file
 from rippermod_manager.services.nexus_helpers import match_local_to_nexus_file
 from rippermod_manager.services.paths import get_mods_dir
 from rippermod_manager.services.presence_service import (
@@ -67,15 +68,6 @@ LINK_MIN_COVERAGE: float = 0.90
 # When the archive's payload is on disk but the mod added files of its own, the archive must
 # still hold this share of the adopted files, so a small archive never claims a larger group.
 LINK_MIN_ADOPTED_SHARE: float = 0.75
-_DOC_SUFFIXES = (".md", ".txt", ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".url", ".html")
-_DOC_PREFIXES = ("readme", "license", "changelog")
-
-
-def _is_doc_file(path: str) -> bool:
-    """Whether an archive entry is documentation that installers do not place in the game."""
-    name = path.rsplit("/", 1)[-1].lower()
-    return name.endswith(_DOC_SUFFIXES) or name.startswith(_DOC_PREFIXES)
-
 
 _BACKFILL_SETTING = "adopt_archive_backfill_done"  # suffixed with ":<game id>"
 
@@ -387,7 +379,7 @@ def find_source_archive(
         if coverage < LINK_MIN_COVERAGE:
             # The other direction: the archive's payload is on disk, and the mod only added
             # files of its own at runtime (a user.ini, a config). Docs never reach the game.
-            payload = {p for p in file_set if not _is_doc_file(p)}
+            payload = {p for p in file_set if not is_doc_file(p)}
             payload_on_disk = len(adopted & payload) / len(payload) if payload else 0.0
             if payload_on_disk < LINK_MIN_COVERAGE or coverage < LINK_MIN_ADOPTED_SHARE:
                 continue
