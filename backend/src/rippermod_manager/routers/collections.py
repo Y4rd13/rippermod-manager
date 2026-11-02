@@ -119,6 +119,11 @@ async def preview_collection(
         raise HTTPException(404, str(exc)) from exc
 
 
+# (game id, slug) of force reinstalls whose uninstall is running in a worker
+# thread; another install of the same collection gets 409 until it ends.
+_reinstall_uninstalling: set[tuple[int, str]] = set()
+
+
 @router.post(
     "/games/{game_name}/collections/install",
     response_model=CollectionStatusOut,
@@ -157,15 +162,26 @@ async def install_collection(
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
 
+    # Checked and set with no await in between, so two requests cannot both pass.
+    key = (game.id, preview.slug)
+    if key in _reinstall_uninstalling:
+        raise HTTPException(
+            409,
+            "This collection is still being uninstalled for a reinstall; wait for it to finish.",
+        )
     try:
         if body.force_reinstall:
             # In a worker thread: the uninstall's deploy waits for a background
             # REDmod compile and may run redMod.exe (up to 10 minutes).
-            await asyncio.to_thread(
-                collection_install_service.uninstall_previous_install_in_own_session,
-                game.id,  # type: ignore[arg-type]
-                preview.slug,
-            )
+            _reinstall_uninstalling.add(key)  # type: ignore[arg-type]
+            try:
+                await asyncio.to_thread(
+                    collection_install_service.uninstall_previous_install_in_own_session,
+                    game.id,  # type: ignore[arg-type]
+                    preview.slug,
+                )
+            finally:
+                _reinstall_uninstalling.discard(key)  # type: ignore[arg-type]
         row = collection_install_service.start_install(
             game=game,
             request=body,
