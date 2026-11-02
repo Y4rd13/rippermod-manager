@@ -153,4 +153,19 @@ describe("Dialog", () => {
     expect(dialog.getAttribute("aria-modal")).toBe("true");
     expect(dialog.getAttribute("aria-labelledby")).toBe("t");
   });
+
+  it("keeps clicks inside the dialog from reaching the element that rendered it", async () => {
+    const user = userEvent.setup();
+    const rowClick = vi.fn();
+    render(
+      <div onClick={rowClick}>
+        <Dialog onClose={() => {}} titleId="t">
+          <h2 id="t">Title</h2>
+          <button type="button">inside</button>
+        </Dialog>
+      </div>,
+    );
+    await user.click(screen.getByRole("button", { name: "inside" }));
+    expect(rowClick).not.toHaveBeenCalled();
+  });
 });

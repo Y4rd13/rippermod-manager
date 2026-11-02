@@ -32,6 +32,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Dialog } from "@/components/ui/Dialog";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { useModlistFile, useModlistView, useArchiveConflictSummaries } from "@/hooks/queries";
 import {
@@ -670,76 +671,73 @@ function AutoSortPreviewDialog({
     preview.proposed_add.length > 0 || preview.proposed_remove.length > 0;
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
-      onClick={() => !loading && onCancel()}
+    <Dialog
+      onClose={onCancel}
+      titleId="auto-sort-preview-title"
+      closeOnEscape={!loading}
+      closeOnBackdrop={!loading}
+      backdropClassName="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+      className="w-full max-w-lg rounded-xl border border-border bg-surface-1 p-6 max-h-[80vh] overflow-y-auto"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="w-full max-w-lg rounded-xl border border-border bg-surface-1 p-6 max-h-[80vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center gap-2 text-accent-text">
-          <Sparkles size={20} />
-          <h3 className="text-lg font-semibold text-text-primary">
-            Auto-sort Preview
-          </h3>
-        </div>
-
-        <p className="mb-4 text-sm text-text-secondary">{preview.rationale}</p>
-
-        {hasChanges ? (
-          <div className="mb-6 space-y-3">
-            <div className="text-xs text-text-muted">
-              {preview.proposed_add.length} preference{preview.proposed_add.length !== 1 ? "s" : ""}{" "}
-              to add
-              {preview.proposed_remove.length > 0 &&
-                `, ${preview.proposed_remove.length} to remove`}
-              .
-            </div>
-            {preview.affected_mods.length > 0 && (
-              <div className="rounded border border-border bg-surface-0 p-3">
-                <div className="mb-2 text-xs font-medium text-text-secondary">
-                  Affected mods (sorted by file count, smaller = wins):
-                </div>
-                <ul className="space-y-1 text-xs font-mono">
-                  {preview.affected_mods.map((m) => (
-                    <li
-                      key={m.mod_id}
-                      className="flex items-center justify-between gap-2"
-                    >
-                      <span className="truncate text-text-primary">{m.mod_name}</span>
-                      <span className="shrink-0 text-text-muted">
-                        {m.file_count} file{m.file_count !== 1 ? "s" : ""}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="mb-6 rounded border border-border bg-surface-0 p-3 text-xs text-text-muted">
-            Nothing to change.
-          </div>
-        )}
-
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" size="sm" disabled={loading} onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={!hasChanges}
-            loading={loading}
-            onClick={onApply}
-          >
-            Apply
-          </Button>
-        </div>
+      <div className="mb-4 flex items-center gap-2 text-accent-text">
+        <Sparkles size={20} />
+        <h3 id="auto-sort-preview-title" className="text-lg font-semibold text-text-primary">
+          Auto-sort Preview
+        </h3>
       </div>
-    </div>
+
+      <p className="mb-4 text-sm text-text-secondary">{preview.rationale}</p>
+
+      {hasChanges ? (
+        <div className="mb-6 space-y-3">
+          <div className="text-xs text-text-muted">
+            {preview.proposed_add.length} preference{preview.proposed_add.length !== 1 ? "s" : ""}{" "}
+            to add
+            {preview.proposed_remove.length > 0 &&
+              `, ${preview.proposed_remove.length} to remove`}
+            .
+          </div>
+          {preview.affected_mods.length > 0 && (
+            <div className="rounded border border-border bg-surface-0 p-3">
+              <div className="mb-2 text-xs font-medium text-text-secondary">
+                Affected mods (sorted by file count, smaller = wins):
+              </div>
+              <ul className="space-y-1 text-xs font-mono">
+                {preview.affected_mods.map((m) => (
+                  <li
+                    key={m.mod_id}
+                    className="flex items-center justify-between gap-2"
+                  >
+                    <span className="truncate text-text-primary">{m.mod_name}</span>
+                    <span className="shrink-0 text-text-muted">
+                      {m.file_count} file{m.file_count !== 1 ? "s" : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="mb-6 rounded border border-border bg-surface-0 p-3 text-xs text-text-muted">
+          Nothing to change.
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" size="sm" disabled={loading} onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={!hasChanges}
+          loading={loading}
+          onClick={onApply}
+        >
+          Apply
+        </Button>
+      </div>
+    </Dialog>
   );
 }

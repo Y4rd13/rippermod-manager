@@ -1,7 +1,8 @@
 import { AlertTriangle, type LucideIcon } from "lucide-react";
-import { type ReactNode, useEffect, useId } from "react";
+import { type ReactNode, useId } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 
 interface Props {
   title: string;
@@ -34,58 +35,42 @@ export function ConfirmDialog({
 }: Props) {
   const dialogId = useId();
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !loading) onCancel();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel, loading]);
-
-  const handleBackdropClick = () => {
-    if (!loading) onCancel();
-  };
-
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
-      onClick={handleBackdropClick}
+    <Dialog
+      onClose={onCancel}
+      titleId={`confirm-dialog-title-${dialogId}`}
+      closeOnEscape={!loading}
+      closeOnBackdrop={!loading}
+      backdropClassName="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+      className="w-full max-w-sm rounded-xl border border-border bg-surface-1 p-6"
     >
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={`confirm-dialog-title-${dialogId}`}
-        className="w-full max-w-sm rounded-xl border border-border bg-surface-1 p-6"
-        onClick={(e) => e.stopPropagation()}
+        className={`mb-4 flex items-center gap-2 ${variant === "warning" ? "text-warning" : "text-danger"}`}
       >
-        <div
-          className={`mb-4 flex items-center gap-2 ${variant === "warning" ? "text-warning" : "text-danger"}`}
+        <Icon size={20} />
+        <h3
+          id={`confirm-dialog-title-${dialogId}`}
+          className="text-lg font-semibold text-text-primary"
         >
-          <Icon size={20} />
-          <h3
-            id={`confirm-dialog-title-${dialogId}`}
-            className="text-lg font-semibold text-text-primary"
-          >
-            {title}
-          </h3>
-        </div>
-        <p className={`text-sm text-text-secondary ${children ? "mb-3" : "mb-6"}`}>{message}</p>
-        {children && <div className="mb-6">{children}</div>}
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" size="sm" disabled={loading} onClick={onCancel}>
-            Cancel
-          </Button>
-          {secondaryLabel && onSecondary && (
-            <Button variant="secondary" size="sm" disabled={loading} onClick={onSecondary}>
-              {secondaryLabel}
-            </Button>
-          )}
-          {/* Always danger-styled: both warning and danger dialogs guard destructive/state-changing actions */}
-          <Button variant="danger" size="sm" loading={loading} onClick={onConfirm}>
-            {confirmLabel}
-          </Button>
-        </div>
+          {title}
+        </h3>
       </div>
-    </div>
+      <p className={`text-sm text-text-secondary ${children ? "mb-3" : "mb-6"}`}>{message}</p>
+      {children && <div className="mb-6">{children}</div>}
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" size="sm" disabled={loading} onClick={onCancel}>
+          Cancel
+        </Button>
+        {secondaryLabel && onSecondary && (
+          <Button variant="secondary" size="sm" disabled={loading} onClick={onSecondary}>
+            {secondaryLabel}
+          </Button>
+        )}
+        {/* Always danger-styled: both warning and danger dialogs guard destructive/state-changing actions */}
+        <Button variant="danger" size="sm" loading={loading} onClick={onConfirm}>
+          {confirmLabel}
+        </Button>
+      </div>
+    </Dialog>
   );
 }
