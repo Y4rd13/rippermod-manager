@@ -88,7 +88,7 @@ export function DownloadQueueFooter() {
         onClick={toggleFooter}
         className="flex w-full items-center gap-3 px-4 h-10 hover:bg-surface-2/50 transition-colors"
       >
-        <Download size={16} className="text-accent shrink-0" />
+        <Download size={16} className="text-accent-text shrink-0" />
         <span className="text-sm text-text-secondary whitespace-nowrap">{countLabel}</span>
         <div className="flex-1 mx-2 h-1.5 rounded-full bg-surface-3 overflow-hidden">
           <div
@@ -151,11 +151,11 @@ export function DownloadQueueFooter() {
                       Installed
                     </span>
                   ) : isInstalling ? (
-                    <Loader2 size={16} className="text-accent shrink-0 animate-spin" />
+                    <Loader2 size={16} className="text-accent-text shrink-0 animate-spin" />
                   ) : (
                     <button
                       onClick={() => handleInstall(job.nexus_mod_id, job.file_name)}
-                      className="p-1 text-accent hover:text-accent-hover transition-colors shrink-0"
+                      className="p-1 text-accent-text hover:text-text-primary transition-colors shrink-0"
                       title="Install mod"
                     >
                       <PackagePlus size={16} />

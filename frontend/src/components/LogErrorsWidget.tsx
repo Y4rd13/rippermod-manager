@@ -18,7 +18,7 @@ export function LogErrorsWidget({ gameName }: { gameName: string }) {
   return (
     <div className="rounded-lg border border-border bg-surface-2 p-3">
       <div className="mb-2 flex items-center gap-2 text-sm font-medium text-text-primary">
-        <ScrollText size={15} className="shrink-0 text-accent" />
+        <ScrollText size={15} className="shrink-0 text-accent-text" />
         Mod errors
         <span className="ml-auto flex items-center gap-2 text-xs font-normal text-text-muted">
           {data.length === 0 ? (
@@ -64,7 +64,7 @@ export function LogErrorsWidget({ gameName }: { gameName: string }) {
                 </span>
                 {e.mod_name && (
                   <span
-                    className="mr-1.5 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent"
+                    className="mr-1.5 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent-text"
                     title="Attributed to this installed mod"
                   >
                     {e.mod_name}

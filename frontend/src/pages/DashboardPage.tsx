@@ -181,7 +181,7 @@ export function DashboardPage() {
           icon={Gamepad2}
           label="Games"
           value={games.length}
-          color="bg-accent/10 text-accent"
+          color="bg-accent/10 text-accent-text"
           hoverBorder="hover:border-accent/40"
           onClick={firstGame ? () => navigate(`/games/${firstGame}`) : undefined}
           title="View your games"
@@ -281,7 +281,7 @@ export function DashboardPage() {
                   className="flex items-center justify-between rounded-lg border border-border p-3 hover:bg-surface-2 transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <Gamepad2 size={18} className="text-accent" />
+                    <Gamepad2 size={18} className="text-accent-text" />
                     <div>
                       <p className="text-sm font-medium text-text-primary">
                         {game.name}

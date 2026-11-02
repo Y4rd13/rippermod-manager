@@ -111,7 +111,7 @@ export function ActivityPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <History size={24} className="text-accent" />
+        <History size={24} className="text-accent-text" />
         <h1 className="text-2xl font-bold text-text-primary">Activity</h1>
       </div>
 

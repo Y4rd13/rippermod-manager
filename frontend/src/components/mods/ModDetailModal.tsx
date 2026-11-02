@@ -527,7 +527,7 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, de
                         if (detail.is_tracked) untrackMod.mutate({ gameName, modId: currentModId });
                         else trackMod.mutate({ gameName, modId: currentModId });
                       }}
-                      className={detail.is_tracked ? "text-accent" : ""}
+                      className={detail.is_tracked ? "text-accent-text" : ""}
                     >
                       {detail.is_tracked ? <EyeOff size={14} /> : <Eye size={14} />}
                       {detail.is_tracked ? "Tracked" : "Track"}

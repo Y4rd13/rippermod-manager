@@ -63,9 +63,9 @@ const PreviewTreeNode = memo(function PreviewTreeNode({
             <ChevronRight size={14} className="shrink-0 text-text-muted" />
           )}
           {open ? (
-            <FolderOpen size={14} className="shrink-0 text-accent" />
+            <FolderOpen size={14} className="shrink-0 text-accent-text" />
           ) : (
-            <Folder size={14} className="shrink-0 text-accent" />
+            <Folder size={14} className="shrink-0 text-accent-text" />
           )}
           <span className="font-mono text-xs text-text-primary truncate">
             {node.name}
@@ -138,13 +138,13 @@ const PreviewTreeNode = memo(function PreviewTreeNode({
     >
       <File size={14} className="shrink-0 text-text-muted" />
       <span
-        className={`font-mono text-xs truncate ${isRenamed ? "text-accent font-medium" : "text-text-secondary"}`}
+        className={`font-mono text-xs truncate ${isRenamed ? "text-accent-text font-medium" : "text-text-secondary"}`}
         title={isRenamed ? renamedPath : fullPath}
       >
         {displayName}
       </span>
       {isRenamed && (
-        <span className="shrink-0 text-[10px] text-accent bg-accent/10 px-1 rounded">
+        <span className="shrink-0 text-[10px] text-accent-text bg-accent/10 px-1 rounded">
           renamed
         </span>
       )}
@@ -154,7 +154,7 @@ const PreviewTreeNode = memo(function PreviewTreeNode({
       <button
         onClick={(e) => { e.stopPropagation(); startEditing(); }}
         title="Rename file"
-        className="shrink-0 rounded p-0.5 text-text-muted opacity-0 group-hover:opacity-100 hover:text-accent hover:bg-accent/10 transition-all"
+        className="shrink-0 rounded p-0.5 text-text-muted opacity-0 group-hover:opacity-100 hover:text-accent-text hover:bg-accent/10 transition-all"
       >
         <Pencil size={12} />
       </button>
@@ -278,7 +278,7 @@ export function PreInstallPreview({ gameName, archiveFilename, onConfirm, onCanc
             </div>
 
             {renameCount > 0 && (
-              <p className="mt-2 text-xs text-accent">
+              <p className="mt-2 text-xs text-accent-text">
                 {renameCount} file{renameCount !== 1 ? "s" : ""} will be renamed.
               </p>
             )}

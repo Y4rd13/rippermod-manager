@@ -667,7 +667,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
           <div className="py-4 text-sm text-text-muted text-center space-y-2">
             <p>No archives matching the current filters.</p>
             <button
-              className="text-accent hover:text-accent-hover text-xs transition-colors"
+              className="text-accent-text hover:text-text-primary text-xs transition-colors"
               onClick={() => { setFilter(""); setLinkChip("all"); }}
             >
               Clear filters

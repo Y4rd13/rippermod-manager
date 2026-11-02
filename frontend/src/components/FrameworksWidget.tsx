@@ -38,7 +38,7 @@ export function FrameworksWidget({ gameName }: { gameName: string }) {
   return (
     <div className="rounded-xl border border-border bg-surface-1 p-4">
       <div className="flex items-center gap-2">
-        <Boxes size={16} className="shrink-0 text-accent" />
+        <Boxes size={16} className="shrink-0 text-accent-text" />
         <h3 className="text-sm font-semibold text-text-primary">Frameworks</h3>
         <span className="ml-auto flex items-center gap-2 text-xs text-text-muted">
           <span>

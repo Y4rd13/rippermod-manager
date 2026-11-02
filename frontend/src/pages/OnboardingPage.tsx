@@ -148,7 +148,7 @@ function NexusSetupStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                 <button
                   type="button"
                   onClick={() => sso.cancel()}
-                  className="ml-2 text-accent underline"
+                  className="ml-2 text-accent-text underline"
                 >
                   Cancel
                 </button>
@@ -409,7 +409,7 @@ function AddGameStep({ onFinish, onBack }: { onFinish: () => void; onBack: () =>
                 className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-surface-2 transition-colors"
               >
                 <span className="text-text-primary truncate">{d.path}</span>
-                <span className="shrink-0 ml-2 text-xs text-accent font-medium">
+                <span className="shrink-0 ml-2 text-xs text-accent-text font-medium">
                   {d.source}
                 </span>
               </button>

@@ -304,7 +304,7 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
           <button
             type="button"
             onClick={() => setHelpOpen(true)}
-            className="rounded-lg p-1.5 text-text-muted hover:text-accent hover:bg-surface-2 transition-colors"
+            className="rounded-lg p-1.5 text-text-muted hover:text-accent-text hover:bg-surface-2 transition-colors"
             title="How do archive conflicts work?"
           >
             <HelpCircle size={16} />
@@ -363,7 +363,7 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
                     )}
                   </td>
                   <td className="py-2.5 pr-4">
-                    <code className="text-xs text-accent font-mono">{item.archive_filename}</code>
+                    <code className="text-xs text-accent-text font-mono">{item.archive_filename}</code>
                   </td>
                   <td className="py-2.5 pr-4">
                     <div className="flex items-center gap-1.5">
@@ -372,7 +372,7 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
                       </span>
                       {item.nexus_mod_id != null && (
                         <button
-                          className="shrink-0 text-text-muted hover:text-accent transition-colors"
+                          className="shrink-0 text-text-muted hover:text-accent-text transition-colors"
                           title="View on Nexus Mods"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -543,7 +543,7 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
                                 <Shuffle size={12} className="text-text-muted shrink-0" />
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2">
-                                    <code className="font-mono text-accent text-xs truncate">{ca.archive_filename}</code>
+                                    <code className="font-mono text-accent-text text-xs truncate">{ca.archive_filename}</code>
                                     {ca.is_winner ? (
                                       <Badge variant="success">wins over</Badge>
                                     ) : (
@@ -559,7 +559,7 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
                                 <div className="flex items-center gap-1 shrink-0">
                                   {partner?.nexus_mod_id != null && (
                                     <button
-                                      className="rounded p-1.5 text-text-muted hover:text-accent hover:bg-surface-2 transition-colors"
+                                      className="rounded p-1.5 text-text-muted hover:text-accent-text hover:bg-surface-2 transition-colors"
                                       title="View on Nexus Mods"
                                       onClick={() =>
                                         openUrl(`https://www.nexusmods.com/${gameDomain}/mods/${partner.nexus_mod_id}`).catch(() => {})
@@ -593,7 +593,7 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
                         </div>
 
                         <button
-                          className="flex items-center gap-1 mt-2 text-xs text-accent hover:text-accent/80 transition-colors"
+                          className="flex items-center gap-1 mt-2 text-xs text-accent-text hover:text-accent-text/80 transition-colors"
                           onClick={() =>
                             setDetailsOpenFor((cur) =>
                               cur?.archive === item.archive_filename
@@ -635,7 +635,7 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
             className="w-full max-w-md rounded-xl border border-border bg-surface-1 p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2 mb-4 text-accent">
+            <div className="flex items-center gap-2 mb-4 text-accent-text">
               <Crown size={20} />
               <h3 className="text-lg font-semibold text-text-primary">
                 Prefer &ldquo;{previewState.winnerName}&rdquo; over{" "}
@@ -746,7 +746,7 @@ function ConflictHelpModal({ onClose }: { onClose: () => void }) {
       >
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <HelpCircle size={18} className="text-accent" />
+            <HelpCircle size={18} className="text-accent-text" />
             <h3 id="conflict-help-title" className="text-lg font-semibold text-text-primary">
               How do archive conflicts work?
             </h3>

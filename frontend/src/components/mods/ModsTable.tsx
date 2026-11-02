@@ -247,7 +247,7 @@ export function ModsTable({ mods, gameName, isLoading }: { mods: ModGroup[]; gam
                     <FileTreeView tree={buildFileTree(mod.files)} />
                     {mod.nexus_match && (
                       <div className="mt-2 pt-2 border-t border-border flex items-center gap-2 text-xs">
-                        <ExternalLink size={12} className="text-accent" />
+                        <ExternalLink size={12} className="text-accent-text" />
                         <span className="text-text-muted">
                           Matched via {matchMethodLabel(mod.nexus_match.method)}, Nexus Mod #
                           {mod.nexus_match.nexus_mod_id}
@@ -269,7 +269,7 @@ export function ModsTable({ mods, gameName, isLoading }: { mods: ModGroup[]; gam
             {filter ? <> &quot;{filter}&quot;</> : ""}.
           </p>
           <button
-            className="text-accent hover:text-accent-hover text-xs transition-colors"
+            className="text-accent-text hover:text-text-primary text-xs transition-colors"
             onClick={() => { setFilter(""); setMatchFilter("all"); }}
           >
             Clear filters

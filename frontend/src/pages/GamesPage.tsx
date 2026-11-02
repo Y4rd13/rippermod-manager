@@ -172,7 +172,7 @@ function AddGameDialog({
                     className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-surface-2 transition-colors"
                   >
                     <span className="text-text-primary truncate">{d.path}</span>
-                    <span className="shrink-0 ml-2 text-xs text-accent font-medium">
+                    <span className="shrink-0 ml-2 text-xs text-accent-text font-medium">
                       {d.source}
                     </span>
                   </button>
@@ -240,9 +240,9 @@ export function GamesPage() {
               <div className="flex items-center justify-between">
                 <Link
                   to={`/games/${game.name}`}
-                  className="flex items-center gap-3 hover:text-accent transition-colors"
+                  className="flex items-center gap-3 hover:text-accent-text transition-colors"
                 >
-                  <Gamepad2 size={20} className="text-accent" />
+                  <Gamepad2 size={20} className="text-accent-text" />
                   <div>
                     <p className="font-semibold text-text-primary">
                       {game.name}

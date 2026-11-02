@@ -813,7 +813,7 @@ function ManagedModsGrid({
                         }}
                         title="Open mod page on Nexus Mods"
                         aria-label="Open on Nexus Mods"
-                        className="ml-auto rounded p-1 text-text-muted hover:text-accent hover:bg-accent/10 shrink-0 transition-colors"
+                        className="ml-auto rounded p-1 text-text-muted hover:text-accent-text hover:bg-accent/10 shrink-0 transition-colors"
                       >
                         <ExternalLink size={12} />
                       </button>

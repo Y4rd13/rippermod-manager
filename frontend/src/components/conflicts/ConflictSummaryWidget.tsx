@@ -145,7 +145,7 @@ const severityBadge: Record<ClusterSeverity, "danger" | "warning" | "neutral"> =
 const statCardConfig = [
   { key: "fileConflicts", label: "File Conflicts", singular: "File Conflict", Icon: FileWarning, color: "text-warning" },
   { key: "resourceConflicts", label: "Resource Conflicts", singular: "Resource Conflict", Icon: Layers, color: "text-danger" },
-  { key: "clusters", label: "Clusters", singular: "Cluster", Icon: Network, color: "text-accent" },
+  { key: "clusters", label: "Clusters", singular: "Cluster", Icon: Network, color: "text-accent-text" },
   { key: "mods", label: "Mods", singular: "Mod", Icon: Package, color: "text-text-muted" },
 ] as const;
 
