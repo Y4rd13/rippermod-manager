@@ -79,3 +79,35 @@ def test_from_mod_returns_the_queued_job_of_the_same_file(client, engine):
     assert r.json()["job"]["id"] == existing_id
     with Session(engine) as s:
         assert len(s.exec(select(DownloadJob)).all()) == 1
+
+
+@respx.mock
+def test_from_mod_returns_active_job_without_calling_nexus(client, engine):
+    from sqlmodel import Session, select
+
+    from rippermod_manager.models.download import DownloadJob
+    from rippermod_manager.models.game import Game
+
+    _setup(client)
+    validate = respx.get(f"{BASE_URL}/v1/users/validate.json").mock(
+        return_value=httpx.Response(200, json={"name": "u", "is_premium": True})
+    )
+    files = respx.get(url__regex=r".*/mods/107/files\.json.*").mock(
+        return_value=httpx.Response(200, json={"files": []})
+    )
+    with Session(engine) as s:
+        game = s.exec(select(Game)).one()
+        job = DownloadJob(
+            game_id=game.id, nexus_mod_id=107, nexus_file_id=9001, status="downloading"
+        )
+        s.add(job)
+        s.commit()
+        existing_id = job.id
+
+    r = client.post(f"{G}/from-mod", json={"nexus_mod_id": 107})
+
+    assert r.status_code == 200
+    assert r.json()["job"]["id"] == existing_id
+    assert r.json()["requires_nxm"] is False
+    assert not validate.called
+    assert not files.called

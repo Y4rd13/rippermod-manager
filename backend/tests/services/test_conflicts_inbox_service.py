@@ -143,3 +143,41 @@ def test_inbox_counts_doc_file_inside_folder(session, tmp_path: Path):
 
     assert overview.total_conflicts == 1
     assert len(get_mod_conflict_detail(game, mods[0], session).evidence) == 1
+
+
+def test_reinstall_refuses_when_mod_has_files_outside_its_archive(session, tmp_path: Path):
+    from rippermod_manager.services.install_service import adopt_mod
+
+    install_path = tmp_path / "game3"
+    staging = install_path / "downloaded_mods"
+    staging.mkdir(parents=True)
+    with zipfile.ZipFile(staging / "X-4198-1-0.zip", "w") as zf:
+        zf.writestr("archive/pc/mod/x.archive", b"data")
+    game = Game(name="Cyberpunk 2077", domain_name="cyberpunk2077", install_path=str(install_path))
+    session.add(game)
+    session.flush()
+    session.add(GameModPath(game_id=game.id, relative_path="archive/pc/mod"))
+    session.commit()
+    session.refresh(game)
+    rels = ["archive/pc/mod/x.archive", "archive/pc/mod/x.ini"]
+    for rel in rels:
+        p = install_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"data")
+    adopted = adopt_mod(game, "X", rels, session)
+    mod = session.get(InstalledMod, adopted.installed_mod_id)
+    mod.source_archive = "X-4198-1-0.zip"  # the archive covers x.archive, not the runtime x.ini
+    session.add(mod)
+    session.commit()
+
+    with pytest.raises(ResolveRefusedError) as exc:
+        resolve_conflict(game, mod, session)
+
+    assert str(exc.value) == (
+        "This mod has 1 file that is not in its archive, such as settings it wrote. "
+        "Reinstalling would delete it."
+    )
+    assert session.get(InstalledMod, mod.id) is not None
+    for rel in rels:
+        assert (install_path / rel).is_file()
+        assert (staging / adopted.installed_mod_name_safe / rel).is_file()
