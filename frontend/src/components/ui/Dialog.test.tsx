@@ -75,6 +75,42 @@ describe("Dialog", () => {
     expect(blocked).not.toHaveBeenCalled();
   });
 
+  it("leaves Escape to a control that handled it", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(
+      <Host>
+        <Dialog onClose={onClose} titleId="t">
+          <h2 id="t">Title</h2>
+          <input
+            aria-label="name"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") e.preventDefault();
+            }}
+          />
+        </Dialog>
+      </Host>,
+    );
+    await user.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("runs onEscape instead of onClose when given", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const onEscape = vi.fn();
+    render(
+      <Host>
+        <Dialog onClose={onClose} onEscape={onEscape} titleId="t">
+          <h2 id="t">Title</h2>
+        </Dialog>
+      </Host>,
+    );
+    await user.keyboard("{Escape}");
+    expect(onEscape).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("returns focus to the opener on close", async () => {
     const user = userEvent.setup();
     function Opener() {

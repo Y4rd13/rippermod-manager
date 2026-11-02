@@ -22,6 +22,8 @@ interface DialogProps {
   initialFocusRef?: RefObject<HTMLElement | null>;
   /** Default true. Pass false while an operation runs. */
   closeOnEscape?: boolean;
+  /** Runs on Escape in place of onClose, e.g. to step back inside the dialog. */
+  onEscape?: () => void;
   /** Default true. */
   closeOnBackdrop?: boolean;
   /** Panel classes. */
@@ -38,7 +40,7 @@ interface StackEntry {
   id: string;
   parentId: string | null;
   panel: HTMLElement;
-  getOptions: () => { closeOnEscape: boolean; onClose: () => void };
+  getOptions: () => { closeOnEscape: boolean; onEscape: () => void };
 }
 
 /** Open dialogs, bottom first. The last entry is the active one. */
@@ -69,11 +71,14 @@ function handleDocumentKeyDown(e: KeyboardEvent) {
   const top = stack[stack.length - 1];
   if (!top) return;
   if (e.key === "Escape") {
-    const { closeOnEscape, onClose } = top.getOptions();
+    // A control inside the dialog that handles Escape itself (an inline editor) calls
+    // preventDefault, and the dialog stays open.
+    if (e.defaultPrevented) return;
+    const { closeOnEscape, onEscape } = top.getOptions();
     if (!closeOnEscape) return;
     e.preventDefault();
     e.stopPropagation();
-    onClose();
+    onEscape();
     return;
   }
   if (e.key !== "Tab") return;
@@ -99,7 +104,7 @@ function handleDocumentKeyDown(e: KeyboardEvent) {
 }
 
 function register(entry: StackEntry) {
-  if (stack.length === 0) document.addEventListener("keydown", handleDocumentKeyDown, true);
+  if (stack.length === 0) document.addEventListener("keydown", handleDocumentKeyDown);
   // A dialog nested in another one's React tree always sits above it. Child effects run
   // before their parent's, so a parent registering late goes below its children.
   const childIndex = stack.findIndex((e) => e.parentId === entry.id);
@@ -111,7 +116,7 @@ function register(entry: StackEntry) {
 function unregister(id: string) {
   const i = stack.findIndex((e) => e.id === id);
   if (i !== -1) stack.splice(i, 1);
-  if (stack.length === 0) document.removeEventListener("keydown", handleDocumentKeyDown, true);
+  if (stack.length === 0) document.removeEventListener("keydown", handleDocumentKeyDown);
   syncInert();
 }
 
@@ -131,6 +136,7 @@ function OpenDialog({
   describedById,
   initialFocusRef,
   closeOnEscape = true,
+  onEscape,
   closeOnBackdrop = true,
   className,
   backdropClassName,
@@ -139,9 +145,9 @@ function OpenDialog({
   const id = useId();
   const parentId = useContext(ParentDialogContext);
   const panelRef = useRef<HTMLDivElement>(null);
-  const options = useRef({ closeOnEscape, onClose });
+  const options = useRef({ closeOnEscape, onEscape: onEscape ?? onClose });
   useEffect(() => {
-    options.current = { closeOnEscape, onClose };
+    options.current = { closeOnEscape, onEscape: onEscape ?? onClose };
   });
 
   useEffect(() => {
