@@ -500,3 +500,26 @@ class TestConflictCount:
     def test_count_game_not_found(self, client):
         r = client.get("/api/v1/games/NoSuchGame/conflicts/count")
         assert r.status_code == 404
+
+
+class TestConflictReindexStatus:
+    def test_reindex_status_is_idle_by_default(self, client, game_setup):
+        game_name, _ = game_setup
+        r = client.get(f"/api/v1/games/{game_name}/conflicts/reindex/status")
+        assert r.status_code == 200
+        assert r.json() == {"state": "idle"}
+
+    def test_reindex_status_is_running_while_a_reindex_is_busy(
+        self, client, game_setup, monkeypatch
+    ):
+        from rippermod_manager.routers import conflicts as conflicts_router
+
+        game_name, _ = game_setup
+        monkeypatch.setattr(conflicts_router, "conflict_reindex_busy", lambda _gid: True)
+        r = client.get(f"/api/v1/games/{game_name}/conflicts/reindex/status")
+        assert r.status_code == 200
+        assert r.json() == {"state": "running"}
+
+    def test_reindex_status_game_not_found(self, client):
+        r = client.get("/api/v1/games/Missing/conflicts/reindex/status")
+        assert r.status_code == 404

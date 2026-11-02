@@ -472,6 +472,11 @@ export interface ReindexResult {
   duration_ms: number;
 }
 
+/** Background conflict reindex state for one game; "running" while it waits or runs. */
+export interface ConflictReindexStatus {
+  state: "idle" | "running";
+}
+
 // Conflicts inbox types
 
 export type ConflictSeverity = "critical" | "warning" | "info";
