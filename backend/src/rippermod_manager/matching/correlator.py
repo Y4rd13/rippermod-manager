@@ -95,12 +95,15 @@ def _is_word_substring(a: str, b: str) -> bool:
     """Check whether the shorter of two normalized names sits on word boundaries in the longer.
 
     The shorter name must start at a word start. Unless it has two or more tokens, it must
-    also end at a word end, so "ash" does not match inside "splash".
+    also end at a word end, so "ash" does not match inside "splash", and it must make up at
+    least half of the longer name's words, so "ash" does not stand for "ash female v preset".
     """
     short, long = (a, b) if len(a) <= len(b) else (b, a)
     if not short:
         return False
     multi_token = len(short.split()) >= 2
+    if not multi_token and len(long.split()) > 2:
+        return False
     start = long.find(short)
     while start != -1:
         end = start + len(short)
