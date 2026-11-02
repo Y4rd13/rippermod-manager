@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/lib/api-client";
 import type {
+  ModPath,
   ActivityLogEntry,
   ArchiveConflictSummariesResult,
   ArchiveContentsResult,
@@ -53,6 +54,15 @@ export function useGame(name: string) {
     queryKey: ["games", name],
     queryFn: () => api.get(`/api/v1/games/${name}`),
     enabled: !!name,
+  });
+}
+
+/** The folders the scanner reads for a game (S5). */
+export function useModPaths(gameName: string) {
+  return useQuery<ModPath[]>({
+    queryKey: ["games", gameName, "mod-paths"],
+    queryFn: () => api.get(`/api/v1/games/${encodeURIComponent(gameName)}/mod-paths`),
+    enabled: !!gameName,
   });
 }
 
