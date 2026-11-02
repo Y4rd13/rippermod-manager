@@ -72,7 +72,7 @@ export function DeployStatusBadge({ gameName }: DeployStatusBadgeProps) {
 
       {confirmForce && status.foreign > 0 && (
         <ConfirmDialog
-          title="Overwrite foreign files?"
+          title="Move foreign files aside?"
           message={
             `${status.foreign} file${status.foreign === 1 ? "" : "s"} in the game folder are currently ` +
             `copies (not RipperMod hardlinks), most likely left over from another mod manager or a ` +

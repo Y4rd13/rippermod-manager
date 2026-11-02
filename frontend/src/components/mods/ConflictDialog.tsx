@@ -136,15 +136,20 @@ export function ConflictDialog({ conflicts, onCancel, onSkip, onOverwrite }: Pro
             />
           ))}
         </div>
+        <p className="mb-4 text-xs text-text-secondary">
+          Install: this mod&apos;s copy is linked in the game folder. The other mod keeps its own copy
+          and gets the path back if you uninstall this one. Install without these files: the listed
+          files are not extracted from this mod.
+        </p>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" size="sm" onClick={onCancel}>
             Cancel
           </Button>
           <Button variant="secondary" size="sm" onClick={onSkip}>
-            Skip Conflicts
+            Install without these files
           </Button>
           <Button size="sm" onClick={onOverwrite}>
-            Overwrite
+            Install
           </Button>
         </div>
       </div>

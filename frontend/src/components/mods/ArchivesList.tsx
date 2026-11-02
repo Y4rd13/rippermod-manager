@@ -481,7 +481,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
               variant="secondary"
               size="sm"
               onClick={() => setConfirmCleanup(true)}
-              title={`Delete ${orphanCount} archive${orphanCount !== 1 ? "s" : ""} not linked to any installed mod`}
+              title={`Delete ${orphanCount} archive${orphanCount !== 1 ? "s" : ""} with no Nexus id that RipperMod has not installed`}
             >
               <Trash2 size={14} /> Clean {orphanCount} Orphan{orphanCount !== 1 ? "s" : ""}
             </Button>
@@ -731,7 +731,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
       {confirmCleanup && (
         <ConfirmDialog
           title={`Delete ${orphanCount} orphan archive${orphanCount !== 1 ? "s" : ""}?`}
-          message={`Permanently delete ${orphanMb} MB of archives not linked to any Nexus mod? This cannot be undone.`}
+          message={`Permanently delete ${orphanMb} MB of archives that have no Nexus id and are not installed by RipperMod? This cannot be undone.`}
           confirmLabel="Delete"
           variant="danger"
           icon={Trash2}
