@@ -554,7 +554,7 @@ export function ArchiveResourceConflicts({ gameName, gameDomain }: Props) {
                                   {partner?.mod_name ? (
                                     <p className="text-text-muted text-xs mt-0.5 truncate">{partner.mod_name}</p>
                                   ) : (
-                                    <p className="text-text-muted/50 text-xs mt-0.5">Unmanaged</p>
+                                    <p className="text-text-muted text-xs mt-0.5">Unmanaged</p>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-1 shrink-0">

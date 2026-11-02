@@ -7,14 +7,14 @@ type Variant = "success" | "warning" | "danger" | "neutral";
 const variantStyles: Record<Variant, string> = {
   success: "bg-success/10 text-success border-success/20",
   warning: "bg-warning/10 text-warning border-warning/20",
-  danger: "bg-danger/10 text-danger border-danger/20",
+  danger: "bg-danger/10 text-danger-text border-danger/20",
   neutral: "bg-surface-3 text-text-secondary border-border",
 };
 
 const prominentVariantStyles: Record<Variant, string> = {
-  success: "bg-success/90 text-white border-success shadow-sm shadow-success/30",
+  success: "bg-success/90 text-surface-0 border-success shadow-sm shadow-success/30",
   warning: "bg-warning/90 text-black border-warning shadow-sm shadow-warning/30",
-  danger: "bg-danger/90 text-white border-danger shadow-sm shadow-danger/30",
+  danger: "bg-danger/90 text-surface-0 border-danger shadow-sm shadow-danger/30",
   neutral: "bg-surface-3 text-text-secondary border-border",
 };
 

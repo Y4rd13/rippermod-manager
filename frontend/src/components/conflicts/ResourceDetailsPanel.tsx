@@ -131,9 +131,9 @@ function GroupSection({
             {group.partner_mod_name ? (
               <span className="text-text-muted text-xs truncate">{group.partner_mod_name}</span>
             ) : (
-              <span className="text-text-muted/50 text-xs">Unmanaged</span>
+              <span className="text-text-muted text-xs">Unmanaged</span>
             )}
-            <span className="text-[11px] text-text-muted/60">
+            <span className="text-[11px] text-text-muted">
               {filtered.length} conflict{filtered.length !== 1 ? "s" : ""}
               {group.real_count > 0 && <span className="text-danger ml-1">{group.real_count} real</span>}
               {group.dependency_count > 0 && <span className="text-warning ml-1">{group.dependency_count} dep</span>}

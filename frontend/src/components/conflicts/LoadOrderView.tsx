@@ -564,7 +564,7 @@ export function LoadOrderView({ gameName }: Props) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by mod or archive name..."
-          className="w-full rounded-lg border border-border bg-surface-1 py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-accent focus:outline-none"
+          className="w-full rounded-lg border border-border bg-surface-1 py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
         />
       </div>
 

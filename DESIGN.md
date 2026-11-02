@@ -15,6 +15,7 @@ colors:
   success: "#22c55e"
   warning: "#f59e0b"
   danger: "#ef4444"
+  danger-text: "#f87171"
   text-primary: "#f1f1f6"
   text-secondary: "#b8bdc9"
   text-muted: "#8b8fa0"
@@ -234,11 +235,12 @@ A cool, near-monochrome dark palette with a single indigo signal and conventiona
 - **Online Green** (`success`): installed, deployed, linked, healthy, up to date.
 - **Amber Alert** (`warning`): updates available, matched-but-unconfirmed, drift, medium-confidence match. Solid amber always takes black text.
 - **Flatline Red** (`danger`): conflicts, critical health findings, errors, destructive actions, low-confidence match, titlebar close hover.
+- **Flatline Text** (`danger-text`, `#f87171`): red used as text inside a red tint, as in the danger badge, where Flatline Red falls to 4.2:1 on a tinted Raised background; Flatline Text measures 5.68:1 there.
 
 ### Named Rules
 **The One Signal Rule.** Indigo is the only hue that means "selected" or "act here". Status colors never stand in for selection, and indigo never stands in for status, except the info toast.
 
-**The Text Contrast Rule.** Every text color passes 4.5:1 on the surface it sits on. Indigo as text is always `accent-text`; text on a solid amber fill is black (9.78:1); text on a solid green fill is Void (`text-surface-0`, 8.67:1), never white (2.28:1). Muted rows are shown with Smoke text and a label, never with opacity.
+**The Text Contrast Rule.** Every text color passes 4.5:1 on the surface it sits on. Indigo as text is always `accent-text`; text on a solid amber fill is black (9.78:1); text on a solid green or red fill is Void (`text-surface-0`, 8.67:1 on green), never white (2.28:1 on green); red text inside a red tint uses `danger-text`. Muted rows are shown with Smoke text and a label, never with opacity.
 
 **The Tinted Status Rule.** Status is shown as a tint, not a fill: background at 10 to 15% (`bg-success/10`), border at 20 to 40%, text at full strength. A solid status fill (`prominent` badge) is the exception for counts that must be read at a glance.
 
@@ -323,8 +325,8 @@ Quiet and compact; the primary is the only one with color and glow.
 - **State:** active is solid Indigo Signal with white text; inactive hover steps to Lifted and Ash. Single and multi-select share one look.
 
 ### Badges
-- **Style:** pills, 2px 8px, 12px medium, 1px border, tinted per the Tinted Status Rule; neutral is Lifted with Ash text.
-- **Prominent:** solid status fill at 90% with a small status-colored glow (white text on green and red, black on amber).
+- **Style:** pills, 2px 8px, 12px medium, 1px border, tinted per the Tinted Status Rule (the danger badge's text is Flatline Text); neutral is Lifted with Ash text.
+- **Prominent:** solid status fill at 90% with a small status-colored glow (Void text on green and red, black on amber).
 - **Confidence badge:** green at 90% and above, amber at 75% and above, red below, with a check, triangle or cross icon and the percentage. It is the visible form of the "make provenance visible" principle.
 
 ### Cards / Containers
@@ -374,7 +376,7 @@ Every modal renders through `components/ui/Dialog.tsx`, the only component that 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** take every color from the `@theme` tokens in `frontend/src/index.css`; the palette is 16 tokens and nothing else.
+- **Do** take every color from the `@theme` tokens in `frontend/src/index.css`; the palette is 17 tokens and nothing else.
 - **Do** build buttons, inputs, cards and badges from `components/ui` (`Button`, `Input`, `Card`, `Badge`) so radius, focus ring and hover stay consistent.
 - **Do** show status with the tinted treatment (10 to 15% fill, 20 to 40% border, full text color) and keep solid status fills for prominent counts.
 - **Do** raise hover and nesting by one surface step (Void to Panel to Raised to Lifted) with a Hairline border instead of adding a shadow.
