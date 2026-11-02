@@ -257,6 +257,7 @@ export function useInstallMod() {
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
       qc.invalidateQueries({ queryKey: ["updates", gameName] });
       invalidateGameState(qc, gameName);
+      qc.invalidateQueries({ queryKey: ["deploy-status", gameName] });
       installToast(result);
     },
     onError: (err) =>
@@ -883,6 +884,7 @@ export function useFomodInstall() {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
       invalidateGameState(qc, gameName);
+      qc.invalidateQueries({ queryKey: ["deploy-status", gameName] });
       installToast(result);
     },
     onError: () => toast.error("FOMOD installation failed"),
