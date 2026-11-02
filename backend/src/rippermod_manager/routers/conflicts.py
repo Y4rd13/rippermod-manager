@@ -41,7 +41,7 @@ from rippermod_manager.services.conflict_service import (
     check_installed_conflicts,
     check_pairwise_conflict,
 )
-from rippermod_manager.services.conflicts.engine import ConflictEngine
+from rippermod_manager.services.conflicts.engine import reindex_game
 from rippermod_manager.services.conflicts_inbox_service import (
     ResolveRefusedError,
     dismiss_conflict,
@@ -140,13 +140,8 @@ def reindex_conflicts(
     """Trigger a full conflict re-scan for all installed mods."""
     game = get_game_or_404(game_name, session)
 
-    from rippermod_manager.services.archive_index_service import index_game_archives
-
-    index_game_archives(game, session, force_reindex=False)
-
     start = time.perf_counter()
-    engine = ConflictEngine()
-    evidence = engine.run(game, session)
+    evidence = reindex_game(game, session)
     elapsed_ms = int((time.perf_counter() - start) * 1000)
 
     by_kind: dict[ConflictKind, int] = {k: 0 for k in ConflictKind}

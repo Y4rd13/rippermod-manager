@@ -311,6 +311,9 @@ def install_mod(
         len(extracted_paths),
         overwritten,
     )
+    from rippermod_manager.services.conflicts.auto_reindex import request_conflict_reindex
+
+    request_conflict_reindex(game.id)
     if record_history:
         from rippermod_manager.services.activity_service import record_activity
 
@@ -709,6 +712,9 @@ def uninstall_mod(
     from rippermod_manager.services.vfs.redmod_scheduler import request_redmod_compile
 
     redmod_compile_queued = had_redmod and request_redmod_compile(game)
+    from rippermod_manager.services.conflicts.auto_reindex import request_conflict_reindex
+
+    request_conflict_reindex(game.id)
 
     logger.info("Uninstalled '%s' (%d files removed)", installed_mod.name, file_count)
     if record_history:
@@ -825,6 +831,9 @@ def toggle_mod(
     from rippermod_manager.services.vfs.redmod_scheduler import request_redmod_compile
 
     redmod_compile_queued = has_redmod_files(installed_mod) and request_redmod_compile(game)
+    from rippermod_manager.services.conflicts.auto_reindex import request_conflict_reindex
+
+    request_conflict_reindex(game.id)
 
     action = "Disabled" if should_disable else "Enabled"
     logger.info("%s '%s' (%d files affected)", action, installed_mod.name, affected)

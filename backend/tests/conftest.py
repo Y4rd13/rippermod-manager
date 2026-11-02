@@ -33,9 +33,11 @@ def _no_adopt_backfill_thread(monkeypatch):
 def background_requests(monkeypatch):
     """Background runners never start threads in tests; their requests are recorded.
 
-    ``calls["redmod"]`` holds the game ids that asked for a REDmod compile. Tests that
-    mean the real job call it directly (``redmod_scheduler._compile_job``).
+    ``calls["redmod"]`` holds the game ids that asked for a REDmod compile and
+    ``calls["conflicts"]`` those that asked for a conflict reindex. Tests that mean the
+    real job call it directly (``redmod_scheduler._compile_job``, ``auto_reindex._reindex_job``).
     """
+    from rippermod_manager.services.conflicts import auto_reindex
     from rippermod_manager.services.vfs import redmod_scheduler
 
     calls: dict[str, list[int]] = {"redmod": [], "conflicts": []}
@@ -49,6 +51,7 @@ def background_requests(monkeypatch):
 
     monkeypatch.setattr(redmod_scheduler._runner, "request", _record("redmod"))
     monkeypatch.setattr(redmod_scheduler, "_last", {})
+    monkeypatch.setattr(auto_reindex._runner, "request", _record("conflicts"))
     return calls
 
 

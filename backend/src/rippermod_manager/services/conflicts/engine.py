@@ -80,3 +80,11 @@ class ConflictEngine:
             elapsed_ms,
         )
         return all_evidence
+
+
+def reindex_game(game: Game, session: Session) -> list[ConflictEvidence]:
+    """Refresh the archive index, then run every detector for *game* (full reindex)."""
+    from rippermod_manager.services.archive_index_service import index_game_archives
+
+    index_game_archives(game, session, force_reindex=False)
+    return ConflictEngine().run(game, session)
