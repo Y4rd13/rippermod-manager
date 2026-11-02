@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import {
   useCancelDownload,
@@ -78,19 +78,6 @@ export function useInstallFlow(
       }),
     [],
   );
-
-  useEffect(() => {
-    if (!conflicts) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (conflictModId != null) removeInstalling(conflictModId);
-        setConflicts(null);
-        setConflictModId(null);
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [conflicts, conflictModId, removeInstalling]);
 
   const doInstall = useCallback(
     async (

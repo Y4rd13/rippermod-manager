@@ -430,19 +430,6 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
     }
   };
 
-  useEffect(() => {
-    if (!conflicts) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setConflicts(null);
-        setSelectedArchive(null);
-        processNextInQueue();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [conflicts]);
-
   if (isLoading) {
     return <SkeletonTable columns={6} rows={5} />;
   }
