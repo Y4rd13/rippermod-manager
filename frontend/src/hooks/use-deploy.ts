@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 
 import { api } from "@/lib/api-client";
+import { REDMOD_MISSING_MESSAGE, REDMOD_MISSING_REASON } from "@/lib/deploy-toast";
+import { toast } from "@/stores/toast-store";
 
 export interface DriftReport {
   total: number;
@@ -55,6 +58,13 @@ export interface DeployReport {
   displaced_not_restored: string[];
 }
 
+/** Background REDmod compile state for one game (toggle, uninstall, profile load). */
+export interface RedmodStatus {
+  state: "idle" | "compiling";
+  last_result: RedmodDeployResult | null;
+  last_finished_at: string | null;
+}
+
 /** Game-dir paths a force deploy would move aside to `<mods_dir>/_displaced/`. */
 export interface ForcePreview {
   paths: string[];
@@ -68,6 +78,8 @@ const statusPath = (gameName: string) =>
   `/api/v1/games/${encodeURIComponent(gameName)}/install/deploy/status`;
 const forcePreviewPath = (gameName: string) =>
   `/api/v1/games/${encodeURIComponent(gameName)}/install/deploy/force-preview`;
+const redmodStatusPath = (gameName: string) =>
+  `/api/v1/games/${encodeURIComponent(gameName)}/install/redmod/status`;
 const untrackedPath = (gameName: string) =>
   `/api/v1/games/${encodeURIComponent(gameName)}/install/untracked-files`;
 
@@ -79,6 +91,48 @@ export function useDeployStatus(gameName: string | null) {
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
+}
+
+/**
+ * Background REDmod compile state. Polls every 1.5 s only while a compile is
+ * running; toggle, uninstall and profile load invalidate it to start polling.
+ */
+export function useRedmodStatus(gameName: string | null) {
+  return useQuery<RedmodStatus, Error>({
+    queryKey: ["redmod-status", gameName],
+    queryFn: () => api.get<RedmodStatus>(redmodStatusPath(gameName!)),
+    enabled: !!gameName,
+    refetchInterval: (query) => (query.state.data?.state === "compiling" ? 1500 : false),
+  });
+}
+
+/**
+ * Watches background REDmod compiles and toasts their outcome: a failed compile
+ * shows its error, a missing redMod.exe shows ``REDMOD_MISSING_MESSAGE``.
+ * Results that already existed when the game was first seen are not toasted.
+ * Returns true while a compile is running.
+ */
+export function useRedmodCompileWatcher(gameName: string | null): boolean {
+  const { data } = useRedmodStatus(gameName);
+  const seen = useRef<{ game: string | null; finishedAt: string | null } | null>(null);
+
+  useEffect(() => {
+    if (!data) return;
+    const finishedAt = data.last_finished_at;
+    const prev = seen.current;
+    seen.current = { game: gameName, finishedAt };
+    if (prev === null || prev.game !== gameName) return;
+    if (!finishedAt || finishedAt === prev.finishedAt) return;
+    const result = data.last_result;
+    if (!result) return;
+    if (result.ran && !result.success) {
+      toast.error("REDmod compile failed", result.error || "redmod deploy returned an error");
+    } else if (!result.ran && result.skipped_reason === REDMOD_MISSING_REASON) {
+      toast.warning("REDmod not compiled", REDMOD_MISSING_MESSAGE);
+    }
+  }, [data, gameName]);
+
+  return data?.state === "compiling";
 }
 
 /**

@@ -214,6 +214,9 @@ export function useUninstallMod() {
       qc.invalidateQueries({ queryKey: ["updates", gameName] });
       invalidateGameState(qc, gameName);
       qc.invalidateQueries({ queryKey: ["deploy-status", gameName] });
+      if (result?.redmod_compile_queued) {
+        qc.invalidateQueries({ queryKey: ["redmod-status", gameName] });
+      }
       const unlinked = result?.not_relinked ?? [];
       if (unlinked.length > 0) {
         toast.warning(
@@ -290,7 +293,10 @@ export function useToggleMod() {
       }
       toast.error("Failed to toggle mod", apiErrorDetail(err, ""));
     },
-    onSuccess: (result) => {
+    onSuccess: (result, { gameName }) => {
+      if (result?.redmod_compile_queued) {
+        qc.invalidateQueries({ queryKey: ["redmod-status", gameName] });
+      }
       const unlinked = result?.not_relinked ?? [];
       if (unlinked.length > 0) {
         toast.warning(
@@ -438,6 +444,7 @@ export function useLoadProfile() {
     onSuccess: (result, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["profiles", gameName] });
+      qc.invalidateQueries({ queryKey: ["redmod-status", gameName] });
       invalidateGameState(qc, gameName);
       if (result.failed_count > 0) {
         const skipped =
