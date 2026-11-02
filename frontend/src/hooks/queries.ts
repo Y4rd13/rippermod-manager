@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/lib/api-client";
 import type {
+  ModlistFileResult,
   ModPath,
   ActivityLogEntry,
   ArchiveConflictSummariesResult,
@@ -338,6 +339,16 @@ export function useConflictGraph(gameName: string, resourceHash?: string, enable
     queryFn: () => api.get(`/api/v1/games/${gameName}/conflicts/graph${params}`),
     enabled: !!gameName && enabled,
     staleTime: 60_000,
+  });
+}
+
+/** modlist.txt as written on disk; fetched only while ``enabled`` (the View panel is open). */
+export function useModlistFile(gameName: string, enabled: boolean) {
+  return useQuery<ModlistFileResult>({
+    queryKey: ["modlist-file", gameName],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/load-order/modlist/file`),
+    enabled: !!gameName && enabled,
+    staleTime: 0,
   });
 }
 

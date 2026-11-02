@@ -829,6 +829,13 @@ export interface PreferenceOut {
   loser_mod_name: string;
 }
 
+/** The lines of archive/pc/mod/modlist.txt, in file order. */
+export interface ModlistFileResult {
+  exists: boolean;
+  path: string;
+  lines: string[];
+}
+
 export interface ModlistViewResult {
   game_name: string;
   groups: ModlistGroupEntry[];
