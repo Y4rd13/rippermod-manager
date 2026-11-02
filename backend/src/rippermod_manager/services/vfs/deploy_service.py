@@ -811,7 +811,8 @@ def deploy(game: Game, session: Session, *, force: bool = False) -> DeployReport
     If pre-flight fails, returns an empty report with the ``preflight`` field
     populated so callers can surface the reason. On a clean execute (no failures
     and no preflight refusal), marks all enabled mods as deployed and clears any
-    pending drift flag. If any enabled mod has REDmod content, also invokes
+    pending drift flag. After every execute, clean or not, rewrites
+    ``modlist.txt`` and, if any enabled mod has REDmod content, also invokes
     ``redMod.exe deploy`` so the compiled cache stays in sync with the deployed
     junctions; the redmod result is attached to ``report.redmod`` regardless of
     outcome.
@@ -842,18 +843,22 @@ def deploy(game: Game, session: Session, *, force: bool = False) -> DeployReport
             m.deploy_drift = False
             session.add(m)
         session.commit()
-        # Undeploy deletes modlist.txt (S11): a later deploy restores the load order.
-        from rippermod_manager.services.modlist_service import write_modlist
+    # Both steps run even when some links failed: a foreign file left by a manual
+    # install or another manager blocks its own path only, so a user who has one
+    # would otherwise never get modlist.txt back after an undeploy (S11) nor a
+    # compiled REDmod cache for the junctions that did link.
+    # Undeploy deletes modlist.txt (S11): a later deploy restores the load order.
+    from rippermod_manager.services.modlist_service import write_modlist
 
-        write_modlist(game, session)
-        # Taken even with no REDmod content: a background compile in progress
-        # (toggle/uninstall, S2) finishes before this deploy returns, so Play,
-        # which deploys first, never launches over a half-built cache.
-        from rippermod_manager.services.vfs.redmod_scheduler import compile_lock
+    write_modlist(game, session)
+    # Taken even with no REDmod content: a background compile in progress
+    # (toggle/uninstall, S2) finishes before this deploy returns, so Play,
+    # which deploys first, never launches over a half-built cache.
+    from rippermod_manager.services.vfs.redmod_scheduler import compile_lock
 
-        with compile_lock(game.id):  # type: ignore[arg-type]
-            if _has_enabled_redmods(game, session):
-                report.redmod = redmod_deploy(game)
+    with compile_lock(game.id):  # type: ignore[arg-type]
+        if _has_enabled_redmods(game, session):
+            report.redmod = redmod_deploy(game)
     return report
 
 

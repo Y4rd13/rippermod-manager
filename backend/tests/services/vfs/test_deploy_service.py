@@ -1193,3 +1193,74 @@ def test_deploy_rewrites_modlist(in_memory_session, sample_game):
         report = deploy(game, session)
     assert report.failed == 0
     assert modlist.read_text() == "a.archive\n"
+
+
+def test_deploy_rewrites_modlist_when_a_foreign_file_blocks_one_link(
+    in_memory_session, sample_game
+):
+    """A foreign file on one path must not leave the game without modlist.txt.
+
+    Undeploy deletes modlist.txt (S11). A user with files from a manual install or
+    another manager never gets a fully clean deploy, so the load order has to be
+    written back even when some links fail.
+    """
+    session, game = in_memory_session, sample_game
+    _hardlinked_mod(session, game, name="Arc", rel="archive/pc/mod/a.archive")
+    _hardlinked_mod(session, game, name="Blocked", rel="archive/pc/mod/b.archive")
+    blocked = Path(game.install_path) / "archive" / "pc" / "mod" / "b.archive"
+    blocked.parent.mkdir(parents=True, exist_ok=True)
+    blocked.write_text("copy left by another mod manager")
+    modlist = blocked.parent / "modlist.txt"
+
+    with _no_game_running():
+        report = deploy(game, session)
+
+    assert report.failed == 1
+    assert blocked.read_text() == "copy left by another mod manager"
+    assert modlist.read_text().splitlines() == ["a.archive", "b.archive"]
+
+
+def test_deploy_compiles_redmod_when_a_foreign_file_blocks_another_link(
+    in_memory_session, sample_game
+):
+    """REDmod still compiles when an unrelated path is blocked by a foreign file."""
+    session, game = in_memory_session, sample_game
+    _stage_redmod_binary(game)
+    staging = Path(game.install_path) / "downloaded_mods" / "MyREDmod" / "mods" / "MyREDmod"
+    staging.mkdir(parents=True)
+    (staging / "info.json").write_text("{}")
+    mod = InstalledMod(game_id=game.id, name="MyREDmod", staging_dir="MyREDmod", disabled=False)
+    session.add(mod)
+    session.flush()
+    session.add(
+        InstalledModFile(
+            installed_mod_id=mod.id,
+            relative_path="mods/MyREDmod/info.json",
+            source_path="mods/MyREDmod/info.json",
+            link_kind="junction",
+        )
+    )
+    session.commit()
+    _hardlinked_mod(session, game, name="Blocked", rel="archive/pc/mod/b.archive")
+    blocked = Path(game.install_path) / "archive" / "pc" / "mod" / "b.archive"
+    blocked.parent.mkdir(parents=True, exist_ok=True)
+    blocked.write_text("copy left by another mod manager")
+
+    proc = _make_redmod_proc(returncode=0, stdout="compiled 1 mod")
+    with (
+        _no_game_running(),
+        patch(
+            "rippermod_manager.services.vfs.deploy_service.junction",
+            side_effect=lambda src, dst: Path(dst).mkdir(parents=True, exist_ok=True),
+        ),
+        patch(
+            "rippermod_manager.services.vfs.deploy_service.subprocess.run",
+            return_value=proc,
+        ) as redmod_run,
+    ):
+        report = deploy(game, session)
+
+    assert report.failed == 1
+    assert report.redmod is not None
+    assert report.redmod.success is True
+    redmod_run.assert_called_once()
