@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { api, ApiError } from "@/lib/api-client";
 
@@ -564,6 +565,15 @@ export function useCheckUpdates() {
   });
 }
 
+/**
+ * Free accounts cannot get a CDN link from the API: open the mod's Files tab on
+ * Nexus, where "Mod Manager Download" sends the nxm:// link back to the app (S1).
+ */
+function openNexusFilesPage(result: DownloadStartResult): void {
+  if (result.nexus_url) void openUrl(result.nexus_url);
+  toast.info("Opened on Nexus", "Click Mod Manager Download there to download it with RipperMod.");
+}
+
 export function useStartDownload() {
   const qc = useQueryClient();
   return useMutation<DownloadStartResult, Error, { gameName: string; data: DownloadRequest }>({
@@ -577,7 +587,7 @@ export function useStartDownload() {
         return;
       }
       if (result.requires_nxm) {
-        toast.warning("Premium required", "Open the mod on Nexus to download manually");
+        openNexusFilesPage(result);
         return;
       }
       if (result.job) {
@@ -600,7 +610,7 @@ export function useStartModDownload() {
         return;
       }
       if (result.requires_nxm) {
-        toast.warning("Premium required", "Open the mod on Nexus to download manually");
+        openNexusFilesPage(result);
         return;
       }
       if (result.job) {

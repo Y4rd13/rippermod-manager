@@ -644,6 +644,8 @@ export interface DownloadJobOut {
 export interface DownloadStartResult {
   job: DownloadJobOut | null;
   requires_nxm: boolean;
+  /** With requires_nxm: the mod's Files tab on Nexus, opened for the user. */
+  nexus_url?: string | null;
   requires_file_selection: boolean;
   // True when the freshly-arrived nxm:// key was consumed by an in-flight
   // Collections install orchestrator instead of starting a standalone

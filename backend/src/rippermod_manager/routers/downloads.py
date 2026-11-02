@@ -28,6 +28,14 @@ def _get_api_key(session: Session) -> str:
     return api_key
 
 
+def nexus_files_url(domain: str, mod_id: int, file_id: int | None = None) -> str:
+    """The Files tab of a mod on Nexus, highlighting *file_id* when given."""
+    url = f"https://www.nexusmods.com/{domain}/mods/{mod_id}?tab=files"
+    if file_id is not None:
+        url += f"&file_id={file_id}"
+    return url
+
+
 def _job_to_out(job) -> DownloadJobOut:
     return DownloadJobOut(
         id=job.id,
@@ -60,7 +68,10 @@ async def start_download(
             key_result = await client.validate_key()
 
         if not key_result.is_premium:
-            return DownloadStartResult(requires_nxm=True)
+            return DownloadStartResult(
+                requires_nxm=True,
+                nexus_url=nexus_files_url(game.domain_name, body.nexus_mod_id, body.nexus_file_id),
+            )
 
     # If a Collections install orchestrator is currently waiting for this
     # exact (mod_id, file_id), hand the freshly-arrived NXM key to it
@@ -148,7 +159,9 @@ async def start_download_from_mod(
         raise HTTPException(502, "Nexus API returned a file entry without a file_id")
 
     if not key_result.is_premium:
-        return DownloadStartResult(requires_nxm=True)
+        return DownloadStartResult(
+            requires_nxm=True, nexus_url=nexus_files_url(game.domain_name, body.nexus_mod_id)
+        )
 
     job = await download_service.create_and_start_download(
         game=game,
