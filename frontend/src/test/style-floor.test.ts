@@ -52,3 +52,14 @@ describe("text size", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("text hygiene", () => {
+  it("has no &mdash; entity in UI source", () => {
+    const offenders = sourceFiles().filter((f) => readFileSync(f, "utf8").includes("&mdash;"));
+    expect(offenders).toEqual([]);
+  });
+  it("uses only defined surface tokens", () => {
+    const offenders = sourceFiles().filter((f) => readFileSync(f, "utf8").includes("bg-surface-secondary"));
+    expect(offenders).toEqual([]);
+  });
+});

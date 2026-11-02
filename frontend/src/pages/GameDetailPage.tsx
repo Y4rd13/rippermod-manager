@@ -609,7 +609,7 @@ export function GameDetailPage() {
           </div>
           <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-text-muted">
             {gameVersion?.version && (
-              <span className="text-xs font-medium text-text-muted bg-surface-secondary px-2 py-0.5 rounded">
+              <span className="text-xs font-medium text-text-muted bg-surface-1 px-2 py-0.5 rounded">
                 v{gameVersion.version}
               </span>
             )}

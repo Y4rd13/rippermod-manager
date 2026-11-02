@@ -239,6 +239,8 @@ function ScannedFoldersBlock({ gameName, installPath }: { gameName: string; inst
   const addPath = useAddModPath();
   const removePath = useRemoveModPath();
   const resetPaths = useResetModPaths();
+  const [pendingRemove, setPendingRemove] = useState<{ id: number; relativePath: string } | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const handleAdd = async () => {
     const picked = await openDialog({
@@ -262,7 +264,7 @@ function ScannedFoldersBlock({ gameName, installPath }: { gameName: string; inst
         <span className="text-sm font-medium text-text-primary">Scanned folders</span>
         <button
           type="button"
-          onClick={() => resetPaths.mutate({ gameName })}
+          onClick={() => setConfirmReset(true)}
           disabled={resetPaths.isPending}
           className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-text-secondary"
         >
@@ -286,7 +288,7 @@ function ScannedFoldersBlock({ gameName, installPath }: { gameName: string; inst
               type="button"
               aria-label={`Remove ${p.relative_path}`}
               title="Remove"
-              onClick={() => removePath.mutate({ gameName, pathId: p.id })}
+              onClick={() => setPendingRemove({ id: p.id, relativePath: p.relative_path })}
               disabled={removePath.isPending}
               className="text-text-muted hover:text-danger"
             >
@@ -301,6 +303,38 @@ function ScannedFoldersBlock({ gameName, installPath }: { gameName: string; inst
       <Button size="sm" variant="secondary" onClick={handleAdd} loading={addPath.isPending}>
         <FolderOpen size={14} /> Add folder…
       </Button>
+
+      {pendingRemove && (
+        <ConfirmDialog
+          title="Remove scanned folder?"
+          message={`${pendingRemove.relativePath} will no longer be scanned. Files on disk are not touched.`}
+          confirmLabel="Remove"
+          variant="warning"
+          icon={X}
+          loading={removePath.isPending}
+          onConfirm={() =>
+            removePath.mutate(
+              { gameName, pathId: pendingRemove.id },
+              { onSettled: () => setPendingRemove(null) },
+            )
+          }
+          onCancel={() => setPendingRemove(null)}
+        />
+      )}
+      {confirmReset && (
+        <ConfirmDialog
+          title="Reset scanned folders?"
+          message="The list goes back to the default folders for this game."
+          confirmLabel="Reset"
+          variant="warning"
+          icon={RotateCcw}
+          loading={resetPaths.isPending}
+          onConfirm={() =>
+            resetPaths.mutate({ gameName }, { onSettled: () => setConfirmReset(false) })
+          }
+          onCancel={() => setConfirmReset(false)}
+        />
+      )}
     </div>
   );
 }
