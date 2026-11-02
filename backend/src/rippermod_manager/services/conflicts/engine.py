@@ -7,7 +7,7 @@ import time
 
 from sqlmodel import Session, select
 
-from rippermod_manager.models.conflict import ConflictEvidence
+from rippermod_manager.models.conflict import ConflictEvidence, ConflictKind
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.services.conflicts.dependency_graph import build_dependency_pairs
@@ -39,7 +39,10 @@ class ConflictEngine:
 
         dependency_pairs = build_dependency_pairs(installed_mods, session)
 
-        all_evidence: list[ConflictEvidence] = []
+        # Every detector runs before anything is written: a DELETE flushed after
+        # the first one would hold SQLite's write lock through all the others,
+        # and the reindex runs after each toggle, install and scan.
+        detected: list[tuple[ConflictKind, list[ConflictEvidence]]] = []
         for detector in get_all_detectors():
             try:
                 evidence = detector.detect(
@@ -48,19 +51,7 @@ class ConflictEngine:
             except Exception:
                 logger.exception("Detector %s failed for game %s", detector.kind, game.name)
                 continue
-
-            # Delete old evidence only for this kind after a successful detect
-            old = session.exec(
-                select(ConflictEvidence).where(
-                    ConflictEvidence.game_id == game.id,
-                    ConflictEvidence.kind == detector.kind,
-                )
-            ).all()
-            for row in old:
-                session.delete(row)
-            session.flush()
-
-            all_evidence.extend(evidence)
+            detected.append((detector.kind, evidence))
             logger.info(
                 "Detector %s found %d conflicts for game %s",
                 detector.kind,
@@ -68,6 +59,20 @@ class ConflictEngine:
                 game.name,
             )
 
+        # One short write: replace the evidence of each kind whose detector ran.
+        # A failed detector keeps its old evidence.
+        all_evidence: list[ConflictEvidence] = []
+        for kind, evidence in detected:
+            old = session.exec(
+                select(ConflictEvidence).where(
+                    ConflictEvidence.game_id == game.id,
+                    ConflictEvidence.kind == kind,
+                )
+            ).all()
+            for row in old:
+                session.delete(row)
+            all_evidence.extend(evidence)
+        session.flush()
         for ev in all_evidence:
             session.add(ev)
         session.commit()

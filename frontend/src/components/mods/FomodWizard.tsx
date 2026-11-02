@@ -339,8 +339,9 @@ export function FomodWizard({ gameName, archiveFilename, onDismiss, onInstallCom
                     {wizard.preview.total_files} file(s) will be installed
                   </p>
                   <ul className="max-h-64 overflow-y-auto rounded-lg border border-border bg-surface-2 p-2 font-mono text-xs text-text-secondary">
-                    {wizard.preview.files.map((f) => (
-                      <li key={f.game_relative_path} className="truncate" title={f.game_relative_path}>
+                    {wizard.preview.files.map((f, i) => (
+                      // Two sources can target one path: the index keeps keys unique.
+                      <li key={`${i}:${f.game_relative_path}`} className="truncate" title={f.game_relative_path}>
                         {f.game_relative_path}
                       </li>
                     ))}

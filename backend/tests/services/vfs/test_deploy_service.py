@@ -1122,6 +1122,26 @@ def test_clean_undeploy_removes_modlist_and_redmod_cache(in_memory_session, samp
     assert not modlist.exists() and not cache.exists()
 
 
+def test_undeploy_removes_the_cache_under_the_compile_lock(in_memory_session, sample_game):
+    """A background REDmod compile must not rebuild the cache while undeploy deletes it."""
+    from rippermod_manager.services.vfs import deploy_service
+    from rippermod_manager.services.vfs.redmod_scheduler import compile_lock
+
+    session, game = in_memory_session, sample_game
+    _deploy_traces(game)
+    real = deploy_service._remove_deploy_traces
+    held: list[bool] = []
+
+    def spy(g):
+        held.append(compile_lock(g.id).locked())
+        return real(g)
+
+    with _no_game_running(), patch.object(deploy_service, "_remove_deploy_traces", spy):
+        undeploy(game, session)
+    assert held == [True]
+    assert not compile_lock(game.id).locked()
+
+
 def test_refused_undeploy_keeps_modlist_and_cache(in_memory_session, sample_game):
     session, game = in_memory_session, sample_game
     modlist, cache = _deploy_traces(game)

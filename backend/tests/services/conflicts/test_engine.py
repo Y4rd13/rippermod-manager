@@ -126,3 +126,46 @@ def test_request_conflict_reindex_hands_the_game_id_to_the_runner(background_req
 
     auto_reindex.request_conflict_reindex(5)
     assert background_requests["conflicts"] == [5]
+
+
+def test_detectors_run_with_no_write_transaction_open(session, game, monkeypatch):
+    """Detectors can be slow: the old evidence is deleted only after the last one.
+
+    Holding SQLite's write lock while they run would make every other write wait
+    for the busy timeout (the reindex now runs after each toggle and install).
+    """
+    from rippermod_manager.models.conflict import ConflictKind, Severity
+    from rippermod_manager.services.conflicts import engine as engine_mod
+
+    mod_a = InstalledMod(game_id=game.id, name="A")
+    session.add(mod_a)
+    session.commit()
+    session.add(
+        ConflictEvidence(
+            game_id=game.id,
+            kind=ConflictKind.archive_entry,
+            severity=Severity.low,
+            key="old",
+        )
+    )
+    session.commit()
+
+    open_tx: list[bool] = []
+
+    class _Spy:
+        def __init__(self, kind):
+            self.kind = kind
+
+        def detect(self, _game, _mods, s, **_kw):
+            open_tx.append(s.connection().connection.dbapi_connection.in_transaction)
+            return []
+
+    monkeypatch.setattr(
+        engine_mod,
+        "get_all_detectors",
+        lambda: [_Spy(ConflictKind.archive_entry), _Spy(ConflictKind.tweak_key)],
+    )
+    ConflictEngine().run(game, session)
+    assert open_tx == [False, False]
+    left = session.exec(select(ConflictEvidence).where(ConflictEvidence.game_id == game.id)).all()
+    assert left == []

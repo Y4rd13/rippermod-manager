@@ -160,6 +160,50 @@ class TestInstallKickoff:
         assert body["status"] == "pending"
         assert body["total_mods"] == 1
 
+    def test_force_reinstall_uninstalls_off_the_event_loop(self, client, session):
+        """The cascade's deploy waits for a REDmod compile: it must not block the loop."""
+        import asyncio
+
+        from rippermod_manager.schemas.nexus import NexusKeyResult
+
+        _seed_game(client)
+        _set_api_key(client)
+        on_loop: list[bool] = []
+
+        def _record(*_a, **_kw):
+            try:
+                asyncio.get_running_loop()
+                on_loop.append(True)
+            except RuntimeError:
+                on_loop.append(False)
+
+        with (
+            patch(
+                "rippermod_manager.nexus.client.NexusClient.validate_key",
+                new=AsyncMock(
+                    return_value=NexusKeyResult(valid=True, is_premium=True, username="u")
+                ),
+            ),
+            patch(
+                "rippermod_manager.nexus.graphql_client.NexusGraphQLClient.get_collection_revision",
+                new=AsyncMock(return_value=_gql_revision_payload()),
+            ),
+            patch(
+                "rippermod_manager.services.collection_install_service.uninstall_previous_install",
+                side_effect=_record,
+            ),
+            patch(
+                "rippermod_manager.services.collection_install_service.asyncio.create_task"
+            ) as mtask,
+        ):
+            mtask.return_value.add_done_callback = lambda *_: None
+            r = client.post(
+                "/api/v1/games/CP/collections/install",
+                json={"slug": "starter", "revision": 1, "force_reinstall": True},
+            )
+        assert r.status_code == 202, r.text
+        assert on_loop and on_loop[0] is False
+
     def test_premium_user_starts_install(self, client, session):
         _seed_game(client)
         _set_api_key(client)

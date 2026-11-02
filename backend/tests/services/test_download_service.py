@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from rippermod_manager.models.download import DownloadJob
 from rippermod_manager.models.settings import AppSetting
@@ -587,3 +587,90 @@ def test_recover_interrupted_jobs_marks_in_flight_failed(session, make_game):
     rows = sorted(session.exec(select(DownloadJob)).all(), key=lambda j: j.id)
     assert [j.error for j in rows[:3]] == [INTERRUPTED_ERROR] * 3
     assert [j.status for j in rows] == ["failed", "failed", "failed", "completed"]
+
+
+def _cancel_newest_job(engine) -> None:
+    """Cancel the newest job from another session, as the cancel endpoint would."""
+    with Session(engine) as s:
+        job = s.exec(select(DownloadJob).order_by(DownloadJob.id.desc())).first()  # type: ignore[union-attr]
+        cancel_job(job, s)
+
+
+async def test_cancel_during_the_request_link_fetch_is_kept(session, engine, queue_env):
+    game, started, gates, nexus = queue_env
+
+    async def links_then_cancel(*_a, **_kw):
+        _cancel_newest_job(engine)
+        return [{"URI": "https://cdn/x"}]
+
+    nexus.get_download_links = AsyncMock(side_effect=links_then_cancel)
+    job = await create_and_start_download(game, 100, 1, "key", session)
+    await _settle()
+    try:
+        assert _status(session, job.id) == "cancelled"
+        assert started == []
+        assert download_service._active_job_ids == set()
+    finally:
+        _open_all(gates)
+        await _settle()
+
+
+async def test_cancel_during_an_nxm_link_fetch_without_a_slot_is_not_queued(
+    session, engine, queue_env
+):
+    game, started, gates, nexus = queue_env
+    running = await _request(session, game, 2)
+
+    async def links_then_cancel(*_a, **_kw):
+        _cancel_newest_job(engine)
+        return [{"URI": "https://cdn/x"}]
+
+    nexus.get_download_links = AsyncMock(side_effect=links_then_cancel)
+    job = await create_and_start_download(
+        game, 200, 1, "key", session, nxm_key="k", nxm_expires=9999999999
+    )
+    try:
+        assert _status(session, job.id) == "cancelled"
+        assert job.id not in download_service._queued_starts
+        gates[running[0].id].set()
+        await _settle()
+        assert job.id not in started
+    finally:
+        _open_all(gates)
+        await _settle()
+
+
+async def test_a_failed_link_fetch_does_not_overwrite_a_cancel(session, engine, queue_env):
+    game, _started, gates, nexus = queue_env
+
+    async def cancel_then_fail(*_a, **_kw):
+        _cancel_newest_job(engine)
+        raise httpx.ConnectError("down")
+
+    nexus.get_download_links = AsyncMock(side_effect=cancel_then_fail)
+    job = await create_and_start_download(game, 100, 1, "key", session)
+    try:
+        assert _status(session, job.id) == "cancelled"
+        assert download_service._active_job_ids == set()
+    finally:
+        _open_all(gates)
+        await _settle()
+
+
+async def test_a_failed_queued_link_fetch_does_not_overwrite_a_cancel(session, engine, queue_env):
+    game, _started, gates, nexus = queue_env
+    jobs = await _request(session, game, 3)
+    ids = [j.id for j in jobs]
+
+    async def cancel_then_fail(*_a, **_kw):
+        _cancel_newest_job(engine)
+        raise httpx.ConnectError("down")
+
+    nexus.get_download_links = AsyncMock(side_effect=cancel_then_fail)
+    try:
+        gates[ids[0]].set()
+        await _settle()
+        assert _status(session, ids[2]) == "cancelled"
+    finally:
+        _open_all(gates)
+        await _settle()

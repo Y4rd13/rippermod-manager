@@ -174,17 +174,9 @@ def start_install(
     # Force-reinstall path: cascade through the previous install BEFORE
     # the upsert so the orchestrator starts from a clean row + zero child
     # mods. No-op when nothing is installed yet for this (game, slug).
+    # The router runs it first in a worker thread; this call then finds nothing.
     if request.force_reinstall:
-        existing = session.exec(
-            select(InstalledCollection).where(
-                InstalledCollection.game_id == game.id,
-                InstalledCollection.slug == preview.slug,
-            )
-        ).first()
-        if existing is not None and existing.id is not None:
-            if existing.id in _event_queues:
-                raise CollectionInstallInProgressError(existing.id)
-            uninstall_collection(existing.id, session)
+        uninstall_previous_install(game.id, preview.slug, session)
 
     collection = _upsert_collection_row(game, preview, session)
 
@@ -243,6 +235,47 @@ async def stream_events(collection_id: int) -> AsyncIterator[CollectionProgressE
         if event is None:
             break
         yield event
+
+
+def uninstall_previous_install(game_id: int, slug: str, session: Session) -> None:
+    """Uninstall the (game, slug) collection before a force reinstall; no-op without one.
+
+    Raises :class:`CollectionInstallInProgressError` while that install still runs.
+    """
+    existing = session.exec(
+        select(InstalledCollection).where(
+            InstalledCollection.game_id == game_id,
+            InstalledCollection.slug == slug,
+        )
+    ).first()
+    if existing is None or existing.id is None:
+        return
+    if existing.id in _event_queues:
+        raise CollectionInstallInProgressError(existing.id)
+    uninstall_collection(existing.id, session)
+
+
+def uninstall_previous_install_in_own_session(game_id: int, slug: str) -> None:
+    """:func:`uninstall_previous_install` with its own session, for ``asyncio.to_thread``.
+
+    Its deploy waits for a background REDmod compile and may run redMod.exe, so an
+    async caller must not run it on the event loop.
+    """
+    from rippermod_manager.database import engine
+
+    with Session(engine) as s:
+        uninstall_previous_install(game_id, slug, s)
+
+
+def _final_deploy(game_id: int) -> None:
+    """Deploy *game_id* in its own session; run through ``asyncio.to_thread``."""
+    from rippermod_manager.database import engine
+    from rippermod_manager.services.vfs.deploy_service import deploy
+
+    with Session(engine) as s:
+        game = s.get(Game, game_id)
+        if game is not None:
+            deploy(game, s)
 
 
 def uninstall_collection(collection_id: int, session: Session) -> dict[str, int]:
@@ -853,7 +886,6 @@ async def _run_install(
     """
     from rippermod_manager.database import engine
     from rippermod_manager.services.download_service import create_and_start_download
-    from rippermod_manager.services.vfs.deploy_service import deploy
 
     completed = 0
     failed = 0
@@ -1111,10 +1143,9 @@ async def _run_install(
             status="installing",
         )
         try:
-            with Session(engine) as s:
-                game = s.get(Game, game_id)
-                if game is not None:
-                    deploy(game, s)
+            # Off the loop: deploy waits for a background REDmod compile and may
+            # run redMod.exe itself, which would freeze every other request.
+            await asyncio.to_thread(_final_deploy, game_id)
         except (OSError, RuntimeError):
             logger.exception("Collection %d: final deploy failed", collection_id)
 

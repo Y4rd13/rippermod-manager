@@ -511,9 +511,17 @@ class TestRunInstallHappyPath:
         )
 
         deploy_called: list[int] = []
+        on_loop: list[bool] = []
 
         def _fake_deploy(_game, _session):
             deploy_called.append(1)
+            # The final deploy waits on compile_lock and may run redMod.exe: it
+            # must run in a worker thread, never on the event loop.
+            try:
+                asyncio.get_running_loop()
+                on_loop.append(True)
+            except RuntimeError:
+                on_loop.append(False)
 
         # Wire up the queue manually so _emit has a sink, then drain in parallel.
         from rippermod_manager.services.collection_install_service import _event_queues
@@ -586,6 +594,7 @@ class TestRunInstallHappyPath:
         # Sanity: every mod got an install attempt + a deploy at the end.
         assert len(install_calls) == 2
         assert len(deploy_called) == 1
+        assert on_loop == [False]
 
         # Final row state.
         session.expire_all()
