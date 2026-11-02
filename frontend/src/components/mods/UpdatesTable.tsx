@@ -23,15 +23,15 @@ import type { ModUpdate } from "@/types/api";
 
 const DETECTION_BADGE: Record<ModUpdate["detection_method"], { label: string; title: string }> = {
   version: {
-    label: "Version",
+    label: "New version",
     title: "The Nexus version is newer than the installed version.",
   },
   timestamp: {
-    label: "Newer file",
+    label: "New file",
     title: "Nexus has a file uploaded after your download.",
   },
   both: {
-    label: "Version + file",
+    label: "New version + file",
     title: "Both the version and the upload date are newer on Nexus.",
   },
 };
@@ -51,7 +51,7 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
   const checkUpdates = useCheckUpdates();
   const startDownload = useStartDownload();
   const [filter, setFilter] = useState("");
-  const [sortKey, setSortKey] = useSessionState<UpdateSortKey>(`updates-sort-${gameName}`, "updated");
+  const [sortKey, setSortKey] = useSessionState<UpdateSortKey>(`updates-sort-${gameName}`, "nexusVer");
   const [sortDir, setSortDir] = useSessionState<"asc" | "desc">(`updates-dir-${gameName}`, "desc");
   const [activeSourceList, setActiveSourceList] = useSessionState<string[]>(
     `updates-sources-${gameName}`,
