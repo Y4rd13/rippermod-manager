@@ -1,4 +1,4 @@
-import { Boxes, Search, X } from "lucide-react";
+import { Boxes, ChevronDown, ChevronRight, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
@@ -24,16 +24,28 @@ function inferType(files: ModFileOut[]): string {
 interface Props {
   gameName: string;
   mods: ModGroup[];
+  /** Rows checked when the dialog opens: the on-disk ids, or the one row the user picked. */
+  preselectIds: number[];
   onClose: () => void;
 }
 
+/** A group counts as detected on disk only when the backend says so; a missing flag does not. */
+const isOnDisk = (m: ModGroup) => m.nexus_match?.on_disk === true;
+
 /**
- * Review-and-adopt dialog: lets the user pick (and rename) detected on-disk mods
- * to bring under management via POST /install/adopt. Select-all by default.
+ * Review-and-adopt dialog: lets the user pick (and rename) mods to bring under management
+ * via POST /install/adopt. Mods detected on disk are listed first; weaker matches sit in a
+ * collapsed "Possible matches" section. Only `preselectIds` start checked.
  */
-export function AdoptReviewDialog({ gameName, mods, onClose }: Props) {
+export function AdoptReviewDialog({ gameName, mods, preselectIds, onClose }: Props) {
   const adopt = useAdoptMods();
-  const [selected, setSelected] = useState<Set<number>>(() => new Set(mods.map((m) => m.id)));
+  const [selected, setSelected] = useState<Set<number>>(() => new Set(preselectIds));
+  const [possibleOpen, setPossibleOpen] = useState(() => {
+    const preselected = new Set(preselectIds);
+    return (
+      !mods.some(isOnDisk) || mods.some((m) => !isOnDisk(m) && preselected.has(m.id))
+    );
+  });
   const [names, setNames] = useState<Record<number, string>>(() =>
     Object.fromEntries(mods.map((m) => [m.id, m.display_name])),
   );
@@ -49,13 +61,18 @@ export function AdoptReviewDialog({ gameName, mods, onClose }: Props) {
     );
   }, [mods, filter]);
 
-  const allVisibleSelected = visible.length > 0 && visible.every((m) => selected.has(m.id));
+  const visibleOnDisk = visible.filter(isOnDisk);
+  const visiblePossible = visible.filter((m) => !isOnDisk(m));
+  // "Select all" covers the rows the user can see: possible matches only when expanded.
+  const selectable = possibleOpen ? visible : visibleOnDisk;
+  const allVisibleSelected =
+    selectable.length > 0 && selectable.every((m) => selected.has(m.id));
 
   const toggleAll = () => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (allVisibleSelected) visible.forEach((m) => next.delete(m.id));
-      else visible.forEach((m) => next.add(m.id));
+      if (allVisibleSelected) selectable.forEach((m) => next.delete(m.id));
+      else selectable.forEach((m) => next.add(m.id));
       return next;
     });
   };
@@ -87,6 +104,50 @@ export function AdoptReviewDialog({ gameName, mods, onClose }: Props) {
       },
     );
   };
+
+  const renderRow = (m: ModGroup) => (
+    <div
+      key={m.id}
+      className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-3 py-2"
+    >
+      <input
+        type="checkbox"
+        checked={selected.has(m.id)}
+        onChange={() => toggle(m.id)}
+        aria-label={`Adopt ${m.display_name}`}
+        className="h-4 w-4 shrink-0 accent-accent"
+      />
+      <input
+        type="text"
+        value={names[m.id] ?? m.display_name}
+        onChange={(e) => setNames((p) => ({ ...p, [m.id]: e.target.value }))}
+        title="Rename before adopting"
+        className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm font-medium text-text-primary hover:border-border focus:border-accent focus:bg-surface-1 focus:outline-none"
+      />
+      <Badge variant="neutral">{inferType(m.files)}</Badge>
+      <span className="shrink-0 text-xs text-text-muted">
+        {plural(m.files.length, "file")}
+      </span>
+      {m.nexus_match ? (
+        <Badge
+          variant={
+            m.nexus_match.score >= 0.9
+              ? "success"
+              : m.nexus_match.score >= 0.75
+                ? "warning"
+                : "danger"
+          }
+          title={`Matched to ${m.nexus_match.mod_name}`}
+        >
+          {Math.round(m.nexus_match.score * 100)}%
+        </Badge>
+      ) : (
+        <Badge variant="neutral" title="No Nexus match, adopted as a local mod">
+          local
+        </Badge>
+      )}
+    </div>
+  );
 
   return (
     <Dialog
@@ -132,7 +193,7 @@ export function AdoptReviewDialog({ gameName, mods, onClose }: Props) {
               onChange={toggleAll}
               className="h-4 w-4 accent-accent"
             />
-            Select all ({visible.length})
+            Select all ({selectable.length})
           </label>
           <div className="relative w-48">
             <Search
@@ -149,49 +210,29 @@ export function AdoptReviewDialog({ gameName, mods, onClose }: Props) {
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          {visible.map((m) => (
-            <div
-              key={m.id}
-              className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-3 py-2"
-            >
-              <input
-                type="checkbox"
-                checked={selected.has(m.id)}
-                onChange={() => toggle(m.id)}
-                className="h-4 w-4 shrink-0 accent-accent"
-              />
-              <input
-                type="text"
-                value={names[m.id] ?? m.display_name}
-                onChange={(e) => setNames((p) => ({ ...p, [m.id]: e.target.value }))}
-                title="Rename before adopting"
-                className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm font-medium text-text-primary hover:border-border focus:border-accent focus:bg-surface-1 focus:outline-none"
-              />
-              <Badge variant="neutral">{inferType(m.files)}</Badge>
-              <span className="shrink-0 text-xs text-text-muted">
-                {m.files.length} file{m.files.length === 1 ? "" : "s"}
-              </span>
-              {m.nexus_match ? (
-                <Badge
-                  variant={
-                    m.nexus_match.score >= 0.9
-                      ? "success"
-                      : m.nexus_match.score >= 0.75
-                        ? "warning"
-                        : "danger"
-                  }
-                  title={`Matched to ${m.nexus_match.mod_name}`}
-                >
-                  {Math.round(m.nexus_match.score * 100)}%
-                </Badge>
-              ) : (
-                <Badge variant="neutral" title="No Nexus match, adopted as a local mod">
-                  local
-                </Badge>
-              )}
-            </div>
-          ))}
+        <div className="space-y-4">
+          {visibleOnDisk.length > 0 && (
+            <section aria-labelledby="adopt-on-disk-title" className="space-y-1.5">
+              <h4 id="adopt-on-disk-title" className="text-xs font-medium text-text-secondary">
+                Detected on disk ({visibleOnDisk.length})
+              </h4>
+              {visibleOnDisk.map((m) => renderRow(m))}
+            </section>
+          )}
+          {visiblePossible.length > 0 && (
+            <section className="space-y-1.5">
+              <button
+                type="button"
+                aria-expanded={possibleOpen}
+                onClick={() => setPossibleOpen((o) => !o)}
+                className="flex items-center gap-1 rounded text-xs font-medium text-text-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                {possibleOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                Possible matches ({visiblePossible.length})
+              </button>
+              {possibleOpen && visiblePossible.map((m) => renderRow(m))}
+            </section>
+          )}
           {visible.length === 0 && (
             <p className="py-8 text-center text-sm text-text-muted">No mods match the filter.</p>
           )}
@@ -212,8 +253,9 @@ export function AdoptReviewDialog({ gameName, mods, onClose }: Props) {
             loading={adopt.isPending}
             onClick={handleAdopt}
           >
-            Adopt {plural(selectedMods.length, "mod")}
-            {selectedFileCount > 0 ? ` (${plural(selectedFileCount, "file")})` : ""}
+            {selectedMods.length === 0
+              ? "Select mods to adopt"
+              : `Adopt ${plural(selectedMods.length, "mod")} (${plural(selectedFileCount, "file")})`}
           </Button>
         </div>
       </div>
