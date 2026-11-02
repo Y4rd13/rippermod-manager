@@ -855,7 +855,12 @@ def deploy(
     # Undeploy deletes modlist.txt (S11): a later deploy restores the load order.
     from rippermod_manager.services.modlist_service import write_modlist
 
-    write_modlist(game, session)
+    try:
+        write_modlist(game, session)
+    except OSError:
+        # The links are already in place; a locked or read-only modlist.txt must
+        # not turn the whole deploy into an error.
+        logger.warning("Could not write modlist.txt for %s", game.name, exc_info=True)
     # Taken even with no REDmod content: a background compile in progress
     # (toggle/uninstall, S2) finishes before this deploy returns, so Play,
     # which deploys first, never launches over a half-built cache.
