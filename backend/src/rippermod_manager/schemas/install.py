@@ -20,6 +20,7 @@ class InstallResult(BaseModel):
     files_overwritten: int
     installed_mod_name_safe: str = ""  # staging dir name; empty for legacy compat
     deploy: DeployReport | None = None  # report of the deploy this install ran, if any
+    redmod_compile_queued: bool = False  # a background REDmod compile was requested (S2)
 
 
 class InstalledModOut(BaseModel):

@@ -227,6 +227,9 @@ export function useInstallMod() {
     mutationFn: ({ gameName, data }) =>
       api.post(`/api/v1/games/${gameName}/install/`, data),
     onSuccess: (result, { gameName }) => {
+      if (result.redmod_compile_queued) {
+        qc.invalidateQueries({ queryKey: ["redmod-status", gameName] });
+      }
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
       qc.invalidateQueries({ queryKey: ["updates", gameName] });
@@ -870,6 +873,9 @@ export function useFomodInstall() {
     mutationFn: ({ gameName, data }) =>
       api.post(`/api/v1/games/${gameName}/install/fomod/install`, data),
     onSuccess: (result, { gameName }) => {
+      if (result.redmod_compile_queued) {
+        qc.invalidateQueries({ queryKey: ["redmod-status", gameName] });
+      }
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
       invalidateGameState(qc, gameName);

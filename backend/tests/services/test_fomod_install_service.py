@@ -374,6 +374,36 @@ class TestInstallFomod:
         # staging_dir is reported in result
         assert result.installed_mod_name_safe == "TestFomod"
 
+    def test_redmod_fomod_install_queues_compile(self, setup, engine, background_requests):
+        """A FOMOD that ships REDmod content queues a background compile (S2)."""
+        from unittest.mock import patch
+
+        from rippermod_manager.schemas.deploy import DeployReport
+
+        game, _game_dir, staging = setup
+        archive = staging / "RedFomod.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("info.json", "{}")
+        resolved = [
+            ResolvedFile(
+                archive_path="info.json",
+                game_relative_path="mods/RedPkg/info.json",
+                priority=0,
+            ),
+        ]
+        with (
+            Session(engine) as s,
+            patch(
+                "rippermod_manager.services.vfs.deploy_service.deploy",
+                return_value=DeployReport(total=0, done=0, failed=0),
+            ) as deploy_mock,
+        ):
+            result = install_fomod(game, archive, s, resolved, "RedFomod")
+
+        assert deploy_mock.call_args.kwargs.get("compile_redmod") is False
+        assert result.redmod_compile_queued is True
+        assert background_requests["redmod"] == [game.id]
+
     def test_fomod_install_does_not_read_whole_archive(self, setup, engine, monkeypatch):
         from rippermod_manager.archive.handler import ArchiveHandler
 

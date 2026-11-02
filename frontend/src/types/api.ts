@@ -292,6 +292,7 @@ export interface InstallResult {
   files_extracted: number;
   files_skipped: number;
   files_overwritten: number;
+  redmod_compile_queued?: boolean;
 }
 
 export interface UninstallResult {

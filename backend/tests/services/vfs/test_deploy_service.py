@@ -1264,3 +1264,37 @@ def test_deploy_compiles_redmod_when_a_foreign_file_blocks_another_link(
     assert report.redmod is not None
     assert report.redmod.success is True
     redmod_run.assert_called_once()
+
+
+def test_deploy_without_compile_redmod_skips_redmod(in_memory_session, sample_game):
+    """Install deploys with compile_redmod=False and queues the compile itself."""
+    session, game = in_memory_session, sample_game
+    _stage_redmod_binary(game)
+    staging = Path(game.install_path) / "downloaded_mods" / "MyREDmod" / "mods" / "MyREDmod"
+    staging.mkdir(parents=True)
+    (staging / "info.json").write_text("{}")
+    mod = InstalledMod(game_id=game.id, name="MyREDmod", staging_dir="MyREDmod", disabled=False)
+    session.add(mod)
+    session.flush()
+    session.add(
+        InstalledModFile(
+            installed_mod_id=mod.id,
+            relative_path="mods/MyREDmod/info.json",
+            source_path="mods/MyREDmod/info.json",
+            link_kind="junction",
+        )
+    )
+    session.commit()
+
+    with (
+        _no_game_running(),
+        patch(
+            "rippermod_manager.services.vfs.deploy_service.junction",
+            side_effect=lambda src, dst: Path(dst).mkdir(parents=True, exist_ok=True),
+        ),
+        patch("rippermod_manager.services.vfs.deploy_service.subprocess.run") as redmod_run,
+    ):
+        report = deploy(game, session, compile_redmod=False)
+
+    assert report.redmod is None
+    redmod_run.assert_not_called()

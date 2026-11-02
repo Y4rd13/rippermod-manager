@@ -407,6 +407,7 @@ class TestToggleEndpoint:
     ):
         game_name, _, staging = game_setup
         mod_id = self._install(client, game_name, staging, "RedTog", {"mods/tog.txt": b"t"})
+        background_requests["redmod"].clear()  # the install queued its own compile
         r = client.patch(f"/api/v1/games/{game_name}/install/installed/{mod_id}/toggle")
         assert r.json()["redmod_compile_queued"] is True and len(background_requests["redmod"]) == 1
 
@@ -415,6 +416,7 @@ class TestToggleEndpoint:
     ):
         game_name, _, staging = game_setup
         mod_id = self._install(client, game_name, staging, "RedBack", {"mods/b.txt": b"t"})
+        background_requests["redmod"].clear()  # the install queued its own compile
         client.patch(f"/api/v1/games/{game_name}/install/installed/{mod_id}/toggle")
         r = client.patch(f"/api/v1/games/{game_name}/install/installed/{mod_id}/toggle")
         assert r.json()["disabled"] is False
@@ -435,6 +437,7 @@ class TestToggleEndpoint:
     ):
         game_name, _, staging = game_setup
         mod_id = self._install(client, game_name, staging, "RedRm", {"mods/rm.txt": b"t"})
+        background_requests["redmod"].clear()  # the install queued its own compile
         r = client.delete(f"/api/v1/games/{game_name}/install/installed/{mod_id}")
         assert r.json()["redmod_compile_queued"] is True
         assert len(background_requests["redmod"]) == 1
