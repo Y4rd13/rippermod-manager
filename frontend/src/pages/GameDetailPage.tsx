@@ -20,6 +20,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Link, useParams } from "react-router";
 
 import { ClusterDetailsPanel, ConflictSummaryWidget } from "@/components/conflicts/ConflictSummaryWidget";
+import { ScriptTweakConflicts } from "@/components/conflicts/ScriptTweakConflicts";
 import { AdoptReviewDialog } from "@/components/mods/AdoptReviewDialog";
 import { FrameworksStatCard } from "@/components/FrameworksStatCard";
 import { HealthStatCard } from "@/components/HealthStatCard";
@@ -87,7 +88,12 @@ const MATCHED_SUB_TABS: { key: MatchedSubTab; label: string }[] = [
   { key: "scan-details", label: "Scan Details" },
 ];
 
-type ConflictSubTab = "file-conflicts" | "archive-resources" | "cluster-details" | "load-order";
+type ConflictSubTab =
+  | "file-conflicts"
+  | "archive-resources"
+  | "scripts-tweaks"
+  | "cluster-details"
+  | "load-order";
 
 function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomain: string }) {
   const [subTab, setSubTab] = useState<ConflictSubTab>("file-conflicts");
@@ -95,6 +101,7 @@ function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomai
   const subTabs: { key: ConflictSubTab; label: string }[] = [
     { key: "file-conflicts", label: "File Conflicts" },
     { key: "archive-resources", label: "Archive Resources" },
+    { key: "scripts-tweaks", label: "Scripts & Tweaks" },
     { key: "load-order", label: "Load Order" },
     { key: "cluster-details", label: "Cluster Details" },
   ];
@@ -127,6 +134,7 @@ function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomai
           <ArchiveResourceConflicts gameName={gameName} gameDomain={gameDomain} />
         </Suspense>
       )}
+      {subTab === "scripts-tweaks" && <ScriptTweakConflicts gameName={gameName} />}
       {subTab === "cluster-details" && <ClusterDetailsPanel gameName={gameName} />}
       {subTab === "load-order" && (
         <Suspense fallback={<SkeletonCardGrid count={3} />}>
