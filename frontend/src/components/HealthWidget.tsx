@@ -50,14 +50,14 @@ function resolveAction(issue: HealthIssueOut, ctx: ActionCtx): RowAction | null 
   switch (issue.kind) {
     case "failed_install":
       return {
-        label: "Re-deploy",
+        label: "Redeploy",
         Icon: RefreshCw,
         loading: ctx.deploy.isPending,
         run: () => ctx.deploy.mutate({ force: false }),
       };
     case "foreign_files":
       return {
-        label: "Re-deploy",
+        label: "Redeploy",
         Icon: RefreshCw,
         loading: ctx.deploy.isPending,
         run: ctx.askForceDeploy,
@@ -219,7 +219,7 @@ function ForceDeployDialog({
         : `${paths.length} file${paths.length === 1 ? "" : "s"} in the game folder will be moved aside to downloaded_mods/_displaced/ and restored on undeploy:`;
   return (
     <ConfirmDialog
-      title="Re-deploy over foreign files?"
+      title="Redeploy over foreign files?"
       message={message}
       confirmLabel="Move aside and deploy"
       variant="warning"

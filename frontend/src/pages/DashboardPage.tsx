@@ -59,7 +59,7 @@ function GameStatsReporter({ gameName, onReport }: { gameName: string; onReport:
 
   const stats = useMemo(() => ({
     totalInstalled: installed.length,
-    nexusMatched: mods.filter((m) => m.nexus_match?.on_disk === true).length,
+    nexusMatched: mods.filter((m) => m.nexus_match).length,
     updatesAvailable: updates?.updates_available ?? 0,
     conflictsAffected: conflicts?.mods_with_conflicts ?? 0,
   }), [installed.length, mods, updates?.updates_available, conflicts?.mods_with_conflicts]);
@@ -202,14 +202,14 @@ export function DashboardPage() {
           color="bg-warning/10 text-warning"
           hoverBorder="hover:border-warning/40"
           onClick={firstGame ? () => navigate(`/games/${firstGame}`) : undefined}
-          title="Mods on disk linked to a Nexus page"
+          title="Scanned mods matched to Nexus Mods entries"
         />
         <StatCard
           icon={RefreshCw}
           label="Updates Available"
           value={games.length > 0 ? totals.updatesAvailable : "--"}
-          color="bg-danger/10 text-danger"
-          hoverBorder="hover:border-danger/40"
+          color="bg-warning/10 text-warning"
+          hoverBorder="hover:border-warning/40"
           onClick={firstGame ? () => navigate(`/games/${firstGame}`) : undefined}
           title="View available updates"
         />

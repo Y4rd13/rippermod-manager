@@ -51,7 +51,7 @@ import { useAbstainMod, useCancelDownload, useEndorseMod, useStartModDownload, u
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import { useDependents } from "@/hooks/queries";
 import { api } from "@/lib/api-client";
-import { isoToEpoch, timeAgo } from "@/lib/format";
+import { isoToEpoch, plural, timeAgo } from "@/lib/format";
 import { matchMethodLabel } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
@@ -393,7 +393,7 @@ function ManagedModsGrid({
         if (deps.length > 0) {
           setDisableGuard({
             modIds: entries.map((e) => e.id),
-            label: entries[0]?.nexus_name || entries[0]?.name || `${entries.length} files`,
+            label: entries[0]?.nexus_name || entries[0]?.name || plural(entries.length, "file"),
             dependents: deps,
             bulk: false,
           });
@@ -591,7 +591,7 @@ function ManagedModsGrid({
               {isMulti && (
                 <Badge variant="neutral">
                   <Files size={10} className="mr-0.5" />
-                  {group.entries.length} files
+                  {plural(group.entries.length, "file")}
                 </Badge>
               )}
               {update && (
@@ -767,7 +767,7 @@ function ManagedModsGrid({
                     {isMulti && (
                       <Badge variant="neutral">
                         <Files size={10} className="mr-0.5" />
-                        {group.entries.length} files
+                        {plural(group.entries.length, "file")}
                       </Badge>
                     )}
                     {update && (
@@ -1062,7 +1062,7 @@ function RecognizedModsGrid({
     const fileCountLabel =
       sourceFolders.length > 1
         ? `${mod.files.length} in ${sourceFolders.length} folders`
-        : `${mod.files.length} files`;
+        : plural(mod.files.length, "file");
     const PATH_PREVIEW_LIMIT = 20;
     const pathTooltip =
       mod.files.length > 0
