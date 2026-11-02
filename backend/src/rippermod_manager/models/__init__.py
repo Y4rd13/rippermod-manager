@@ -5,7 +5,7 @@ from rippermod_manager.models.collection import (
     InstalledCollection,
 )
 from rippermod_manager.models.conflict import ConflictEvidence
-from rippermod_manager.models.correlation import ModNexusCorrelation
+from rippermod_manager.models.correlation import ModNexusCorrelation, RejectedCorrelation
 from rippermod_manager.models.download import DownloadJob
 from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.models.install import DisplacedFile, InstalledMod, InstalledModFile
@@ -45,4 +45,5 @@ __all__ = [
     "PCSpecs",
     "Profile",
     "ProfileEntry",
+    "RejectedCorrelation",
 ]

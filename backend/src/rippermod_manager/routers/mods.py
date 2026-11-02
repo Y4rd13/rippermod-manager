@@ -24,6 +24,7 @@ from rippermod_manager.services.presence_service import (
     ON_DISK_MIN_SCORE,
     winning_correlations,
 )
+from rippermod_manager.services.rejections import clear_rejection, remember_rejection
 from rippermod_manager.services.update_service import batch_group_file_mtimes
 
 logger = logging.getLogger(__name__)
@@ -315,13 +316,14 @@ def confirm_correlation(
     ).first()
     if not corr:
         raise HTTPException(404, "No correlation found for this mod group")
-    corr.confirmed_by_user = True
-    session.add(corr)
-    session.commit()
-    session.refresh(corr)
     dl = session.get(NexusDownload, corr.nexus_download_id)
     if not dl:
         raise HTTPException(404, "NexusDownload not found")
+    corr.confirmed_by_user = True
+    session.add(corr)
+    clear_rejection(session, mod_group_id, dl.nexus_mod_id)
+    session.commit()
+    session.refresh(corr)
     meta = session.exec(
         select(NexusModMeta).where(NexusModMeta.nexus_mod_id == dl.nexus_mod_id)
     ).first()
@@ -353,6 +355,9 @@ def reject_correlation(
     if not corrs:
         raise HTTPException(404, "No correlations found for this mod group")
     for c in corrs:
+        dl = session.get(NexusDownload, c.nexus_download_id)
+        if dl:
+            remember_rejection(session, mod_group_id, dl.nexus_mod_id)
         session.delete(c)
     session.commit()
     return {"deleted": True}
@@ -404,6 +409,8 @@ async def reassign_correlation(
         )
         session.flush()
 
+    # Choosing the pair again is the user's decision: it lifts an earlier rejection.
+    clear_rejection(session, mod_group_id, dl.nexus_mod_id)
     corr = ModNexusCorrelation(
         mod_group_id=mod_group_id,
         nexus_download_id=dl.id,  # type: ignore[arg-type]

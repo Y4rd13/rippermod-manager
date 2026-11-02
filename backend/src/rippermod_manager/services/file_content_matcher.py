@@ -20,6 +20,7 @@ from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
 from rippermod_manager.schemas.mod import FileContentMatchResult
 from rippermod_manager.services.nexus_helpers import upsert_nexus_mod
 from rippermod_manager.services.progress import ProgressCallback, noop_progress
+from rippermod_manager.services.rejections import rejected_pairs
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,7 @@ async def match_by_file_contents(
     # Limit searches
     search_candidates = search_candidates[:max_searches]
 
+    rejected = rejected_pairs(session, game.id)  # type: ignore[arg-type]
     matched = 0
     searches_done = 0
 
@@ -172,6 +174,10 @@ async def match_by_file_contents(
                     continue
 
                 nexus_mod_id = mod_ids.pop()
+
+                # The user rejected this match: do not bring it back
+                if (group.id, nexus_mod_id) in rejected:
+                    continue
 
                 # Skip if already correlated
                 existing_dl = session.exec(

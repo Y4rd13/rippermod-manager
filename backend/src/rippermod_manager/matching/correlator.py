@@ -16,6 +16,7 @@ from rippermod_manager.models.install import InstalledMod
 from rippermod_manager.models.mod import ModFile, ModGroup
 from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
 from rippermod_manager.schemas.mod import CorrelateResult
+from rippermod_manager.services.rejections import rejected_pairs
 
 logger = logging.getLogger(__name__)
 # Characters that filesystem paths often strip (apostrophes, quotes, parens)
@@ -238,6 +239,8 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
 
     revalidate_boosted(session, existing, group_map, dl_map)
 
+    rejected = rejected_pairs(session, game.id)  # type: ignore[arg-type]
+
     already_matched: set[int] = set()
     already_matched_nexus_ids: set[int] = set()
     for corr in existing:
@@ -286,7 +289,7 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
         if im.mod_group_id in already_matched:
             continue
         dl = nexus_id_map.get(im.nexus_mod_id)  # type: ignore[arg-type]
-        if not dl:
+        if not dl or (im.mod_group_id, dl.nexus_mod_id) in rejected:
             continue
         corr = ModNexusCorrelation(
             mod_group_id=im.mod_group_id,  # type: ignore[arg-type]
@@ -322,7 +325,10 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
             parsed = parse_mod_filename(f.filename)
             if parsed.nexus_mod_id and parsed.nexus_mod_id in nexus_id_map:
                 dl_candidate = nexus_id_map[parsed.nexus_mod_id]
-                if dl_candidate.nexus_mod_id not in already_matched_nexus_ids:
+                if (
+                    dl_candidate.nexus_mod_id not in already_matched_nexus_ids
+                    and (group.id, dl_candidate.nexus_mod_id) not in rejected
+                ):
                     best_download = dl_candidate
                     best_score = 0.95
                     best_method = "filename_id"
@@ -333,6 +339,8 @@ def correlate_game_mods(game: Game, session: Session) -> CorrelateResult:
             local_cat = group_category_map.get(group.id)  # type: ignore[arg-type]
             for dl in downloads:
                 if dl.nexus_mod_id in already_matched_nexus_ids:
+                    continue
+                if (group.id, dl.nexus_mod_id) in rejected:
                     continue
                 score, method = compute_name_score(group.display_name, dl.mod_name)
                 # Apply category penalty for incompatible types

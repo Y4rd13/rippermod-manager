@@ -246,7 +246,7 @@ def delete_game(name: str, session: Session = Depends(get_session)) -> None:
     from rippermod_manager.models.archive_index import ArchiveEntryIndex
     from rippermod_manager.models.collection import InstalledCollection
     from rippermod_manager.models.conflict import ConflictEvidence
-    from rippermod_manager.models.correlation import ModNexusCorrelation
+    from rippermod_manager.models.correlation import ModNexusCorrelation, RejectedCorrelation
     from rippermod_manager.models.download import DownloadJob
     from rippermod_manager.models.install import (
         ArchiveNexusLink,
@@ -296,6 +296,9 @@ def delete_game(name: str, session: Session = Depends(get_session)) -> None:
             )
         )
     if group_ids:
+        session.exec(
+            delete(RejectedCorrelation).where(RejectedCorrelation.mod_group_id.in_(group_ids))  # type: ignore[attr-defined]
+        )
         session.exec(delete(ModGroupAlias).where(ModGroupAlias.mod_group_id.in_(group_ids)))  # type: ignore[union-attr]
         session.exec(delete(ModFile).where(ModFile.mod_group_id.in_(group_ids)))  # type: ignore[union-attr]
     session.exec(delete(ModGroup).where(ModGroup.game_id == game_id))  # type: ignore[call-overload]
