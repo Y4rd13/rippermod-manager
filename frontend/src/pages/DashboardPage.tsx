@@ -57,7 +57,7 @@ function GameStatsReporter({ gameName, onReport }: { gameName: string; onReport:
 
   const stats = useMemo(() => ({
     totalInstalled: installed.length,
-    nexusMatched: mods.filter((m) => m.nexus_match).length,
+    nexusMatched: mods.filter((m) => m.nexus_match?.on_disk === true).length,
     updatesAvailable: updates?.updates_available ?? 0,
     conflictsAffected: conflicts?.mods_with_conflicts ?? 0,
   }), [installed.length, mods, updates?.updates_available, conflicts?.mods_with_conflicts]);
@@ -140,7 +140,7 @@ export function DashboardPage() {
           color="bg-warning/10 text-warning"
           hoverBorder="hover:border-warning/40"
           onClick={firstGame ? () => navigate(`/games/${firstGame}`) : undefined}
-          title="View Nexus matched mods"
+          title="Mods on disk linked to a Nexus page"
         />
         <StatCard
           icon={RefreshCw}
