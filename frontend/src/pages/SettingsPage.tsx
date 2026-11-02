@@ -123,6 +123,7 @@ function DeploymentCard() {
   const undeploy = useUndeploy(gameName);
   const { data: game } = useGame(gameName ?? "");
   const updateGame = useUpdateGame();
+  const [confirmUndeploy, setConfirmUndeploy] = useState(false);
 
   if (!gameName) return null;
 
@@ -130,6 +131,7 @@ function DeploymentCard() {
     undeploy.mutate(undefined, {
       onSuccess: (report) => reportDeployOutcome(report, "Undeploy"),
       onError: (error) => toast.error("Undeploy failed", error.message),
+      onSettled: () => setConfirmUndeploy(false),
     });
   };
 
@@ -168,11 +170,22 @@ function DeploymentCard() {
             size="sm"
             variant="secondary"
             loading={undeploy.isPending}
-            onClick={handleUndeploy}
+            onClick={() => setConfirmUndeploy(true)}
           >
             Undeploy
           </Button>
         </div>
+        {confirmUndeploy && (
+          <ConfirmDialog
+            variant="warning"
+            title="Undeploy all mods?"
+            message="Removes the links to your mods from the game folder, puts back the files moved to _displaced/, and deletes archive/pc/mod/modlist.txt and r6/cache/modded/. Your mods stay in the staging folder. If REDmods installed outside RipperMod remain in mods/, REDmod is compiled again for them."
+            confirmLabel="Undeploy"
+            loading={undeploy.isPending}
+            onConfirm={handleUndeploy}
+            onCancel={() => setConfirmUndeploy(false)}
+          />
+        )}
 
         <div className="border-t border-border pt-3 space-y-2">
           <div className="flex items-center justify-between">

@@ -56,6 +56,8 @@ export interface DeployReport {
   redmod: RedmodDeployResult | null;
   /** Files a force deploy moved aside that could not go back: their path is occupied. */
   displaced_not_restored: string[];
+  /** Deploy traces a clean undeploy deleted (modlist.txt, r6/cache/modded). */
+  removed_paths: string[];
 }
 
 /** Background REDmod compile state for one game (toggle, uninstall, profile load). */

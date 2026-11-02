@@ -1100,3 +1100,74 @@ def test_deploy_waits_for_a_running_compile(in_memory_session, sample_game):
         report = deploy(game, session)
     assert time.monotonic() - t0 >= 0.25
     assert report.failed == 0
+
+
+def _deploy_traces(game):
+    install = Path(game.install_path)
+    modlist = install / "archive" / "pc" / "mod" / "modlist.txt"
+    modlist.parent.mkdir(parents=True, exist_ok=True)
+    modlist.write_text("a.archive\n")
+    cache = install / "r6" / "cache" / "modded"
+    cache.mkdir(parents=True)
+    (cache / "final.redscripts").write_text("compiled")
+    return modlist, cache
+
+
+def test_clean_undeploy_removes_modlist_and_redmod_cache(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    modlist, cache = _deploy_traces(game)
+    with _no_game_running():
+        report = undeploy(game, session)
+    assert report.removed_paths == ["archive/pc/mod/modlist.txt", "r6/cache/modded"]
+    assert not modlist.exists() and not cache.exists()
+
+
+def test_refused_undeploy_keeps_modlist_and_cache(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    modlist, cache = _deploy_traces(game)
+    with patch("rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=True):
+        report = undeploy(game, session)
+    assert report.removed_paths == [] and modlist.exists() and cache.is_dir()
+
+
+def test_undeploy_recompiles_for_unmanaged_redmods(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    _stage_redmod_binary(game)
+    foreign = Path(game.install_path) / "mods" / "Foreign"
+    foreign.mkdir(parents=True)
+    (foreign / "info.json").write_text("{}")
+    with (
+        _no_game_running(),
+        patch(
+            "rippermod_manager.services.vfs.deploy_service.subprocess.run",
+            return_value=_make_redmod_proc(),
+        ) as redmod_run,
+    ):
+        report = undeploy(game, session)
+    assert report.redmod is not None and report.redmod.ran is True
+    redmod_run.assert_called_once()
+
+
+def test_undeploy_without_unmanaged_redmods_does_not_compile(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    _stage_redmod_binary(game)
+    with (
+        _no_game_running(),
+        patch("rippermod_manager.services.vfs.deploy_service.subprocess.run") as redmod_run,
+    ):
+        report = undeploy(game, session)
+    assert report.redmod is None and report.removed_paths == []
+    redmod_run.assert_not_called()
+
+
+def test_deploy_rewrites_modlist(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    mod, _staged = _hardlinked_mod(session, game, name="Arc", rel="archive/pc/mod/a.archive")
+    mod.deployed = False
+    session.add(mod)
+    session.commit()
+    modlist = Path(game.install_path) / "archive" / "pc" / "mod" / "modlist.txt"
+    with _no_game_running():
+        report = deploy(game, session)
+    assert report.failed == 0
+    assert modlist.read_text() == "a.archive\n"
