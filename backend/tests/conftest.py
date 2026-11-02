@@ -18,6 +18,45 @@ from rippermod_manager.main import app  # noqa: E402
 from rippermod_manager.models.game import Game, GameModPath  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _no_adopt_backfill_thread(monkeypatch):
+    """Entering the app lifespan must not start the real adopt-archive backfill thread.
+
+    It would share the StaticPool test engine's single connection (or, in tests that do not
+    patch the engine, write to the real database). Tests that mean it call
+    ``run_adopt_backfill_all_games`` directly or patch it themselves.
+    """
+    monkeypatch.setattr("rippermod_manager.main.run_adopt_backfill_all_games", lambda: None)
+
+
+@pytest.fixture(autouse=True)
+def background_requests(monkeypatch):
+    """Background runners never start threads in tests; their requests are recorded.
+
+    ``calls["redmod"]`` holds the game ids that asked for a REDmod compile and
+    ``calls["conflicts"]`` those that asked for a conflict reindex. Tests that mean the
+    real job call it directly (``redmod_scheduler._compile_job``, ``auto_reindex._reindex_job``).
+    """
+    from rippermod_manager.services.conflicts import auto_reindex
+    from rippermod_manager.services.vfs import redmod_scheduler
+
+    calls: dict[str, list[int]] = {"redmod": [], "conflicts": []}
+
+    def _record(kind: str):
+        def _request(key: int) -> bool:
+            calls[kind].append(key)
+            return True
+
+        return _request
+
+    monkeypatch.setattr(redmod_scheduler._runner, "request", _record("redmod"))
+    monkeypatch.setattr(redmod_scheduler, "_last", {})
+    monkeypatch.setattr(redmod_scheduler, "_last_request_at", {})
+    monkeypatch.setattr(redmod_scheduler, "_undeployed_at", {})
+    monkeypatch.setattr(auto_reindex._runner, "request", _record("conflicts"))
+    return calls
+
+
 @pytest.fixture
 def engine():
     eng = create_engine(

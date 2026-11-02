@@ -573,7 +573,64 @@ def undeploy(game: Game, session: Session) -> DeployReport:
             m.deployed = False
             session.add(m)
         session.commit()
+        from rippermod_manager.services.vfs.redmod_scheduler import (
+            compile_lock,
+            mark_undeployed,
+        )
+
+        # A background compile (toggle/uninstall, S2) finishes before the cache is
+        # deleted, so it cannot write the removed mods back into it, and one still
+        # queued from before this undeploy is skipped when it starts.
+        with compile_lock(game.id):  # type: ignore[arg-type]
+            mark_undeployed(game.id)  # type: ignore[arg-type]
+            report.removed_paths = _remove_deploy_traces(game)
+            # REDmods installed outside the app still need a cache without ours (S11).
+            if _has_unmanaged_redmods(game):
+                report.redmod = redmod_deploy(game)
     return report
+
+
+# What a deploy leaves in the game dir besides the links: the load order the app
+# writes and the REDmod cache compiled from the deployed mods (S11).
+_MODLIST_REL = "archive/pc/mod/modlist.txt"
+_REDMOD_CACHE_REL = "r6/cache/modded"
+
+
+def _remove_deploy_traces(game: Game) -> list[str]:
+    """Delete ``modlist.txt`` and ``r6/cache/modded/``; return the paths deleted.
+
+    A path that cannot be deleted is logged and left out of the result.
+    """
+    install = Path(game.install_path)
+    removed: list[str] = []
+    modlist = install / _MODLIST_REL
+    if modlist.is_file():
+        try:
+            modlist.unlink()
+            removed.append(_MODLIST_REL)
+        except OSError:
+            logger.warning("Could not delete %s", modlist, exc_info=True)
+    cache = install / _REDMOD_CACHE_REL
+    if cache.is_dir():
+        try:
+            shutil.rmtree(cache)
+            removed.append(_REDMOD_CACHE_REL)
+        except OSError:
+            logger.warning("Could not delete %s", cache, exc_info=True)
+    return removed
+
+
+def _has_unmanaged_redmods(game: Game) -> bool:
+    """True when ``mods/<folder>/info.json`` exists: a REDmod the app does not manage.
+
+    Called after undeploy removed the app's own links, so any REDmod left in
+    ``mods/`` was installed by something else.
+    """
+    mods_root = Path(game.install_path) / "mods"
+    try:
+        return any((child / "info.json").is_file() for child in mods_root.iterdir())
+    except OSError:
+        return False
 
 
 def detect_drift(game: Game, session: Session) -> DriftReport:
@@ -690,12 +747,12 @@ def _has_enabled_redmods(game: Game, session: Session) -> bool:
             InstalledMod.disabled.is_(False),  # type: ignore[union-attr]
         )
     ).all()
-    for mod in mods:
-        _ = mod.files
-        for f in mod.files:
-            if f.relative_path.replace("\\", "/").startswith("mods/"):
-                return True
-    return False
+    return any(has_redmod_files(mod) for mod in mods)
+
+
+def has_redmod_files(mod: InstalledMod) -> bool:
+    """True when *mod* owns any file under ``mods/`` (REDmod content)."""
+    return any(f.relative_path.replace("\\", "/").startswith("mods/") for f in mod.files)
 
 
 def redmod_deploy(game: Game) -> RedmodDeployResult:
@@ -713,11 +770,16 @@ def redmod_deploy(game: Game) -> RedmodDeployResult:
     """
     exe = _redmod_exe(game)
     if exe is None:
+        logger.warning(
+            "REDmod compile skipped for %s: %s not found", game.name, REDMOD_REL_PATH.as_posix()
+        )
         return RedmodDeployResult(ran=False, skipped_reason="REDmod binary not found")
 
     try:
         proc = subprocess.run(
-            [str(exe), "deploy", "-reportProgress"],
+            # -root is required: without it redMod.exe takes its own bin folder as
+            # the game root and finds no mods to compile.
+            [str(exe), "deploy", "-reportProgress", "-root", str(Path(game.install_path))],
             cwd=str(exe.parent),
             capture_output=True,
             text=True,
@@ -748,13 +810,16 @@ def redmod_deploy(game: Game) -> RedmodDeployResult:
     )
 
 
-def deploy(game: Game, session: Session, *, force: bool = False) -> DeployReport:
+def deploy(
+    game: Game, session: Session, *, force: bool = False, compile_redmod: bool = True
+) -> DeployReport:
     """Compose pre_flight_check, plan_deploy, execute_plan and redmod_deploy.
 
     If pre-flight fails, returns an empty report with the ``preflight`` field
     populated so callers can surface the reason. On a clean execute (no failures
     and no preflight refusal), marks all enabled mods as deployed and clears any
-    pending drift flag. If any enabled mod has REDmod content, also invokes
+    pending drift flag. After every execute, clean or not, rewrites
+    ``modlist.txt`` and, if any enabled mod has REDmod content, also invokes
     ``redMod.exe deploy`` so the compiled cache stays in sync with the deployed
     junctions; the redmod result is attached to ``report.redmod`` regardless of
     outcome.
@@ -763,6 +828,9 @@ def deploy(game: Game, session: Session, *, force: bool = False) -> DeployReport
     destination instead of skipping them as conflicts. Use this when the user
     has explicitly opted into a "force redeploy" (e.g., to migrate from another
     mod manager that left copy-installed files behind).
+
+    ``compile_redmod=False`` skips the REDmod step: install passes it and queues a
+    background compile instead (S2), so the request never waits on redMod.exe.
     """
     pre = pre_flight_check(game)
     if not pre.ok:
@@ -785,8 +853,28 @@ def deploy(game: Game, session: Session, *, force: bool = False) -> DeployReport
             m.deploy_drift = False
             session.add(m)
         session.commit()
-        if _has_enabled_redmods(game, session):
-            report.redmod = redmod_deploy(game)
+    # Both steps run even when some links failed: a foreign file left by a manual
+    # install or another manager blocks its own path only, so a user who has one
+    # would otherwise never get modlist.txt back after an undeploy (S11) nor a
+    # compiled REDmod cache for the junctions that did link.
+    # Undeploy deletes modlist.txt (S11): a later deploy restores the load order.
+    from rippermod_manager.services.modlist_service import write_modlist
+
+    try:
+        write_modlist(game, session)
+    except OSError:
+        # The links are already in place; a locked or read-only modlist.txt must
+        # not turn the whole deploy into an error.
+        logger.warning("Could not write modlist.txt for %s", game.name, exc_info=True)
+    # Taken even with no REDmod content: a background compile in progress
+    # (toggle/uninstall, S2) finishes before this deploy returns, so Play,
+    # which deploys first, never launches over a half-built cache.
+    from rippermod_manager.services.vfs.redmod_scheduler import compile_lock
+
+    if compile_redmod:
+        with compile_lock(game.id):  # type: ignore[arg-type]
+            if _has_enabled_redmods(game, session):
+                report.redmod = redmod_deploy(game)
     return report
 
 

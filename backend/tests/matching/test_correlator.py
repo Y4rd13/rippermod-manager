@@ -1,3 +1,5 @@
+import pytest
+
 from rippermod_manager.matching.correlator import (
     _categories_compatible,
     classify_group_category,
@@ -8,7 +10,7 @@ from rippermod_manager.matching.correlator import (
 )
 from rippermod_manager.models.correlation import ModNexusCorrelation
 from rippermod_manager.models.mod import ModFile, ModGroup
-from rippermod_manager.models.nexus import NexusDownload, NexusModMeta
+from rippermod_manager.models.nexus import NexusDownload, NexusModMeta, NexusModRequirement
 
 
 class TestTokenJaccard:
@@ -54,7 +56,7 @@ class TestComputeNameScore:
         assert method == "exact"
 
     def test_substring_match(self):
-        score, method = compute_name_score("weather", "enhanced weather mod")
+        score, method = compute_name_score("weather", "enhanced weather")
         assert score == 0.9
         assert method == "substring"
 
@@ -87,6 +89,56 @@ class TestComputeNameScore:
     def test_z_prefix_local_vs_clean_nexus(self):
         score, _method = compute_name_score("zVendorsXL", "Vendors XL")
         assert score >= 0.8
+
+    @pytest.mark.parametrize(
+        "local,nexus",
+        [
+            ("Ash", "Load Begone (Skip Intro Splash Videos and More)"),
+            ("ENC", "Echoes of Joy - Small Immersive Encounters"),
+            ("Iac", "Pontiac Firebird Trans AM GTA"),
+            ("Config", "Mes Configs CP77 - DELETED"),
+        ],
+    )
+    def test_substring_inside_a_word_is_not_substring(self, local, nexus):
+        score, method = compute_name_score(local, nexus)
+        assert method != "substring"
+        assert score < 0.75
+
+    def test_multiword_prefix_substring_still_counts(self):
+        assert compute_name_score("Visual Holster", "Visual Holsters (Edgerunners 2 Update)") == (
+            0.9,
+            "substring",
+        )
+
+    def test_single_whole_word_substring_counts(self):
+        assert compute_name_score("Config", "WTNC Config")[1] == "substring"
+
+    @pytest.mark.parametrize(
+        "local,nexus",
+        [
+            ("Ash", "Ash - Female V Preset"),
+            ("Config", "Cyberware-EX - Custom Expansion Mode (Raito Labs Config)"),
+            ("LHUD", "Enterable Interiors - LHUD 2.22 updated patch"),
+            ("Airdrops", "Airdrops - More Hidden Gems"),
+        ],
+    )
+    def test_single_word_covering_under_half_is_not_substring(self, local, nexus):
+        """A lone word only stands for a name it makes up at least half of."""
+        assert compute_name_score(local, nexus)[1] != "substring"
+
+    def test_later_whole_word_occurrence_counts(self):
+        """An in-word occurrence earlier in the name must not hide a whole-word one."""
+        assert compute_name_score("Ash", "Splash Ash") == (0.9, "substring")
+
+    @pytest.mark.parametrize("local,nexus", [("", "Mod & Co"), ("Mod & Co", "")])
+    def test_empty_normalized_name_is_not_substring(self, local, nexus):
+        assert compute_name_score(local, nexus)[1] != "substring"
+
+    def test_longer_local_name_counts_in_either_direction(self):
+        assert compute_name_score("Visual Holsters (Edgerunners 2 Update)", "Visual Holster") == (
+            0.9,
+            "substring",
+        )
 
 
 class TestCorrelateGameMods:
@@ -329,3 +381,190 @@ class TestCategoryClassification:
     def test_incompatible_categories(self):
         assert _categories_compatible("scripts", "models and textures") is False
         assert _categories_compatible("assets", "scripts") is False
+
+
+class TestRevalidateBoosted:
+    """Stored boosted matches are re-scored on the name alone at every correlate run."""
+
+    def _store(
+        self,
+        session,
+        make_game,
+        group_name,
+        dl_name,
+        score,
+        confirmed=False,
+        method="endorsed_name",
+    ):
+        game = make_game()
+        group = ModGroup(game_id=game.id, display_name=group_name)
+        dl = NexusDownload(game_id=game.id, nexus_mod_id=700, mod_name=dl_name)
+        session.add_all([group, dl])
+        session.flush()
+        corr = ModNexusCorrelation(
+            mod_group_id=group.id,
+            nexus_download_id=dl.id,
+            score=score,
+            method=method,
+            confirmed_by_user=confirmed,
+        )
+        session.add(corr)
+        session.commit()
+        return game, corr.id
+
+    def test_revalidate_rescores_stored_substring_match_under_current_rule(
+        self, session, make_game
+    ):
+        """A name match stored as substring 0.9 takes the score the current rule gives it."""
+        game, corr_id = self._store(
+            session,
+            make_game,
+            "LHUD",
+            "Enterable Interiors - LHUD 2.22 updated patch",
+            0.9,
+            method="substring",
+        )
+        correlate_game_mods(game, session)
+        corr = session.get(ModNexusCorrelation, corr_id)
+        assert corr is not None
+        assert corr.method == "fuzzy"
+        assert corr.score == pytest.approx(0.42, abs=0.01)
+        assert corr.reasoning.startswith("re-scored:")
+
+    def test_revalidate_keeps_the_category_penalty(self, session, make_game):
+        """A stored score that carries the category penalty is not raised back to the raw score."""
+        game, corr_id = self._store(
+            session, make_game, "Cool Mod Remix", "Cool Mod", 0.82, method="substring"
+        )
+        corr = session.get(ModNexusCorrelation, corr_id)
+        session.add(
+            ModFile(
+                mod_group_id=corr.mod_group_id,
+                file_path="r6/scripts/cool.reds",
+                filename="cool.reds",
+            )
+        )
+        session.add(
+            NexusModMeta(
+                game_domain=game.domain_name,
+                nexus_mod_id=700,
+                name="Cool Mod",
+                category="Models and Textures",
+            )
+        )
+        session.commit()
+
+        correlate_game_mods(game, session)
+
+        corr = session.get(ModNexusCorrelation, corr_id)
+        assert corr.score == pytest.approx(0.82)
+
+    def test_revalidate_lowers_boosted_endorsed_match_below_on_disk(self, session, make_game):
+        game, corr_id = self._store(
+            session, make_game, "Immersive Rippers", "Immersive Bartenders - Dogtown", 0.85
+        )
+        correlate_game_mods(game, session)
+        corr = session.get(ModNexusCorrelation, corr_id)
+        assert corr.score == pytest.approx(0.557, abs=0.01)
+        assert corr.reasoning.startswith("re-scored: name similarity 0.5")
+
+    def test_revalidate_deletes_boosted_match_below_entry_threshold(self, session, make_game):
+        game, corr_id = self._store(
+            session, make_game, "Ash", "Load Begone (Skip Intro Splash Videos and More)", 0.9
+        )
+        correlate_game_mods(game, session)
+        assert session.get(ModNexusCorrelation, corr_id) is None
+
+    def test_revalidate_keeps_confirmed_boosted_match(self, session, make_game):
+        game, corr_id = self._store(
+            session,
+            make_game,
+            "Immersive Rippers",
+            "Immersive Bartenders - Dogtown",
+            0.85,
+            confirmed=True,
+        )
+        correlate_game_mods(game, session)
+        assert session.get(ModNexusCorrelation, corr_id).score == 0.85
+
+    def test_revalidate_lifts_stale_score_of_strong_name_to_the_boost(self, session, make_game):
+        """Name 0.779 is on disk: a stale 0.6 becomes the 0.85 floor (fails if nothing runs)."""
+        game, corr_id = self._store(session, make_game, "Weather Mod", "Weather Overhaul Mod", 0.6)
+        correlate_game_mods(game, session)
+        assert session.get(ModNexusCorrelation, corr_id).score == 0.85
+
+    def test_revalidate_keeps_endorsed_match_found_through_the_meta_name(self, session, make_game):
+        """The endorsed matcher scores max(dl name, meta name): revalidation must too."""
+        game, corr_id = self._store(
+            session, make_game, "Weather Mod", "Immersive Bartenders - Dogtown", 0.85
+        )
+        session.add(NexusModMeta(nexus_mod_id=700, name="Weather Overhaul Mod"))
+        session.commit()
+        correlate_game_mods(game, session)
+        assert session.get(ModNexusCorrelation, corr_id).score == 0.85
+
+    def test_revalidate_keeps_requirement_match_found_through_the_requirement_name(
+        self, session, make_game
+    ):
+        """The requirement matcher scores the requirement row's name, not the download's."""
+        game, corr_id = self._store(
+            session,
+            make_game,
+            "Weather Mod",
+            "Immersive Bartenders - Dogtown",
+            0.92,
+            method="requirement",
+        )
+        main = ModGroup(game_id=game.id, display_name="Main Mod")
+        main_dl = NexusDownload(game_id=game.id, nexus_mod_id=100, mod_name="Main Mod")
+        session.add_all([main, main_dl])
+        session.flush()
+        session.add(
+            ModNexusCorrelation(
+                mod_group_id=main.id, nexus_download_id=main_dl.id, score=1.0, method="exact"
+            )
+        )
+        session.add(
+            NexusModRequirement(
+                nexus_mod_id=100, required_mod_id=700, mod_name="Weather Overhaul Mod"
+            )
+        )
+        session.commit()
+        correlate_game_mods(game, session)
+        assert session.get(ModNexusCorrelation, corr_id).score == 0.92
+
+    def test_requirement_name_does_not_rescue_other_methods(self, session, make_game):
+        """Only the requirement method may use a requirement row's name."""
+        game, corr_id = self._store(
+            session, make_game, "Weather Mod", "Immersive Bartenders - Dogtown", 0.85
+        )
+        session.add(
+            NexusModRequirement(
+                nexus_mod_id=100, required_mod_id=700, mod_name="Weather Overhaul Mod"
+            )
+        )
+        session.commit()
+        correlate_game_mods(game, session)
+        assert session.get(ModNexusCorrelation, corr_id) is None
+
+    def test_deleted_boosted_match_frees_the_group_for_rematch(self, session, make_game):
+        """A deleted stale match must leave `existing`, so the group is matched again."""
+        from sqlmodel import select
+
+        game, _ = self._store(
+            session, make_game, "Ash", "Load Begone (Skip Intro Splash Videos and More)", 0.9
+        )
+        better = NexusDownload(game_id=game.id, nexus_mod_id=701, mod_name="Ash")
+        session.add(better)
+        session.commit()
+        result = correlate_game_mods(game, session)
+        assert result.matched == 1
+        corrs = session.exec(select(ModNexusCorrelation)).all()
+        assert [(c.nexus_download_id, c.method, c.score) for c in corrs] == [
+            (better.id, "exact", 1.0)
+        ]
+
+
+def test_names_that_normalize_to_nothing_do_not_match():
+    """Two punctuation-only names are not an exact match."""
+    assert compute_name_score("##", "---") == (0.0, "fuzzy")

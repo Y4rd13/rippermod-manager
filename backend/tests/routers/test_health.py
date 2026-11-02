@@ -2,9 +2,11 @@
 
 from sqlmodel import Session
 
+from rippermod_manager.models.correlation import ModNexusCorrelation
 from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
-from rippermod_manager.models.nexus import NexusModRequirement
+from rippermod_manager.models.mod import ModGroup
+from rippermod_manager.models.nexus import NexusDownload, NexusModRequirement
 
 
 def _make_game(session: Session) -> Game:
@@ -26,6 +28,41 @@ def _install_with_files(
     for p in paths:
         s.add(InstalledModFile(installed_mod_id=mod.id, relative_path=p))
     return mod
+
+
+def _addon_requiring_scanned_mod(s: Session, game: Game, score: float | None) -> int | None:
+    """AddonMod (200) requires "Mod Settings" (4885); optionally a scanned group matches it.
+
+    Returns the scanned group's id, or None when no group is correlated.
+    """
+    s.add(
+        InstalledMod(
+            game_id=game.id, name="AddonMod", nexus_mod_id=200, disabled=False, deployed=True
+        )
+    )
+    s.add(
+        NexusModRequirement(
+            nexus_mod_id=200, required_mod_id=4885, mod_name="Mod Settings", is_external=False
+        )
+    )
+    group_id = None
+    if score is not None:
+        group = ModGroup(game_id=game.id, display_name="Mod Settings", confidence=0.9)
+        nd = NexusDownload(game_id=game.id, nexus_mod_id=4885, mod_name="Mod Settings")
+        s.add(group)
+        s.add(nd)
+        s.flush()
+        s.add(
+            ModNexusCorrelation(
+                mod_group_id=group.id,
+                nexus_download_id=nd.id,
+                score=score,
+                method="filename_id",
+            )
+        )
+        group_id = group.id
+    s.commit()
+    return group_id
 
 
 class TestHealthCheck:
@@ -73,6 +110,52 @@ class TestHealthCheck:
         assert "missing_requirement" in kinds
         miss = next(i for i in data["issues"] if i["kind"] == "missing_requirement")
         assert miss["mod_name"] == "AddonMod"
+
+    def test_requirement_on_disk_is_info_with_group(self, client, engine):
+        with Session(engine) as s:
+            game = _make_game(s)
+            group_id = _addon_requiring_scanned_mod(s, game, 1.0)
+
+        data = client.get("/api/v1/games/Cyberpunk 2077/health/").json()
+        issue = next(i for i in data["issues"] if i["required_name"] == "Mod Settings")
+        assert issue["kind"] == "unmanaged_requirement"
+        assert issue["severity"] == "info"
+        assert (
+            issue["message"]
+            == 'requires "Mod Settings", which is on disk but not managed by RipperMod.'
+        )
+        assert issue["mod_group_id"] == group_id
+        assert issue["nexus_url"] == "https://www.nexusmods.com/cyberpunk2077/mods/4885"
+        assert data["critical"] == 0 and data["ok"] is True
+
+    def test_requirement_possible_match_is_warning(self, client, engine):
+        with Session(engine) as s:
+            game = _make_game(s)
+            _addon_requiring_scanned_mod(s, game, 0.47)
+
+        data = client.get("/api/v1/games/Cyberpunk 2077/health/").json()
+        issue = next(i for i in data["issues"] if i["required_name"] == "Mod Settings")
+        assert issue["kind"] == "missing_requirement"
+        assert issue["severity"] == "warning"
+        assert (
+            issue["message"]
+            == 'requires "Mod Settings", which may be on disk (match confidence 47%).'
+        )
+        assert issue["nexus_url"] == "https://www.nexusmods.com/cyberpunk2077/mods/4885"
+        assert data["critical"] == 0 and data["ok"] is True
+
+    def test_requirement_without_match_stays_critical(self, client, engine):
+        with Session(engine) as s:
+            game = _make_game(s)
+            _addon_requiring_scanned_mod(s, game, None)
+
+        data = client.get("/api/v1/games/Cyberpunk 2077/health/").json()
+        issue = next(i for i in data["issues"] if i["required_name"] == "Mod Settings")
+        assert issue["kind"] == "missing_requirement"
+        assert issue["severity"] == "critical"
+        assert issue["message"] == 'requires "Mod Settings", which is not installed.'
+        assert issue["nexus_url"] == "https://www.nexusmods.com/cyberpunk2077/mods/4885"
+        assert data["ok"] is False
 
     def test_disabled_requirement_is_warning(self, client, engine):
         with Session(engine) as s:

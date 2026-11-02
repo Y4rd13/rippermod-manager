@@ -17,14 +17,15 @@ from rippermod_manager.models.nexus import NexusDownload
 from rippermod_manager.nexus.client import NexusRateLimitError
 from rippermod_manager.nexus.graphql_client import NexusGraphQLClient, NexusGraphQLError
 from rippermod_manager.schemas.mod import RequirementMatchResult
+from rippermod_manager.services.name_boost import boosted_score
 from rippermod_manager.services.nexus_helpers import upsert_nexus_mod
 from rippermod_manager.services.progress import ProgressCallback, noop_progress
+from rippermod_manager.services.rejections import rejected_pairs
 
 logger = logging.getLogger(__name__)
 
 _MIN_COLLECTION_OVERLAP = 3
 _NAME_THRESHOLD = 0.55
-_CORRELATION_SCORE = 0.85
 
 
 async def match_by_collections(
@@ -67,6 +68,7 @@ async def match_by_collections(
         select(ModGroup).where(ModGroup.id.in_(unmatched_ids))  # type: ignore[union-attr]
     ).all()
 
+    rejected = rejected_pairs(session, game.id)  # type: ignore[arg-type]
     matched = 0
     collections_checked = 0
 
@@ -134,7 +136,7 @@ async def match_by_collections(
                     best_name = ""
 
                     for mid, name in uncorrelated_collection.items():
-                        if mid in newly_matched_nexus_ids:
+                        if mid in newly_matched_nexus_ids or (group.id, mid) in rejected:
                             continue
                         score, _ = compute_name_score(group.display_name, name)
                         if score >= _NAME_THRESHOLD and score > best_score:
@@ -184,7 +186,7 @@ async def match_by_collections(
                     corr = ModNexusCorrelation(
                         mod_group_id=group.id,  # type: ignore[arg-type]
                         nexus_download_id=dl.id,  # type: ignore[arg-type]
-                        score=_CORRELATION_SCORE,
+                        score=boosted_score(best_score, "collection"),
                         method="collection",
                         reasoning=(
                             f"Matched via collection '{coll.get('name', slug)}': "

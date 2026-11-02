@@ -15,13 +15,14 @@ from rippermod_manager.models.game import Game
 from rippermod_manager.models.mod import ModGroup
 from rippermod_manager.models.nexus import NexusDownload, NexusModRequirement
 from rippermod_manager.schemas.mod import RequirementMatchResult
+from rippermod_manager.services.name_boost import boosted_score
 from rippermod_manager.services.nexus_helpers import upsert_nexus_mod
 from rippermod_manager.services.progress import ProgressCallback, noop_progress
+from rippermod_manager.services.rejections import rejected_pairs
 
 logger = logging.getLogger(__name__)
 
 _NAME_THRESHOLD = 0.55
-_CORRELATION_SCORE = 0.92
 
 
 async def match_by_requirements(
@@ -47,6 +48,8 @@ async def match_by_requirements(
             NexusModRequirement.nexus_mod_id.in_(correlated_nexus_ids),  # type: ignore[union-attr]
             NexusModRequirement.required_mod_id.is_not(None),  # type: ignore[union-attr]
             NexusModRequirement.is_external.is_(False),  # type: ignore[union-attr]
+            # Only forward rows: a reverse row names a mod that depends on this one
+            NexusModRequirement.is_reverse.is_(False),  # type: ignore[union-attr]
             NexusModRequirement.required_mod_id.notin_(correlated_nexus_ids),  # type: ignore[union-attr]
         )
     ).all()
@@ -94,6 +97,7 @@ async def match_by_requirements(
     matched = 0
     newly_matched_groups: set[int] = set()
     newly_matched_nexus_ids: set[int] = set()
+    rejected = rejected_pairs(session, game.id)  # type: ignore[arg-type]
 
     for group in unmatched_groups:
         if group.id in newly_matched_groups:
@@ -104,7 +108,7 @@ async def match_by_requirements(
         best_req_name = ""
 
         for req_mod_id, (req_name, _requiring_mod_id) in req_map.items():
-            if req_mod_id in newly_matched_nexus_ids:
+            if req_mod_id in newly_matched_nexus_ids or (group.id, req_mod_id) in rejected:
                 continue
 
             score, _ = compute_name_score(group.display_name, req_name)
@@ -137,7 +141,7 @@ async def match_by_requirements(
         corr = ModNexusCorrelation(
             mod_group_id=group.id,  # type: ignore[arg-type]
             nexus_download_id=dl.id,  # type: ignore[arg-type]
-            score=_CORRELATION_SCORE,
+            score=boosted_score(best_score, "requirement"),
             method="requirement",
             reasoning=(
                 f"Matched '{group.display_name}' to requirement "

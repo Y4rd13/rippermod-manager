@@ -9,6 +9,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 
 from rippermod_manager.models.game import Game, GameModPath
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
+from rippermod_manager.services import install_service
 from rippermod_manager.services.install_service import (
     get_file_ownership_map,
     install_mod,
@@ -17,6 +18,7 @@ from rippermod_manager.services.install_service import (
     toggle_mod,
     uninstall_mod,
 )
+from rippermod_manager.services.vfs.primitives import GameRunningError
 
 
 def _make_zip(path, files: dict[str, bytes]) -> None:
@@ -1081,3 +1083,149 @@ class TestRelinkReported:
     def test_clean_uninstall_reports_nothing(self, session, game, b_wins):
         result = uninstall_mod(b_wins, game, session)
         assert result.not_relinked == []
+
+
+class TestGameRunningGuard:
+    """uninstall and toggle refuse before touching the DB or the disk while the game runs."""
+
+    @pytest.fixture
+    def installed(self, session, game, game_dir, staging_dir):
+        archive = staging_dir / "Guarded.zip"
+        _make_zip(archive, {"mods/guarded.txt": b"data"})
+        result = install_mod(game, archive, session)
+        mod = session.get(InstalledMod, result.installed_mod_id)
+        session.refresh(mod)
+        _ = mod.files
+        return mod
+
+    def test_uninstall_refuses_while_game_running(
+        self, monkeypatch, session, game, game_dir, installed
+    ):
+        monkeypatch.setattr(install_service, "is_game_running", lambda *a, **k: True)
+        mod_id = installed.id
+
+        with pytest.raises(GameRunningError, match="Cyberpunk 2077 is running"):
+            uninstall_mod(installed, game, session)
+
+        assert session.get(InstalledMod, mod_id) is not None
+        assert (game_dir / "mods" / "guarded.txt").exists()
+
+    def test_disable_refuses_while_game_running(
+        self, monkeypatch, session, game, game_dir, installed
+    ):
+        monkeypatch.setattr(install_service, "is_game_running", lambda *a, **k: True)
+
+        with pytest.raises(GameRunningError):
+            toggle_mod(installed, game, session)
+
+        session.refresh(installed)
+        assert installed.disabled is False
+        assert (game_dir / "mods" / "guarded.txt").exists()
+
+    def test_enable_refuses_while_game_running(
+        self, monkeypatch, session, game, game_dir, installed
+    ):
+        toggle_mod(installed, game, session)  # disable while the game is closed
+        session.refresh(installed)
+        assert installed.disabled is True
+        monkeypatch.setattr(install_service, "is_game_running", lambda *a, **k: True)
+
+        with pytest.raises(GameRunningError):
+            toggle_mod(installed, game, session)
+
+        session.refresh(installed)
+        assert installed.disabled is True
+        assert not (game_dir / "mods" / "guarded.txt").exists()
+
+    def test_ensure_game_closed_passes_when_game_closed(self, monkeypatch):
+        monkeypatch.setattr(install_service, "is_game_running", lambda *a, **k: False)
+        assert install_service.ensure_game_closed() is None
+
+
+class TestInstallQueuesRedmodCompile:
+    """Installing REDmod content queues a background compile, not one inside the request."""
+
+    def _cp_game(self, session, game_dir):
+        g = Game(name="CP77Queue", domain_name="cyberpunk2077", install_path=str(game_dir))
+        session.add(g)
+        session.flush()
+        session.add(GameModPath(game_id=g.id, relative_path="mods"))
+        session.commit()
+        return g
+
+    def test_redmod_install_queues_compile_and_deploys_without_it(
+        self, session, game_dir, staging_dir, background_requests
+    ):
+        from rippermod_manager.schemas.deploy import DeployReport
+
+        game = self._cp_game(session, game_dir)
+        archive = staging_dir / "QueuedREDmod-1-1-0.zip"
+        _make_zip(
+            archive,
+            {
+                "QueuedPkg/info.json": b'{"name":"Queued","version":"1.0"}',
+                "QueuedPkg/archives/a.archive": b"FAKE",
+            },
+        )
+        with patch(
+            "rippermod_manager.services.vfs.deploy_service.deploy",
+            return_value=DeployReport(total=0, done=0, failed=0),
+        ) as deploy_mock:
+            result = install_mod(game, archive, session)
+
+        assert deploy_mock.call_args.kwargs.get("compile_redmod") is False
+        assert result.redmod_compile_queued is True
+        assert background_requests["redmod"] == [game.id]
+
+    def test_plain_install_does_not_queue_compile(
+        self, session, game_dir, staging_dir, background_requests
+    ):
+        from rippermod_manager.schemas.deploy import DeployReport
+
+        game = self._cp_game(session, game_dir)
+        archive = staging_dir / "PlainArchive-2-1-0.zip"
+        _make_zip(archive, {"archive/pc/mod/plain.archive": b"FAKE"})
+        with patch(
+            "rippermod_manager.services.vfs.deploy_service.deploy",
+            return_value=DeployReport(total=0, done=0, failed=0),
+        ):
+            result = install_mod(game, archive, session)
+
+        assert result.redmod_compile_queued is False
+        assert background_requests["redmod"] == []
+
+
+def test_install_refused_by_preflight_does_not_queue_redmod_compile(
+    session, game_dir, staging_dir, background_requests
+):
+    """A deploy refused by pre-flight (game running) links nothing, so nothing compiles."""
+    from rippermod_manager.schemas.deploy import DeployReport, PreflightReport
+
+    game = Game(name="CP77Refused", domain_name="cyberpunk2077", install_path=str(game_dir))
+    session.add(game)
+    session.flush()
+    session.add(GameModPath(game_id=game.id, relative_path="mods"))
+    session.commit()
+    archive = staging_dir / "RefusedREDmod-3-1-0.zip"
+    _make_zip(archive, {"RefPkg/info.json": b"{}", "RefPkg/archives/r.archive": b"FAKE"})
+    refused = DeployReport(
+        total=0, done=0, failed=0, preflight=PreflightReport(ok=False, reasons=["game running"])
+    )
+    with patch("rippermod_manager.services.vfs.deploy_service.deploy", return_value=refused):
+        result = install_mod(game, archive, session)
+
+    assert result.redmod_compile_queued is False
+    assert background_requests["redmod"] == []
+
+
+def test_install_survives_an_unwritable_modlist(session, game, staging_dir):
+    """The mod is installed even when modlist.txt cannot be written."""
+    archive = staging_dir / "LockedList.zip"
+    _make_zip(archive, {"archive/pc/mod/l.archive": b"FAKE"})
+    with patch(
+        "rippermod_manager.services.modlist_service.write_modlist",
+        side_effect=PermissionError("modlist.txt is locked"),
+    ):
+        result = install_mod(game, archive, session, auto_deploy=False)
+
+    assert result.files_extracted == 1

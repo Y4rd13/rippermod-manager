@@ -26,6 +26,7 @@ from rippermod_manager.models.nexus import NexusDownload
 from rippermod_manager.services.install_service import list_available_archives
 from rippermod_manager.services.nexus_helpers import upsert_nexus_mod
 from rippermod_manager.services.progress import ProgressCallback, noop_progress
+from rippermod_manager.services.rejections import rejected_pairs
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +216,7 @@ def parse_archive_metadata(
         return result
 
     on_progress("fomod", f"Inspecting {len(archives)} archives...", 83)
+    rejected = rejected_pairs(session, game.id)  # type: ignore[arg-type]
 
     for i, archive_path in enumerate(archives):
         result.archives_inspected += 1
@@ -268,7 +270,8 @@ def parse_archive_metadata(
                         ModNexusCorrelation.nexus_download_id == dl.id,
                     )
                 ).first()
-                if not existing_corr:
+                is_rejected = (installed_mod.mod_group_id, dl.nexus_mod_id) in rejected
+                if not existing_corr and not is_rejected:
                     reason = f"FOMOD info.xml mod ID {metadata.nexus_mod_id}"
                     session.add(
                         ModNexusCorrelation(

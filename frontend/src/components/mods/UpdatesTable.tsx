@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 
 import { SourceBadge } from "@/components/mods/SourceBadge";
+import { Badge } from "@/components/ui/Badge";
 import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -19,6 +20,21 @@ import { useDownloadJobs } from "@/hooks/queries";
 import { useSessionState } from "@/hooks/use-session-state";
 import { timeAgo } from "@/lib/format";
 import type { ModUpdate } from "@/types/api";
+
+const DETECTION_BADGE: Record<ModUpdate["detection_method"], { label: string; title: string }> = {
+  version: {
+    label: "Version",
+    title: "The Nexus version is newer than the installed version.",
+  },
+  timestamp: {
+    label: "Newer file",
+    title: "Nexus has a file uploaded after your download.",
+  },
+  both: {
+    label: "Version + file",
+    title: "Both the version and the upload date are newer on Nexus.",
+  },
+};
 
 type UpdateSortKey = "name" | "localVer" | "nexusVer" | "source" | "author" | "updated" | "downloaded";
 
@@ -219,6 +235,11 @@ export function UpdatesTable({ gameName, updates, isLoading }: Props) {
               <td className="py-2 pr-4 text-text-primary">
                 <div className="flex items-center gap-1.5">
                   <span>{u.display_name}</span>
+                  {DETECTION_BADGE[u.detection_method] && (
+                    <Badge variant="neutral" title={DETECTION_BADGE[u.detection_method].title}>
+                      {DETECTION_BADGE[u.detection_method].label}
+                    </Badge>
+                  )}
                   {u.nexus_url && (
                     <button
                       onClick={() => openUrl(u.nexus_url).catch(() => {})}

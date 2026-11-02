@@ -1,11 +1,14 @@
 import logging
 import sys
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 import rippermod_manager.models  # noqa: F401 — register all models with SQLModel
 from rippermod_manager.config import settings
@@ -13,6 +16,7 @@ from rippermod_manager.database import create_db_and_tables
 from rippermod_manager.routers import api_router
 from rippermod_manager.security import get_api_token, install_security
 from rippermod_manager.services.pid_file import remove_pid_file, write_pid_file
+from rippermod_manager.services.vfs.primitives import GameRunningError
 
 
 def _configure_logging() -> None:
@@ -41,6 +45,35 @@ def _configure_logging() -> None:
 
 
 logger = logging.getLogger(__name__)
+
+
+def run_adopt_backfill_all_games() -> None:
+    """Link mods adopted before archives were linked, game by game, with its own session.
+
+    Meant for a background thread: opening and listing archives is slow with many
+    adopted mods, and nothing the app serves depends on the result. A failure in
+    one game is logged and the next game still runs.
+    """
+    try:
+        from sqlmodel import Session
+        from sqlmodel import select as sql_select
+
+        from rippermod_manager.database import engine
+        from rippermod_manager.models.game import Game
+        from rippermod_manager.services import install_service
+
+        with Session(engine) as session:
+            for game in session.exec(sql_select(Game)).all():
+                game_id = game.id
+                try:
+                    linked = install_service.backfill_adopted_archives(game, session)
+                    if linked:
+                        logger.info("Linked %d adopted mod(s) to their archive", linked)
+                except (OSError, ValueError, SQLAlchemyError) as exc:
+                    session.rollback()
+                    logger.warning("adopt archive backfill failed for game %s: %s", game_id, exc)
+    except Exception:  # top-level startup guard: never crash the app, log the traceback
+        logger.exception("Adopt archive backfill failed, continuing anyway")
 
 
 @asynccontextmanager
@@ -91,6 +124,24 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 )
     except Exception:
         logger.exception("Stale collection-install recovery failed, continuing anyway")
+    # Download jobs left queued or in flight by a previous run can never finish:
+    # their CDN links, NXM keys and tasks were in memory (S6).
+    try:
+        from sqlmodel import Session
+
+        from rippermod_manager.database import engine
+        from rippermod_manager.services import download_service
+
+        with Session(engine) as _session:
+            interrupted = download_service.recover_interrupted_jobs(_session)
+            if interrupted:
+                logger.info("Marked %d interrupted download(s) as failed on startup", interrupted)
+    except Exception:
+        logger.exception("Interrupted-download recovery failed, continuing anyway")
+    # Daemon thread: the backfill never delays serving or holds shutdown.
+    threading.Thread(
+        target=run_adopt_backfill_all_games, name="adopt-archive-backfill", daemon=True
+    ).start()
     write_pid_file(settings.data_dir)
     logger.info("Application started")
     yield
@@ -104,14 +155,6 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         await shutdown_downloads()
     except Exception:
         logger.exception("Failed to shutdown downloads")
-    try:
-        from rippermod_manager.services.app_update_service import (
-            shutdown as shutdown_app_update,
-        )
-
-        await shutdown_app_update()
-    except Exception:
-        logger.exception("Failed to shutdown app-update download")
     try:
         from rippermod_manager.database import engine
 
@@ -129,6 +172,12 @@ app = FastAPI(
 )
 
 install_security(app)
+
+
+@app.exception_handler(GameRunningError)
+async def game_running_handler(_request: Request, exc: GameRunningError) -> JSONResponse:
+    """Any operation refused because Cyberpunk is running answers 409 with the reason."""
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
 app.include_router(api_router)

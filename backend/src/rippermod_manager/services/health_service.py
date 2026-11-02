@@ -8,6 +8,7 @@ from rippermod_manager.models.game import Game
 from rippermod_manager.models.install import InstalledMod, InstalledModFile
 from rippermod_manager.models.nexus import NexusModRequirement
 from rippermod_manager.schemas.deploy import DriftReport
+from rippermod_manager.services.presence_service import Presence, nexus_presence
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,8 @@ class HealthIssue:
     installed_mod_id: int | None = None
     nexus_url: str | None = None  # missing_requirement -> the required mod's Nexus page
     action_mod_id: int | None = None  # disabled_requirement -> the mod to enable
-    required_name: str = ""  # missing/disabled_requirement -> the required mod's name
+    required_name: str = ""  # missing/disabled/unmanaged_requirement -> the required mod's name
+    mod_group_id: int | None = None  # unmanaged_requirement -> the scanned group to adopt
 
 
 def check_health(game: Game, session: Session) -> list[HealthIssue]:
@@ -81,6 +83,7 @@ def _check_requirements(
     for r in all_reqs:
         reqs_by_mod.setdefault(r.nexus_mod_id, []).append(r)
 
+    presence = nexus_presence(game, session)
     issues: list[HealthIssue] = []
     for mod in installed:
         if mod.disabled or mod.nexus_mod_id is None:
@@ -91,20 +94,7 @@ def _check_requirements(
             if r.required_mod_id in _FRAMEWORK_NEXUS_IDS:
                 continue  # the Frameworks card owns core-framework status
             if r.required_mod_id not in by_nexus:
-                issues.append(
-                    HealthIssue(
-                        kind="missing_requirement",
-                        severity="critical",
-                        mod_name=mod.name,
-                        message=f'requires "{r.mod_name}", which is not installed.',
-                        suggested_fix=f"Install {r.mod_name} from Nexus Mods.",
-                        installed_mod_id=mod.id,
-                        required_name=r.mod_name,
-                        nexus_url=(
-                            f"https://www.nexusmods.com/{game.domain_name}/mods/{r.required_mod_id}"
-                        ),
-                    )
-                )
+                issues.append(_missing_requirement_issue(mod, r, game, presence))
             elif r.required_mod_id not in enabled_nexus:
                 issues.append(
                     HealthIssue(
@@ -119,6 +109,53 @@ def _check_requirements(
                     )
                 )
     return issues
+
+
+def _missing_requirement_issue(
+    mod: InstalledMod, r: NexusModRequirement, game: Game, presence: Presence
+) -> HealthIssue:
+    """A requirement the app does not manage: on disk (info), possible (warning) or missing."""
+    nexus_url = f"https://www.nexusmods.com/{game.domain_name}/mods/{r.required_mod_id}"
+    on_disk = presence.matches.get(r.required_mod_id)  # type: ignore[arg-type]
+    if on_disk is not None and on_disk.on_disk:
+        return HealthIssue(
+            kind="unmanaged_requirement",
+            severity="info",
+            mod_name=mod.name,
+            message=f'requires "{r.mod_name}", which is on disk but not managed by RipperMod.',
+            suggested_fix=f"Adopt {r.mod_name} so RipperMod manages it.",
+            installed_mod_id=mod.id,
+            required_name=r.mod_name,
+            nexus_url=nexus_url,
+            mod_group_id=on_disk.mod_group_id,
+        )
+    possible = presence.possible(r.required_mod_id)  # type: ignore[arg-type]
+    if possible is not None:
+        return HealthIssue(
+            kind="missing_requirement",
+            severity="warning",
+            mod_name=mod.name,
+            message=(
+                f'requires "{r.mod_name}", which may be on disk '
+                f"(match confidence {round(possible.score * 100)}%)."
+            ),
+            suggested_fix=(
+                f"Confirm the {r.mod_name} match on the Mods tab, or install it from Nexus Mods."
+            ),
+            installed_mod_id=mod.id,
+            required_name=r.mod_name,
+            nexus_url=nexus_url,
+        )
+    return HealthIssue(
+        kind="missing_requirement",
+        severity="critical",
+        mod_name=mod.name,
+        message=f'requires "{r.mod_name}", which is not installed.',
+        suggested_fix=f"Install {r.mod_name} from Nexus Mods.",
+        installed_mod_id=mod.id,
+        required_name=r.mod_name,
+        nexus_url=nexus_url,
+    )
 
 
 def _check_install_integrity(

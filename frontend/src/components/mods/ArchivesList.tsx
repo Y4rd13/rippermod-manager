@@ -1,4 +1,4 @@
-import { AlertTriangle, Archive, Check, ChevronDown, Copy, Download, ExternalLink, FolderOpen, FolderTree, Link, PackageMinus, RefreshCw, Settings2, Trash2 } from "lucide-react";
+import { AlertTriangle, Archive, Check, ChevronDown, Copy, Download, ExternalLink, FolderOpen, FolderTree, Link, PackageMinus, RefreshCw, Settings2, Trash2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
@@ -36,6 +36,7 @@ import { useContextMenu } from "@/hooks/use-context-menu";
 import { formatBytes, isoToEpoch, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type {
+  ArchiveStatus,
   AvailableArchive,
   ConflictCheckResult,
 } from "@/types/api";
@@ -46,23 +47,80 @@ interface Props {
   gameDomain: string;
   installPath: string;
   isLoading?: boolean;
+  onAdopt?: (modGroupId: number) => void;
 }
 
 type ArchiveSortKey = "archive" | "name" | "version" | "size" | "nexusId" | "downloaded" | "status";
 
-type LinkChip = "all" | "linked" | "unlinked" | "installed" | "orphan";
+type LinkChip = "all" | "linked" | "unlinked" | ArchiveStatus;
 
-const STATUS_ORDER: Record<string, number> = { installed: 0, orphan: 1, empty: 2 };
+const STATUS_LABELS: Record<ArchiveStatus, string> = {
+  managed: "Managed",
+  not_managed: "Not managed",
+  possible_match: "Possible match",
+  other_version: "Other version",
+  not_installed: "Not installed",
+  orphan: "Orphan",
+};
 
-function archiveStatus(a: AvailableArchive): string {
-  if (a.is_empty) return "empty";
-  return a.is_installed ? "installed" : "orphan";
+const STATUS_TITLES: Record<ArchiveStatus, string> = {
+  managed: "Installed and managed by RipperMod",
+  not_managed: "The mod is on disk but not managed by RipperMod; adopt it",
+  possible_match: "A mod on disk may match this archive; review and adopt it",
+  other_version: "Another version of this mod is managed by RipperMod",
+  not_installed: "Linked to a Nexus mod that is not installed",
+  orphan: "Not linked to any Nexus mod",
+};
+
+const STATUS_VARIANTS: Record<ArchiveStatus, "success" | "warning" | "neutral"> = {
+  managed: "success",
+  not_managed: "warning",
+  possible_match: "warning",
+  other_version: "neutral",
+  not_installed: "neutral",
+  orphan: "neutral",
+};
+
+const STATUS_KEYS = Object.keys(STATUS_LABELS) as ArchiveStatus[];
+const STATUS_ORDER: Record<ArchiveStatus, number> = Object.fromEntries(
+  STATUS_KEYS.map((key, i) => [key, i]),
+) as Record<ArchiveStatus, number>;
+
+function archiveStatus(a: AvailableArchive): ArchiveStatus {
+  return a.status;
+}
+
+/** Whether the row offers Adopt / Review & adopt instead of Install. */
+function canAdopt(a: AvailableArchive): boolean {
+  return (
+    (a.status === "not_managed" || a.status === "possible_match") &&
+    a.mod_group_id != null &&
+    !a.is_empty
+  );
+}
+
+/** Confidence badge per DESIGN.md: green >= 90 %, amber >= 75 %, red below. */
+function ConfidenceBadge({ score }: { score: number }) {
+  const pct = Math.round(score * 100);
+  if (score >= 0.9) {
+    return <Badge variant="success" title="Match confidence"><Check size={10} /> {pct}%</Badge>;
+  }
+  if (score >= 0.75) {
+    return <Badge variant="warning" title="Match confidence"><AlertTriangle size={10} /> {pct}%</Badge>;
+  }
+  return <Badge variant="danger" title="Match confidence"><XCircle size={10} /> {pct}%</Badge>;
 }
 
 function buildContextItems(archive: AvailableArchive): ContextMenuItem[] {
   const items: ContextMenuItem[] = [];
   if (archive.is_empty && archive.nexus_mod_id) {
     items.push({ key: "redownload", label: "Re-download", icon: RefreshCw });
+  } else if (canAdopt(archive)) {
+    items.push({
+      key: "adopt",
+      label: archive.status === "possible_match" ? "Review & adopt" : "Adopt",
+      icon: Link,
+    });
   } else if (archive.is_installed && archive.installed_mod_id) {
     items.push({ key: "uninstall", label: "Uninstall", icon: PackageMinus, variant: "danger" });
   } else {
@@ -79,7 +137,7 @@ function buildContextItems(archive: AvailableArchive): ContextMenuItem[] {
   return items;
 }
 
-export function ArchivesList({ archives, gameName, gameDomain, installPath, isLoading }: Props) {
+export function ArchivesList({ archives, gameName, gameDomain, installPath, isLoading, onAdopt }: Props) {
   const installMod = useInstallMod();
   const uninstallMod = useUninstallMod();
   const checkConflicts = useCheckConflicts();
@@ -107,7 +165,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
   const activeDownloadByModId = useMemo(() => {
     const map = new Map<number, { status: string }>();
     for (const job of downloadJobs) {
-      if (job.status === "downloading" || job.status === "pending") {
+      if (job.status === "downloading" || job.status === "pending" || job.status === "queued") {
         map.set(job.nexus_mod_id, { status: job.status });
       }
     }
@@ -156,7 +214,13 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useSessionState<ArchiveSortKey>(`archives-sort-${gameName}`, "name");
   const [sortDir, setSortDir] = useSessionState<"asc" | "desc">(`archives-dir-${gameName}`, "asc");
-  const [linkChip, setLinkChip] = useSessionState<LinkChip>(`archives-chip-${gameName}`, "all");
+  const [storedChip, setLinkChip] = useSessionState<LinkChip>(`archives-chip-${gameName}`, "all");
+  // A session may still hold a chip from before the per-state chips ("installed").
+  const linkChip: LinkChip =
+    storedChip === "all" || storedChip === "linked" || storedChip === "unlinked" ||
+    STATUS_KEYS.includes(storedChip)
+      ? storedChip
+      : "all";
 
   const handleSort = useCallback((key: string) => {
     const k = key as ArchiveSortKey;
@@ -171,8 +235,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
     const items = archives.filter((a) => {
       if (linkChip === "linked" && a.nexus_mod_id == null) return false;
       if (linkChip === "unlinked" && a.nexus_mod_id != null) return false;
-      if (linkChip === "installed" && !a.is_installed) return false;
-      if (linkChip === "orphan" && a.is_installed) return false;
+      if (STATUS_KEYS.includes(linkChip as ArchiveStatus) && a.status !== linkChip) return false;
       if (!q) return true;
       return (
         a.filename.toLowerCase().includes(q) ||
@@ -202,7 +265,7 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
           cmp = (a.last_downloaded_at ?? "").localeCompare(b.last_downloaded_at ?? "");
           break;
         case "status":
-          cmp = (STATUS_ORDER[archiveStatus(a)] ?? 3) - (STATUS_ORDER[archiveStatus(b)] ?? 3);
+          cmp = (STATUS_ORDER[archiveStatus(a)] ?? STATUS_KEYS.length) - (STATUS_ORDER[archiveStatus(b)] ?? STATUS_KEYS.length);
           break;
       }
       return sortDir === "asc" ? cmp : -cmp;
@@ -223,22 +286,22 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
     [archives],
   );
 
-  const installedCount = useMemo(
-    () => archives.filter((a) => a.is_installed).length,
+  const orphans = useMemo(
+    () => archives.filter((a) => a.status === "orphan"),
     [archives],
   );
-
-  const orphanCount = useMemo(
-    () => archives.filter((a) => !a.is_installed).length,
-    [archives],
-  );
+  const orphanCount = orphans.length;
+  const orphanMb = (orphans.reduce((sum, a) => sum + a.size, 0) / 1048576).toFixed(1);
 
   const filterChips = [
     { key: "all", label: "All", count: archives.length },
     { key: "linked", label: "Linked", count: linkedCount },
     { key: "unlinked", label: "Unlinked", count: unlinkedCount },
-    { key: "installed", label: "Installed", count: installedCount },
-    { key: "orphan", label: "Orphan", count: orphanCount },
+    ...STATUS_KEYS.map((key) => ({
+      key,
+      label: STATUS_LABELS[key],
+      count: archives.filter((a) => a.status === key).length,
+    })),
   ];
 
   const installQueueRef = useRef<string[]>([]);
@@ -346,6 +409,8 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
     if (!archive) return;
     if (key === "uninstall" && archive.installed_mod_id) {
       setConfirmUninstall({ filename: archive.filename, modId: archive.installed_mod_id });
+    } else if (key === "adopt" && archive.mod_group_id != null) {
+      onAdopt?.(archive.mod_group_id);
     } else if (key === "install") {
       handleCheckConflicts(archive.filename);
     } else if (key === "copy") {
@@ -411,31 +476,15 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
           >
             <FolderOpen size={14} /> Open Folder
           </Button>
-          {orphanCount > 0 && !confirmCleanup && (
+          {orphanCount > 0 && (
             <Button
               variant="secondary"
               size="sm"
               onClick={() => setConfirmCleanup(true)}
-              title={`Delete ${orphanCount} archive${orphanCount !== 1 ? "s" : ""} not linked to any installed mod`}
+              title={`Delete ${orphanCount} archive${orphanCount !== 1 ? "s" : ""} with no Nexus id that RipperMod has not installed`}
             >
               <Trash2 size={14} /> Clean {orphanCount} Orphan{orphanCount !== 1 ? "s" : ""}
             </Button>
-          )}
-          {confirmCleanup && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-danger">Delete {orphanCount} archive{orphanCount !== 1 ? "s" : ""}?</span>
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={() => { cleanupOrphans.mutate(gameName); setConfirmCleanup(false); }}
-                loading={cleanupOrphans.isPending}
-              >
-                Confirm
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setConfirmCleanup(false)}>
-                Cancel
-              </Button>
-            </div>
           )}
         </div>
 
@@ -497,10 +546,10 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
                   <span title="Download failed or was interrupted; re-download from Nexus to fix">
                     <Badge variant="danger"><AlertTriangle size={10} /> Empty</Badge>
                   </span>
-                ) : a.is_installed ? (
-                  <Badge variant="success"><Check size={10} /> Installed</Badge>
                 ) : (
-                  <Badge variant="neutral">Orphan</Badge>
+                  <Badge variant={STATUS_VARIANTS[a.status]} title={STATUS_TITLES[a.status]}>
+                    {a.status === "managed" && <Check size={10} />} {STATUS_LABELS[a.status]}
+                  </Badge>
                 )}
               </td>
               <td className="py-2 pl-2 whitespace-nowrap text-right">
@@ -513,6 +562,15 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
                     >
                       <PackageMinus size={14} /> Uninstall
                     </Button>
+                  ) : canAdopt(a) && onAdopt ? (
+                    <div className="inline-flex items-center gap-1.5">
+                      {a.status === "possible_match" && a.match_score != null && (
+                        <ConfidenceBadge score={a.match_score} />
+                      )}
+                      <Button size="sm" onClick={() => onAdopt(a.mod_group_id!)}>
+                        <Link size={14} /> {a.status === "possible_match" ? "Review & adopt" : "Adopt"}
+                      </Button>
+                    </div>
                   ) : (
                     <div className="inline-flex items-center">
                       <button
@@ -668,6 +726,29 @@ export function ArchivesList({ archives, gameName, gameDomain, installPath, isLo
           onSelect={handleContextMenuSelect}
           onClose={closeMenu}
         />
+      )}
+
+      {confirmCleanup && (
+        <ConfirmDialog
+          title={`Delete ${orphanCount} orphan archive${orphanCount !== 1 ? "s" : ""}?`}
+          message={`Permanently delete ${orphanMb} MB of archives that have no Nexus id and are not installed by RipperMod? This cannot be undone.`}
+          confirmLabel="Delete"
+          variant="danger"
+          icon={Trash2}
+          loading={cleanupOrphans.isPending}
+          onConfirm={async () => {
+            await cleanupOrphans.mutateAsync(gameName).catch(() => {});
+            setConfirmCleanup(false);
+          }}
+          onCancel={() => setConfirmCleanup(false)}
+        >
+          <ul className="mb-4 max-h-40 space-y-0.5 overflow-y-auto rounded border border-border bg-surface-0 p-2 font-mono text-xs text-text-secondary">
+            {orphans.map((a) => (
+              <li key={a.filename} className="truncate" title={a.filename}>{a.filename}</li>
+            ))}
+          </ul>
+          <p className="mb-4 text-xs text-text-muted">{orphanMb} MB in total</p>
+        </ConfirmDialog>
       )}
 
       {confirmDeleteFile && (

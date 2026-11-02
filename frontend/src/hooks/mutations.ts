@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { api, ApiError } from "@/lib/api-client";
 
@@ -12,10 +13,12 @@ function apiErrorDetail(err: unknown, fallback: string): string {
   }
   return fallback;
 }
+import { invalidateGameState } from "@/hooks/invalidate";
 import { formatBytes } from "@/lib/format";
 import { useDownloadStore } from "@/stores/download-store";
 import { toast } from "@/stores/toast-store";
 import type {
+  ModPath,
   ActivityLogEntry,
   AdoptGroup,
   AdoptResult,
@@ -114,7 +117,50 @@ export function useUpdateGame() {
       qc.invalidateQueries({ queryKey: ["games"] });
       toast.success("Game updated", game.name);
     },
-    onError: (err) => toast.error("Failed to update game", err.message),
+    onError: (err) =>
+      toast.error("Failed to update game", apiErrorDetail(err, err.message)),
+  });
+}
+
+const modPathsUrl = (gameName: string) =>
+  `/api/v1/games/${encodeURIComponent(gameName)}/mod-paths`;
+
+/** Add a scanned folder (relative to the game dir); applies on the next scan. */
+export function useAddModPath() {
+  const qc = useQueryClient();
+  return useMutation<ModPath[], Error, { gameName: string; relativePath: string }>({
+    mutationFn: ({ gameName, relativePath }) =>
+      api.post(modPathsUrl(gameName), { relative_path: relativePath }),
+    onSuccess: () => {
+      // Prefix: covers the mod-paths list and the game (its mod_paths count).
+      qc.invalidateQueries({ queryKey: ["games"] });
+    },
+    onError: (err) => toast.error("Could not add the folder", apiErrorDetail(err, err.message)),
+  });
+}
+
+export function useRemoveModPath() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, { gameName: string; pathId: number }>({
+    mutationFn: ({ gameName, pathId }) => api.delete(`${modPathsUrl(gameName)}/${pathId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["games"] });
+    },
+    onError: (err) =>
+      toast.error("Could not remove the folder", apiErrorDetail(err, err.message)),
+  });
+}
+
+export function useResetModPaths() {
+  const qc = useQueryClient();
+  return useMutation<ModPath[], Error, { gameName: string }>({
+    mutationFn: ({ gameName }) => api.post(`${modPathsUrl(gameName)}/reset`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["games"] });
+      toast.success("Scanned folders reset to defaults");
+    },
+    onError: (err) =>
+      toast.error("Could not reset the folders", apiErrorDetail(err, err.message)),
   });
 }
 
@@ -136,6 +182,7 @@ export function useScanMods() {
       api.post(`/api/v1/games/${gameName}/mods/scan`),
     onSuccess: (_, gameName) => {
       qc.invalidateQueries({ queryKey: ["mods", gameName] });
+      invalidateGameState(qc, gameName);
     },
   });
 }
@@ -147,6 +194,7 @@ export function useCorrelate() {
       api.post(`/api/v1/games/${gameName}/mods/correlate`),
     onSuccess: (_, gameName) => {
       qc.invalidateQueries({ queryKey: ["mods", gameName] });
+      invalidateGameState(qc, gameName);
     },
   });
 }
@@ -172,23 +220,45 @@ export function useDisconnectNexus() {
   });
 }
 
+/** Report an install: whether its deploy ran, and duplicate paths inside the archive. */
+function installToast(result: InstallResult): void {
+  const preflight = result.deploy?.preflight;
+  const failed = result.deploy?.failed ?? 0;
+  if (preflight && !preflight.ok) {
+    const hint = preflight.game_running ? " Close the game and use Redeploy in the title bar." : "";
+    toast.warning("Mod installed but not deployed", preflight.reasons.join(" ") + hint);
+  } else if (failed > 0) {
+    toast.warning(
+      "Mod installed, but some game files were not linked",
+      `${failed} file${failed === 1 ? "" : "s"} in the game folder could not be linked. Use Redeploy in the title bar.`,
+    );
+  } else {
+    toast.success("Mod installed", `${result.files_extracted} files extracted`);
+  }
+  const dupes = result.files_overwritten;
+  if (dupes > 0) {
+    toast.info(
+      "Duplicate paths in the archive",
+      `${dupes} path${dupes === 1 ? "" : "s"} appear${dupes === 1 ? "s" : ""} more than once in the archive; one copy of each was kept.`,
+    );
+  }
+}
+
 export function useInstallMod() {
   const qc = useQueryClient();
   return useMutation<InstallResult, Error, { gameName: string; data: InstallRequest }>({
     mutationFn: ({ gameName, data }) =>
       api.post(`/api/v1/games/${gameName}/install/`, data),
     onSuccess: (result, { gameName }) => {
+      if (result.redmod_compile_queued) {
+        qc.invalidateQueries({ queryKey: ["redmod-status", gameName] });
+      }
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
       qc.invalidateQueries({ queryKey: ["updates", gameName] });
-      qc.invalidateQueries({ queryKey: ["health", gameName] });
-      toast.success("Mod installed", `${result.files_extracted} files extracted`);
-      if (result.files_overwritten > 0) {
-        toast.warning(
-          "Files overwritten",
-          `${result.files_overwritten} existing file${result.files_overwritten === 1 ? " was" : "s were"} replaced`,
-        );
-      }
+      invalidateGameState(qc, gameName);
+      qc.invalidateQueries({ queryKey: ["deploy-status", gameName] });
+      installToast(result);
     },
     onError: (err) =>
       toast.error(
@@ -207,22 +277,22 @@ export function useUninstallMod() {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
       qc.invalidateQueries({ queryKey: ["updates", gameName] });
-      qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
-      qc.invalidateQueries({ queryKey: ["archive-resource-details", gameName] });
-      qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
-      qc.invalidateQueries({ queryKey: ["health", gameName] });
+      invalidateGameState(qc, gameName);
       qc.invalidateQueries({ queryKey: ["deploy-status", gameName] });
+      if (result?.redmod_compile_queued) {
+        qc.invalidateQueries({ queryKey: ["redmod-status", gameName] });
+      }
       const unlinked = result?.not_relinked ?? [];
       if (unlinked.length > 0) {
         toast.warning(
           "Mod uninstalled, but some files were not handed to another mod",
-          `${unlinked.length} file${unlinked.length === 1 ? "" : "s"} left unlinked. Close the game and run Deploy.`,
+          `${unlinked.length} file${unlinked.length === 1 ? "" : "s"} left unlinked. Close the game and use Redeploy in the title bar.`,
         );
       } else {
         toast.success("Mod uninstalled");
       }
     },
-    onError: () => toast.error("Failed to uninstall mod"),
+    onError: (err) => toast.error("Failed to uninstall mod", apiErrorDetail(err, "")),
   });
 }
 
@@ -238,18 +308,10 @@ export function useAdoptMods() {
       }
       // Adopt converts detected -> managed and moves files: refresh the same
       // keys install/uninstall touch, plus "mods" (the detected list shrinks).
-      for (const key of [
-        "installed-mods",
-        "mods",
-        "available-archives",
-        "updates",
-        "conflict-summary",
-        "archive-conflict-summaries",
-        "archive-resource-details",
-        "health",
-      ]) {
+      for (const key of ["installed-mods", "mods", "available-archives", "updates"]) {
         qc.invalidateQueries({ queryKey: [key, gameName] });
       }
+      invalidateGameState(qc, gameName);
       if (result.adopted_mods > 0) {
         toast.success(
           `Adopted ${result.adopted_mods} mod${result.adopted_mods === 1 ? "" : "s"}`,
@@ -289,29 +351,29 @@ export function useToggleMod() {
       );
       return { previous };
     },
-    onError: (_err, { gameName }, context) => {
+    onError: (err, { gameName }, context) => {
       // Roll back to the pre-mutation snapshot so the UI doesn't lie.
       if (context?.previous !== undefined) {
         qc.setQueryData(["installed-mods", gameName], context.previous);
       }
-      toast.error("Failed to toggle mod");
+      toast.error("Failed to toggle mod", apiErrorDetail(err, ""));
     },
-    onSuccess: (result) => {
+    onSuccess: (result, { gameName }) => {
+      if (result?.redmod_compile_queued) {
+        qc.invalidateQueries({ queryKey: ["redmod-status", gameName] });
+      }
       const unlinked = result?.not_relinked ?? [];
       if (unlinked.length > 0) {
         toast.warning(
           result.disabled ? "Mod disabled, but some files were not relinked" : "Some files were not linked",
-          `${unlinked.length} file${unlinked.length === 1 ? "" : "s"} left unlinked. Close the game and run Deploy.`,
+          `${unlinked.length} file${unlinked.length === 1 ? "" : "s"} left unlinked. Close the game and use Redeploy in the title bar.`,
         );
       }
     },
     onSettled: (_data, _err, { gameName }) => {
       // Always refetch server truth after the mutation resolves, win or lose.
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
-      qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
-      qc.invalidateQueries({ queryKey: ["archive-resource-details", gameName] });
-      qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
-      qc.invalidateQueries({ queryKey: ["health", gameName] });
+      invalidateGameState(qc, gameName);
     },
   });
 }
@@ -327,10 +389,7 @@ export function useUndoActivity() {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
       qc.invalidateQueries({ queryKey: ["updates", gameName] });
-      qc.invalidateQueries({ queryKey: ["conflict-summary", gameName] });
-      qc.invalidateQueries({ queryKey: ["archive-conflict-summaries", gameName] });
-      qc.invalidateQueries({ queryKey: ["archive-resource-details", gameName] });
-      qc.invalidateQueries({ queryKey: ["health", gameName] });
+      invalidateGameState(qc, gameName);
       toast.success("Action undone");
     },
     onError: (err) => {
@@ -450,7 +509,18 @@ export function useLoadProfile() {
     onSuccess: (result, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["profiles", gameName] });
-      if (result.skipped_count > 0) {
+      qc.invalidateQueries({ queryKey: ["redmod-status", gameName] });
+      invalidateGameState(qc, gameName);
+      if (result.failed_count > 0) {
+        const skipped =
+          result.skipped_count > 0
+            ? `, ${result.skipped_count} no longer installed`
+            : "";
+        toast.warning(
+          "Profile partly loaded",
+          `${result.failed_count} mod${result.failed_count === 1 ? "" : "s"} could not be switched${skipped}`,
+        );
+      } else if (result.skipped_count > 0) {
         toast.warning(
           "Some mods were skipped",
           `${result.skipped_count} mod${result.skipped_count === 1 ? " is" : "s are"} no longer installed`,
@@ -459,7 +529,7 @@ export function useLoadProfile() {
         toast.success("Profile loaded");
       }
     },
-    onError: () => toast.error("Failed to load profile"),
+    onError: (err) => toast.error("Failed to load profile", apiErrorDetail(err, "")),
   });
 }
 
@@ -559,6 +629,15 @@ export function useCheckUpdates() {
   });
 }
 
+/**
+ * Free accounts cannot get a CDN link from the API: open the mod's Files tab on
+ * Nexus, where "Mod Manager Download" sends the nxm:// link back to the app (S1).
+ */
+function openNexusFilesPage(result: DownloadStartResult): void {
+  if (result.nexus_url) void openUrl(result.nexus_url);
+  toast.info("Opened on Nexus", "Click Mod Manager Download there to download it with RipperMod.");
+}
+
 export function useStartDownload() {
   const qc = useQueryClient();
   return useMutation<DownloadStartResult, Error, { gameName: string; data: DownloadRequest }>({
@@ -572,12 +651,15 @@ export function useStartDownload() {
         return;
       }
       if (result.requires_nxm) {
-        toast.warning("Premium required", "Open the mod on Nexus to download manually");
+        openNexusFilesPage(result);
         return;
       }
       if (result.job) {
         useDownloadStore.getState().setJob(result.job);
-        toast.info("Download started", result.job.file_name);
+        toast.info(
+          result.job.status === "queued" ? "Download queued" : "Download started",
+          result.job.file_name,
+        );
       }
       qc.invalidateQueries({ queryKey: ["download-jobs", gameName] });
     },
@@ -595,16 +677,33 @@ export function useStartModDownload() {
         return;
       }
       if (result.requires_nxm) {
-        toast.warning("Premium required", "Open the mod on Nexus to download manually");
+        openNexusFilesPage(result);
         return;
       }
       if (result.job) {
         useDownloadStore.getState().setJob(result.job);
-        toast.info("Download started", result.job.file_name);
+        toast.info(
+          result.job.status === "queued" ? "Download queued" : "Download started",
+          result.job.file_name,
+        );
       }
       qc.invalidateQueries({ queryKey: ["download-jobs", gameName] });
     },
     onError: () => toast.error("Download failed"),
+  });
+}
+
+/** Save ``download_concurrency`` (1-10): how many downloads run at once (S6). */
+export function useSetDownloadConcurrency() {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, number>({
+    mutationFn: (value) =>
+      api.put("/api/v1/settings/", { settings: { download_concurrency: String(value) } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["settings"] });
+    },
+    onError: (err) =>
+      toast.error("Could not save simultaneous downloads", apiErrorDetail(err, "")),
   });
 }
 
@@ -635,6 +734,7 @@ export function useConfirmCorrelation() {
       api.patch(`/api/v1/games/${gameName}/mods/${modGroupId}/correlation/confirm`),
     onSuccess: (_, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["mods", gameName] });
+      invalidateGameState(qc, gameName);
       toast.success("Match confirmed");
     },
     onError: () => toast.error("Failed to confirm match"),
@@ -648,6 +748,7 @@ export function useRejectCorrelation() {
       api.delete(`/api/v1/games/${gameName}/mods/${modGroupId}/correlation`),
     onSuccess: (_, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["mods", gameName] });
+      invalidateGameState(qc, gameName);
       toast.success("Match rejected");
     },
     onError: () => toast.error("Failed to reject match"),
@@ -667,6 +768,7 @@ export function useReassignCorrelation() {
       }),
     onSuccess: (_, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["mods", gameName] });
+      invalidateGameState(qc, gameName);
       toast.success("Match reassigned");
     },
     onError: () => toast.error("Failed to reassign match"),
@@ -679,11 +781,12 @@ export function useResolveConflict() {
     mutationFn: ({ gameName, modId }) =>
       api.post(`/api/v1/games/${gameName}/conflicts/inbox/${modId}/resolve`, { action: "reinstall" }),
     onSuccess: (_, { gameName }) => {
-      qc.invalidateQueries({ queryKey: ["conflicts", gameName] });
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      invalidateGameState(qc, gameName);
       toast.success("Conflict resolved", "Mod reinstalled to reclaim files");
     },
-    onError: () => toast.error("Failed to resolve conflict"),
+    onError: (err) =>
+      toast.error("Failed to resolve conflict", apiErrorDetail(err, "Check the backend log for details.")),
   });
 }
 
@@ -775,15 +878,14 @@ export function useFomodInstall() {
     mutationFn: ({ gameName, data }) =>
       api.post(`/api/v1/games/${gameName}/install/fomod/install`, data),
     onSuccess: (result, { gameName }) => {
+      if (result.redmod_compile_queued) {
+        qc.invalidateQueries({ queryKey: ["redmod-status", gameName] });
+      }
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
       qc.invalidateQueries({ queryKey: ["available-archives", gameName] });
-      toast.success("Mod installed", `${result.files_extracted} files extracted`);
-      if (result.files_overwritten > 0) {
-        toast.warning(
-          "Files overwritten",
-          `${result.files_overwritten} existing file${result.files_overwritten === 1 ? " was" : "s were"} replaced`,
-        );
-      }
+      invalidateGameState(qc, gameName);
+      qc.invalidateQueries({ queryKey: ["deploy-status", gameName] });
+      installToast(result);
     },
     onError: () => toast.error("FOMOD installation failed"),
   });
@@ -804,6 +906,8 @@ export function useEndorseMod() {
     onSuccess: (_, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["nexus-downloads", gameName] });
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      // The Matched tab reads endorse/track flags from the mods list (S10).
+      qc.invalidateQueries({ queryKey: ["mods", gameName] });
       qc.invalidateQueries({ queryKey: ["mod-summary"] });
       toast.success("Mod endorsed");
     },
@@ -819,6 +923,8 @@ export function useAbstainMod() {
     onSuccess: (_, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["nexus-downloads", gameName] });
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      // The Matched tab reads endorse/track flags from the mods list (S10).
+      qc.invalidateQueries({ queryKey: ["mods", gameName] });
       qc.invalidateQueries({ queryKey: ["mod-summary"] });
       toast.success("Endorsement removed");
     },
@@ -834,6 +940,8 @@ export function useTrackMod() {
     onSuccess: (_, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["nexus-downloads", gameName] });
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      // The Matched tab reads endorse/track flags from the mods list (S10).
+      qc.invalidateQueries({ queryKey: ["mods", gameName] });
       qc.invalidateQueries({ queryKey: ["mod-summary"] });
       toast.success("Mod tracked");
     },
@@ -849,6 +957,8 @@ export function useUntrackMod() {
     onSuccess: (_, { gameName }) => {
       qc.invalidateQueries({ queryKey: ["nexus-downloads", gameName] });
       qc.invalidateQueries({ queryKey: ["installed-mods", gameName] });
+      // The Matched tab reads endorse/track flags from the mods list (S10).
+      qc.invalidateQueries({ queryKey: ["mods", gameName] });
       qc.invalidateQueries({ queryKey: ["mod-summary"] });
       toast.success("Mod untracked");
     },

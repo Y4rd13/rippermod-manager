@@ -59,6 +59,21 @@ def graphql_mod_to_rest_info(gql_mod: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def parse_size_in_bytes(value: Any) -> int:
+    """Coerce a GraphQL ``sizeInBytes`` (BigInt, encoded as a string) to a byte count.
+
+    Accepts a decimal string or an int. Anything else (None, empty, unparsable,
+    bool, negative) is 0, so callers never raise and never store a bogus size.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        return 0
+    try:
+        size = int(value)
+    except ValueError:
+        return 0
+    return max(size, 0)
+
+
 def graphql_file_to_rest_file(gql_file: dict[str, Any]) -> dict[str, Any]:
     """Convert a GraphQL ModFile object to a REST-compatible file dict."""
     return {
@@ -68,7 +83,8 @@ def graphql_file_to_rest_file(gql_file: dict[str, Any]) -> dict[str, Any]:
         "category_id": gql_file.get("categoryId"),
         "category_name": gql_file.get("category", ""),
         "uploaded_timestamp": _iso_to_epoch(gql_file.get("date")),
-        "size_in_bytes": gql_file.get("size") or 0,
+        # GraphQL ``size`` is kilobytes; only ``sizeInBytes`` is bytes.
+        "size_in_bytes": parse_size_in_bytes(gql_file.get("sizeInBytes")),
         "description": gql_file.get("description"),
         "content_preview_link": gql_file.get("contentPreviewLink"),
     }

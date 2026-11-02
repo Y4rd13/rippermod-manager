@@ -641,7 +641,9 @@ def test_redmod_deploy_invokes_subprocess_with_expected_args(tmp_path):
     args, kwargs = mocked.call_args
     cmd = args[0]
     assert cmd[0] == str(exe)
-    assert cmd[1:] == ["deploy", "-reportProgress"]
+    # Without -root, redMod.exe takes its own bin folder as the game root, logs
+    # "Invalid root path" and reports "No mods found": nothing is ever compiled.
+    assert cmd[1:] == ["deploy", "-reportProgress", "-root", str(Path(g.install_path))]
     assert kwargs["cwd"] == str(exe.parent)
     assert kwargs["shell"] is False
     assert kwargs["capture_output"] is True
@@ -1083,3 +1085,233 @@ def test_undeploy_reads_ownership_once(in_memory_session, sample_game):
         undeploy(game, session)
 
     assert len(calls) == 1
+
+
+def test_deploy_waits_for_a_running_compile(in_memory_session, sample_game):
+    import threading
+    import time
+
+    from rippermod_manager.services.vfs.redmod_scheduler import compile_lock
+
+    session, game = in_memory_session, sample_game
+    lock = compile_lock(game.id)
+    lock.acquire()
+    threading.Timer(0.3, lock.release).start()
+    t0 = time.monotonic()
+    with _no_game_running():
+        report = deploy(game, session)
+    assert time.monotonic() - t0 >= 0.25
+    assert report.failed == 0
+
+
+def _deploy_traces(game):
+    install = Path(game.install_path)
+    modlist = install / "archive" / "pc" / "mod" / "modlist.txt"
+    modlist.parent.mkdir(parents=True, exist_ok=True)
+    modlist.write_text("a.archive\n")
+    cache = install / "r6" / "cache" / "modded"
+    cache.mkdir(parents=True)
+    (cache / "final.redscripts").write_text("compiled")
+    return modlist, cache
+
+
+def test_clean_undeploy_removes_modlist_and_redmod_cache(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    modlist, cache = _deploy_traces(game)
+    with _no_game_running():
+        report = undeploy(game, session)
+    assert report.removed_paths == ["archive/pc/mod/modlist.txt", "r6/cache/modded"]
+    assert not modlist.exists() and not cache.exists()
+
+
+def test_undeploy_removes_the_cache_under_the_compile_lock(in_memory_session, sample_game):
+    """A background REDmod compile must not rebuild the cache while undeploy deletes it."""
+    from rippermod_manager.services.vfs import deploy_service
+    from rippermod_manager.services.vfs.redmod_scheduler import compile_lock
+
+    session, game = in_memory_session, sample_game
+    _deploy_traces(game)
+    real = deploy_service._remove_deploy_traces
+    held: list[bool] = []
+
+    def spy(g):
+        held.append(compile_lock(g.id).locked())
+        return real(g)
+
+    with _no_game_running(), patch.object(deploy_service, "_remove_deploy_traces", spy):
+        undeploy(game, session)
+    assert held == [True]
+    assert not compile_lock(game.id).locked()
+
+
+def test_refused_undeploy_keeps_modlist_and_cache(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    modlist, cache = _deploy_traces(game)
+    with patch("rippermod_manager.services.vfs.deploy_service.is_game_running", return_value=True):
+        report = undeploy(game, session)
+    assert report.removed_paths == [] and modlist.exists() and cache.is_dir()
+
+
+def test_undeploy_recompiles_for_unmanaged_redmods(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    _stage_redmod_binary(game)
+    foreign = Path(game.install_path) / "mods" / "Foreign"
+    foreign.mkdir(parents=True)
+    (foreign / "info.json").write_text("{}")
+    with (
+        _no_game_running(),
+        patch(
+            "rippermod_manager.services.vfs.deploy_service.subprocess.run",
+            return_value=_make_redmod_proc(),
+        ) as redmod_run,
+    ):
+        report = undeploy(game, session)
+    assert report.redmod is not None and report.redmod.ran is True
+    redmod_run.assert_called_once()
+
+
+def test_undeploy_without_unmanaged_redmods_does_not_compile(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    _stage_redmod_binary(game)
+    with (
+        _no_game_running(),
+        patch("rippermod_manager.services.vfs.deploy_service.subprocess.run") as redmod_run,
+    ):
+        report = undeploy(game, session)
+    assert report.redmod is None and report.removed_paths == []
+    redmod_run.assert_not_called()
+
+
+def test_deploy_rewrites_modlist(in_memory_session, sample_game):
+    session, game = in_memory_session, sample_game
+    mod, _staged = _hardlinked_mod(session, game, name="Arc", rel="archive/pc/mod/a.archive")
+    mod.deployed = False
+    session.add(mod)
+    session.commit()
+    modlist = Path(game.install_path) / "archive" / "pc" / "mod" / "modlist.txt"
+    with _no_game_running():
+        report = deploy(game, session)
+    assert report.failed == 0
+    assert modlist.read_text() == "a.archive\n"
+
+
+def test_deploy_rewrites_modlist_when_a_foreign_file_blocks_one_link(
+    in_memory_session, sample_game
+):
+    """A foreign file on one path must not leave the game without modlist.txt.
+
+    Undeploy deletes modlist.txt (S11). A user with files from a manual install or
+    another manager never gets a fully clean deploy, so the load order has to be
+    written back even when some links fail.
+    """
+    session, game = in_memory_session, sample_game
+    _hardlinked_mod(session, game, name="Arc", rel="archive/pc/mod/a.archive")
+    _hardlinked_mod(session, game, name="Blocked", rel="archive/pc/mod/b.archive")
+    blocked = Path(game.install_path) / "archive" / "pc" / "mod" / "b.archive"
+    blocked.parent.mkdir(parents=True, exist_ok=True)
+    blocked.write_text("copy left by another mod manager")
+    modlist = blocked.parent / "modlist.txt"
+
+    with _no_game_running():
+        report = deploy(game, session)
+
+    assert report.failed == 1
+    assert blocked.read_text() == "copy left by another mod manager"
+    assert modlist.read_text().splitlines() == ["a.archive", "b.archive"]
+
+
+def test_deploy_compiles_redmod_when_a_foreign_file_blocks_another_link(
+    in_memory_session, sample_game
+):
+    """REDmod still compiles when an unrelated path is blocked by a foreign file."""
+    session, game = in_memory_session, sample_game
+    _stage_redmod_binary(game)
+    staging = Path(game.install_path) / "downloaded_mods" / "MyREDmod" / "mods" / "MyREDmod"
+    staging.mkdir(parents=True)
+    (staging / "info.json").write_text("{}")
+    mod = InstalledMod(game_id=game.id, name="MyREDmod", staging_dir="MyREDmod", disabled=False)
+    session.add(mod)
+    session.flush()
+    session.add(
+        InstalledModFile(
+            installed_mod_id=mod.id,
+            relative_path="mods/MyREDmod/info.json",
+            source_path="mods/MyREDmod/info.json",
+            link_kind="junction",
+        )
+    )
+    session.commit()
+    _hardlinked_mod(session, game, name="Blocked", rel="archive/pc/mod/b.archive")
+    blocked = Path(game.install_path) / "archive" / "pc" / "mod" / "b.archive"
+    blocked.parent.mkdir(parents=True, exist_ok=True)
+    blocked.write_text("copy left by another mod manager")
+
+    proc = _make_redmod_proc(returncode=0, stdout="compiled 1 mod")
+    with (
+        _no_game_running(),
+        patch(
+            "rippermod_manager.services.vfs.deploy_service.junction",
+            side_effect=lambda src, dst: Path(dst).mkdir(parents=True, exist_ok=True),
+        ),
+        patch(
+            "rippermod_manager.services.vfs.deploy_service.subprocess.run",
+            return_value=proc,
+        ) as redmod_run,
+    ):
+        report = deploy(game, session)
+
+    assert report.failed == 1
+    assert report.redmod is not None
+    assert report.redmod.success is True
+    redmod_run.assert_called_once()
+
+
+def test_deploy_without_compile_redmod_skips_redmod(in_memory_session, sample_game):
+    """Install deploys with compile_redmod=False and queues the compile itself."""
+    session, game = in_memory_session, sample_game
+    _stage_redmod_binary(game)
+    staging = Path(game.install_path) / "downloaded_mods" / "MyREDmod" / "mods" / "MyREDmod"
+    staging.mkdir(parents=True)
+    (staging / "info.json").write_text("{}")
+    mod = InstalledMod(game_id=game.id, name="MyREDmod", staging_dir="MyREDmod", disabled=False)
+    session.add(mod)
+    session.flush()
+    session.add(
+        InstalledModFile(
+            installed_mod_id=mod.id,
+            relative_path="mods/MyREDmod/info.json",
+            source_path="mods/MyREDmod/info.json",
+            link_kind="junction",
+        )
+    )
+    session.commit()
+
+    with (
+        _no_game_running(),
+        patch(
+            "rippermod_manager.services.vfs.deploy_service.junction",
+            side_effect=lambda src, dst: Path(dst).mkdir(parents=True, exist_ok=True),
+        ),
+        patch("rippermod_manager.services.vfs.deploy_service.subprocess.run") as redmod_run,
+    ):
+        report = deploy(game, session, compile_redmod=False)
+
+    assert report.redmod is None
+    redmod_run.assert_not_called()
+
+
+def test_deploy_survives_an_unwritable_modlist(in_memory_session, sample_game):
+    """An OSError writing modlist.txt is logged; the deploy report still comes back."""
+    session, game = in_memory_session, sample_game
+    _hardlinked_mod(session, game, name="Arc", rel="archive/pc/mod/a.archive")
+    with (
+        _no_game_running(),
+        patch(
+            "rippermod_manager.services.modlist_service.write_modlist",
+            side_effect=PermissionError("modlist.txt is locked"),
+        ),
+    ):
+        report = deploy(game, session)
+
+    assert report.failed == 0
+    assert report.done == 1

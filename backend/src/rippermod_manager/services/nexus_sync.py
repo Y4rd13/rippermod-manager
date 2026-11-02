@@ -124,8 +124,8 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
             await asyncio.gather(*[_fetch_files(mid) for mid in resolved_mod_ids])
 
         for mod_id, fetched_files in files_map.items():
-            existing_file_ids = {
-                row.file_id
+            existing_files = {
+                row.file_id: row
                 for row in session.exec(
                     select(NexusModFile).where(NexusModFile.nexus_mod_id == mod_id)
                 ).all()
@@ -133,7 +133,15 @@ async def sync_nexus_history(game: Game, api_key: str, session: Session) -> Nexu
 
             for f in fetched_files:
                 fid = f.get("file_id")
-                if not fid or fid in existing_file_ids:
+                if not fid:
+                    continue
+                existing_row = existing_files.get(fid)
+                if existing_row is not None:
+                    # Correct sizes stored in the wrong unit, but never zero a known size.
+                    new_size = f.get("size_in_bytes") or 0
+                    if new_size > 0 and existing_row.file_size != new_size:
+                        existing_row.file_size = new_size
+                        session.add(existing_row)
                     continue
                 session.add(
                     NexusModFile(

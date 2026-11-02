@@ -28,6 +28,14 @@ def _get_api_key(session: Session) -> str:
     return api_key
 
 
+def nexus_files_url(domain: str, mod_id: int, file_id: int | None = None) -> str:
+    """The Files tab of a mod on Nexus, highlighting *file_id* when given."""
+    url = f"https://www.nexusmods.com/{domain}/mods/{mod_id}?tab=files"
+    if file_id is not None:
+        url += f"&file_id={file_id}"
+    return url
+
+
 def _job_to_out(job) -> DownloadJobOut:
     return DownloadJobOut(
         id=job.id,
@@ -60,7 +68,10 @@ async def start_download(
             key_result = await client.validate_key()
 
         if not key_result.is_premium:
-            return DownloadStartResult(requires_nxm=True)
+            return DownloadStartResult(
+                requires_nxm=True,
+                nexus_url=nexus_files_url(game.domain_name, body.nexus_mod_id, body.nexus_file_id),
+            )
 
     # If a Collections install orchestrator is currently waiting for this
     # exact (mod_id, file_id), hand the freshly-arrived NXM key to it
@@ -106,16 +117,17 @@ async def start_download_from_mod(
     from rippermod_manager.models.download import DownloadJob
     from rippermod_manager.nexus.client import NexusClient
 
-    # Return existing active job instead of creating duplicates
-    existing = session.exec(
+    # A repeated click while this mod is already downloading returns that job without
+    # spending Nexus API calls on resolving its file again.
+    active = session.exec(
         select(DownloadJob).where(
             DownloadJob.game_id == game.id,
             DownloadJob.nexus_mod_id == body.nexus_mod_id,
-            DownloadJob.status == "downloading",
+            DownloadJob.status.in_(("pending", "queued", "downloading")),  # type: ignore[union-attr]
         )
     ).first()
-    if existing:
-        return DownloadStartResult(job=_job_to_out(existing), requires_nxm=False)
+    if active:
+        return DownloadStartResult(job=_job_to_out(active), requires_nxm=False)
 
     async with NexusClient(api_key) as client:
         key_result = await client.validate_key()
@@ -147,8 +159,22 @@ async def start_download_from_mod(
     if not nexus_file_id:
         raise HTTPException(502, "Nexus API returned a file entry without a file_id")
 
+    # Return the job already queued or running for this file instead of a duplicate.
+    existing = session.exec(
+        select(DownloadJob).where(
+            DownloadJob.game_id == game.id,
+            DownloadJob.nexus_mod_id == body.nexus_mod_id,
+            DownloadJob.nexus_file_id == nexus_file_id,
+            DownloadJob.status.in_(("pending", "queued", "downloading")),  # type: ignore[union-attr]
+        )
+    ).first()
+    if existing:
+        return DownloadStartResult(job=_job_to_out(existing), requires_nxm=False)
+
     if not key_result.is_premium:
-        return DownloadStartResult(requires_nxm=True)
+        return DownloadStartResult(
+            requires_nxm=True, nexus_url=nexus_files_url(game.domain_name, body.nexus_mod_id)
+        )
 
     job = await download_service.create_and_start_download(
         game=game,

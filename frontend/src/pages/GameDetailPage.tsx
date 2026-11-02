@@ -20,6 +20,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Link, useParams } from "react-router";
 
 import { ClusterDetailsPanel, ConflictSummaryWidget } from "@/components/conflicts/ConflictSummaryWidget";
+import { ScriptTweakConflicts } from "@/components/conflicts/ScriptTweakConflicts";
 import { AdoptReviewDialog } from "@/components/mods/AdoptReviewDialog";
 import { FrameworksStatCard } from "@/components/FrameworksStatCard";
 import { HealthStatCard } from "@/components/HealthStatCard";
@@ -43,11 +44,12 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ScanProgress, type ScanLog } from "@/components/ui/ScanProgress";
+import { invalidateGameState } from "@/hooks/invalidate";
 import { useDeploy } from "@/hooks/use-deploy";
 import { useInstallFlow } from "@/hooks/use-install-flow";
 import {
   useAvailableArchives,
-  useConflictsOverview,
+  useConflictCount,
   useDownloadJobs,
   useEndorsedMods,
   useGame,
@@ -65,7 +67,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import { useUIStore } from "@/stores/ui-store";
 import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
-import type { HealthReport, ModUpdate } from "@/types/api";
+import type { HealthReport, ModGroup, ModUpdate } from "@/types/api";
 
 const ArchiveResourceConflicts = lazy(() =>
   import("@/components/conflicts/ArchiveResourceConflicts").then((m) => ({
@@ -86,13 +88,20 @@ const MATCHED_SUB_TABS: { key: MatchedSubTab; label: string }[] = [
   { key: "scan-details", label: "Scan Details" },
 ];
 
-type ConflictSubTab = "file-conflicts" | "archive-resources" | "cluster-details" | "load-order";
+type ConflictSubTab =
+  | "file-conflicts"
+  | "archive-resources"
+  | "scripts-tweaks"
+  | "cluster-details"
+  | "load-order";
 
 function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomain: string }) {
   const [subTab, setSubTab] = useState<ConflictSubTab>("file-conflicts");
+  const { data: conflictCount } = useConflictCount(gameName);
   const subTabs: { key: ConflictSubTab; label: string }[] = [
     { key: "file-conflicts", label: "File Conflicts" },
     { key: "archive-resources", label: "Archive Resources" },
+    { key: "scripts-tweaks", label: "Scripts & Tweaks" },
     { key: "load-order", label: "Load Order" },
     { key: "cluster-details", label: "Cluster Details" },
   ];
@@ -115,12 +124,17 @@ function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomai
           </button>
         ))}
       </div>
-      {subTab === "file-conflicts" && <ConflictsInbox gameName={gameName} />}
+      {subTab === "file-conflicts" && <ConflictsInbox
+          gameName={gameName}
+          modsOnDiskWithConflicts={conflictCount?.mods_with_conflicts ?? 0}
+          onOpenClusterDetails={() => setSubTab("cluster-details")}
+        />}
       {subTab === "archive-resources" && (
         <Suspense fallback={<SkeletonCardGrid count={3} />}>
           <ArchiveResourceConflicts gameName={gameName} gameDomain={gameDomain} />
         </Suspense>
       )}
+      {subTab === "scripts-tweaks" && <ScriptTweakConflicts gameName={gameName} />}
       {subTab === "cluster-details" && <ClusterDetailsPanel gameName={gameName} />}
       {subTab === "load-order" && (
         <Suspense fallback={<SkeletonCardGrid count={3} />}>
@@ -153,7 +167,7 @@ export function GameDetailPage() {
   const warnBeforeLaunch = useUIStore((s) => s.warnBeforeLaunch);
   const adoptBannerDismissed = useUIStore((s) => s.adoptBannerDismissedByGame[name] ?? false);
   const dismissAdoptBanner = useUIStore((s) => s.dismissAdoptBanner);
-  const [adoptOpen, setAdoptOpen] = useState(false);
+  const [adoptSelection, setAdoptSelection] = useState<ModGroup[] | null>(null);
   useEffect(() => {
     setActiveGame(name || null);
     return () => setActiveGame(null);
@@ -167,7 +181,7 @@ export function GameDetailPage() {
   const { data: endorsedMods = [], isLoading: endorsedLoading, dataUpdatedAt: endorsedUpdatedAt } = useEndorsedMods(name);
   const { data: trackedMods = [], isLoading: trackedLoading, dataUpdatedAt: trackedUpdatedAt } = useTrackedMods(name);
   const { data: updates, isLoading: updatesLoading } = useUpdates(name);
-  const { data: conflictsOverview, isLoading: conflictsLoading } = useConflictsOverview(name);
+  const { data: conflictCount, isLoading: conflictsLoading } = useConflictCount(name);
   const { data: healthReport } = useHealth(name);
   const { data: downloadJobs = [] } = useDownloadJobs(name);
   const queryClient = useQueryClient();
@@ -361,6 +375,7 @@ export function GameDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["installed-mods", name] });
       queryClient.invalidateQueries({ queryKey: ["nexus-downloads", name] });
       queryClient.invalidateQueries({ queryKey: ["available-archives", name] });
+      invalidateGameState(queryClient, name);
       toast.success("Scan complete");
     } catch (e) {
       stopFlushing();
@@ -392,22 +407,35 @@ export function GameDetailPage() {
     );
   }, [nexusMatched, installedMods]);
   const recognizedNotInstalled = adoptableMods.length;
+  // "Detected on disk" is the high-confidence subset (backend `on_disk`); the rest are possible matches.
+  const onDiskMods = useMemo(
+    () => adoptableMods.filter((m) => m.nexus_match?.on_disk),
+    [adoptableMods],
+  );
+
+  /** Opens the adopt dialog on the given groups, or on every adoptable one when none are given. */
+  const openAdopt = (groupIds?: number[]) => {
+    const picked = groupIds
+      ? adoptableMods.filter((m) => groupIds.includes(m.id))
+      : adoptableMods;
+    if (picked.length > 0) setAdoptSelection(picked);
+  };
 
   const tabCounts = useMemo<Partial<Record<Tab, number>>>(() => ({
-    installed: installedLoading ? undefined : installedMods.length + recognizedNotInstalled,
+    installed: installedLoading ? undefined : installedMods.length + onDiskMods.length,
     matched: modsLoading ? undefined : nexusMatched.length,
     archives: archivesLoading ? undefined : archives.length,
     updates: updatesLoading ? undefined : updates?.updates_available,
-    conflicts: conflictsLoading ? undefined : conflictsOverview?.mods_affected,
+    conflicts: conflictsLoading ? undefined : conflictCount?.mods_with_conflicts,
     profiles: profilesLoading ? undefined : profiles.length,
     endorsed: endorsedLoading ? undefined : endorsedMods.length,
     tracked: trackedLoading ? undefined : trackedMods.length,
   }), [
-    installedMods.length, installedLoading, recognizedNotInstalled,
+    installedMods.length, installedLoading, onDiskMods.length,
     nexusMatched.length, modsLoading,
     archives.length, archivesLoading,
     updates?.updates_available, updatesLoading,
-    conflictsOverview?.mods_affected, conflictsLoading,
+    conflictCount?.mods_with_conflicts, conflictsLoading,
     profiles.length, profilesLoading,
     endorsedMods.length, endorsedLoading,
     trackedMods.length, trackedLoading,
@@ -572,22 +600,22 @@ export function GameDetailPage() {
         <Card
           className={cn(
             "transition-colors",
-            (conflictsOverview?.mods_affected ?? 0) > 0
+            (conflictCount?.mods_with_conflicts ?? 0) > 0
               ? "hover:border-warning/40"
               : "hover:border-success/40",
           )}
           onClick={() => setTab("conflicts")}
-          title="Installed mods with file or resource conflicts"
+          title="Mods on disk with file or resource conflicts"
         >
           <div className="flex items-center gap-3">
             <AlertTriangle
               size={18}
-              className={(conflictsOverview?.mods_affected ?? 0) > 0 ? "text-warning" : "text-success"}
+              className={(conflictCount?.mods_with_conflicts ?? 0) > 0 ? "text-warning" : "text-success"}
             />
             <div>
               <p className="text-xs text-text-muted">Conflicts</p>
               <p className="text-lg font-bold text-text-primary">
-                {conflictsLoading ? "--" : (conflictsOverview?.mods_affected ?? 0)}
+                {conflictsLoading ? "--" : (conflictCount?.mods_with_conflicts ?? 0)}
               </p>
             </div>
           </div>
@@ -596,14 +624,14 @@ export function GameDetailPage() {
         <HealthStatCard gameName={name} onOpen={goToHealth} />
       </div>
 
-      {recognizedNotInstalled > 0 && !adoptBannerDismissed && (
+      {onDiskMods.length > 0 && !adoptBannerDismissed && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent/5 p-4">
           <div className="flex items-center gap-3">
             <Package size={20} className="shrink-0 text-accent" />
             <div>
               <p className="text-sm font-medium text-text-primary">
-                {recognizedNotInstalled} mod{recognizedNotInstalled === 1 ? "" : "s"} detected on disk{" "}
-                {recognizedNotInstalled === 1 ? "isn't" : "aren't"} managed yet
+                {onDiskMods.length} mod{onDiskMods.length === 1 ? "" : "s"} detected on disk{" "}
+                {onDiskMods.length === 1 ? "isn't" : "aren't"} managed yet
               </p>
               <p className="text-xs text-text-muted">
                 Adopt them to unlock profiles, updates, and clean uninstall, without re-downloading.
@@ -615,7 +643,7 @@ export function GameDetailPage() {
               size="sm"
               onClick={() => {
                 setTab("installed");
-                setAdoptOpen(true);
+                openAdopt();
               }}
             >
               Review &amp; adopt
@@ -659,7 +687,7 @@ export function GameDetailPage() {
                   {tabCounts[key]}
                 </span>
               )}
-              {key === "conflicts" && (conflictsOverview?.mods_affected ?? 0) > 0 && (
+              {key === "conflicts" && (conflictCount?.mods_with_conflicts ?? 0) > 0 && (
                 <span className="h-1.5 w-1.5 rounded-full bg-danger inline-block" />
               )}
               {key === "updates" && (updates?.updates_available ?? 0) > 0 && (
@@ -764,6 +792,7 @@ export function GameDetailPage() {
           gameName={name}
           focusFrameworks={focusFrameworks}
           onGoToUpdates={() => setTab("updates")}
+          onAdopt={(id) => openAdopt([id])}
         />
       )}
       {tab === "installed" && (
@@ -772,19 +801,19 @@ export function GameDetailPage() {
           <InstalledModsTable
             mods={installedMods}
             gameName={name}
-            recognizedMods={nexusMatched}
+            recognizedMods={adoptableMods}
             archives={archives}
             downloadJobs={downloadJobs}
             updates={updates?.updates ?? []}
             isLoading={installedLoading}
             onModClick={setSelectedModId}
             onTabChange={(t) => setTab(t as Tab)}
-            onReviewAdopt={recognizedNotInstalled > 0 ? () => setAdoptOpen(true) : undefined}
+            onReviewAdopt={recognizedNotInstalled > 0 ? () => openAdopt() : undefined}
           />
         </>
       )}
       {tab === "archives" && (
-        <ArchivesList archives={archives} gameName={name} gameDomain={game.domain_name} installPath={game.install_path} isLoading={archivesLoading} />
+        <ArchivesList archives={archives} gameName={name} gameDomain={game.domain_name} installPath={game.install_path} isLoading={archivesLoading} onAdopt={(id) => openAdopt([id])} />
       )}
       {tab === "profiles" && (
         <ProfileManager profiles={profiles} gameName={name} isLoading={profilesLoading} installedCount={installedMods.length} recognizedCount={recognizedNotInstalled} />
@@ -938,11 +967,11 @@ export function GameDetailPage() {
           onOverwrite={modalFlow.handleInstallOverwrite}
         />
       )}
-      {adoptOpen && (
+      {adoptSelection && (
         <AdoptReviewDialog
           gameName={name}
-          mods={adoptableMods}
-          onClose={() => setAdoptOpen(false)}
+          mods={adoptSelection}
+          onClose={() => setAdoptSelection(null)}
         />
       )}
     </div>

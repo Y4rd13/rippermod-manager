@@ -1,4 +1,4 @@
-import { CheckCircle, ClipboardCopy, Crown, ExternalLink, Eye, EyeOff, FileText, FolderOpen, Heart, LogOut, RotateCcw, Save, Sparkles, User } from "lucide-react";
+import { CheckCircle, ClipboardCopy, Crown, ExternalLink, Eye, EyeOff, FileText, FolderOpen, Heart, LogOut, RotateCcw, Save, Sparkles, User, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Switch } from "@/components/ui/Switch";
-import { useAbstainMod, useDisconnectNexus, useEndorseMod, useTrackMod, useUntrackMod, useUpdateGame } from "@/hooks/mutations";
+import { useAbstainMod, useAddModPath, useDisconnectNexus, useEndorseMod, useRemoveModPath, useResetModPaths, useSetDownloadConcurrency, useTrackMod, useUntrackMod, useUpdateGame } from "@/hooks/mutations";
 import {
   RIPPERMOD_NEXUS_MOD_ID,
   RIPPERMOD_NEXUS_URL,
@@ -26,7 +26,7 @@ import {
   useSetSaveBackupEnabled,
   useSetSaveBackupPath,
 } from "@/hooks/use-save-backups";
-import { useGame, useGames, useModSummary, useSettings } from "@/hooks/queries";
+import { useGame, useGames, useModPaths, useModSummary, useSettings } from "@/hooks/queries";
 import { api } from "@/lib/api-client";
 import { reportDeployOutcome } from "@/lib/deploy-toast";
 import { cn } from "@/lib/utils";
@@ -44,6 +44,7 @@ function DeploymentCard() {
   const undeploy = useUndeploy(gameName);
   const { data: game } = useGame(gameName ?? "");
   const updateGame = useUpdateGame();
+  const [confirmUndeploy, setConfirmUndeploy] = useState(false);
 
   if (!gameName) return null;
 
@@ -51,6 +52,7 @@ function DeploymentCard() {
     undeploy.mutate(undefined, {
       onSuccess: (report) => reportDeployOutcome(report, "Undeploy"),
       onError: (error) => toast.error("Undeploy failed", error.message),
+      onSettled: () => setConfirmUndeploy(false),
     });
   };
 
@@ -89,11 +91,22 @@ function DeploymentCard() {
             size="sm"
             variant="secondary"
             loading={undeploy.isPending}
-            onClick={handleUndeploy}
+            onClick={() => setConfirmUndeploy(true)}
           >
             Undeploy
           </Button>
         </div>
+        {confirmUndeploy && (
+          <ConfirmDialog
+            variant="warning"
+            title="Undeploy all mods?"
+            message="Removes the links to your mods from the game folder, puts back the files moved to _displaced/, and deletes archive/pc/mod/modlist.txt and r6/cache/modded/. Your mods stay in the staging folder. If REDmods installed outside RipperMod remain in mods/, REDmod is compiled again for them."
+            confirmLabel="Undeploy"
+            loading={undeploy.isPending}
+            onConfirm={handleUndeploy}
+            onCancel={() => setConfirmUndeploy(false)}
+          />
+        )}
 
         <div className="border-t border-border pt-3 space-y-2">
           <div className="flex items-center justify-between">
@@ -125,8 +138,91 @@ function DeploymentCard() {
             <p className="text-[11px] text-text-muted/80">Using default location.</p>
           )}
         </div>
+
+        {game && <ScannedFoldersBlock gameName={gameName} installPath={game.install_path} />}
       </div>
     </Card>
+  );
+}
+
+/** ``picked`` relative to ``root`` with "/", or null when it is not strictly inside. */
+function relativeInside(root: string, picked: string): string | null {
+  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
+  const r = norm(root);
+  const p = norm(picked);
+  if (p.length <= r.length || p.slice(0, r.length).toLowerCase() !== r.toLowerCase()) return null;
+  if (p[r.length] !== "/") return null;
+  return p.slice(r.length + 1);
+}
+
+function ScannedFoldersBlock({ gameName, installPath }: { gameName: string; installPath: string }) {
+  const { data: paths = [] } = useModPaths(gameName);
+  const addPath = useAddModPath();
+  const removePath = useRemoveModPath();
+  const resetPaths = useResetModPaths();
+
+  const handleAdd = async () => {
+    const picked = await openDialog({
+      directory: true,
+      multiple: false,
+      title: "Choose a folder to scan",
+      defaultPath: installPath,
+    });
+    if (typeof picked !== "string") return;
+    const rel = relativeInside(installPath, picked);
+    if (rel == null) {
+      toast.error("Pick a folder inside the game directory");
+      return;
+    }
+    addPath.mutate({ gameName, relativePath: rel });
+  };
+
+  return (
+    <div className="border-t border-border pt-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-text-primary">Scanned folders</span>
+        <button
+          type="button"
+          onClick={() => resetPaths.mutate({ gameName })}
+          disabled={resetPaths.isPending}
+          className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-text-secondary"
+        >
+          <RotateCcw size={12} /> Reset to defaults
+        </button>
+      </div>
+      <p className="text-xs text-text-muted">
+        Folders inside the game directory that a scan reads for mods. Changes apply on the next
+        scan.
+      </p>
+      <ul className="space-y-1">
+        {paths.map((p) => (
+          <li
+            key={p.id}
+            className="flex items-center gap-2 rounded-md border border-border bg-surface-2 px-2.5 py-1 text-xs"
+          >
+            <span className="flex-1 truncate font-mono text-text-secondary" title={p.description || p.relative_path}>
+              {p.relative_path}
+            </span>
+            <button
+              type="button"
+              aria-label={`Remove ${p.relative_path}`}
+              title="Remove"
+              onClick={() => removePath.mutate({ gameName, pathId: p.id })}
+              disabled={removePath.isPending}
+              className="text-text-muted hover:text-danger"
+            >
+              <X size={12} />
+            </button>
+          </li>
+        ))}
+        {paths.length === 0 && (
+          <li className="text-xs text-text-muted">No folders are scanned for this game.</li>
+        )}
+      </ul>
+      <Button size="sm" variant="secondary" onClick={handleAdd} loading={addPath.isPending}>
+        <FolderOpen size={14} /> Add folder…
+      </Button>
+    </div>
   );
 }
 
@@ -256,6 +352,65 @@ function AboutCard() {
           </div>
         </>
       )}
+    </Card>
+  );
+}
+
+const DEFAULT_DOWNLOAD_CONCURRENCY = 3;
+
+function parseConcurrency(raw: string | undefined): number | null {
+  if (raw == null || !/^\d+$/.test(raw.trim())) return null;
+  const n = Number(raw.trim());
+  return n >= 1 && n <= 10 ? n : null;
+}
+
+function DownloadsCard() {
+  const { data: settings } = useSettings();
+  const stored = parseConcurrency(
+    settings?.find((s) => s.key === "download_concurrency")?.value,
+  ) ?? DEFAULT_DOWNLOAD_CONCURRENCY;
+  // Keyed by the stored value so the field resets when the saved setting changes.
+  return <DownloadConcurrencyField key={stored} stored={stored} />;
+}
+
+function DownloadConcurrencyField({ stored }: { stored: number }) {
+  const [draft, setDraft] = useState(String(stored));
+  const save = useSetDownloadConcurrency();
+
+  const commit = () => {
+    const value = parseConcurrency(draft);
+    if (value == null) {
+      setDraft(String(stored));
+      return;
+    }
+    if (value !== stored) save.mutate(value);
+  };
+
+  return (
+    <Card>
+      <h2 className="text-lg font-semibold text-text-primary">Downloads</h2>
+      <div className="mt-4 flex flex-col gap-1.5">
+        <label htmlFor="download-concurrency" className="text-sm font-medium text-text-secondary">
+          Simultaneous downloads
+        </label>
+        <input
+          id="download-concurrency"
+          type="number"
+          min={1}
+          max={10}
+          step={1}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
+          className="w-24 rounded-lg border border-border bg-surface-1 px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+        />
+        <p className="text-xs text-text-muted">
+          Downloads past this number wait as Queued. A change applies when the next slot frees.
+        </p>
+      </div>
     </Card>
   );
 }
@@ -706,6 +861,7 @@ export function SettingsPage() {
       </Card>
 
       <DeploymentCard />
+      <DownloadsCard />
       <LaunchCard />
       <DiagnosticsCard />
       <SaveBackupsCard />

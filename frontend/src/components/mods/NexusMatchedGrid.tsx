@@ -9,6 +9,7 @@ import { PreInstallPreview } from "@/components/mods/PreInstallPreview";
 import { CorrelationActions } from "@/components/mods/CorrelationActions";
 import { ReassignDialog } from "@/components/mods/ReassignDialog";
 import { ModCardAction } from "@/components/mods/ModCardAction";
+import { ModQuickActions } from "@/components/mods/ModQuickActions";
 import { NexusModCard } from "@/components/mods/NexusModCard";
 import { NexusModRow } from "@/components/mods/NexusModRow";
 import { NexusModTile } from "@/components/mods/NexusModTile";
@@ -375,6 +376,12 @@ export function NexusMatchedGrid({
                 gameName={gameName}
                 modGroupId={mod.id}
                 confirmed={match.confirmed}
+              />
+              <ModQuickActions
+                isEndorsed={match.is_endorsed}
+                isTracked={match.is_tracked}
+                modId={match.nexus_mod_id}
+                gameName={gameName}
               />
               {match.updated_at && (
                 <span className="text-xs text-text-muted">{timeAgo(isoToEpoch(match.updated_at))}</span>

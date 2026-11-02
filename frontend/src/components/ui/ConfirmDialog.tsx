@@ -14,6 +14,9 @@ interface Props {
   onCancel: () => void;
   /** Optional extra content rendered between the message and the action buttons. */
   children?: ReactNode;
+  /** Optional non-destructive alternative shown between Cancel and the confirm button. */
+  secondaryLabel?: string;
+  onSecondary?: () => void;
 }
 
 export function ConfirmDialog({
@@ -26,6 +29,8 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   children,
+  secondaryLabel,
+  onSecondary,
 }: Props) {
   const dialogId = useId();
 
@@ -70,6 +75,11 @@ export function ConfirmDialog({
           <Button variant="secondary" size="sm" disabled={loading} onClick={onCancel}>
             Cancel
           </Button>
+          {secondaryLabel && onSecondary && (
+            <Button variant="secondary" size="sm" disabled={loading} onClick={onSecondary}>
+              {secondaryLabel}
+            </Button>
+          )}
           {/* Always danger-styled: both warning and danger dialogs guard destructive/state-changing actions */}
           <Button variant="danger" size="sm" loading={loading} onClick={onConfirm}>
             {confirmLabel}

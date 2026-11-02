@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/lib/api-client";
 import type {
+  ModlistFileResult,
+  ModPath,
   ActivityLogEntry,
   ArchiveConflictSummariesResult,
   ArchiveContentsResult,
@@ -9,6 +11,7 @@ import type {
   ArchiveResourceDetailsResult,
   AvailableArchive,
   ConflictGraphResult,
+  ConflictCount,
   ConflictKind,
   ConflictsOverview,
   ConflictSummaryResult,
@@ -51,6 +54,15 @@ export function useGame(name: string) {
     queryKey: ["games", name],
     queryFn: () => api.get(`/api/v1/games/${name}`),
     enabled: !!name,
+  });
+}
+
+/** The folders the scanner reads for a game (S5). */
+export function useModPaths(gameName: string) {
+  return useQuery<ModPath[]>({
+    queryKey: ["games", gameName, "mod-paths"],
+    queryFn: () => api.get(`/api/v1/games/${encodeURIComponent(gameName)}/mod-paths`),
+    enabled: !!gameName,
   });
 }
 
@@ -231,6 +243,15 @@ export function useConflictsOverview(gameName: string) {
   });
 }
 
+export function useConflictCount(gameName: string) {
+  return useQuery<ConflictCount>({
+    queryKey: ["conflicts", gameName, "count"],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/conflicts/count`),
+    enabled: !!gameName,
+    staleTime: 60_000,
+  });
+}
+
 export function useModConflicts(gameName: string, modId: number | null) {
   return useQuery<ModConflictDetail>({
     queryKey: ["conflicts", gameName, modId],
@@ -299,6 +320,16 @@ export function useConflictGraph(gameName: string, resourceHash?: string, enable
     queryFn: () => api.get(`/api/v1/games/${gameName}/conflicts/graph${params}`),
     enabled: !!gameName && enabled,
     staleTime: 60_000,
+  });
+}
+
+/** modlist.txt as written on disk; fetched only while ``enabled`` (the View panel is open). */
+export function useModlistFile(gameName: string, enabled: boolean) {
+  return useQuery<ModlistFileResult>({
+    queryKey: ["modlist-file", gameName],
+    queryFn: () => api.get(`/api/v1/games/${gameName}/load-order/modlist/file`),
+    enabled: !!gameName && enabled,
+    staleTime: 0,
   });
 }
 

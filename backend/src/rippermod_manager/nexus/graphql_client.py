@@ -12,6 +12,7 @@ from typing import Any, Self
 
 import httpx
 
+from rippermod_manager.app_info import log_identity_once, nexus_identity_headers
 from rippermod_manager.nexus.client import NexusRateLimitError, _nexus_retry
 
 logger = logging.getLogger(__name__)
@@ -101,6 +102,7 @@ _MOD_FILE_FIELDS = """
     categoryId
     category
     size
+    sizeInBytes
     date
     description
 """
@@ -114,11 +116,13 @@ class NexusGraphQLClient:
         self._client: httpx.AsyncClient | None = None
 
     async def __aenter__(self) -> Self:
+        log_identity_once()
         self._client = httpx.AsyncClient(
             headers={
                 "APIKEY": self._api_key,
                 "Content-Type": "application/json",
                 "Accept": "application/json",
+                **nexus_identity_headers(),
             },
             timeout=90.0,
         )
@@ -218,6 +222,7 @@ class NexusGraphQLClient:
                         categoryId
                         category
                         size
+                        sizeInBytes
                         date
                         mod {
                             uid
@@ -343,7 +348,7 @@ class NexusGraphQLClient:
         sort_by: str | None = None,
         sort_direction: str = "DESC",
     ) -> list[dict[str, Any]]:
-        """Search mods by name using wildcard filter.
+        """Search mods by name using the WILDCARD operator (matches substrings).
 
         Optional ``sort_by`` accepts ``"endorsements"``, ``"downloads"``,
         or ``"updatedAt"``.
@@ -351,15 +356,15 @@ class NexusGraphQLClient:
         gid = self._game_id(game_domain)
         variables: dict[str, Any] = {
             "filter": {
-                "gameId": [{"value": gid, "op": "EQUALS"}],
-                "name": [{"value": f"*{name}*", "op": "WILDCARD"}],
+                "gameId": [{"value": str(gid), "op": "EQUALS"}],
+                "name": [{"value": name, "op": "WILDCARD"}],
             },
             "count": count,
         }
         sort_decl = ""
         if sort_by:
             sort_decl = ", $sort: [ModsSort!]"
-            variables["sort"] = [{"field": sort_by, "direction": sort_direction}]
+            variables["sort"] = [{sort_by: {"direction": sort_direction}}]
         sort_arg = ", sort: $sort" if sort_by else ""
         query = (
             f"query SearchMods($filter: ModsFilter!, $count: Int!{sort_decl}) {{"
@@ -449,7 +454,7 @@ class NexusGraphQLClient:
         Returned fields are everything the install orchestrator + preview
         dialog need: collection identity (name, summary, description, tile,
         author), per-revision metadata (id, status, timestamps, total size),
-        and per-mod-file rows with ``fileId``/``size``/``version`` so that
+        and per-mod-file rows with ``fileId``/``sizeInBytes``/``version`` so that
         downloads can be planned and progress can be reported.
 
         The shape mirrors Vortex's ``FULL_REVISION_INFO`` field selector
@@ -471,7 +476,7 @@ class NexusGraphQLClient:
                 revisionStatus
                 createdAt
                 updatedAt
-                fileSize
+                totalSize
                 collection {
                     id
                     slug
@@ -493,6 +498,7 @@ class NexusGraphQLClient:
                         name
                         version
                         size
+                        sizeInBytes
                         uri
                         mod {
                             modId

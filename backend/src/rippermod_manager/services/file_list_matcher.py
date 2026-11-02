@@ -21,6 +21,8 @@ from rippermod_manager.models.game import Game
 from rippermod_manager.models.mod import ModFile, ModGroup
 from rippermod_manager.models.nexus import NexusDownload, NexusModFile, NexusModMeta
 from rippermod_manager.services.install_service import list_available_archives
+from rippermod_manager.services.name_boost import boosted_score
+from rippermod_manager.services.rejections import rejected_pairs
 
 logger = logging.getLogger(__name__)
 
@@ -189,6 +191,8 @@ def match_endorsed_to_local(
     for mod_id in nf_by_mod:
         nf_by_mod[mod_id].sort(key=lambda f: _CAT_PRIORITY.get(f.category_id or 0, 99))
 
+    rejected = rejected_pairs(session, game.id)  # type: ignore[arg-type]
+
     # Track downloads that matched via CDN filename (skip in fallback)
     matched_dl_ids: set[int] = set()
 
@@ -214,7 +218,7 @@ def match_endorsed_to_local(
                 leaf_index,
                 already_correlated_groups,
             )
-            if group_id is None:
+            if group_id is None or (group_id, dl.nexus_mod_id) in rejected:
                 continue
 
             sizes_match = size_ratio >= _SIZE_MATCH_RATIO
@@ -282,7 +286,7 @@ def match_endorsed_to_local(
                     leaf_index,
                     already_correlated_groups,
                 )
-                if group_id is None:
+                if group_id is None or (group_id, dl.nexus_mod_id) in rejected:
                     continue
 
                 sizes_match = size_ratio >= _SIZE_MATCH_RATIO
@@ -330,7 +334,6 @@ def match_endorsed_to_local(
 
 
 _ENDORSED_NAME_THRESHOLD = 0.55
-_ENDORSED_MIN_SCORE = 0.85
 
 
 def match_endorsed_by_name(
@@ -391,6 +394,7 @@ def match_endorsed_by_name(
 
     matched_group_ids: set[int] = set()
     matched_nexus_ids: set[int] = set()
+    rejected = rejected_pairs(session, game.id)  # type: ignore[arg-type]
 
     for dl in uncorrelated_dls:
         if dl.nexus_mod_id in matched_nexus_ids or dl.nexus_mod_id in corr_nexus_ids:
@@ -404,7 +408,7 @@ def match_endorsed_by_name(
         meta_name = meta_name_map.get(dl.nexus_mod_id, "")
 
         for group in uncorrelated_groups:
-            if group.id in matched_group_ids:
+            if group.id in matched_group_ids or (group.id, dl.nexus_mod_id) in rejected:
                 continue
 
             score_dl, _ = compute_name_score(group.display_name, dl_name)
@@ -418,16 +422,16 @@ def match_endorsed_by_name(
                 best_group = group
 
         if best_group and best_score >= _ENDORSED_NAME_THRESHOLD:
-            boosted_score = max(best_score, _ENDORSED_MIN_SCORE)
+            stored_score = boosted_score(best_score, "endorsed_name")
             corr = ModNexusCorrelation(
                 mod_group_id=best_group.id,  # type: ignore[arg-type]
                 nexus_download_id=dl.id,  # type: ignore[arg-type]
-                score=boosted_score,
+                score=stored_score,
                 method="endorsed_name",
                 reasoning=(
                     f"Endorsed mod '{dl_name}' matched to "
                     f"local group '{best_group.display_name}' "
-                    f"(name similarity {best_score:.2f}, boosted to {boosted_score:.2f})"
+                    f"(name similarity {best_score:.2f}, stored as {stored_score:.2f})"
                 ),
             )
             session.add(corr)
@@ -439,7 +443,7 @@ def match_endorsed_by_name(
                     "mod_name": dl_name,
                     "local_group": best_group.display_name,
                     "raw_score": f"{best_score:.2f}",
-                    "boosted_score": f"{boosted_score:.2f}",
+                    "boosted_score": f"{stored_score:.2f}",
                     "method": "endorsed_name",
                 }
             )

@@ -23,6 +23,8 @@ interface Props {
   footer?: ReactNode;
   badge?: ReactNode;
   overflowMenu?: ReactNode;
+  /** Leading selection control (a checkbox); renders its own cell only when set. */
+  selection?: ReactNode;
   onClick?: () => void;
   onContextMenu?: React.MouseEventHandler;
 }
@@ -38,6 +40,7 @@ export function NexusModRow({
   footer,
   badge,
   overflowMenu,
+  selection,
   onClick,
   onContextMenu,
 }: Props) {
@@ -50,6 +53,11 @@ export function NexusModRow({
       onClick={onClick}
       onContextMenu={onContextMenu}
     >
+      {selection && (
+        <td className="w-[28px] py-2 pr-1 align-middle" onClick={(e) => e.stopPropagation()}>
+          {selection}
+        </td>
+      )}
       <td className="py-2 pr-3 w-[68px]">
         <img
           src={pictureUrl || PLACEHOLDER_IMG}

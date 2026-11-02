@@ -20,6 +20,7 @@ from rippermod_manager.nexus.graphql_client import NexusGraphQLClient
 from rippermod_manager.schemas.mod import FileContentMatchResult
 from rippermod_manager.services.nexus_helpers import upsert_nexus_mod
 from rippermod_manager.services.progress import ProgressCallback, noop_progress
+from rippermod_manager.services.rejections import rejected_pairs
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,13 @@ _GENERIC_NAMES = frozenset(
 
 _MIN_FILENAME_LEN = 8
 _CORRELATION_SCORE = 0.88
+_SEARCH_PAGE = 20
+
+
+def _result_stem(node: dict) -> str:
+    """The lowercase stem of a search result's file name, without a leading ``#``."""
+    name = PurePosixPath(str(node.get("fileName") or "")).name.lower().lstrip("#")
+    return PurePosixPath(name).stem
 
 
 def _pick_distinctive_file(files: list[ModFile]) -> str | None:
@@ -124,6 +132,7 @@ async def match_by_file_contents(
     # Limit searches
     search_candidates = search_candidates[:max_searches]
 
+    rejected = rejected_pairs(session, game.id)  # type: ignore[arg-type]
     matched = 0
     searches_done = 0
 
@@ -133,8 +142,8 @@ async def match_by_file_contents(
                 try:
                     results = await gql.search_file_contents(
                         game.domain_name,
-                        file_path_wildcard=f"*{stem}*",
-                        count=5,
+                        file_path_wildcard=stem,
+                        count=_SEARCH_PAGE,
                     )
                 except NexusRateLimitError:
                     on_progress("file-content", "Rate limited, stopping", 90)
@@ -146,8 +155,13 @@ async def match_by_file_contents(
 
                 searches_done += 1
 
-                if not results:
+                # A full page may hide other mods that ship the same file.
+                if not results or len(results) >= _SEARCH_PAGE:
                     continue
+
+                # WILDCARD matches substrings, so keep only files with our exact stem
+                # ("language" otherwise hits "shading_language_packing.py").
+                results = [n for n in results if _result_stem(n) == stem]
 
                 # Check if all results point to the same mod
                 mod_ids = set()
@@ -160,6 +174,10 @@ async def match_by_file_contents(
                     continue
 
                 nexus_mod_id = mod_ids.pop()
+
+                # The user rejected this match: do not bring it back
+                if (group.id, nexus_mod_id) in rejected:
+                    continue
 
                 # Skip if already correlated
                 existing_dl = session.exec(

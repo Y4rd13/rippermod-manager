@@ -43,13 +43,33 @@ from rippermod_manager.services.archive_layout import (
     detect_layout,
     known_roots_for_game,
 )
+from rippermod_manager.services.doc_files import is_doc_file
 from rippermod_manager.services.nexus_helpers import match_local_to_nexus_file
 from rippermod_manager.services.paths import get_mods_dir
+from rippermod_manager.services.presence_service import (
+    archive_nexus_ids,
+    archive_status,
+    nexus_presence,
+)
 from rippermod_manager.services.vfs.naming import unique_staging_name
 from rippermod_manager.services.vfs.ownership import next_win_seq, path_key
-from rippermod_manager.services.vfs.primitives import VfsError, hardlink, same_volume
+from rippermod_manager.services.vfs.primitives import (
+    GameRunningError,
+    VfsError,
+    hardlink,
+    is_game_running,
+    same_volume,
+)
 
 logger = logging.getLogger(__name__)
+
+# Share of an adopted mod's files an archive must hold to count as its source.
+LINK_MIN_COVERAGE: float = 0.90
+# When the archive's payload is on disk but the mod added files of its own, the archive must
+# still hold this share of the adopted files, so a small archive never claims a larger group.
+LINK_MIN_ADOPTED_SHARE: float = 0.75
+
+_BACKFILL_SETTING = "adopt_archive_backfill_done"  # suffixed with ":<game id>"
 
 
 def list_available_archives(game: Game) -> list[Path]:
@@ -271,7 +291,7 @@ def install_mod(
     if auto_deploy:
         from rippermod_manager.services.vfs import deploy_service
 
-        deploy_report = deploy_service.deploy(game, session)
+        deploy_report = deploy_service.deploy(game, session, compile_redmod=False)
 
     # Index .archive files for resource-level conflict detection
     from rippermod_manager.services.archive_index_service import index_mod_archives
@@ -283,7 +303,11 @@ def install_mod(
     # Regenerate modlist.txt to include new archives in the load order
     from rippermod_manager.services.modlist_service import write_modlist
 
-    write_modlist(game, session)
+    try:
+        write_modlist(game, session)
+    except OSError:
+        # The mod is staged and linked; a locked modlist.txt must not fail the install.
+        logger.warning("Could not write modlist.txt for %s", game.name, exc_info=True)
 
     logger.info(
         "Installed '%s' (%d files staged, %d overwritten in staging)",
@@ -291,6 +315,17 @@ def install_mod(
         len(extracted_paths),
         overwritten,
     )
+    # New REDmod content loads only once compiled (S2); compile in the background.
+    redmod_compile_queued = False
+    # A deploy refused by pre-flight (game running) linked nothing to compile.
+    if deploy_report is not None and deploy_report.preflight is None:
+        from rippermod_manager.services.vfs.deploy_service import has_redmod_files
+        from rippermod_manager.services.vfs.redmod_scheduler import request_redmod_compile
+
+        redmod_compile_queued = has_redmod_files(installed) and request_redmod_compile(game)
+    from rippermod_manager.services.conflicts.auto_reindex import request_conflict_reindex
+
+    request_conflict_reindex(game.id)
     if record_history:
         from rippermod_manager.services.activity_service import record_activity
 
@@ -311,6 +346,7 @@ def install_mod(
         files_overwritten=overwritten,
         installed_mod_name_safe=safe_name,
         deploy=deploy_report,
+        redmod_compile_queued=redmod_compile_queued,
     )
 
 
@@ -324,6 +360,106 @@ def _rollback_adopt(moved: list[tuple[Path, Path]]) -> None:
             shutil.move(str(staging_path), str(game_path))
         except OSError:
             logger.exception("adopt rollback failed for %s", game_path)
+
+
+def find_source_archive(
+    game: Game, nexus_mod_id: int, relative_paths: list[str], session: Session
+) -> str | None:
+    """The staging archive of ``nexus_mod_id`` that holds the adopted files, if any.
+
+    See ``_pick_source_archive`` for the rules.
+    """
+    adopted = {p.replace("\\", "/").lower() for p in relative_paths}
+    if not adopted:
+        return None
+    archives = {p.name: p for p in list_available_archives(game)}
+    ids = archive_nexus_ids(game, session, set(archives))
+    return _pick_source_archive(game, nexus_mod_id, adopted, archives, ids)
+
+
+def _pick_source_archive(
+    game: Game,
+    nexus_mod_id: int,
+    adopted: set[str],
+    archives: dict[str, Path],
+    ids: dict[str, int],
+) -> str | None:
+    """Choose the archive of ``nexus_mod_id`` among ``archives`` that holds ``adopted``.
+
+    ``adopted`` holds lowercased relative paths with "/" separators; ``ids`` maps archive
+    names to Nexus mod ids. Coverage is the share of ``adopted`` present in the archive.
+    An archive qualifies at ``LINK_MIN_COVERAGE``, or when at least that share of its
+    non-documentation files is among the adopted ones and its coverage still reaches
+    ``LINK_MIN_ADOPTED_SHARE`` (the mod wrote extra files such as a user.ini at runtime).
+    The qualifying archive with the highest coverage wins, ties going to the most recently
+    modified. FOMOD and unreadable archives never qualify (their file set is unknown).
+    Reads archives only, never the database.
+    """
+    # Local import: conflict_service imports this module at load time.
+    from rippermod_manager.services.conflict_service import _get_archive_file_set
+
+    if not adopted:
+        return None
+    best: tuple[float, float, str] | None = None
+    for name, path in archives.items():
+        if ids.get(name) != nexus_mod_id:
+            continue
+        file_set = _get_archive_file_set(game, name)
+        if file_set is None:
+            continue
+        shared = len(adopted & file_set)
+        coverage = shared / len(adopted)
+        if coverage < LINK_MIN_COVERAGE:
+            # The other direction: the archive's payload is on disk, and the mod only added
+            # files of its own at runtime (a user.ini, a config). Docs never reach the game.
+            payload = {p for p in file_set if not is_doc_file(p)}
+            payload_on_disk = len(adopted & payload) / len(payload) if payload else 0.0
+            if payload_on_disk < LINK_MIN_COVERAGE or coverage < LINK_MIN_ADOPTED_SHARE:
+                continue
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            continue
+        if best is None or (coverage, mtime) > best[:2]:
+            best = (coverage, mtime, name)
+    return best[2] if best else None
+
+
+def backfill_adopted_archives(game: Game, session: Session) -> int:
+    """Link mods adopted before archives were linked to the archive that holds their files.
+
+    Runs once per game (guarded by the ``adopt_archive_backfill_done:<game id>`` setting).
+    Returns the number of mods linked. Commits.
+
+    Every archive is chosen in a read-only pass before any mod is changed: assigning first
+    would autoflush on the next query and hold SQLite's write lock while archives are opened.
+    """
+    from rippermod_manager.services.settings_helpers import get_setting, set_setting
+
+    flag = f"{_BACKFILL_SETTING}:{game.id}"
+    if get_setting(session, flag) == "1":
+        return 0
+    mods = session.exec(
+        select(InstalledMod).where(
+            InstalledMod.game_id == game.id,
+            InstalledMod.source_archive == "",
+            InstalledMod.nexus_mod_id.is_not(None),  # type: ignore[union-attr]
+        )
+    ).all()
+    archives = {p.name: p for p in list_available_archives(game)} if mods else {}
+    ids = archive_nexus_ids(game, session, set(archives)) if archives else {}
+    chosen: list[tuple[InstalledMod, str]] = []
+    for mod in mods:
+        adopted = {f.relative_path.replace("\\", "/").lower() for f in mod.files}
+        archive = _pick_source_archive(game, mod.nexus_mod_id, adopted, archives, ids)  # type: ignore[arg-type]
+        if archive:
+            chosen.append((mod, archive))
+    for mod, archive in chosen:
+        mod.source_archive = archive
+        session.add(mod)
+    set_setting(session, flag, "1")
+    session.commit()
+    return len(chosen)
 
 
 def adopt_mod(
@@ -452,11 +588,15 @@ def adopt_mod(
         shutil.rmtree(staging_root, ignore_errors=True)
         raise ValueError(f"No adoptable files for '{name}' (all paths missing or skipped).")
 
+    # Empty string stays the first-class "no archive" state when none covers the files.
+    source_archive = (
+        find_source_archive(game, nexus_mod_id, adopted, session) if nexus_mod_id else None
+    )
     installed = InstalledMod(
         game_id=game.id,  # type: ignore[arg-type]
         name=name,
         staging_dir=safe_name,
-        source_archive="",  # first-class "no archive" state
+        source_archive=source_archive or "",
         nexus_mod_id=nexus_mod_id,
         deployed=True,  # files are already hardlinked into the game dir
     )
@@ -523,6 +663,12 @@ def adopt_mod(
     )
 
 
+def ensure_game_closed() -> None:
+    """Raise ``GameRunningError`` while Cyberpunk runs: its files are locked then."""
+    if is_game_running():
+        raise GameRunningError("Cyberpunk 2077 is running, close it first.")
+
+
 def uninstall_mod(
     installed_mod: InstalledMod,
     game: Game,
@@ -531,6 +677,7 @@ def uninstall_mod(
     record_history: bool = True,
 ) -> UninstallResult:
     """Remove a mod's game-dir links and its staging subtree."""
+    ensure_game_closed()
     # Snapshot saves before this destructive change (best-effort, deduped).
     from rippermod_manager.services.save_backup_service import maybe_backup_before
     from rippermod_manager.services.vfs.deploy_service import (
@@ -583,6 +730,9 @@ def uninstall_mod(
     )
 
     released = {path_key(f.relative_path, f.link_kind) for f in installed_mod.files}
+    from rippermod_manager.services.vfs.deploy_service import has_redmod_files
+
+    had_redmod = has_redmod_files(installed_mod)
     session.delete(installed_mod)
     session.commit()
 
@@ -594,6 +744,13 @@ def uninstall_mod(
     if not_relinked:
         logger.warning("Uninstall left %d path(s) unlinked: %s", len(not_relinked), not_relinked)
     write_modlist(game, session)
+    # The REDmod cache still holds this mod's content until it is compiled again (S2).
+    from rippermod_manager.services.vfs.redmod_scheduler import request_redmod_compile
+
+    redmod_compile_queued = had_redmod and request_redmod_compile(game)
+    from rippermod_manager.services.conflicts.auto_reindex import request_conflict_reindex
+
+    request_conflict_reindex(game.id)
 
     logger.info("Uninstalled '%s' (%d files removed)", installed_mod.name, file_count)
     if record_history:
@@ -615,6 +772,7 @@ def uninstall_mod(
         foreign=removal.foreign,
         displaced_not_restored=not_restored,
         not_relinked=not_relinked,
+        redmod_compile_queued=redmod_compile_queued,
     )
 
 
@@ -625,6 +783,7 @@ def toggle_mod(
     *,
     commit: bool = True,
     record_history: bool = True,
+    check_game: bool = True,
 ) -> ToggleResult:
     """Flip ``installed_mod.disabled`` and deploy/undeploy that mod's files.
 
@@ -636,8 +795,12 @@ def toggle_mod(
     then relinks this mod's paths, taking over the ones it wins (S4).
 
     Pass ``commit=False`` to defer the DB commit (useful for batching in
-    profile loads); the caller becomes responsible for commits.
+    profile loads); the caller becomes responsible for commits. Pass
+    ``check_game=False`` when the caller already ran ``ensure_game_closed()``
+    for the whole batch.
     """
+    if check_game:
+        ensure_game_closed()
     from rippermod_manager.services.vfs.deploy_service import (
         execute_plan,
         plan_remove_mod_links,
@@ -703,6 +866,15 @@ def toggle_mod(
 
     write_modlist(game, session)
 
+    # REDmod content changed: the compiled cache is stale until it is rebuilt (S2).
+    from rippermod_manager.services.vfs.deploy_service import has_redmod_files
+    from rippermod_manager.services.vfs.redmod_scheduler import request_redmod_compile
+
+    redmod_compile_queued = has_redmod_files(installed_mod) and request_redmod_compile(game)
+    from rippermod_manager.services.conflicts.auto_reindex import request_conflict_reindex
+
+    request_conflict_reindex(game.id)
+
     action = "Disabled" if should_disable else "Enabled"
     logger.info("%s '%s' (%d files affected)", action, installed_mod.name, affected)
     if commit and record_history:
@@ -725,6 +897,7 @@ def toggle_mod(
         failed=failed,
         displaced_not_restored=not_restored,
         not_relinked=not_relinked,
+        redmod_compile_queued=redmod_compile_queued,
     )
 
 
@@ -810,7 +983,11 @@ def find_orphaned_archives(
     game: Game,
     session: Session,
 ) -> list[str]:
-    """Return archive filenames not referenced by any installed mod or active download."""
+    """Return archives with no managed mod, no Nexus id and no active download.
+
+    An archive whose Nexus id resolves (filename, ``ArchiveNexusLink`` or completed job) is
+    never an orphan, even when no installed mod uses it.
+    """
     staging = get_mods_dir(game)
     if not staging.is_dir():
         return []
@@ -823,29 +1000,31 @@ def find_orphaned_archives(
     if not all_files:
         return []
 
-    installed_archives: set[str] = set()
-    installed_mods = session.exec(
-        select(InstalledMod.source_archive).where(
-            InstalledMod.game_id == game.id,
-            InstalledMod.source_archive != "",
-        )
-    ).all()
-    for sa in installed_mods:
-        installed_archives.add(sa)
+    managed_archives = set(
+        session.exec(
+            select(InstalledMod.source_archive).where(
+                InstalledMod.game_id == game.id,
+                InstalledMod.source_archive != "",
+            )
+        ).all()
+    )
+    active_downloads = set(
+        session.exec(
+            select(DownloadJob.file_name).where(
+                DownloadJob.game_id == game.id,
+                DownloadJob.status.in_(["pending", "downloading", "completed"]),
+                DownloadJob.file_name != "",
+            )
+        ).all()
+    )
 
-    active_downloads: set[str] = set()
-    active_jobs = session.exec(
-        select(DownloadJob.file_name).where(
-            DownloadJob.game_id == game.id,
-            DownloadJob.status.in_(["pending", "downloading", "completed"]),
-            DownloadJob.file_name != "",
-        )
-    ).all()
-    for fn in active_jobs:
-        active_downloads.add(fn)
-
-    referenced = installed_archives | active_downloads
-    return sorted(all_files - referenced)
+    nexus_ids = archive_nexus_ids(game, session, all_files)
+    presence = nexus_presence(game, session)
+    return sorted(
+        name
+        for name in all_files - active_downloads
+        if archive_status(name, nexus_ids.get(name), managed_archives, presence) == "orphan"
+    )
 
 
 def delete_orphaned_archives(
