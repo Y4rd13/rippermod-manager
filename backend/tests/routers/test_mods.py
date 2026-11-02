@@ -337,3 +337,64 @@ class TestMatchersSkipRejectedPairs:
 
         assert _pairs(session, by_file.id) == set()
         assert _pairs(session, by_install.id) == set()
+
+
+class TestRejectRemembersOnlyTheVisiblePair:
+    def test_reject_stores_only_the_top_scored_pair(self, client, session, make_game):
+        from sqlmodel import select
+
+        from rippermod_manager.models.correlation import ModNexusCorrelation, RejectedCorrelation
+        from rippermod_manager.models.mod import ModGroup
+        from rippermod_manager.models.nexus import NexusDownload
+
+        game = make_game(name="G")
+        group = ModGroup(game_id=game.id, display_name="Some Mod")
+        dl_a = NexusDownload(game_id=game.id, nexus_mod_id=111, mod_name="A")
+        dl_b = NexusDownload(game_id=game.id, nexus_mod_id=222, mod_name="B")
+        session.add_all([group, dl_a, dl_b])
+        session.flush()
+        session.add(
+            ModNexusCorrelation(
+                mod_group_id=group.id, nexus_download_id=dl_a.id, score=0.9, method="exact"
+            )
+        )
+        session.add(
+            ModNexusCorrelation(
+                mod_group_id=group.id, nexus_download_id=dl_b.id, score=0.6, method="fuzzy"
+            )
+        )
+        session.commit()
+
+        r = client.delete(f"/api/v1/games/{game.name}/mods/{group.id}/correlation")
+
+        assert r.status_code == 200
+        session.expire_all()
+        rows = session.exec(select(RejectedCorrelation)).all()
+        assert [(x.mod_group_id, x.nexus_mod_id) for x in rows] == [(group.id, 111)]
+        assert _pairs(session, group.id) == set()
+
+    def test_confirm_clears_the_rejection_of_its_pair(self, client, session, make_game):
+        from sqlmodel import select
+
+        from rippermod_manager.models.correlation import ModNexusCorrelation, RejectedCorrelation
+        from rippermod_manager.models.mod import ModGroup
+        from rippermod_manager.models.nexus import NexusDownload
+
+        game = make_game(name="G")
+        group = ModGroup(game_id=game.id, display_name="Some Mod")
+        dl = NexusDownload(game_id=game.id, nexus_mod_id=111, mod_name="A")
+        session.add_all([group, dl])
+        session.flush()
+        session.add(RejectedCorrelation(mod_group_id=group.id, nexus_mod_id=111))
+        session.add(
+            ModNexusCorrelation(
+                mod_group_id=group.id, nexus_download_id=dl.id, score=0.9, method="exact"
+            )
+        )
+        session.commit()
+
+        r = client.patch(f"/api/v1/games/{game.name}/mods/{group.id}/correlation/confirm")
+
+        assert r.status_code == 200
+        session.expire_all()
+        assert session.exec(select(RejectedCorrelation)).all() == []

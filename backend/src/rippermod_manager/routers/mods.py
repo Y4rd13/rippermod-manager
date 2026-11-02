@@ -350,14 +350,18 @@ def reject_correlation(
 ) -> dict[str, bool]:
     _get_game(game_name, session)
     corrs = session.exec(
-        select(ModNexusCorrelation).where(ModNexusCorrelation.mod_group_id == mod_group_id)
+        select(ModNexusCorrelation)
+        .where(ModNexusCorrelation.mod_group_id == mod_group_id)
+        .order_by(ModNexusCorrelation.score.desc())  # type: ignore[union-attr]
     ).all()
     if not corrs:
         raise HTTPException(404, "No correlations found for this mod group")
+    # Remember only the pair the user saw (the top-scored one, as confirm picks it): a
+    # lower-scored correlation was never shown, so rejecting it would hide a possible match.
+    top_dl = session.get(NexusDownload, corrs[0].nexus_download_id)
+    if top_dl:
+        remember_rejection(session, mod_group_id, top_dl.nexus_mod_id)
     for c in corrs:
-        dl = session.get(NexusDownload, c.nexus_download_id)
-        if dl:
-            remember_rejection(session, mod_group_id, dl.nexus_mod_id)
         session.delete(c)
     session.commit()
     return {"deleted": True}
