@@ -1,0 +1,567 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-02T20:43:42+00:00",
+  "title": "Design System: RipperMod Manager",
+  "draft": true,
+  "extensions": {
+    "colorMeta": {
+      "surface-0": {
+        "role": "neutral",
+        "displayName": "Void",
+        "canonical": "#0a0a0f",
+        "oklch": "oklch(14.7% 0.011 285)",
+        "tonalRamp": [
+          "oklch(15% 0.011 285)",
+          "oklch(26% 0.011 285)",
+          "oklch(37% 0.011 285)",
+          "oklch(48% 0.011 285)",
+          "oklch(60% 0.011 285)",
+          "oklch(72% 0.011 285)",
+          "oklch(84% 0.011 285)",
+          "oklch(95% 0.011 285)"
+        ]
+      },
+      "surface-1": {
+        "role": "neutral",
+        "displayName": "Panel",
+        "canonical": "#12121a",
+        "oklch": "oklch(18.6% 0.016 285)",
+        "tonalRamp": [
+          "oklch(15% 0.016 285)",
+          "oklch(26% 0.016 285)",
+          "oklch(37% 0.016 285)",
+          "oklch(48% 0.016 285)",
+          "oklch(60% 0.016 285)",
+          "oklch(72% 0.016 285)",
+          "oklch(84% 0.016 285)",
+          "oklch(95% 0.016 285)"
+        ]
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Raised",
+        "canonical": "#1a1a25",
+        "oklch": "oklch(22.3% 0.021 285)",
+        "tonalRamp": [
+          "oklch(15% 0.007 285)",
+          "oklch(26% 0.012 285)",
+          "oklch(37% 0.017 285)",
+          "oklch(48% 0.021 285)",
+          "oklch(60% 0.021 285)",
+          "oklch(72% 0.021 285)",
+          "oklch(84% 0.017 285)",
+          "oklch(95% 0.012 285)"
+        ]
+      },
+      "surface-3": {
+        "role": "neutral",
+        "displayName": "Lifted",
+        "canonical": "#242430",
+        "oklch": "oklch(26.6% 0.022 285)",
+        "tonalRamp": [
+          "oklch(15% 0.007 285)",
+          "oklch(26% 0.013 285)",
+          "oklch(37% 0.018 285)",
+          "oklch(48% 0.022 285)",
+          "oklch(60% 0.022 285)",
+          "oklch(72% 0.022 285)",
+          "oklch(84% 0.017 285)",
+          "oklch(95% 0.012 285)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#2a2a3a",
+        "oklch": "oklch(29.2% 0.029 284)",
+        "tonalRamp": [
+          "oklch(15% 0.009 284)",
+          "oklch(26% 0.016 284)",
+          "oklch(37% 0.023 284)",
+          "oklch(48% 0.029 284)",
+          "oklch(60% 0.029 284)",
+          "oklch(72% 0.029 284)",
+          "oklch(84% 0.023 284)",
+          "oklch(95% 0.016 284)"
+        ]
+      },
+      "border-bright": {
+        "role": "neutral",
+        "displayName": "Hairline Bright",
+        "canonical": "#3a3a4a",
+        "oklch": "oklch(35.5% 0.028 285)",
+        "tonalRamp": [
+          "oklch(15% 0.009 285)",
+          "oklch(26% 0.016 285)",
+          "oklch(37% 0.022 285)",
+          "oklch(48% 0.028 285)",
+          "oklch(60% 0.028 285)",
+          "oklch(72% 0.028 285)",
+          "oklch(84% 0.022 285)",
+          "oklch(95% 0.015 285)"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Indigo Signal",
+        "canonical": "#5b5ee8",
+        "oklch": "oklch(55.9% 0.204 277)",
+        "tonalRamp": [
+          "oklch(15% 0.066 277)",
+          "oklch(26% 0.115 277)",
+          "oklch(37% 0.164 277)",
+          "oklch(48% 0.204 277)",
+          "oklch(60% 0.204 277)",
+          "oklch(72% 0.204 277)",
+          "oklch(84% 0.159 277)",
+          "oklch(95% 0.111 277)"
+        ]
+      },
+      "accent-hover": {
+        "role": "primary",
+        "displayName": "Indigo Press",
+        "canonical": "#4f52dc",
+        "oklch": "oklch(52.1% 0.206 276)",
+        "tonalRamp": [
+          "oklch(15% 0.067 276)",
+          "oklch(26% 0.116 276)",
+          "oklch(37% 0.165 276)",
+          "oklch(48% 0.206 276)",
+          "oklch(60% 0.206 276)",
+          "oklch(72% 0.206 276)",
+          "oklch(84% 0.160 276)",
+          "oklch(95% 0.112 276)"
+        ]
+      },
+      "accent-text": {
+        "role": "primary",
+        "displayName": "Indigo Text",
+        "canonical": "#818cf8",
+        "oklch": "oklch(68.0% 0.158 277)",
+        "tonalRamp": [
+          "oklch(15% 0.051 277)",
+          "oklch(26% 0.089 277)",
+          "oklch(37% 0.127 277)",
+          "oklch(48% 0.158 277)",
+          "oklch(60% 0.158 277)",
+          "oklch(72% 0.158 277)",
+          "oklch(84% 0.123 277)",
+          "oklch(95% 0.086 277)"
+        ]
+      },
+      "info": {
+        "role": "status",
+        "displayName": "Sky",
+        "canonical": "#38bdf8",
+        "oklch": "oklch(75.4% 0.139 233)",
+        "tonalRamp": [
+          "oklch(15% 0.045 233)",
+          "oklch(26% 0.078 233)",
+          "oklch(37% 0.112 233)",
+          "oklch(48% 0.139 233)",
+          "oklch(60% 0.139 233)",
+          "oklch(72% 0.139 233)",
+          "oklch(84% 0.108 233)",
+          "oklch(95% 0.076 233)"
+        ]
+      },
+      "success": {
+        "role": "status",
+        "displayName": "Online Green",
+        "canonical": "#22c55e",
+        "oklch": "oklch(72.3% 0.192 150)",
+        "tonalRamp": [
+          "oklch(15% 0.062 150)",
+          "oklch(26% 0.108 150)",
+          "oklch(37% 0.154 150)",
+          "oklch(48% 0.192 150)",
+          "oklch(60% 0.192 150)",
+          "oklch(72% 0.192 150)",
+          "oklch(84% 0.15 150)",
+          "oklch(95% 0.104 150)"
+        ]
+      },
+      "warning": {
+        "role": "status",
+        "displayName": "Amber Alert",
+        "canonical": "#f59e0b",
+        "oklch": "oklch(76.9% 0.165 70)",
+        "tonalRamp": [
+          "oklch(15% 0.054 70)",
+          "oklch(26% 0.093 70)",
+          "oklch(37% 0.132 70)",
+          "oklch(48% 0.165 70)",
+          "oklch(60% 0.165 70)",
+          "oklch(72% 0.165 70)",
+          "oklch(84% 0.128 70)",
+          "oklch(95% 0.089 70)"
+        ]
+      },
+      "danger": {
+        "role": "status",
+        "displayName": "Flatline Red",
+        "canonical": "#ef4444",
+        "oklch": "oklch(63.7% 0.208 25)",
+        "tonalRamp": [
+          "oklch(15% 0.068 25)",
+          "oklch(26% 0.117 25)",
+          "oklch(37% 0.167 25)",
+          "oklch(48% 0.208 25)",
+          "oklch(60% 0.208 25)",
+          "oklch(72% 0.208 25)",
+          "oklch(84% 0.162 25)",
+          "oklch(95% 0.113 25)"
+        ]
+      },
+      "text-primary": {
+        "role": "neutral",
+        "displayName": "Bone",
+        "canonical": "#f1f1f6",
+        "oklch": "oklch(96.0% 0.007 286)",
+        "tonalRamp": [
+          "oklch(15% 0.007 286)",
+          "oklch(26% 0.007 286)",
+          "oklch(37% 0.007 286)",
+          "oklch(48% 0.007 286)",
+          "oklch(60% 0.007 286)",
+          "oklch(72% 0.007 286)",
+          "oklch(84% 0.007 286)",
+          "oklch(95% 0.007 286)"
+        ]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Ash",
+        "canonical": "#b8bdc9",
+        "oklch": "oklch(79.8% 0.018 268)",
+        "tonalRamp": [
+          "oklch(15% 0.006 268)",
+          "oklch(26% 0.010 268)",
+          "oklch(37% 0.014 268)",
+          "oklch(48% 0.018 268)",
+          "oklch(60% 0.018 268)",
+          "oklch(72% 0.018 268)",
+          "oklch(84% 0.014 268)",
+          "oklch(95% 0.010 268)"
+        ]
+      },
+      "text-muted": {
+        "role": "neutral",
+        "displayName": "Smoke",
+        "canonical": "#8b8fa0",
+        "oklch": "oklch(65.2% 0.026 275)",
+        "tonalRamp": [
+          "oklch(15% 0.008 275)",
+          "oklch(26% 0.014 275)",
+          "oklch(37% 0.021 275)",
+          "oklch(48% 0.026 275)",
+          "oklch(60% 0.026 275)",
+          "oklch(72% 0.026 275)",
+          "oklch(84% 0.02 275)",
+          "oklch(95% 0.014 275)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Onboarding welcome heading only."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "One h1 per page and dashboard stat values."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card, dialog and empty-state titles."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Buttons, inputs, nav, tabs, dialog copy."
+      },
+      "body-dense": {
+        "displayName": "Body dense",
+        "purpose": "Tables, metadata, badges, chips, small buttons; most used size."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase section eyebrows in Health and Frameworks widgets; arbitrary 11px value."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "Wordmark subline, source badges, compact tile metadata; arbitrary 10px value."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "File paths, archive names, hashes, versions."
+      }
+    },
+    "shadows": [
+      {
+        "name": "accent-glow",
+        "value": "0 1px 3px 0 rgb(91 94 232 / 0.3), 0 1px 2px -1px rgb(91 94 232 / 0.3)",
+        "purpose": "Primary button at rest; prominent badges use the same glow in their status color."
+      },
+      {
+        "name": "accent-glow-hover",
+        "value": "0 4px 6px -1px rgb(91 94 232 / 0.4), 0 2px 4px -2px rgb(91 94 232 / 0.4)",
+        "purpose": "Primary button hover."
+      },
+      {
+        "name": "float",
+        "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+        "purpose": "Toasts and context menus."
+      },
+      {
+        "name": "modal",
+        "value": "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+        "purpose": "Collection dialogs."
+      },
+      {
+        "name": "bulk-bar",
+        "value": "0 25px 50px -12px rgb(0 0 0 / 0.25)",
+        "purpose": "Floating bulk-action bar."
+      },
+      {
+        "name": "focus-ring",
+        "value": "0 0 0 2px #0a0a0f, 0 0 0 4px #5b5ee8",
+        "purpose": "Checkbox and radio focus-visible."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-standard",
+        "value": "150ms cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Tailwind transition-colors default; 88 uses for hover and state changes."
+      },
+      {
+        "name": "sidebar-collapse",
+        "value": "width 200ms",
+        "purpose": "Sidebar 208px to 56px."
+      },
+      {
+        "name": "switch",
+        "value": "transform 200ms",
+        "purpose": "Switch thumb and track."
+      },
+      {
+        "name": "modal-in",
+        "value": "opacity 0 to 1, scale 0.95 to 1, 200ms ease-out",
+        "purpose": "Dialog enter (animate-modal-in)."
+      },
+      {
+        "name": "fade-in",
+        "value": "opacity 0 to 1, 150ms ease-out",
+        "purpose": "Context menu and bulk bar enter."
+      },
+      {
+        "name": "toast-slide",
+        "value": "translateX(100%) to 0 with opacity, 300ms ease-out",
+        "purpose": "Toast enter and dismiss."
+      },
+      {
+        "name": "slide-up",
+        "value": "translateY(100%) to 0 with opacity, 300ms ease-out",
+        "purpose": "Download queue footer enter."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      },
+      {
+        "name": "window-min",
+        "value": "900px x 600px"
+      }
+    ],
+    "layers": [
+      {
+        "name": "sticky",
+        "value": "10",
+        "purpose": "Table headers and the game page tab strip (z-20)."
+      },
+      {
+        "name": "download-footer",
+        "value": "30"
+      },
+      {
+        "name": "bulk-bar",
+        "value": "40"
+      },
+      {
+        "name": "menu",
+        "value": "50"
+      },
+      {
+        "name": "dialog",
+        "value": "60"
+      },
+      {
+        "name": "skip-link",
+        "value": "100"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main action on a page or dialog; the only button with color and glow.",
+      "html": "<button class=\"ds-btn-primary\">Install</button>",
+      "css": ".ds-btn-primary { font-family: var(--font-sans, \"IBM Plex Sans\", \"Segoe UI\", system-ui, sans-serif); display:inline-flex; align-items:center; gap:8px; padding:8px 16px; font-size:14px; line-height:20px; font-weight:500; border-radius:8px; border:1px solid transparent; background:var(--color-accent,#5b5ee8); color:#fff; box-shadow:0 1px 3px 0 rgb(91 94 232/.3),0 1px 2px -1px rgb(91 94 232/.3); transition:all 150ms cubic-bezier(.4,0,.2,1); cursor:pointer; } .ds-btn-primary:hover { background:var(--color-accent-hover,#818cf8); box-shadow:0 4px 6px -1px rgb(91 94 232/.4),0 2px 4px -2px rgb(91 94 232/.4); } .ds-btn-primary:focus-visible { outline:none; box-shadow:0 0 0 2px var(--color-accent,#5b5ee8); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Cancel and neutral actions; Lifted fill, accent border on hover.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { font-family: var(--font-sans, \"IBM Plex Sans\", \"Segoe UI\", system-ui, sans-serif); display:inline-flex; align-items:center; gap:8px; padding:8px 16px; font-size:14px; line-height:20px; font-weight:500; border-radius:8px; border:1px solid transparent; background:var(--color-surface-3,#242430); color:var(--color-text-primary,#f1f1f6); transition:all 150ms cubic-bezier(.4,0,.2,1); cursor:pointer; } .ds-btn-secondary:hover { background:var(--color-surface-2,#1a1a25); border-color:rgb(91 94 232/.4); } .ds-btn-secondary:focus-visible { outline:none; box-shadow:0 0 0 2px var(--color-accent,#5b5ee8); }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Toolbar and inline actions with no resting fill.",
+      "html": "<button class=\"ds-btn-ghost\">Refresh</button>",
+      "css": ".ds-btn-ghost { font-family: var(--font-sans, \"IBM Plex Sans\", \"Segoe UI\", system-ui, sans-serif); display:inline-flex; align-items:center; gap:8px; padding:8px 16px; font-size:14px; line-height:20px; font-weight:500; border-radius:8px; border:none; background:transparent; color:var(--color-text-secondary,#b8bdc9); transition:all 150ms cubic-bezier(.4,0,.2,1); cursor:pointer; } .ds-btn-ghost:hover { background:var(--color-surface-2,#1a1a25); color:var(--color-text-primary,#f1f1f6); } .ds-btn-ghost:focus-visible { outline:none; box-shadow:0 0 0 2px var(--color-accent,#5b5ee8); }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Destructive confirm; red tint, never a solid red fill.",
+      "html": "<button class=\"ds-btn-danger\">Uninstall</button>",
+      "css": ".ds-btn-danger { font-family: var(--font-sans, \"IBM Plex Sans\", \"Segoe UI\", system-ui, sans-serif); display:inline-flex; align-items:center; gap:8px; padding:4px 10px; font-size:12px; line-height:16px; font-weight:500; border-radius:8px; border:none; background:rgb(239 68 68/.1); color:var(--color-danger,#ef4444); transition:all 150ms cubic-bezier(.4,0,.2,1); cursor:pointer; } .ds-btn-danger:hover { background:rgb(239 68 68/.2); } .ds-btn-danger:focus-visible { outline:none; box-shadow:0 0 0 2px var(--color-accent,#5b5ee8); }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Labeled form field; Panel fill, accent ring on focus.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Install path</span><input class=\"ds-input\" placeholder=\"G:\\SteamLibrary\\...\"></label>",
+      "css": ".ds-field { font-family: var(--font-sans, \"IBM Plex Sans\", \"Segoe UI\", system-ui, sans-serif); display:flex; flex-direction:column; gap:6px; } .ds-field-label { font-size:14px; font-weight:500; color:var(--color-text-secondary,#b8bdc9); } .ds-input { font-family: var(--font-sans, \"IBM Plex Sans\", \"Segoe UI\", system-ui, sans-serif); padding:8px 12px; font-size:14px; border-radius:8px; border:1px solid var(--color-border,#2a2a3a); background:var(--color-surface-1,#12121a); color:var(--color-text-primary,#f1f1f6); transition:color 150ms,border-color 150ms; } .ds-input::placeholder { color:var(--color-text-muted,#8b8fa0); } .ds-input:focus { outline:none; border-color:transparent; box-shadow:0 0 0 2px var(--color-accent,#5b5ee8); }"
+    },
+    {
+      "name": "Filter Chips",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Pill filters with optional counts; active is solid indigo.",
+      "html": "<div class=\"ds-chips\"><button class=\"ds-chip ds-chip-active\">All <span>214</span></button><button class=\"ds-chip\">Enabled <span>198</span></button><button class=\"ds-chip\">Disabled <span>16</span></button></div>",
+      "css": ".ds-chips { display:flex; gap:6px; } .ds-chip { font-family: var(--font-sans, \"IBM Plex Sans\", \"Segoe UI\", system-ui, sans-serif); padding:4px 12px; font-size:12px; line-height:16px; font-weight:500; border-radius:9999px; border:none; background:var(--color-surface-2,#1a1a25); color:var(--color-text-muted,#8b8fa0); cursor:pointer; transition:color 150ms,background-color 150ms; } .ds-chip span { margin-left:4px; opacity:.7; font-variant-numeric:tabular-nums; } .ds-chip:hover { background:var(--color-surface-3,#242430); color:var(--color-text-secondary,#b8bdc9); } .ds-chip-active, .ds-chip-active:hover { background:var(--color-accent,#5b5ee8); color:#fff; } .ds-chip:focus-visible { outline:none; box-shadow:0 0 0 1px var(--color-surface-0,#0a0a0f),0 0 0 3px var(--color-accent,#5b5ee8); }"
+    },
+    {
+      "name": "Status Badges",
+      "kind": "chip",
+      "refersTo": "badge-success",
+      "description": "Tinted status pills, including the confidence badge.",
+      "html": "<div class=\"ds-badges\"><span class=\"ds-badge ds-badge-success\">96%</span><span class=\"ds-badge ds-badge-warning\">Update</span><span class=\"ds-badge ds-badge-danger\">Conflict</span><span class=\"ds-badge\">Disabled</span></div>",
+      "css": ".ds-badges { display:flex; gap:6px; } .ds-badge { font-family: var(--font-sans, \"IBM Plex Sans\", \"Segoe UI\", system-ui, sans-serif); display:inline-flex; align-items:center; padding:2px 8px; font-size:12px; line-height:16px; font-weight:500; border-radius:9999px; border:1px solid var(--color-border,#2a2a3a); background:var(--color-surface-3,#242430); color:var(--color-text-secondary,#b8bdc9); } .ds-badge-success { background:rgb(34 197 94/.1); color:var(--color-success,#22c55e); border-color:rgb(34 197 94/.2); } .ds-badge-warning { background:rgb(245 158 11/.1); color:var(--color-warning,#f59e0b); border-color:rgb(245 158 11/.2); } .ds-badge-danger { background:rgb(239 68 68/.1); color:var(--color-danger,#ef4444); border-color:rgb(239 68 68/.2); }"
+    },
+    {
+      "name": "Sidebar Navigation",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Left rail nav; active item is an indigo tint.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item ds-nav-active\" href=\"#\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/><polyline points=\"9 22 9 12 15 12 15 22\"/></svg>Dashboard</a><a class=\"ds-nav-item\" href=\"#\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/></svg>Updates</a></nav>",
+      "css": ".ds-nav { font-family: var(--font-sans, \"IBM Plex Sans\", \"Segoe UI\", system-ui, sans-serif); width:208px; padding:8px; background:var(--color-surface-1,#12121a); border-right:1px solid var(--color-border,#2a2a3a); display:flex; flex-direction:column; gap:2px; } .ds-nav-item { display:flex; align-items:center; gap:12px; padding:8px 12px; font-size:14px; line-height:20px; border-radius:8px; color:var(--color-text-secondary,#b8bdc9); text-decoration:none; transition:color 150ms,background-color 150ms; } .ds-nav-item:hover { background:var(--color-surface-2,#1a1a25); color:var(--color-text-primary,#f1f1f6); } .ds-nav-active, .ds-nav-active:hover { background:rgb(91 94 232/.1); color:var(--color-accent,#5b5ee8); } .ds-nav-item:focus-visible { outline:none; box-shadow:0 0 0 2px var(--color-accent,#5b5ee8); }"
+    },
+    {
+      "name": "Underline Tabs",
+      "kind": "nav",
+      "refersTo": "tab-active",
+      "description": "Game detail tabs with counts and status dots.",
+      "html": "<div class=\"ds-tabs\"><button class=\"ds-tab ds-tab-active\">Installed <span>214</span></button><button class=\"ds-tab\">Archives <span>38</span></button><button class=\"ds-tab\">Conflicts <i class=\"ds-dot\"></i></button></div>",
+      "css": ".ds-tabs { font-family: var(--font-sans, \"IBM Plex Sans\", \"Segoe UI\", system-ui, sans-serif); display:flex; gap:4px; border-bottom:1px solid var(--color-border,#2a2a3a); } .ds-tab { font-family: var(--font-sans, \"IBM Plex Sans\", \"Segoe UI\", system-ui, sans-serif); display:flex; align-items:center; gap:4px; padding:8px 16px; margin-bottom:-1px; font-size:14px; font-weight:500; background:none; border:none; border-bottom:2px solid transparent; color:var(--color-text-muted,#8b8fa0); cursor:pointer; transition:color 150ms,border-color 150ms; } .ds-tab span { font-size:12px; opacity:.6; font-variant-numeric:tabular-nums; } .ds-tab:hover { color:var(--color-text-secondary,#b8bdc9); } .ds-tab-active, .ds-tab-active:hover { color:var(--color-accent,#5b5ee8); border-bottom-color:var(--color-accent,#5b5ee8); } .ds-dot { width:6px; height:6px; border-radius:9999px; background:var(--color-danger,#ef4444); display:inline-block; }"
+    },
+    {
+      "name": "Mod Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Signature Nexus mod card: image, two-line title, metadata row, action footer.",
+      "html": "<div class=\"ds-modcard\"><div class=\"ds-modcard-img\"></div><div class=\"ds-modcard-body\"><h3>Cyber Engine Tweaks</h3><p>Scripting framework and console for Cyberpunk 2077.</p><div class=\"ds-modcard-meta\"><span>yamashi</span><span>v1.35.0</span></div><div class=\"ds-modcard-foot\"><span class=\"ds-modcard-src\">Installed</span><button class=\"ds-modcard-btn\">Update</button></div></div></div>",
+      "css": ".ds-modcard { font-family: var(--font-sans, \"IBM Plex Sans\", \"Segoe UI\", system-ui, sans-serif); width:260px; border-radius:12px; border:1px solid var(--color-border,#2a2a3a); background:var(--color-surface-1,#12121a); overflow:hidden; cursor:pointer; transition:border-color 150ms; } .ds-modcard:hover { border-color:rgb(91 94 232/.4); } .ds-modcard-img { height:160px; background:var(--color-surface-2,#1a1a25); } .ds-modcard-body { padding:16px; display:flex; flex-direction:column; gap:8px; } .ds-modcard h3 { margin:0; font-size:14px; font-weight:600; line-height:1.25; color:var(--color-text-primary,#f1f1f6); } .ds-modcard p { margin:0; font-size:12px; color:var(--color-text-muted,#8b8fa0); } .ds-modcard-meta { display:flex; gap:12px; font-size:12px; color:var(--color-text-muted,#8b8fa0); } .ds-modcard-foot { display:flex; align-items:center; justify-content:space-between; padding-top:8px; border-top:1px solid rgb(42 42 58/.5); } .ds-modcard-src { font-size: 11px; font-weight:500; padding:2px 8px; border-radius:9999px; background:rgb(34 197 94/.15); color:var(--color-success,#22c55e); } .ds-modcard-btn { font-family: var(--font-sans, \"IBM Plex Sans\", \"Segoe UI\", system-ui, sans-serif); padding:4px 8px; font-size:12px; font-weight:500; border-radius:6px; border:none; background:var(--color-warning,#f59e0b); color:#000; cursor:pointer; } .ds-modcard-btn:hover { opacity:.8; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Ripperdoc's Console",
+    "overview": "**Creative North Star: \"The Ripperdoc's Console\"**\n\nRipperMod is a dark, cool-tinted workstation: four near-black surfaces with a faint blue-violet cast (hue about 285 in OKLCH), one indigo accent, and three status colors. It is built for long maintenance sessions over libraries of hundreds of mods, so the interface is dense by default: 404 of the 458 font-size utilities in the codebase are `text-xs` or `text-sm`, rows are virtualized, and most controls sit at 32 to 36px tall.\n\nThe mood is precise, calm and utilitarian: it reads as a professional tool, not a game skin. The visual language carries no neon, glitch, scanline or chromatic-aberration effects anywhere in the shipped CSS, and PRODUCT.md keeps Cyberpunk flavor out of in-app copy. That absence is a deliberate anti-reference (owner decision, 2026-10-29): no Cyberpunk HUD styling in the app. Character comes instead from giving the product's own ideas their own visual forms: diagnostics read like instrument readouts (Health, Frameworks, deploy drift), and provenance (match method and confidence) gets a dedicated form such as a confidence meter and a method glyph, never the same chip as a category tag. This follows from the Operate mode (precision and restraint over expression), from PRODUCT.md's \"plain language in the app\", and from user trust concerns on the Nexus page, where a gimmicky skin would read as less trustworthy.\n\nDepth comes from stepping the surface ladder and drawing 1px borders, not from shadows. Color is reserved for meaning: indigo marks the active thing (current nav item, selected tab, primary action, checked control), and green, amber and red mark state.",
+    "keyCharacteristics": [
+      "Dark only. No light theme exists in the code.",
+      "Four-step tonal surface ladder plus two border steps, all with the same cool hue.",
+      "One accent (indigo) for selection and primary action; status colors only for state.",
+      "Dense type in IBM Plex Sans: 12px and 14px carry the interface, 11px is the floor, 24px bold is the page-title ceiling.",
+      "Tinted status treatment: 10% fill, 20 to 40% border, full-strength text.",
+      "Flat at rest; shadows only on floating layers (toasts, menus, bulk bar, modals) and the primary button's accent glow."
+    ],
+    "rules": [
+      {
+        "name": "The One Signal Rule",
+        "body": "Indigo is the only hue that means \"selected\" or \"act here\". Status colors never stand in for selection, and indigo never stands in for status, except the info toast.",
+        "section": "colors"
+      },
+      {
+        "name": "The Text Contrast Rule",
+        "body": "Every text color passes 4.5:1 on the surface it sits on. Indigo as text is always `accent-text`; text on a solid amber fill is black (9.78:1); text on a solid green fill is Void (`text-surface-0`, 8.67:1), never white (2.28:1). Muted rows are shown with Smoke text and a label, never with opacity.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tinted Status Rule",
+        "body": "Status is shown as a tint, not a fill: background at 10 to 15% (`bg-success/10`), border at 20 to 40%, text at full strength. A solid status fill (`prominent` badge) is the exception for counts that must be read at a glance.",
+        "section": "colors"
+      },
+      {
+        "name": "The Small Type Rule",
+        "body": "14px is the default and 12px is the dense default; anything above 18px is a page title or a stat value, never body.",
+        "section": "typography"
+      },
+      {
+        "name": "Text floor: 11px",
+        "body": "No text in the UI is smaller than 11px. Every smaller arbitrary size is gone from `frontend/src`, and the guard test in `src/test/style-floor.test.ts` fails on any `text-[Npx]` below 11.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tonal Stack Rule",
+        "body": "A surface that sits on another surface is one step lighter and carries a Hairline border. Reach for a shadow only when the element floats over content (toast, menu, bulk bar, dialog).",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** take every color from the `@theme` tokens in `frontend/src/index.css`; the palette is 16 tokens and nothing else.",
+      "**Do** build buttons, inputs, cards and badges from `components/ui` (`Button`, `Input`, `Card`, `Badge`) so radius, focus ring and hover stay consistent.",
+      "**Do** show status with the tinted treatment (10 to 15% fill, 20 to 40% border, full text color) and keep solid status fills for prominent counts.",
+      "**Do** raise hover and nesting by one surface step (Void to Panel to Raised to Lifted) with a Hairline border instead of adding a shadow.",
+      "**Do** keep body text at 14px and dense data at 12px; one 24px bold `h1` per page.",
+      "**Do** give every interactive element a 2px accent `focus-visible` ring (with a Void or Panel offset on filled controls). Clickable rows and cards spread `activationProps` from `lib/activation.ts` (Tab stop, Enter and Space open them); sort headers put a `<button>` inside the `<th>`.",
+      "**Do** open every modal with `Dialog` and confirm every action that deletes or resets configuration with `ConfirmDialog`.",
+      "**Do** virtualize lists that can reach hundreds of rows (`VirtualTable`, `VirtualCardGrid`)."
+    ],
+    "donts": [
+      "**Don't** use utility classes for tokens that do not exist. The 2026-11-02 pass defined `--color-info` and replaced `bg-surface-secondary` with `bg-surface-1`; a guard test fails on `bg-surface-secondary`.",
+      "**Don't** hand-roll buttons. Shipped drift: 111 raw `<button>` elements against 132 `<Button>` uses; the install and update split buttons in `components/mods/ModCardAction.tsx` and `components/mods/ArchivesList.tsx` use a 6px radius and `hover:opacity-80` instead of the primary button's 8px radius and Indigo Lift hover.",
+      "**Don't** ship a second input treatment. Shipped drift: 19 raw `<input>` against 5 `<Input>`; `SearchInput` uses a Raised fill and a border-only focus while `Input` uses Panel and a ring.",
+      "**Don't** hard-code colors outside the tokens. Shipped drift: `#1a1a2e` and `#555` in the image placeholder SVG of `NexusModCard.tsx`, `NexusModRow.tsx` and `NexusModTile.tsx` (`#1a1a2e` is an off-palette near-twin of Raised `#1a1a25`); `text-white` (17), `text-black` (6), `border-white/20` (3) and the `bg-black/50` scrim (23) bypass the palette.",
+      "**Don't** add arbitrary type sizes, and never one below the 11px floor. `text-[11px]` is the de facto Micro and Label size (the 18 former sub-11px uses moved to it, and the repeated Health source badge to 12px); promote it to an `@theme` font-size token rather than adding new literals.",
+      "**Don't** reach for arbitrary z-index values. Shipped drift: `z-[60]` (16 uses) is the de facto dialog layer and `focus:z-[100]` the skip link; define named layers instead of repeating literals.",
+      "**Don't** use `text-accent` for text: the fill indigo `#5b5ee8` measures 3.4 to 4.4:1 as text on the surfaces. Use `text-accent-text`.",
+      "**Don't** put white text on solid green (2.28:1) or white on solid amber (2.15:1). Use Void on green and black on amber.",
+      "**Don't** dim a row with `opacity` to mean \"inactive\": Load Order's unmanaged rows once measured 1.45:1. Use Smoke text and a label (\"Unmanaged\").",
+      "**Don't** add keyframes without a consumer. `slide-in-right`, `pulse-ring`, `orbit-spin` and `slide-down` in `index.css` have no users.",
+      "**Don't** let Ash and Smoke collapse into one level. Shipped today, `#9ca3af` and `#8b8fa0` are close in lightness and Smoke is used almost three times as often (311 vs 108). Decision (2026-10-29), shipped 2026-11-02: Ash is now `#b8bdc9` (9.16:1 on Raised) while Smoke stays `#8b8fa0`, the darkest value that still passes 4.5:1 on every surface (4.77:1 on Lifted). Darkening Smoke instead (to about `#6b7080`) was rejected: it measures 4.0:1 on Void and fails AA."
+    ]
+  }
+}
