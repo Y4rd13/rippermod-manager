@@ -46,8 +46,10 @@ export function reportDeployOutcome(report: DeployReport, action: string): void 
     ? ` (${report.skipped_existing} already current)`
     : "";
   const redmodNote = report.redmod?.success ? " · REDmod compiled" : "";
+  const removed = report.removed_paths ?? [];
+  const removedNote = removed.length > 0 ? ` · removed ${removed.join(", ")}` : "";
   toast.success(
     `${action} complete`,
-    `${report.done} operation(s) succeeded${skipped}${redmodNote}`,
+    `${report.done} operation(s) succeeded${skipped}${redmodNote}${removedNote}`,
   );
 }

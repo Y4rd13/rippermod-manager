@@ -573,7 +573,57 @@ def undeploy(game: Game, session: Session) -> DeployReport:
             m.deployed = False
             session.add(m)
         session.commit()
+        report.removed_paths = _remove_deploy_traces(game)
+        # REDmods installed outside the app still need a cache without ours (S11).
+        if _has_unmanaged_redmods(game):
+            from rippermod_manager.services.vfs.redmod_scheduler import compile_lock
+
+            with compile_lock(game.id):  # type: ignore[arg-type]
+                report.redmod = redmod_deploy(game)
     return report
+
+
+# What a deploy leaves in the game dir besides the links: the load order the app
+# writes and the REDmod cache compiled from the deployed mods (S11).
+_MODLIST_REL = "archive/pc/mod/modlist.txt"
+_REDMOD_CACHE_REL = "r6/cache/modded"
+
+
+def _remove_deploy_traces(game: Game) -> list[str]:
+    """Delete ``modlist.txt`` and ``r6/cache/modded/``; return the paths deleted.
+
+    A path that cannot be deleted is logged and left out of the result.
+    """
+    install = Path(game.install_path)
+    removed: list[str] = []
+    modlist = install / _MODLIST_REL
+    if modlist.is_file():
+        try:
+            modlist.unlink()
+            removed.append(_MODLIST_REL)
+        except OSError:
+            logger.warning("Could not delete %s", modlist, exc_info=True)
+    cache = install / _REDMOD_CACHE_REL
+    if cache.is_dir():
+        try:
+            shutil.rmtree(cache)
+            removed.append(_REDMOD_CACHE_REL)
+        except OSError:
+            logger.warning("Could not delete %s", cache, exc_info=True)
+    return removed
+
+
+def _has_unmanaged_redmods(game: Game) -> bool:
+    """True when ``mods/<folder>/info.json`` exists: a REDmod the app does not manage.
+
+    Called after undeploy removed the app's own links, so any REDmod left in
+    ``mods/`` was installed by something else.
+    """
+    mods_root = Path(game.install_path) / "mods"
+    try:
+        return any((child / "info.json").is_file() for child in mods_root.iterdir())
+    except OSError:
+        return False
 
 
 def detect_drift(game: Game, session: Session) -> DriftReport:
@@ -788,6 +838,10 @@ def deploy(game: Game, session: Session, *, force: bool = False) -> DeployReport
             m.deploy_drift = False
             session.add(m)
         session.commit()
+        # Undeploy deletes modlist.txt (S11): a later deploy restores the load order.
+        from rippermod_manager.services.modlist_service import write_modlist
+
+        write_modlist(game, session)
         # Taken even with no REDmod content: a background compile in progress
         # (toggle/uninstall, S2) finishes before this deploy returns, so Play,
         # which deploys first, never launches over a half-built cache.

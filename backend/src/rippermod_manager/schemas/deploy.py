@@ -79,6 +79,8 @@ class DeployReport(BaseModel):
     redmod: RedmodDeployResult | None = None  # set when redmod.exe was attempted
     # Displaced files (S6) that could not go back because their path is occupied.
     displaced_not_restored: list[str] = Field(default_factory=list)
+    # Deploy traces a clean undeploy deleted (S11), game-relative with "/".
+    removed_paths: list[str] = Field(default_factory=list)
 
     @property
     def is_clean(self) -> bool:
