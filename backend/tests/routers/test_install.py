@@ -594,3 +594,18 @@ class TestForcePreview:
         assert r.status_code == 200
         assert r.json() == {"paths": ["r6/config/inputUserMappings.xml"]}
         assert vanilla.read_bytes() == b"vanilla"  # preview never touches disk
+
+
+class TestInstallDeployReport:
+    def test_install_response_carries_game_running_preflight(self, client, game_setup, monkeypatch):
+        from rippermod_manager.services.vfs import deploy_service
+
+        monkeypatch.setattr(deploy_service, "is_game_running", lambda *a, **k: True)
+        game_name, _, staging = game_setup
+        _make_zip(staging / "Run.zip", {"mods/run.txt": b"x"})
+        r = client.post(f"/api/v1/games/{game_name}/install/", json={"archive_filename": "Run.zip"})
+        assert r.status_code == 201
+        preflight = r.json()["deploy"]["preflight"]
+        assert preflight["ok"] is False
+        assert preflight["game_running"] is True
+        assert "Cyberpunk 2077 is running, close it before deploying." in preflight["reasons"]
