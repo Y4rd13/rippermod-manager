@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   Archive,
+  Boxes,
   ChevronRight,
   Eye,
   FolderOpen,
@@ -22,8 +23,9 @@ import { Link, useParams } from "react-router";
 import { ClusterDetailsPanel, ConflictSummaryWidget } from "@/components/conflicts/ConflictSummaryWidget";
 import { ScriptTweakConflicts } from "@/components/conflicts/ScriptTweakConflicts";
 import { AdoptReviewDialog } from "@/components/mods/AdoptReviewDialog";
-import { FrameworksStatCard } from "@/components/FrameworksStatCard";
-import { HealthStatCard } from "@/components/HealthStatCard";
+import { useFrameworksVerdict } from "@/components/FrameworksStatCard";
+import { GameStatusStrip, type StatusItem } from "@/components/GameStatusStrip";
+import { useHealthVerdict } from "@/components/HealthStatCard";
 import { HealthTab } from "@/components/HealthTab";
 import { ArchivesList } from "@/components/mods/ArchivesList";
 import { InstalledCollectionsSection } from "@/components/collections/InstalledCollectionsSection";
@@ -41,7 +43,6 @@ import { ProfileManager } from "@/components/mods/ProfileManager";
 import { UpdateDownloadCell } from "@/components/mods/UpdateDownloadCell";
 import { UpdatesTable } from "@/components/mods/UpdatesTable";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ScanProgress, type ScanLog } from "@/components/ui/ScanProgress";
 import { invalidateGameState } from "@/hooks/invalidate";
@@ -64,6 +65,7 @@ import {
 } from "@/hooks/queries";
 import { api } from "@/lib/api-client";
 import { parseSSE } from "@/lib/sse-parser";
+import { plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast-store";
 import { useUIStore } from "@/stores/ui-store";
@@ -444,6 +446,8 @@ export function GameDetailPage() {
     trackedMods.length, trackedLoading,
   ]);
 
+  const frameworksVerdict = useFrameworksVerdict(name);
+  const healthVerdict = useHealthVerdict(name);
   const gameTabs = useRovingTabs(TAB_KEYS, tab, setTab);
   const matchedTabs = useRovingTabs(MATCHED_SUB_TAB_KEYS, matchedSubTab, setMatchedSubTab);
 
@@ -488,16 +492,12 @@ export function GameDetailPage() {
             <div className="h-9 w-36 bg-surface-2 rounded-lg" />
           </div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-border bg-surface-1 px-2 py-1">
           {Array.from({ length: 7 }, (_, i) => (
-            <div key={i} className="rounded-xl border border-border bg-surface-1 p-5">
-              <div className="flex items-center gap-3">
-                <div className="h-5 w-5 bg-surface-2 rounded" />
-                <div className="space-y-1.5 flex-1">
-                  <div className="h-3 w-20 bg-surface-2 rounded" />
-                  <div className="h-5 w-10 bg-surface-2 rounded" />
-                </div>
-              </div>
+            <div key={i} className="flex h-8 items-center gap-1.5 px-2">
+              <div className="h-3.5 w-3.5 bg-surface-2 rounded" />
+              <div className="h-4 w-8 bg-surface-2 rounded" />
+              <div className="h-3 w-14 bg-surface-2 rounded" />
             </div>
           ))}
         </div>
@@ -510,27 +510,92 @@ export function GameDetailPage() {
     );
   }
 
-  return (
-    <div className="space-y-6">
-      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-text-muted">
-        <Link to="/games" className="hover:text-text-primary transition-colors">
-          Games
-        </Link>
-        <ChevronRight size={14} />
-        <span className="text-text-primary font-medium">{game.name}</span>
-      </nav>
+  const updatesAvailable = updates?.updates_available;
+  const conflictMods = conflictCount?.mods_with_conflicts ?? 0;
+  const statusItems: StatusItem[] = [
+    {
+      key: "scanned",
+      label: "Scanned",
+      value: String(mods.length),
+      icon: Package,
+      onSelect: () => { setTab("matched"); setMatchedSubTab("scan-details"); },
+      title: "Total mod groups found by scanning your game folder",
+    },
+    {
+      key: "managed",
+      label: "Managed",
+      value: `${enabledCount}/${installedMods.length}`,
+      icon: UserCheck,
+      onSelect: () => setTab("installed"),
+      title: "Mods managed through this app (enabled / total)",
+    },
+    {
+      key: "matched",
+      label: "Nexus Matched",
+      value: String(nexusMatched.length),
+      icon: Link2,
+      onSelect: () => { setTab("matched"); setMatchedSubTab("nexus-matched"); },
+      title: "Scanned mods matched to Nexus Mods entries",
+    },
+    {
+      key: "updates",
+      label: "Updates",
+      value: updatesAvailable == null ? "--" : String(updatesAvailable),
+      tone: (updatesAvailable ?? 0) > 0 ? "warning" : "neutral",
+      icon: RefreshCw,
+      onSelect: () => setTab("updates"),
+      title: "Newer versions available on Nexus for your mods",
+    },
+    {
+      key: "conflicts",
+      label: "Conflicts",
+      value: conflictsLoading ? "--" : String(conflictMods),
+      tone: conflictMods > 0 ? "warning" : "success",
+      icon: AlertTriangle,
+      onSelect: () => setTab("conflicts"),
+      title: "Mods on disk with file or resource conflicts",
+    },
+    {
+      key: "frameworks",
+      label: "Frameworks",
+      value: frameworksVerdict.value,
+      tone: frameworksVerdict.tone,
+      icon: Boxes,
+      onSelect: goToFrameworks,
+      title: frameworksVerdict.title,
+    },
+    {
+      key: "health",
+      label: "Health",
+      value: healthVerdict.value,
+      tone: healthVerdict.tone,
+      icon: HeartPulse,
+      onSelect: goToHealth,
+      title: healthVerdict.title,
+    },
+  ];
 
+  return (
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
+            <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-text-muted">
+              <Link to="/games" className="hover:text-text-primary transition-colors">
+                Games
+              </Link>
+              <ChevronRight size={14} className="shrink-0" />
+            </nav>
             <h1 className="text-2xl font-bold text-text-primary">{game.name}</h1>
+          </div>
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-text-muted">
             {gameVersion?.version && (
               <span className="text-xs font-medium text-text-muted bg-surface-secondary px-2 py-0.5 rounded">
                 v{gameVersion.version}
               </span>
             )}
-          </div>
-          <p className="text-sm text-text-muted">{game.install_path}</p>
+            <span>{game.install_path}</span>
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={handleLaunch} loading={isLaunching} disabled={!gameVersion?.exe_path} title="Launch the game executable">
@@ -546,103 +611,19 @@ export function GameDetailPage() {
         <ScanProgress logs={scanLogs} percent={scanPercent} phase={scanPhase} />
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4">
-        <Card
-          className="hover:border-success/40 transition-colors"
-          onClick={() => { setTab("matched"); setMatchedSubTab("scan-details"); }}
-          title="Total mod groups found by scanning your game folder"
-        >
-          <div className="flex items-center gap-3">
-            <Package size={18} className="text-success" />
-            <div>
-              <p className="text-xs text-text-muted">Scanned Mods</p>
-              <p className="text-lg font-bold text-text-primary">{mods.length}</p>
-            </div>
-          </div>
-        </Card>
-        <Card
-          className="hover:border-accent/40 transition-colors"
-          onClick={() => setTab("installed")}
-          title="Mods managed through this app (enabled / total)"
-        >
-          <div className="flex items-center gap-3">
-            <UserCheck size={18} className="text-accent-text" />
-            <div>
-              <p className="text-xs text-text-muted">Managed</p>
-              <p className="text-lg font-bold text-text-primary">
-                {enabledCount}/{installedMods.length}
-              </p>
-            </div>
-          </div>
-        </Card>
-        <Card
-          className="hover:border-warning/40 transition-colors"
-          onClick={() => { setTab("matched"); setMatchedSubTab("nexus-matched"); }}
-          title="Scanned mods matched to Nexus Mods entries"
-        >
-          <div className="flex items-center gap-3">
-            <Link2 size={18} className="text-warning" />
-            <div>
-              <p className="text-xs text-text-muted">Nexus Matched</p>
-              <p className="text-lg font-bold text-text-primary">{nexusMatched.length}</p>
-            </div>
-          </div>
-        </Card>
-        <Card
-          className="hover:border-warning/40 transition-colors"
-          onClick={() => setTab("updates")}
-          title="Newer versions available on Nexus for your mods"
-        >
-          <div className="flex items-center gap-3">
-            <RefreshCw size={18} className="text-warning" />
-            <div>
-              <p className="text-xs text-text-muted">Updates</p>
-              <p className="text-lg font-bold text-text-primary">
-                {updates?.updates_available ?? "--"}
-              </p>
-            </div>
-          </div>
-        </Card>
-        <Card
-          className={cn(
-            "transition-colors",
-            (conflictCount?.mods_with_conflicts ?? 0) > 0
-              ? "hover:border-warning/40"
-              : "hover:border-success/40",
-          )}
-          onClick={() => setTab("conflicts")}
-          title="Mods on disk with file or resource conflicts"
-        >
-          <div className="flex items-center gap-3">
-            <AlertTriangle
-              size={18}
-              className={(conflictCount?.mods_with_conflicts ?? 0) > 0 ? "text-warning" : "text-success"}
-            />
-            <div>
-              <p className="text-xs text-text-muted">Conflicts</p>
-              <p className="text-lg font-bold text-text-primary">
-                {conflictsLoading ? "--" : (conflictCount?.mods_with_conflicts ?? 0)}
-              </p>
-            </div>
-          </div>
-        </Card>
-        <FrameworksStatCard gameName={name} onOpen={goToFrameworks} />
-        <HealthStatCard gameName={name} onOpen={goToHealth} />
-      </div>
+      <GameStatusStrip items={statusItems} />
 
       {onDiskMods.length > 0 && !adoptBannerDismissed && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent/5 p-4">
-          <div className="flex items-center gap-3">
-            <Package size={20} className="shrink-0 text-accent-text" />
-            <div>
-              <p className="text-sm font-medium text-text-primary">
-                {onDiskMods.length} mod{onDiskMods.length === 1 ? "" : "s"} detected on disk{" "}
-                {onDiskMods.length === 1 ? "isn't" : "aren't"} managed yet
-              </p>
-              <p className="text-xs text-text-muted">
-                Adopt them to unlock profiles, updates, and clean uninstall, without re-downloading.
-              </p>
-            </div>
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent/5 px-4 py-2">
+          <div
+            className="flex min-w-0 items-center gap-3"
+            title="Adopt them to unlock profiles, updates, and clean uninstall, without re-downloading."
+          >
+            <Package size={18} className="shrink-0 text-accent-text" />
+            <p className="text-sm font-medium text-text-primary">
+              {plural(onDiskMods.length, "mod")} on disk {onDiskMods.length === 1 ? "isn't" : "aren't"}{" "}
+              managed yet
+            </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Button
@@ -666,7 +647,7 @@ export function GameDetailPage() {
         </div>
       )}
 
-      <div className="relative">
+      <div className="sticky -top-6 z-20 bg-surface-0">
         {canScrollLeft && (
           <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 z-10 bg-gradient-to-r from-surface-0 to-transparent" />
         )}
