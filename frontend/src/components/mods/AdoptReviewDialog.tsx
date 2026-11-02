@@ -109,7 +109,7 @@ export function AdoptReviewDialog({ gameName, mods, onClose }: Props) {
       >
         <div className="flex items-start justify-between border-b border-border p-5">
           <div className="flex items-center gap-2">
-            <Boxes size={18} className="mt-0.5 shrink-0 text-accent" />
+            <Boxes size={18} className="mt-0.5 shrink-0 text-accent-text" />
             <div>
               <h3 id="adopt-dialog-title" className="text-lg font-semibold text-text-primary">
                 Adopt your existing mods

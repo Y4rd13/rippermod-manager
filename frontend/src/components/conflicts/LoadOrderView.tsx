@@ -136,7 +136,7 @@ function SortableRow({
         </button>
 
         {/* Position badge */}
-        <span className="w-8 shrink-0 text-right text-xs font-mono font-bold text-accent">
+        <span className="w-8 shrink-0 text-right text-xs font-mono font-bold text-accent-text">
           #{group.position}
         </span>
 
@@ -145,7 +145,7 @@ function SortableRow({
           className="w-4 shrink-0"
           title={group.has_user_preference ? "Has user preference" : undefined}
         >
-          {group.has_user_preference && <Pin size={12} className="text-accent" />}
+          {group.has_user_preference && <Pin size={12} className="text-accent-text" />}
         </span>
 
         {/* Mod name + archive filename */}
@@ -495,7 +495,7 @@ export function LoadOrderView({ gameName }: Props) {
         {result.modlist_active && (
           <button
             onClick={handleOpenModlist}
-            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-text-muted hover:text-accent hover:bg-surface-2 transition-colors"
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-text-muted hover:text-accent-text hover:bg-surface-2 transition-colors"
             title="Open modlist.txt in your default editor"
           >
             <ExternalLink size={11} />
@@ -508,7 +508,7 @@ export function LoadOrderView({ gameName }: Props) {
             aria-expanded={showModlistFile}
             className={cn(
               "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors hover:bg-surface-2",
-              showModlistFile ? "text-accent" : "text-text-muted hover:text-accent",
+              showModlistFile ? "text-accent-text" : "text-text-muted hover:text-accent-text",
             )}
             title="Show the lines of modlist.txt"
           >
@@ -522,7 +522,7 @@ export function LoadOrderView({ gameName }: Props) {
         <span
           className={cn(
             "text-xs",
-            result.total_preferences > 0 ? "text-accent" : "text-text-muted",
+            result.total_preferences > 0 ? "text-accent-text" : "text-text-muted",
           )}
         >
           {result.total_preferences} preference{result.total_preferences !== 1 ? "s" : ""}
@@ -680,7 +680,7 @@ function AutoSortPreviewDialog({
         className="w-full max-w-lg rounded-xl border border-border bg-surface-1 p-6 max-h-[80vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-center gap-2 text-accent">
+        <div className="mb-4 flex items-center gap-2 text-accent-text">
           <Sparkles size={20} />
           <h3 className="text-lg font-semibold text-text-primary">
             Auto-sort Preview

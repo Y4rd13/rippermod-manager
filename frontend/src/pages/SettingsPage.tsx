@@ -232,7 +232,7 @@ function AppUpdateNotice() {
   return (
     <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2.5 text-sm">
       <div className="flex items-center gap-2 text-text-primary min-w-0">
-        <Sparkles size={14} className="shrink-0 text-accent" />
+        <Sparkles size={14} className="shrink-0 text-accent-text" />
         <span className="truncate">
           Update to <strong>v{update.latestVersion}</strong> on Nexus Mods
         </span>
@@ -265,7 +265,7 @@ function AboutCard() {
   return (
     <Card>
       <div className="flex items-start gap-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent/20 to-accent/5 text-accent">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent/20 to-accent/5 text-accent-text">
           <span className="text-xl font-bold leading-none">R</span>
         </div>
         <div className="min-w-0 flex-1 space-y-1">
@@ -322,8 +322,8 @@ function AboutCard() {
                   "inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-all",
                   "disabled:opacity-50",
                   isTracked
-                    ? "border-accent/30 bg-accent/10 text-accent hover:bg-accent/15"
-                    : "border-border bg-surface-2 text-text-secondary hover:border-accent/40 hover:text-accent",
+                    ? "border-accent/30 bg-accent/10 text-accent-text hover:bg-accent/15"
+                    : "border-border bg-surface-2 text-text-secondary hover:border-accent/40 hover:text-accent-text",
                 )}
               >
                 {trackPending ? (
@@ -587,7 +587,7 @@ function DiagnosticsCard() {
                   toast.error("Could not open folder", String(e)),
                 )
               }
-              className="inline-flex shrink-0 items-center gap-1 text-accent hover:underline"
+              className="inline-flex shrink-0 items-center gap-1 text-accent-text hover:underline"
             >
               <FolderOpen size={12} /> Open folder
             </button>
@@ -844,7 +844,7 @@ export function SettingsPage() {
                 <button
                   type="button"
                   onClick={() => sso.cancel()}
-                  className="text-accent underline"
+                  className="text-accent-text underline"
                 >
                   Cancel
                 </button>

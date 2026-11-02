@@ -179,7 +179,7 @@ export function ConflictDetailDrawer({ gameName, modId, modName, severity, dismi
 
           {isSuperseded && winnerName && (
             <div className="flex items-start gap-2.5 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2.5">
-              <Info size={14} className="text-accent mt-0.5 shrink-0" />
+              <Info size={14} className="text-accent-text mt-0.5 shrink-0" />
               <div className="text-xs text-text-secondary space-y-1">
                 <p className="font-medium text-text-primary">Superseded by newer version</p>
                 <p>

@@ -213,7 +213,7 @@ export function UpdateDownloadCell({ update, gameName, downloadJobs }: Props) {
     return (
       <button
         onClick={() => openUrl(update.nexus_url).catch(() => {})}
-        className="inline-flex items-center gap-1 text-accent hover:underline text-xs"
+        className="inline-flex items-center gap-1 text-accent-text hover:underline text-xs"
       >
         <ExternalLink size={12} /> Nexus
       </button>

@@ -57,7 +57,7 @@ function TypeBadge({ type }: { type: string }) {
   switch (type) {
     case "Required":
       return (
-        <span className="text-[10px] font-medium bg-accent/20 text-accent px-1.5 py-0.5 rounded">
+        <span className="text-[10px] font-medium bg-accent/20 text-accent-text px-1.5 py-0.5 rounded">
           Required
         </span>
       );
@@ -268,7 +268,7 @@ export function FomodWizard({ gameName, archiveFilename, onDismiss, onInstallCom
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <div className="flex items-center gap-3">
-            <Package size={20} className="text-accent" />
+            <Package size={20} className="text-accent-text" />
             <div>
               <h3 id="fomod-wizard-title" className="text-base font-semibold text-text-primary">
                 {wizard.config?.module_name || "FOMOD Installer"}
@@ -292,7 +292,7 @@ export function FomodWizard({ gameName, archiveFilename, onDismiss, onInstallCom
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {wizard.isLoading && (
             <div className="flex items-center justify-center py-12">
-              <Loader2 size={24} className="animate-spin text-accent" />
+              <Loader2 size={24} className="animate-spin text-accent-text" />
               <span className="ml-2 text-sm text-text-muted">Loading installer config...</span>
             </div>
           )}

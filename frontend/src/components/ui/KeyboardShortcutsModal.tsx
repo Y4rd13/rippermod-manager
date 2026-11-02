@@ -45,7 +45,7 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div className="flex items-center gap-2">
-            <Keyboard size={18} className="text-accent" />
+            <Keyboard size={18} className="text-accent-text" />
             <h2 id="shortcuts-title" className="text-base font-semibold text-text-primary">
               Keyboard Shortcuts
             </h2>

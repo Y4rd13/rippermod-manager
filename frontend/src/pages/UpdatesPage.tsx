@@ -22,7 +22,7 @@ export function UpdatesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <RefreshCw size={24} className="text-accent" />
+        <RefreshCw size={24} className="text-accent-text" />
         <h1 className="text-2xl font-bold text-text-primary">Updates</h1>
       </div>
 

@@ -206,7 +206,7 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, on
                           className={
                             req.is_installed
                               ? "inline-flex items-center gap-1.5 rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success hover:bg-success/20 hover:border-success/50 transition-colors disabled:opacity-50 disabled:cursor-default"
-                              : "inline-flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/15 hover:border-accent/40 transition-colors disabled:opacity-50 disabled:cursor-default"
+                              : "inline-flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs font-medium text-accent-text hover:bg-accent/15 hover:border-accent/40 transition-colors disabled:opacity-50 disabled:cursor-default"
                           }
                           onClick={() => {
                             if (canNavInApp && req.required_mod_id != null) {
@@ -256,7 +256,7 @@ export function ModDetailModal({ gameDomain, gameName, modId, update, action, on
                         if (detail.is_tracked) untrackMod.mutate({ gameName, modId: currentModId });
                         else trackMod.mutate({ gameName, modId: currentModId });
                       }}
-                      className={detail.is_tracked ? "text-accent" : ""}
+                      className={detail.is_tracked ? "text-accent-text" : ""}
                     >
                       {detail.is_tracked ? <EyeOff size={14} /> : <Eye size={14} />}
                       {detail.is_tracked ? "Tracked" : "Track"}

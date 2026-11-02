@@ -30,7 +30,7 @@ function statusBadgeClass(status: CollectionStatus["status"]): string {
     case "downloading":
     case "installing":
     case "pending":
-      return "bg-accent/15 text-accent";
+      return "bg-accent/15 text-accent-text";
   }
 }
 
@@ -163,7 +163,7 @@ export function InstalledCollectionsSection({ gameName }: Props) {
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {updateAvailable && (
-                    <span className="rounded bg-accent/15 px-1.5 py-0.5 text-xs text-accent">
+                    <span className="rounded bg-accent/15 px-1.5 py-0.5 text-xs text-accent-text">
                       Update to rev {coll.latest_known_revision_number}
                     </span>
                   )}

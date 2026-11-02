@@ -386,7 +386,7 @@ export function NexusMatchedGrid({
                     e.stopPropagation();
                     setFilesModalGroupId(mod.id);
                   }}
-                  className="ml-auto flex items-center gap-1 text-xs text-accent hover:underline"
+                  className="ml-auto flex items-center gap-1 text-xs text-accent-text hover:underline"
                 >
                   <FileText size={12} />
                   {mod.files.length} file{mod.files.length !== 1 ? "s" : ""}

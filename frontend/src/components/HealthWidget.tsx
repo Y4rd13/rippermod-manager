@@ -345,7 +345,7 @@ export function HealthWidget({
   return (
     <div className="rounded-xl border border-border bg-surface-1 p-4">
       <div className="flex items-center gap-2">
-        <HeartPulse size={16} className="shrink-0 text-accent" />
+        <HeartPulse size={16} className="shrink-0 text-accent-text" />
         <h3 className="text-sm font-semibold text-text-primary">Pre-launch check</h3>
         <span className="ml-auto flex items-center gap-1.5">
           {data.critical > 0 && <Badge variant="danger">{data.critical} critical</Badge>}

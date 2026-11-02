@@ -116,7 +116,7 @@ function ConflictSubTabs({ gameName, gameDomain }: { gameName: string; gameDomai
             className={cn(
               "px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px",
               subTab === key
-                ? "border-accent text-accent"
+                ? "border-accent text-accent-text"
                 : "border-transparent text-text-muted hover:text-text-secondary",
             )}
           >
@@ -560,7 +560,7 @@ export function GameDetailPage() {
           title="Mods managed through this app (enabled / total)"
         >
           <div className="flex items-center gap-3">
-            <UserCheck size={18} className="text-accent" />
+            <UserCheck size={18} className="text-accent-text" />
             <div>
               <p className="text-xs text-text-muted">Managed</p>
               <p className="text-lg font-bold text-text-primary">
@@ -627,7 +627,7 @@ export function GameDetailPage() {
       {onDiskMods.length > 0 && !adoptBannerDismissed && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent/5 p-4">
           <div className="flex items-center gap-3">
-            <Package size={20} className="shrink-0 text-accent" />
+            <Package size={20} className="shrink-0 text-accent-text" />
             <div>
               <p className="text-sm font-medium text-text-primary">
                 {onDiskMods.length} mod{onDiskMods.length === 1 ? "" : "s"} detected on disk{" "}
@@ -677,7 +677,7 @@ export function GameDetailPage() {
               className={cn(
                 "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap flex items-center gap-1",
                 tab === key
-                  ? "border-accent text-accent"
+                  ? "border-accent text-accent-text"
                   : "border-transparent text-text-muted hover:text-text-secondary",
               )}
             >
@@ -728,7 +728,7 @@ export function GameDetailPage() {
                 className={cn(
                   "px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px",
                   matchedSubTab === key
-                    ? "border-accent text-accent"
+                    ? "border-accent text-accent-text"
                     : "border-transparent text-text-muted hover:text-text-secondary",
                 )}
               >
@@ -942,7 +942,7 @@ export function GameDetailPage() {
                 setLaunchGate(null);
                 goToHealth();
               }}
-              className="text-xs font-medium text-accent hover:underline"
+              className="text-xs font-medium text-accent-text hover:underline"
             >
               Fix issues first →
             </button>

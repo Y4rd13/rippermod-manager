@@ -30,7 +30,7 @@ export function SortableHeader({
       aria-sort={isActive ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
       className={cn(
         "pb-2 pr-4 font-medium cursor-pointer select-none transition-colors",
-        isActive ? "text-accent" : "text-text-muted hover:text-text-primary",
+        isActive ? "text-accent-text" : "text-text-muted hover:text-text-primary",
         align === "right" && "text-right",
         className,
       )}

@@ -126,7 +126,7 @@ export function BackendGate({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen flex-col items-center justify-center gap-3 bg-surface-0">
-      <Loader2 className="h-8 w-8 animate-spin text-accent" />
+      <Loader2 className="h-8 w-8 animate-spin text-accent-text" />
       <p className="text-sm text-text-secondary">Starting backend...</p>
     </div>
   );
