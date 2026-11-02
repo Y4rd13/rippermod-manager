@@ -15,6 +15,7 @@ from rippermod_manager.schemas.deploy import (
     DeployReport,
     DriftReport,
     ForcePreview,
+    RedmodStatus,
     UntrackedFilesResponse,
 )
 from rippermod_manager.schemas.install import (
@@ -60,7 +61,7 @@ from rippermod_manager.services.presence_service import (
 from rippermod_manager.services.redscript_analysis import check_redscript_conflicts
 from rippermod_manager.services.settings_helpers import get_setting
 from rippermod_manager.services.update_service import invalidate_update_cache
-from rippermod_manager.services.vfs import deploy_service
+from rippermod_manager.services.vfs import deploy_service, redmod_scheduler
 from rippermod_manager.services.vfs.untracked import find_untracked_files
 
 logger = logging.getLogger(__name__)
@@ -598,6 +599,16 @@ def undeploy_game(
             target=f"{report.done} file{'s' if report.done != 1 else ''}",
         )
     return report
+
+
+@router.get("/redmod/status", response_model=RedmodStatus)
+def redmod_status(
+    game_name: str,
+    session: Session = Depends(get_session),
+) -> RedmodStatus:
+    """Background REDmod compile state (``idle`` or ``compiling``) and its last result."""
+    game = get_game_or_404(game_name, session)
+    return redmod_scheduler.redmod_status(game.id)  # type: ignore[arg-type]
 
 
 @router.get("/deploy/status", response_model=DriftReport)

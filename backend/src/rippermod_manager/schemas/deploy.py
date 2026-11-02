@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -57,6 +58,14 @@ class RedmodDeployResult(BaseModel):
     stdout: str = ""
     stderr: str = ""
     error: str = ""
+
+
+class RedmodStatus(BaseModel):
+    """State of the background REDmod compile for one game (S2)."""
+
+    state: Literal["idle", "compiling"] = "idle"
+    last_result: RedmodDeployResult | None = None
+    last_finished_at: datetime | None = None
 
 
 class DeployReport(BaseModel):

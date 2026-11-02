@@ -1083,3 +1083,20 @@ def test_undeploy_reads_ownership_once(in_memory_session, sample_game):
         undeploy(game, session)
 
     assert len(calls) == 1
+
+
+def test_deploy_waits_for_a_running_compile(in_memory_session, sample_game):
+    import threading
+    import time
+
+    from rippermod_manager.services.vfs.redmod_scheduler import compile_lock
+
+    session, game = in_memory_session, sample_game
+    lock = compile_lock(game.id)
+    lock.acquire()
+    threading.Timer(0.3, lock.release).start()
+    t0 = time.monotonic()
+    with _no_game_running():
+        report = deploy(game, session)
+    assert time.monotonic() - t0 >= 0.25
+    assert report.failed == 0
