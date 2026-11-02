@@ -641,7 +641,9 @@ def test_redmod_deploy_invokes_subprocess_with_expected_args(tmp_path):
     args, kwargs = mocked.call_args
     cmd = args[0]
     assert cmd[0] == str(exe)
-    assert cmd[1:] == ["deploy", "-reportProgress"]
+    # Without -root, redMod.exe takes its own bin folder as the game root, logs
+    # "Invalid root path" and reports "No mods found": nothing is ever compiled.
+    assert cmd[1:] == ["deploy", "-reportProgress", "-root", str(Path(g.install_path))]
     assert kwargs["cwd"] == str(exe.parent)
     assert kwargs["shell"] is False
     assert kwargs["capture_output"] is True
