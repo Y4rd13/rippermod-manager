@@ -1,6 +1,7 @@
 import pytest
 from sqlmodel import select
 
+from rippermod_manager.matching.correlator import correlate_game_mods
 from rippermod_manager.models.correlation import ModNexusCorrelation
 from rippermod_manager.models.mod import ModGroup
 from rippermod_manager.models.nexus import NexusDownload, NexusModRequirement
@@ -231,3 +232,156 @@ class TestMatchByRequirements:
             select(ModNexusCorrelation).where(ModNexusCorrelation.mod_group_id == group2.id)
         ).one()
         assert corr.score == pytest.approx(expected, abs=0.01)
+
+
+class TestForwardRequirementsOnly:
+    """A mod that depends on the correlated one (a translation) is not its requirement."""
+
+    @staticmethod
+    def _correlated_main(session, game):
+        group = ModGroup(game_id=game.id, display_name="Main Mod")
+        dl = NexusDownload(game_id=game.id, nexus_mod_id=100, mod_name="Main Mod")
+        session.add_all([group, dl])
+        session.flush()
+        session.add(
+            ModNexusCorrelation(
+                mod_group_id=group.id, nexus_download_id=dl.id, score=1.0, method="exact"
+            )
+        )
+
+    @staticmethod
+    def _stored_requirement_match(session, game, confirmed=False):
+        group = ModGroup(game_id=game.id, display_name="Anti Theft Measures Castellano")
+        dl = NexusDownload(
+            game_id=game.id, nexus_mod_id=200, mod_name="Anti-Theft Measures - Castellano"
+        )
+        session.add_all([group, dl])
+        session.flush()
+        corr = ModNexusCorrelation(
+            mod_group_id=group.id,
+            nexus_download_id=dl.id,
+            score=1.0,
+            method="requirement",
+            confirmed_by_user=confirmed,
+        )
+        session.add(corr)
+        session.commit()
+        return corr.id
+
+    @staticmethod
+    def _requirement_matches(session):
+        # The freed group is matched again by name, so look at the method, not the row id
+        return session.exec(
+            select(ModNexusCorrelation).where(ModNexusCorrelation.method == "requirement")
+        ).all()
+
+    @pytest.mark.asyncio
+    async def test_reverse_requirement_is_not_a_candidate(self, session, make_game):
+        game = make_game()
+        self._correlated_main(session, game)
+        session.add(
+            NexusModRequirement(
+                nexus_mod_id=100,
+                required_mod_id=200,
+                mod_name="Anti-Theft Measures - Castellano",
+                is_external=False,
+                is_reverse=True,
+            )
+        )
+        session.add(ModGroup(game_id=game.id, display_name="Anti Theft Measures Castellano"))
+        session.commit()
+
+        result = await match_by_requirements(game, session)
+        assert result.matched == 0
+
+    def test_revalidate_drops_requirement_match_without_forward_row(self, session, make_game):
+        game = make_game()
+        self._correlated_main(session, game)
+        session.add(
+            NexusModRequirement(
+                nexus_mod_id=100,
+                required_mod_id=200,
+                mod_name="Anti-Theft Measures - Castellano",
+                is_reverse=True,
+            )
+        )
+        self._stored_requirement_match(session, game)
+        correlate_game_mods(game, session)
+        assert not self._requirement_matches(session)
+
+    def test_revalidate_keeps_requirement_match_with_forward_row(self, session, make_game):
+        game = make_game()
+        self._correlated_main(session, game)
+        session.add(
+            NexusModRequirement(
+                nexus_mod_id=100,
+                required_mod_id=200,
+                mod_name="Anti-Theft Measures - Castellano",
+                is_reverse=False,
+            )
+        )
+        corr_id = self._stored_requirement_match(session, game)
+        correlate_game_mods(game, session)
+        assert session.get(ModNexusCorrelation, corr_id) is not None
+
+    def test_revalidate_drops_requirement_match_when_the_requirer_is_not_correlated(
+        self, session, make_game
+    ):
+        game = make_game()
+        self._correlated_main(session, game)
+        session.add(
+            NexusModRequirement(
+                nexus_mod_id=999,
+                required_mod_id=200,
+                mod_name="Anti-Theft Measures - Castellano",
+                is_reverse=False,
+            )
+        )
+        self._stored_requirement_match(session, game)
+        correlate_game_mods(game, session)
+        assert not self._requirement_matches(session)
+
+    def test_revalidate_keeps_confirmed_requirement_match_without_forward_row(
+        self, session, make_game
+    ):
+        game = make_game()
+        self._correlated_main(session, game)
+        corr_id = self._stored_requirement_match(session, game, confirmed=True)
+        correlate_game_mods(game, session)
+        assert session.get(ModNexusCorrelation, corr_id) is not None
+
+    def test_reverse_row_name_does_not_rescue_a_requirement_match(self, session, make_game):
+        """Name is poor on the download; only a reverse row carries the good name."""
+        game = make_game()
+        self._correlated_main(session, game)
+        group = ModGroup(game_id=game.id, display_name="Weather Mod")
+        dl = NexusDownload(
+            game_id=game.id, nexus_mod_id=200, mod_name="Immersive Bartenders - Dogtown"
+        )
+        session.add_all([group, dl])
+        session.flush()
+        corr = ModNexusCorrelation(
+            mod_group_id=group.id, nexus_download_id=dl.id, score=0.92, method="requirement"
+        )
+        session.add(corr)
+        session.add_all(
+            [
+                NexusModRequirement(
+                    nexus_mod_id=100,
+                    required_mod_id=200,
+                    mod_name="Weather Overhaul Mod",
+                    is_reverse=False,
+                ),
+                NexusModRequirement(
+                    nexus_mod_id=300,
+                    required_mod_id=200,
+                    mod_name="Weather Mod",
+                    is_reverse=True,
+                ),
+            ]
+        )
+        session.commit()
+        correlate_game_mods(game, session)
+        # The forward row's name (0.779) still keeps it; the exact-name reverse row must not
+        # lift the score to 1.0.
+        assert session.get(ModNexusCorrelation, corr.id).score == 0.92

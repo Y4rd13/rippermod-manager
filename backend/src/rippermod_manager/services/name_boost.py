@@ -39,11 +39,12 @@ def _candidate_names(
     session: Session,
     candidates: list[ModNexusCorrelation],
     dl_map: dict[int, NexusDownload],
-) -> tuple[dict[int, str], dict[int, list[str]]]:
+) -> tuple[dict[int, str], dict[int, list[str]], dict[int, set[int]]]:
     """Load, with one query each, the other names the matchers may have scored.
 
-    Returns the ``NexusModMeta.name`` and the ``NexusModRequirement.mod_name`` values by
-    Nexus mod id. The requirement names are only needed for the ``requirement`` method.
+    Returns the ``NexusModMeta.name`` by Nexus mod id, and, from the forward requirement rows
+    only (``is_reverse`` false), the ``mod_name`` values and the requiring mod ids by required
+    Nexus mod id. The requirement data is only loaded for the ``requirement`` method.
     """
     nexus_ids = {
         dl.nexus_mod_id
@@ -51,13 +52,14 @@ def _candidate_names(
         if (dl := dl_map.get(c.nexus_download_id)) is not None and dl.nexus_mod_id
     }
     if not nexus_ids:
-        return {}, {}
+        return {}, {}, {}
     meta_rows = session.exec(
         select(NexusModMeta).where(NexusModMeta.nexus_mod_id.in_(nexus_ids))  # type: ignore[attr-defined]
     ).all()
     meta_names = {m.nexus_mod_id: m.name for m in meta_rows if m.name}
 
     req_names: dict[int, list[str]] = {}
+    requirers: dict[int, set[int]] = {}
     req_ids = {
         dl.nexus_mod_id
         for c in candidates
@@ -68,13 +70,17 @@ def _candidate_names(
     if req_ids:
         req_rows = session.exec(
             select(NexusModRequirement).where(
-                NexusModRequirement.required_mod_id.in_(req_ids)  # type: ignore[union-attr]
+                NexusModRequirement.required_mod_id.in_(req_ids),  # type: ignore[union-attr]
+                NexusModRequirement.is_reverse.is_(False),  # type: ignore[union-attr]
             )
         ).all()
         for r in req_rows:
-            if r.required_mod_id is not None and r.mod_name:
+            if r.required_mod_id is None:
+                continue
+            requirers.setdefault(r.required_mod_id, set()).add(r.nexus_mod_id)
+            if r.mod_name:
                 req_names.setdefault(r.required_mod_id, []).append(r.mod_name)
-    return meta_names, req_names
+    return meta_names, req_names, requirers
 
 
 def revalidate_boosted(
@@ -94,14 +100,34 @@ def revalidate_boosted(
     mod: the download's name, the ``NexusModMeta`` name and, for ``requirement``, the name on
     the requirement row. Scoring only the download's name would drop matches that the matchers
     themselves found through another name.
+
+    A ``requirement`` match is also dropped when no forward requirement row points at its Nexus
+    mod from another correlated mod: that is a mod depending on the correlated one (a translation,
+    an add-on), or a requirer that is no longer correlated.
     """
     candidates = [c for c in existing if not c.confirmed_by_user and c.method in BOOSTED_METHODS]
-    meta_names, req_names = _candidate_names(session, candidates, dl_map)
+    meta_names, req_names, requirers = _candidate_names(session, candidates, dl_map)
+    correlated_ids = {
+        dl.nexus_mod_id for c in existing if (dl := dl_map.get(c.nexus_download_id)) is not None
+    }
     deleted = 0
     for corr in candidates:
         grp = group_map.get(corr.mod_group_id)
         dl = dl_map.get(corr.nexus_download_id)
         if not grp or not dl:
+            session.delete(corr)
+            existing.remove(corr)
+            deleted += 1
+            continue
+        if corr.method == "requirement" and not (
+            requirers.get(dl.nexus_mod_id, set()) & (correlated_ids - {dl.nexus_mod_id})
+        ):
+            logger.info(
+                "Dropping requirement correlation: '%s' -> '%s' (no forward requirement from "
+                "another correlated mod)",
+                grp.display_name,
+                dl.mod_name,
+            )
             session.delete(corr)
             existing.remove(corr)
             deleted += 1
