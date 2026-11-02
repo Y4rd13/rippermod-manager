@@ -17,6 +17,7 @@ from rippermod_manager.services.update_service import (
     check_all_updates,
     check_cached_updates,
     collect_tracked_mods,
+    is_known_version,
 )
 
 
@@ -401,8 +402,8 @@ class TestCheckCachedUpdates:
             assert len(result.updates) == 1
             assert result.updates[0]["display_name"] == "CachedMod"
 
-    def test_unverified_version_triggers_update(self, engine):
-        """Endorsed mod with '0.0.0-unverified' sentinel → detected as update."""
+    def test_unverified_version_is_not_an_update(self, engine):
+        """Endorsed mod with '0.0.0-unverified' sentinel → no version update (S9)."""
         with Session(engine) as s:
             game = Game(name="G9", domain_name="g", install_path="/g")
             s.add(game)
@@ -429,10 +430,8 @@ class TestCheckCachedUpdates:
             s.commit()
 
             result = check_cached_updates(game.id, "g", s)
-            assert len(result.updates) == 1
-            assert result.updates[0]["local_version"] == "0.0.0-unverified"
-            assert result.updates[0]["nexus_version"] == "2.35"
-            assert result.updates[0]["source"] == "endorsed"
+            assert result.total_checked == 1
+            assert result.updates == []
 
 
 class TestCheckAllUpdates:
@@ -949,3 +948,119 @@ class TestCheckAllUpdates:
             )
             assert result.updates[0]["nexus_mod_id"] == 42
             assert result.updates[0]["detection_method"] == "timestamp"
+
+
+UNVERIFIED = "0.0.0-unverified"
+
+
+def _seed_unknown_local_version(
+    s: Session,
+    *,
+    installed_at: datetime,
+    nexus_updated: datetime,
+    upload_timestamp: int | None = None,
+) -> Game:
+    """One installed mod whose local version is unknown; Nexus lists 1.0.2."""
+    game = Game(name="G", domain_name="g", install_path="/g")
+    s.add(game)
+    s.flush()
+    s.add(GameModPath(game_id=game.id, relative_path="mods"))
+    s.add(
+        InstalledMod(
+            game_id=game.id,
+            name="FreeRunner",
+            nexus_mod_id=24402,
+            installed_version=UNVERIFIED,
+            installed_at=installed_at,
+            upload_timestamp=upload_timestamp,
+        )
+    )
+    s.add(
+        NexusModMeta(
+            nexus_mod_id=24402,
+            name="FreeRunner",
+            version="1.0.2",
+            author="A",
+            updated_at=nexus_updated,
+        )
+    )
+    s.commit()
+    return game
+
+
+class TestIsKnownVersion:
+    @pytest.mark.parametrize("value", [None, "", UNVERIFIED])
+    def test_unknown(self, value):
+        assert is_known_version(value) is False
+
+    @pytest.mark.parametrize("value", ["1.0", "0.0.0", "0.0.1", "v2.3"])
+    def test_known(self, value):
+        assert is_known_version(value) is True
+
+
+class TestUnknownLocalVersion:
+    @pytest.mark.anyio
+    async def test_unknown_local_version_is_not_a_version_update(self, engine):
+        with Session(engine) as s:
+            game = _seed_unknown_local_version(
+                s,
+                installed_at=datetime.fromtimestamp(2_000_000_000, tz=UTC),
+                nexus_updated=datetime.fromtimestamp(1_000_000_000, tz=UTC),
+            )
+            client = AsyncMock()
+            client.get_updated_mods.return_value = []
+
+            result = await check_all_updates(game.id, "g", client, s, gql=AsyncMock())
+
+            assert result.total_checked == 1
+            assert all(u["nexus_mod_id"] != 24402 for u in result.updates)
+
+    def test_cached_path_skips_unknown_local_version(self, engine):
+        with Session(engine) as s:
+            game = _seed_unknown_local_version(
+                s,
+                installed_at=datetime.fromtimestamp(2_000_000_000, tz=UTC),
+                nexus_updated=datetime.fromtimestamp(1_000_000_000, tz=UTC),
+            )
+
+            result = check_cached_updates(game.id, "g", s)
+
+            assert result.total_checked == 1
+            assert all(u["nexus_mod_id"] != 24402 for u in result.updates)
+
+    @pytest.mark.anyio
+    async def test_unknown_local_version_still_flags_by_download_date(self, engine):
+        with Session(engine) as s:
+            game = _seed_unknown_local_version(
+                s,
+                installed_at=datetime.fromtimestamp(1_700_000_000, tz=UTC),
+                nexus_updated=datetime.fromtimestamp(1_800_000_000, tz=UTC),
+            )
+            client = AsyncMock()
+            client.get_updated_mods.return_value = []
+            client.get_mod_files.return_value = {"files": [], "file_updates": []}
+
+            result = await check_all_updates(game.id, "g", client, s, gql=AsyncMock())
+
+            assert [
+                u["detection_method"] for u in result.updates if u["nexus_mod_id"] == 24402
+            ] == ["timestamp"]
+
+    @pytest.mark.anyio
+    async def test_unknown_local_version_still_flags_by_file_timestamp(self, engine):
+        """A Nexus file newer than the local file flags the mod even with an unknown version."""
+        with Session(engine) as s:
+            game = _seed_unknown_local_version(
+                s,
+                installed_at=datetime.fromtimestamp(2_000_000_000, tz=UTC),
+                nexus_updated=datetime.fromtimestamp(1_800_000_000, tz=UTC),
+                upload_timestamp=1_700_000_000,
+            )
+            client = AsyncMock()
+            client.get_updated_mods.return_value = []
+            client.get_mod_files.return_value = {"files": [], "file_updates": []}
+
+            result = await check_all_updates(game.id, "g", client, s, gql=AsyncMock())
+
+            methods = [u["detection_method"] for u in result.updates if u["nexus_mod_id"] == 24402]
+            assert methods == ["timestamp"]
