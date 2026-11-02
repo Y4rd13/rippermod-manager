@@ -254,6 +254,7 @@ export function GamesPage() {
                 <Button
                   variant="danger"
                   size="sm"
+                  aria-label={`Delete ${game.name}`}
                   onClick={() => setConfirmDelete(game.name)}
                 >
                   <Trash2 size={14} />
