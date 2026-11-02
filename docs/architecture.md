@@ -30,7 +30,7 @@ rippermod-manager/
 │   │   │   ├── games.py             #   CRUD games + mod paths
 │   │   │   ├── mods.py              #   List, scan, correlate, confirm/reject/reassign
 │   │   │   ├── nexus.py             #   Sync, endorse/track, SSO, mod summary
-│   │   │   ├── install.py           #   Install, uninstall, toggle, preview, archives; VFS deploy/undeploy/status/migrate/untracked-files
+│   │   │   ├── install.py           #   Install, uninstall, toggle, preview, archives; VFS deploy/undeploy/status/untracked-files
 │   │   │   ├── fomod.py             #   FOMOD installer wizard
 │   │   │   ├── conflicts.py         #   Conflict engine, inbox, graph
 │   │   │   ├── load_order.py        #   Load order + preferences

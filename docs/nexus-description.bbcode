@@ -15,7 +15,7 @@ No more guessing which mod broke your game. No more manually tracking 200 mods a
 [list]
 [*]Automatically scans your game folder and discovers all installed mod files, no matter how many you've got.
 [*]Groups scattered files that belong to the same mod using TF-IDF clustering, even when they are spread across multiple directories (mods, archive_mods, red4ext, bin, etc.).
-[*]Reads FOMOD and REDmod metadata to improve grouping accuracy.
+[*]Reads FOMOD info.xml and REDmod info.json inside your archives to find the Nexus mod id and a clearer mod name.
 [*]Streaming progress indicator with phase-by-phase feedback during scans.
 [/list]
 
@@ -46,7 +46,7 @@ The algorithm does the heavy lifting, but you're the one calling the shots:
 [*]Full FOMOD wizard that parses ModuleConfig.xml from archives.
 [*]Multi-step conditional UI with plugin groups, dependency resolution, and visual indicators (Required, Recommended, Optional, Not Usable).
 [*]Preview file selections before installing.
-[*]Supports composite dependencies (AND/OR/XOR conditions).
+[*]Supports composite dependencies (AND/OR conditions).
 [/list]
 
 [b]Mod Installation & Management[/b]
@@ -54,9 +54,9 @@ The algorithm does the heavy lifting, but you're the one calling the shots:
 [*][b]Install[/b] from downloaded archives with automatic conflict detection.
 [*][b]Uninstall[/b] mods cleanly with confirmation.
 [*][b]Enable / Disable[/b] individual mods without removing them.
-[*][b]Conflict resolution[/b] dialog showing exactly which files overlap, with Overwrite, Skip, or Cancel options.
+[*][b]Conflict resolution[/b] dialog showing exactly which files overlap, with three choices: [b]Install[/b] (the new mod's copy is linked; the other mod keeps its own copy and gets the path back if you uninstall the new one), [b]Install without these files[/b], or [b]Cancel[/b].
 [*][b]Bulk operations[/b] - Select multiple mods and enable, disable, or uninstall them all at once.
-[*][b]Archive cleanup[/b] - Remove orphan archives not linked to any installed mod.
+[*][b]Archive cleanup[/b] - Remove orphan archives: archives with no Nexus id that RipperMod has not installed.
 [/list]
 
 [b]Clean Game Folder & Smart Deployment[/b]
@@ -68,7 +68,7 @@ RipperMod keeps your Cyberpunk install as close to vanilla as possible. Instead 
 [*][b]Steam-Verify friendly[/b] - Steam's "Verify integrity of game files" only sees the vanilla game. No more red-flagged installs after every game update.
 [*][b]Auto-compile REDmods[/b] - When you install or enable a REDmod, RipperMod automatically runs the REDmod compiler for you. Your scripts and tweaks load in-game on the next launch with zero command-line steps.
 [*][b]Drift detection[/b] - If a game patch, another tool, or a manual change touches your game folder outside RipperMod, the app notices and offers a one-click re-deploy to put everything back the way it should be.
-[*][b]Force redeploy (Vortex / manual-install migration)[/b] - Coming from another mod manager? When Redeploy detects foreign files (copy-installed leftovers from Vortex or manual installs) blocking a hardlink, a confirm dialog offers to overwrite them in one click. Your staged copies in [i]downloaded_mods/[/i] are never touched, so this is fully reversible by uninstalling.
+[*][b]Force redeploy (Vortex / manual-install migration)[/b] - Coming from another mod manager? When Redeploy detects foreign files (copy-installed leftovers from Vortex or manual installs) blocking a hardlink, a confirm dialog offers Force redeploy: it moves each foreign file to [i]downloaded_mods/_displaced/[/i] and links RipperMod's copy instead. Undeploy, or uninstalling the mod, puts the moved files back.
 [*][b]Instant profile switching[/b] - Profiles only re-link the mods that need to change. No copying or moving big files, so swapping loadouts takes seconds even with hundreds of mods.
 [/list]
 
@@ -99,7 +99,7 @@ RipperMod keeps your Cyberpunk install as close to vanilla as possible. Instead 
 [*][b]Dependency-aware severity[/b] - Conflicts between mods with a dependency relationship are classified as medium severity (intentional override). Identical content across archives is classified as low (cosmetic, safe to ignore).
 [*][b]Conflict actions[/b] - Disable, uninstall, or set load order preferences on conflicting mods directly from the conflict view. Each archive links to its Nexus Mods page. Confirmation dialogs explain what will happen before you act.
 [*][b]Conflict inbox[/b] - Centralized view of all detected conflicts with resolve (reinstall with new priority) or dismiss actions.
-[*][b]Conflict graph[/b] - Visual graph of which mods conflict with each other.
+[*][b]Conflict clusters[/b] - Groups of mods that share files, with the files they share.
 [*][b]Archive-level details[/b] - See exactly which resources overlap between archives, with per-resource severity and auto-collapsed hash lists.
 [*][b]Load order: drag-and-drop[/b] - MO2-style. Grab the handle on any row and drop it where you want, the order rewrites and modlist.txt regenerates in one atomic call. Up/down arrows stay as a fine-grained fallback.
 [*][b]Load order: auto-sort[/b] - Conflict-aware heuristic that proposes a sensible order in one click (smaller mods win each conflicting pair, since selective overrides are usually the intentional change). Two-step UX with a preview dialog showing exactly what will change before you accept.
@@ -195,7 +195,7 @@ For best results, endorse the mods you have installed on Nexus Mods. Tracked mod
 [list]
 [*]Windows 10 or 11
 [*]A [url=https://www.nexusmods.com/]Nexus Mods[/url] account (free or premium). Premium users get one-click downloads through the app. Free users can manually drop their downloaded archives into the [b]downloaded_mods[/b] folder inside their game's install directory (e.g. [i]Cyberpunk 2077/downloaded_mods/[/i]) and the app will pick them up from there.
-[*][b]For .rar archives: [url=https://www.7-zip.org/]7-Zip[/url] or WinRAR installed [i]and on your PATH[/i].[/b] RipperMod doesn't bundle a RAR extractor (keeps the installer lean and avoids GPL licensing issues), so it looks for one on your system PATH. [b]Important[/b]: the official 7-Zip installer doesn't add itself to PATH by default; tick that option during install, or add [i]C:\Program Files\7-Zip[/i] to PATH manually afterwards. .zip and .7z archives work out of the box without any extra tools.
+[*][b]For .rar archives: [url=https://www.7-zip.org/]7-Zip[/url] or WinRAR installed.[/b] RipperMod doesn't bundle a RAR extractor (keeps the installer lean and avoids GPL licensing issues). It finds 7-Zip in [i]C:\Program Files\7-Zip[/i] or [i]C:\Program Files (x86)\7-Zip[/i] and WinRAR in [i]C:\Program Files\WinRAR[/i] without any PATH change; only an install in another folder needs that folder on your PATH. .zip and .7z archives work out of the box without any extra tools.
 [/list]
 
 [size=3][b]Your Data[/b][/size]
