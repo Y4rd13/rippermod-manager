@@ -1298,3 +1298,20 @@ def test_deploy_without_compile_redmod_skips_redmod(in_memory_session, sample_ga
 
     assert report.redmod is None
     redmod_run.assert_not_called()
+
+
+def test_deploy_survives_an_unwritable_modlist(in_memory_session, sample_game):
+    """An OSError writing modlist.txt is logged; the deploy report still comes back."""
+    session, game = in_memory_session, sample_game
+    _hardlinked_mod(session, game, name="Arc", rel="archive/pc/mod/a.archive")
+    with (
+        _no_game_running(),
+        patch(
+            "rippermod_manager.services.modlist_service.write_modlist",
+            side_effect=PermissionError("modlist.txt is locked"),
+        ),
+    ):
+        report = deploy(game, session)
+
+    assert report.failed == 0
+    assert report.done == 1

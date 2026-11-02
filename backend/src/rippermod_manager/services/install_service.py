@@ -313,7 +313,8 @@ def install_mod(
     )
     # New REDmod content loads only once compiled (S2); compile in the background.
     redmod_compile_queued = False
-    if auto_deploy:
+    # A deploy refused by pre-flight (game running) linked nothing to compile.
+    if deploy_report is not None and deploy_report.preflight is None:
         from rippermod_manager.services.vfs.deploy_service import has_redmod_files
         from rippermod_manager.services.vfs.redmod_scheduler import request_redmod_compile
 

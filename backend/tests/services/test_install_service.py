@@ -1193,3 +1193,26 @@ class TestInstallQueuesRedmodCompile:
 
         assert result.redmod_compile_queued is False
         assert background_requests["redmod"] == []
+
+
+def test_install_refused_by_preflight_does_not_queue_redmod_compile(
+    session, game_dir, staging_dir, background_requests
+):
+    """A deploy refused by pre-flight (game running) links nothing, so nothing compiles."""
+    from rippermod_manager.schemas.deploy import DeployReport, PreflightReport
+
+    game = Game(name="CP77Refused", domain_name="cyberpunk2077", install_path=str(game_dir))
+    session.add(game)
+    session.flush()
+    session.add(GameModPath(game_id=game.id, relative_path="mods"))
+    session.commit()
+    archive = staging_dir / "RefusedREDmod-3-1-0.zip"
+    _make_zip(archive, {"RefPkg/info.json": b"{}", "RefPkg/archives/r.archive": b"FAKE"})
+    refused = DeployReport(
+        total=0, done=0, failed=0, preflight=PreflightReport(ok=False, reasons=["game running"])
+    )
+    with patch("rippermod_manager.services.vfs.deploy_service.deploy", return_value=refused):
+        result = install_mod(game, archive, session)
+
+    assert result.redmod_compile_queued is False
+    assert background_requests["redmod"] == []
