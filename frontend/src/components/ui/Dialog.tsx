@@ -145,7 +145,8 @@ function OpenDialog({
   const id = useId();
   const parentId = useContext(ParentDialogContext);
   const panelRef = useRef<HTMLDivElement>(null);
-  const options = useRef({ closeOnEscape, onEscape: onEscape ?? onClose });
+  const pressedOnBackdrop = useRef(false);
+  const options =useRef({ closeOnEscape, onEscape: onEscape ?? onClose });
   useEffect(() => {
     options.current = { closeOnEscape, onEscape: onEscape ?? onClose };
   });
@@ -175,8 +176,16 @@ function OpenDialog({
         className={cn(
           backdropClassName ?? "fixed inset-0 z-50 flex items-center justify-center bg-black/50",
         )}
+        onMouseDown={(e) => {
+          pressedOnBackdrop.current = e.target === e.currentTarget;
+        }}
         onClick={(e) => {
-          if (closeOnBackdrop && e.target === e.currentTarget) onClose();
+          // A drag that starts inside the panel (e.g. selecting a path) and ends over the
+          // backdrop fires its click on the backdrop: close only when the press began there.
+          if (closeOnBackdrop && pressedOnBackdrop.current && e.target === e.currentTarget) {
+            onClose();
+          }
+          pressedOnBackdrop.current = false;
           // The portal still bubbles through the React tree: keep clicks inside the dialog
           // from reaching a clickable row or card that rendered it.
           e.stopPropagation();
